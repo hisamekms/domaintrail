@@ -1,0 +1,276 @@
+context Collaboration {
+  /// 聞き取りの識別子。
+  id InterviewId "聞き取りID": UUID
+
+  /// 聞き取りのコマンド。`/` のあとに打つ ID（`es:start`、`model:start`。前の `es`、`model` も読む）は英語のまま、名前は
+  /// 画面の言語で出す。
+  enum InterviewCommand "聞き取りのコマンド" {
+    Es "イベントストーミングを始める（/es:start）"
+    Model "コンテキストのモデリングを始める（/model:start）"
+  }
+
+  /// 画面の言語。聞き取りの問いと要約は、この言語か、人が書いた言語で書く。
+  enum UiLanguage "画面の言語" { Ja "日本語" En "英語" }
+
+  /// 要約の行き先の名前: ストーミングの ID（`/es:start`、DSL の識別子）か、モデリングの道のりの ID（`/model:start`、
+  /// 小文字・数字・ハイフン）。
+  primitive BriefName "要約の行き先": String { matches(value, "^[_a-zA-Z0-9][A-Za-z0-9_-]*$") and length(value) <= 100 }
+
+  /// 新しく作る行き先の見出し（ラベル）。
+  primitive BriefLabel "行き先の見出し": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// 要約の本文: 道のりの「なぜ」を見出しのある行で（「目的: …」）。道のりの項目から作り、編集もこの形で読む。上限は
+  /// コード（`domain/interviews.ts` の `INTERVIEW_LIMITS`）が決める。
+  primitive BriefText "要約の本文": String { length(value) >= 1 and length(value) <= 1500 }
+
+  /// 要約の項目1つ（目的・範囲・制約）: 短い1行。
+  primitive BriefField "要約の項目": String { length(value) >= 1 and length(value) <= 240 }
+
+  /// 参加者の役割（「窓口担当」）。人の名前は書かない。
+  primitive RoleName "参加者の役割": String { length(value) >= 1 and length(value) <= 60 }
+
+  /// モデリングの道のりの名前（「Billing の深掘り」）。
+  primitive JourneyName "道のりの名前": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// 新しいストーミングの短い説明（`///` に書く1行）。
+  primitive ShortDescription "短い説明": String { length(value) >= 1 and length(value) <= 200 }
+
+  /// イベントストーミングの結果の使い道: 人をそろえる、モデリングへつなげる。
+  enum JourneyUse "使い道" { Align "認識をそろえる" Modeling "モデリングへつなげる" }
+
+  /// 聞き取りで決めた道のり: なぜ（目的・範囲・制約・参加者）と、どこまで（ES はレベルと使い道、モデリングは進め方・
+  /// ゴール・もと）。確定すると dt が道のりのファイルに書く（AI の実行はない）。
+  value JourneyBrief "道のりの要約" {
+    purpose: BriefField "目的"
+    scope: BriefField? "範囲"
+    constraints: BriefField? "制約"
+    participants: RoleName[0..12] "参加者（役割）"
+    /// ES: 使い道。
+    use: JourneyUse? "使い道"
+    /// ES: どこまで（ビッグピクチャー・デザインレベル）。
+    level: StormingLevel? "レベル"
+    /// モデリング: 進め方。
+    pattern: GuidePattern? "進め方"
+    /// モデリング: ゴールの区切り（進め方が許すもの）。
+    goal: GuideStepKey? "ゴール"
+    /// モデリング（ES から）: もとのストーミング。
+    stormings: StormingName[0..10] "もとのストーミング"
+    /// モデリング（1つの BC を深掘り）: そのコンテキスト。
+    context: ContextName? "コンテキスト"
+    /// モデリング: 道のりの名前。
+    journeyName: JourneyName? "道のりの名前"
+    /// モデリング: 続ける道のり（ある道のりの ID が行き先）。
+    continues: Bool "続ける"
+  }
+
+  /// 聞き取りの要約。確定すると dt が道のりのファイルに書く。新しいストーミングだけは、その `storming` のかたまりを
+  /// 実行が作る（`///` は短い説明だけ）。
+  value InterviewBrief "要約" {
+    name: BriefName "行き先"
+    /// 行き先がまだないとき、作るときの見出し。
+    label: BriefLabel? "見出し"
+    /// 行き先がまだない（`/es:start`: 新しいストーミング、`/model:start`: 新しい道のり）。
+    isNew: Bool "新しく作る"
+    /// 行き先にすでに道のりがある: 確定するとそのブリーフを置き換える（カードがそう示す）。
+    replaces: Bool "ブリーフを置き換える"
+    text: BriefText "本文"
+    /// 道のり（前の要約にはない: `///` に書いていたころのもの）。
+    journey: JourneyBrief? "道のり"
+    /// 新しいストーミングの短い説明。
+    description: ShortDescription? "短い説明"
+  }
+
+  /// AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
+  /// 要素の参照（`@{es:Returns}`）を含むことがあり、画面はそれをラベルで出す。見える長さは 40 字までで、
+  /// 参照を書いたままの長さは 200 字まで。
+  primitive AnswerChoice "答えの選択肢": String { length(value) >= 1 and length(value) <= 200 }
+
+  /// 答えを待っている AI の問いと、その選択肢（ないこともある）。画面は、始めた人にだけ選択肢のボタンを出す。
+  value AskedQuestion "答えを待つ問い" {
+    question: RequestId "問いのメッセージ"
+    choices: AnswerChoice[0..6] "選択肢"
+    /// いくつも選べる（参加者、使い道など）。選んだものをまとめて1つの答えとして送る。
+    multiple: Bool "複数選べる"
+    invariant distinctChoices "同じ選択肢は1回" { unique(choices) }
+  }
+
+  /// 確定した要約が実行に求めること（新しいストーミングを作るときだけ）: どの聞き取りの、どのコマンドの要約か。
+  value BriefInstruction "要約の指示" {
+    interview: InterviewId "聞き取り"
+    command: InterviewCommand "コマンド"
+    brief: InterviewBrief "要約"
+  }
+
+  /// `/es`・`/model` で始める聞き取り。AI（回答役、読むだけ）が1つずつ問い、あいまいな答えを掘り下げ、最後に要約を出す。
+  /// 聞き取りのあいだ、始めた人のメッセージは仕分けを経ずに聞き取りに入る（ほかの人のメッセージはふだんどおり仕分ける）。
+  /// 要約を確定すると、dt が道のりのファイルに書く（新しいストーミングは、そのかたまりを実行が作る）。コラボでは誰でも始められ、要約を確定するのはファシリテーター
+  /// （参加者が始めた聞き取りでは、それが承認になる。却下もできる）。セッションに走っている聞き取りは1つまで（ユースケースが
+  /// 確かめる）。
+  aggregate Interview "聞き取り" {
+    id: InterviewId
+    references session: SessionId -> Session
+    command: InterviewCommand "コマンド"
+    startedBy: ParticipantId "始めた人"
+    /// 始めたときに始めた人が送ったメッセージ（コマンドの名前）。最初の問いはこれに答える。
+    references opening: RequestId -> Request "始めのメッセージ"
+    /// 始めたときに選んでいた要素（`/es` ならストーミング、`/model` ならコンテキストの手がかり）。
+    focus: ModelTarget? "選んでいた要素"
+    language: UiLanguage "画面の言語"
+    startedAt: Timestamp "開始日時"
+
+    state Asking "聞き取り中" {
+      /// AI がまだ問いを返していない、始めた人の最後のメッセージ。AI が問うたあとはない。
+      awaiting: RequestId? "答えを待つメッセージ"
+      /// AI の最後の問い（選択肢とともに）。始めた人が答えると、なくなる。
+      asked: AskedQuestion? "答えを待つ問い"
+    }
+    state Briefed "要約の確認待ち" {
+      brief: InterviewBrief "要約"
+      /// 要約が答えたメッセージ（カードはその下に出る）。
+      answered: RequestId "要約が答えたメッセージ"
+      briefedAt: Timestamp "要約日時"
+    }
+    state Confirmed "確定" {
+      brief: InterviewBrief "確定した要約"
+      /// 要約を編集して確定した。
+      edited: Bool "編集した"
+      /// 確定したファシリテーター。始めた人でなければ、参加者の要約を承認した。前の行にはない（始めた人が確定した）。
+      confirmedBy: ParticipantId? "確定した人"
+      confirmedAt: Timestamp "確定日時"
+      /// 新しいストーミングを作る実行（ほかはない: dt が道のりのファイルに書くだけ）。
+      references run: AgentRunId? -> AgentRun "実行"
+    }
+    state Stopped "中止" {
+      stoppedBy: ParticipantId "中止した人"
+      stoppedAt: Timestamp "中止日時"
+    }
+    state Rejected "却下" {
+      /// 却下した要約。
+      brief: InterviewBrief "要約"
+      rejectedBy: ParticipantId "却下した人"
+      /// 始めた人へのひとこと。
+      note: Text? "ひとこと"
+      rejectedAt: Timestamp "却下日時"
+    }
+
+    /// 聞き取りを始める。コラボでは誰でも（参加者が始めたら、その人が答え、要約はファシリテーターの承認を待つ）。
+    create command start(id: InterviewId, session: ActiveSession, command: InterviewCommand, startedBy: ParticipantId, opening: RequestId, focus: ModelTarget?, language: UiLanguage, startedAt: Timestamp) "聞き取りを始める"
+      -> Asking
+      emits InterviewStarted
+
+    /// 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
+    command hear(message: RequestId, heardAt: Timestamp) "答えを聞く"
+      Asking | Briefed -> Asking
+      changes awaiting, asked
+      emits InterviewAnswered
+
+    /// AI が次の問いを返す（AI のメッセージとして、選択肢があればそれも）。答えを待っていたメッセージに答える。
+    command ask(answered: RequestId "答えたメッセージ", question: AskedQuestion "問い", askedAt: Timestamp) "問う"
+      Asking -> Asking
+      requires stillAwaited "そのメッセージをまだ待っている" {
+        exists(awaiting) and awaiting == answered
+      } else InterviewMovedOn
+      changes awaiting, asked
+      emits InterviewQuestionAsked
+
+    /// AI が要約を出す。ファシリテーターが確定（承認）・編集して確定・却下を選ぶ。始めた人は中止もできる。
+    command summarize(answered: RequestId "答えたメッセージ", summary: InterviewBrief "要約", briefedAt: Timestamp) "要約を出す"
+      Asking -> Briefed
+      requires stillAwaited "そのメッセージをまだ待っている" {
+        exists(awaiting) and awaiting == answered
+      } else InterviewMovedOn
+      emits InterviewBriefed
+
+    /// ファシリテーターが要約を確定する（編集してもよい）。参加者が始めた聞き取りでは、それが承認になる。新しいストーミング
+    /// では、実行の登録と同じ取引で、その実行を記録する。
+    command confirm(confirmedBy: ParticipantId, confirmedByRole: ParticipantRole, confirmedBrief: InterviewBrief "確定する要約", edited: Bool, run: AgentRunId?, confirmedAt: Timestamp) "要約を確定する"
+      Briefed -> Confirmed
+      requires facilitatorConfirms "ファシリテーターが確定する" {
+        confirmedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      changes brief
+      emits InterviewConfirmed
+
+    /// ファシリテーターが要約を却下する（ひとことを添えてもよい）。聞き取りはそこで終わる。
+    command reject(rejectedBy: ParticipantId, rejectedByRole: ParticipantRole, note: Text?, rejectedAt: Timestamp) "要約を却下する"
+      Briefed -> Rejected
+      requires facilitatorRejects "ファシリテーターが却下する" {
+        rejectedByRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      emits InterviewRejected
+
+    /// 始めた人かファシリテーターが聞き取りを中止する。
+    command stop(stoppedBy: ParticipantId, stoppedByRole: ParticipantRole, stoppedAt: Timestamp) "聞き取りを中止する"
+      Asking | Briefed -> Stopped
+      requires starterOrFacilitatorStops "始めた人かファシリテーターが中止する" {
+        stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+      } else NotTheInterviewer
+      emits InterviewStopped
+  }
+
+  persistent event InterviewStarted "聞き取りの開始" {
+    interviewId: InterviewId
+    session: SessionId
+    command: InterviewCommand
+    startedBy: ParticipantId
+    opening: RequestId
+    focus: ModelTarget?
+    language: UiLanguage
+    startedAt: Timestamp
+  }
+
+  persistent event InterviewAnswered "聞き取りへの答え" {
+    interviewId: InterviewId
+    message: RequestId
+    heardAt: Timestamp
+  }
+
+  persistent event InterviewQuestionAsked "聞き取りの問い" {
+    interviewId: InterviewId
+    question: RequestId
+    /// 問いの選択肢（ないときは空）。
+    choices: AnswerChoice[0..6]
+    multiple: Bool
+    askedAt: Timestamp
+  }
+
+  persistent event InterviewBriefed "聞き取りの要約" {
+    interviewId: InterviewId
+    brief: InterviewBrief
+    answered: RequestId
+    briefedAt: Timestamp
+  }
+
+  persistent event InterviewConfirmed "聞き取りの確定" {
+    interviewId: InterviewId
+    brief: InterviewBrief
+    edited: Bool
+    /// 前のイベントにはない（始めた人が確定した）。
+    confirmedBy: ParticipantId? "確定した人"
+    /// 新しいストーミングを作る実行（ほかはない）。
+    run: AgentRunId?
+    confirmedAt: Timestamp
+  }
+
+  persistent event InterviewStopped "聞き取りの中止" {
+    interviewId: InterviewId
+    stoppedBy: ParticipantId
+    stoppedAt: Timestamp
+  }
+
+  persistent event InterviewRejected "聞き取りの要約の却下" {
+    interviewId: InterviewId
+    rejectedBy: ParticipantId
+    note: Text? "ひとこと"
+    rejectedAt: Timestamp
+  }
+
+  /// 聞き取りを中止できるのは、始めた人かファシリテーターだけ。
+  error NotTheInterviewer "聞き取りを始めた人でない"
+
+  /// AI の問いや要約が答えたメッセージを、聞き取りはもう待っていない（そのあいだに始めた人が続けて書いた）。
+  error InterviewMovedOn "聞き取りは先に進んだ"
+
+  /// セッションには走っている聞き取りがある（1つまで）。
+  error InterviewAlreadyRunning "走っている聞き取りがある"
+}

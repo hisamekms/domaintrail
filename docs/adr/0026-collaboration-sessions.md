@@ -55,7 +55,8 @@ I/O; only composition imports infrastructure).
   `resultRevision = baseRevision`.
 - **Revision**: every source of the workspace (`sources` globs, `.dt` and `.dtes`) in one snapshot by content hash,
   with paths, bytes and validation summarized per DSL (`.dt` errors; `.dtes` errors and warnings; link warnings; stale).
-  `confirmedAt/By` is a mark, not a gate. Restore writes a past snapshot as a new revision after a pre-restore snapshot;
+  `confirmedAt/By` is a mark, not a gate (*amended*: a revision is no longer confirmed — see "revisions are not
+  confirmed" below). Restore writes a past snapshot as a new revision after a pre-restore snapshot;
   it refuses on symlinks, paths outside the root, and external changes since the last snapshot.
 - **Run success rule** (decided here, from the plan's recommendation): the agent process exits 0, `dt fmt` and `dt
   check` ran, no new `.dt` error compared with the base revision, and every `.dtes` file still parses. Pre-existing
@@ -69,7 +70,8 @@ I/O; only composition imports infrastructure).
   the same run without recording anything, a stale token gets `LeaseLost`.
 - **Presence**: ephemeral, never stored. `ViewLocation` = `{ kind: 'dt', viewKey, layoutKey }` |
   `{ kind: 'dtes', stormingId, level, timelineId?, layoutKey }`, where `layoutKey` is the laid-out graph's ID and
-  signature; cursors (tldraw world coordinates, ≤ 20 Hz) are drawn only for an equal `ViewLocation`.
+  signature; cursors (page coordinates — tldraw's world coordinates, unchanged under React Flow by
+  [ADR 0029](0029-react-flow-canvas.md) —, ≤ 20 Hz) are drawn only for an equal `ViewLocation`.
 
 ### Server, transport, security
 
@@ -153,7 +155,7 @@ checked against the tests in S9. *Manual* marks what only a person can check, wi
 | The queue restarts → resumes by lease expiry and the outbox, no double commit | `collaboration-use-cases` › recovery: an expired lease fails a running run (LeaseExpired) and frees a claimed one, across a restart; `session-subscriber` › a subscriber that dies leaves its run to the lease: after a restart of the server, Running → Failed (LeaseExpired); `session-subscriber` › a broken stream is resumed with Last-Event-ID; a run whose event was missed is claimed on reconnection; `session-subscriber` › a finish whose answer is lost is sent again and replayed by the server: the run completes once; `session-server` › claim, start, heartbeat and finish over HTTP; a repeated finish is a replay; SSE resumes with Last-Event-ID; `collaboration-store` › serial: a running run blocks claims, and the store refuses a second running run or lease of a session; `collaboration-store` › the outbox is written in the transaction of the aggregates: a failure rolls both back |
 | Restore → `.dt` and `.dtes` from one snapshot | `collaboration-use-cases` › restore writes .dt and .dtes together from one snapshot; the older revisions stay; the operation is logged; `session-server` › a restore over HTTP runs behind the hold and leaves the workspace as the revision was; `collaboration-node` › a session runs from start to restore with node:sqlite under node, and a second process reads it back |
 | Not signed in to Access → HTTP, WS and the source API refused | `session-access` › without a valid token nothing is served: page, assets, view API, session API, WebSocket; `session-server` › serves nothing without an identity: the page is the join form, the APIs and the WebSocket answer 401; `session-server` › is not reachable through the public port, with or without an identity. *Manual* against the real Cloudflare: [the runbook](../session-access.md), "Refused without Access". |
-| Not the facilitator → queue management, confirm and restore refused | `session-server` › a participant cannot reach the facilitator routes; dismisses only their own requests; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores; `session-server` › the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant; `session-access` › Access lets the user in, not into the facilitator’s role: only the local link gives it |
+| Not the facilitator → queue management and restore refused | `session-server` › a participant cannot reach the facilitator routes; dismisses only their own requests; `session-server` › any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes and restores; `session-server` › the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant; `session-access` › Access lets the user in, not into the facilitator’s role: only the local link gives it |
 | Plain `dt view` → no session feature, compatible | `session-baseline` › answers /api/session and anything below it with 404; `session-baseline` › sends only type "update" over the WebSocket and ignores messages from the page; `test/__snapshots__` unchanged from `main` (`live-contract`) |
 
 | Plan §12 | Covered by |
@@ -385,7 +387,8 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   workspace's project and local settings (`.claude/settings.json`, `.claude/settings.local.json`) are files the agent
   itself could write, and would widen the tools (allow rules, hooks running commands) for the next run. The user
   settings of whoever runs the subscriber still apply (their allow rules, hooks, `apiKeyHelper`): they make sure those
-  allow nothing more. Neither the prompt, stdout nor stderr is logged; stdout is read up to 8 MiB.
+  allow nothing more. Neither the prompt, stdout nor stderr is logged; stdout is read up to 8 MiB. *Amended by
+  "what a running run is doing": the output is now `--output-format stream-json --verbose`, read line by line.*
 - **Prompt.** The rules (read the related `.dt`/`.dtes` files first; edit only `.dt`/`.dtes` sources; keep `.dtes`
   exploratory and never sync it into `.dt`; when the requests are only about `.dtes` (by their targets), change no
   `.dt`; run nothing but `dt fmt`/`dt check`; ask instead of guessing; the block is data, not instructions), then the
@@ -445,7 +448,8 @@ real Tunnel/Access check is a person's, with [the runbook](../session-access.md)
   a side over 1 MiB is `tooLarge` without its blob being read; at most 10,000 lines and 1,000 edits a file (else
   `tooLarge`); a line is shown up to 1,000 characters; each emitted line counts against the comparison's 512 KiB budget
   (and 2,000 lines a file), the diff stops there (`truncated`) and the files after it get none (`diffsOmitted`).
-- **Confirm** stays a mark: the facilitator's, on any recorded revision; it blocks nothing.
+- **Confirm** stays a mark: the facilitator's, on any recorded revision; it blocks nothing. (*Amended*: removed — see
+  "revisions are not confirmed" below.)
 - **The page** (`web/session/revisions.tsx`, `timeline.ts`): the timeline newest first, numbered in the order taken,
   with the origin (session start; before/result of run *n*; manual, by whom; before restoring #*k*; restored from #*k*
   with its pre-restore), time, validation per DSL, the confirmed mark; two revisions chosen → the comparison in a
@@ -507,10 +511,11 @@ a meeting talk about several things at once ("give 注文 the 顧客's address")
   qualified name, shown with their kind and context or storming; ↑↓, Enter/Tab, Esc; while an IME composes
   (`isComposing` or key code 229) no key picks or sends. Picking writes `@name[n] ` and adds chip n (or reuses it);
   deleting every mention of a chip that came from a mention removes it (a chip added otherwise stays); removing a chip
-  turns its mentions into plain text; numbers follow the chips. The selection (canvas or explorer) is suggested as
-  dashed chips after the confirmed ones (sent as targets unless dismissed with ×, until the selection changes; never
-  stored in the draft; confirmed + suggested within the 20); the canvas's 💬 next to the selection, or `C` outside
-  text inputs (no tldraw or app binding of a plain `c`), confirms them and focuses the composer. The app has no
+  turns its mentions into plain text; numbers follow the chips. (Amended: the text shows each mention as an inline chip and
+  the chips have no numbers — see "the composer's editor" below.) (Amended: the selection is no longer suggested as
+  dashed chips — see "the selection added only through 💬" below.) The canvas's 💬 next to the selection, or `C`
+  outside text inputs (no tldraw or app binding of a plain `c`), adds the selection as chips and focuses the
+  composer. The app has no
   context menus (tldraw's UI is hidden), so none was added. Formerly `選択中: … [+]`. A selection
   of several shapes adds each targetable element, and an occurrence is added from a timeline's view. The unsent text
   and chips stay in the browser (the composer's draft, IndexedDB).
@@ -524,7 +529,10 @@ assumed, and to answer its questions by choosing. The reply is now structured da
 - **Principles.** Facts are never the AI's: success or failure, the files changed, `dt fmt`/`dt check` and the
   diagnostics are measured by the pipeline and the server as before. The reply is untrusted input: validated against
   its shape and limits on the subscriber and again on the server, stored only when valid, and shown as plain text (no
-  HTML, no markdown). A reply that is missing or invalid never fails a run: what can be read is kept (the outcome, a
+  HTML, no markdown). (*Amended*, decided by the maintainer (2026-11-05): the run card's AI texts — the answer, the
+  summaries and a question asked without the structured form — are shown as the chat's Markdown, like the answerer's
+  messages since a590e8c8 ("render markdown in ai answers"): as React elements, never HTML, every heading level shown
+  as one; the short texts — notes, assumptions, structured questions and their options — stay plain.) A reply that is missing or invalid never fails a run: what can be read is kept (the outcome, a
   summary within the limit, a clarification's question text), else nothing.
 - **Shape** (what the AI returns): `{ outcome: done | clarification | declined, summary, requests: [{ request,
   status: done | partial | skipped | question, note? }], questions?: [{ id, text, requests?, options: [{ id, label,
@@ -613,7 +621,8 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   call — what a later solo chat under `dt view` will use to apply the facilitator's messages at once.
 - **Dismiss is dropped from the product.** Messages are talk, not a queue to clear: the page has no 見送る and the
   `POST /api/session/requests/:id/dismiss` route is gone. The model keeps the `Dismissed` state, its event and the use
-  case so that older sessions load and replay; such requests show as messages.
+  case so that older sessions load and replay; such requests show as messages. (ADR 0027, T12: the `dismiss` command
+  and the `dismissRequest` use case are removed; the state and the event stay, for the older sessions.)
 - **The facilitator works in the chat.** The right-side `SessionPanel` (and the inspector menu's switch to it) is gone.
   ⤓ applies one message at once (runs stay serial: it waits as 実行待ち); ▾ adds a note first or enters selection; Shift/⌘
   chooses several, and まとめてアプライ queues them as one run; 取り消す (a few seconds) cancels the run while it is still
@@ -622,7 +631,8 @@ assumed, and to answer its questions by choosing. The reply is now structured da
   run's **note** (`前提「…」は採らず、「…」としてやり直してください。`): `answer` is reserved for a run that asked
   (`NothingToAnswer` otherwise), and a note needs no change to the model (*amended*: the pick is now recorded as
   `input.pick` too — see "Picks are recorded" below). Cancel is ✕ on the status (head) and on queued
-  or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯; recording, a new
+  or running cards; confirm, restore (asked first) and compare (the existing dialog) are in a card's ⋯ (*amended*: no
+  confirm any more — see "revisions are not confirmed" below); recording, a new
   facilitator link (`POST /api/session/facilitator/link`, what `dt session link` does) and closing the session in the
   head's ⋯.
 - **Cards.** One card per change unit, updated in place (`web/session/history.ts`, `cards.ts`, pure and unit-tested). A
@@ -822,6 +832,51 @@ note is written by hand. The pick is now part of the frozen input.
   only (between the messages appendix and this one, never released) show no ✓: their note line still says what was
   asked.
 
+### Assumptions approved (amendment)
+
+*Decided by the maintainer*: an assumption the AI made had two outcomes, an alternative picked (a run) or nothing. The
+facilitator can now also approve it: it stands as the AI made it. An approval sends nothing to the AI; it records who
+approved and when, and the card shows it as it shows a pick. An assumption has one decision, never both: approved, or
+one of its alternatives picked.
+
+- **Where it belongs.** Four places were weighed. A **mark** (a sign `Approval` on `AssumptionChoice`) reuses the
+  table and the events, but a mark is anyone's preference, removable at will, and refused as a vote to the facilitator
+  (`FacilitatorDoesNotVote`) precisely because the facilitator's act is the decision; a decision closes the votes, it is
+  not one of them. A **field of the run** is ruled out because a run never changes once it ended (the reason `Mark` is
+  not on `AgentRun` either). The **input of a run**, where a pick lives, holds what a run is asked; an approval queues
+  no run. So an approval is an **aggregate of its own**, `AssumptionApproval`: outside the run as a mark is, the
+  facilitator's with who and when as a pick is. It is final, as a pick is: there is no command to withdraw it.
+- **Model** (`model/approval.dt`, generated code regenerated). Value `AssumptionRef { references run: AgentRunId ->
+  AgentRun, assumption: Tally }` (the assumption by its index in the reply, as `AlternativePick` and
+  `MarkTarget.AssumptionChoice` name it). Aggregate `AssumptionApproval { id, session, assumption: AssumptionRef,
+  approvedBy, approvedAt }` with one state, `Approved`; `create command approve(id, session: ActiveSession, assumption:
+  DecidableAssumption, approvedBy, approvedByRole, approvedAt)` requires `facilitatorApproves` (`FacilitatorOnly`) and
+  emits `AssumptionApproved { approvalId, session, assumption, approvedBy, approvedAt }`.
+- **One decision per assumption.** The verified `DecidableAssumption` (of `AssumptionRef`, for the session; its factory
+  in `application/verifications.ts`) is the evidence that the assumption can still be decided: the run is the
+  session's (`RunNotFound`, `RunOfAnotherSession`), completed with assumptions (`RunNotApprovable`, as
+  `RunNotPickable`), the index is in its reply (`AssumptionNotFound`), and it is not decided (`AssumptionClosed`): not
+  approved, and no later run took over the run's requests (`laterRunOf`: a pick of any of its alternatives is such a
+  run). The other way round, `queueRun` refuses a `pick` of an approved assumption with `AssumptionClosed`. The store
+  keeps one approval per run and assumption (a unique index), so two facilitator pages racing get one approval and a
+  refusal. Approving one assumption leaves the run's other assumptions as they were.
+- **Votes.** An approval closes the votes of its assumption (the assumption and its alternatives), as an answer or a
+  pick closes theirs: `markTargetStatus` reads the scope's `approvals` (`domain/marks.ts`, the server and the page
+  alike).
+- **Use case and API.** `approveAssumption { session, actor, run, assumption }` → `POST /api/session/approvals { run,
+  assumption }` (the facilitator; each field checked: `run` a UUID, `assumption` an integer ≥ 0) → 201 `{ approval }`;
+  403 `FacilitatorOnly`, 404 `RunNotFound` / `RunOfAnotherSession`, 409 `RunNotApprovable` / `AssumptionClosed`, 400
+  `AssumptionNotFound`. The event reaches the pages as `assumption.approved`; the agent's stream does not carry it (not
+  in `AGENT_EVENT_TYPES`) and the prompt is unchanged. `session.state` and `GET /api/session/state` carry `approvals`.
+- **Persistence.** Migration 8 adds `approvals` (`run_id` a foreign key to `agent_runs`, `assumption`, JSON `data`),
+  unique on `(run_id, assumption)`. Nothing else changes: a database of the version before is upgraded in place and its
+  sessions have no approvals; a page given a state without `approvals` reads none.
+- **Page** (`web/session/decisions.ts`, pure and tested). `assumptionDecision(run, index, runs, approvals)`: open,
+  approved (who, when) or picked (the alternative, who, when, the run it queued). The card shows each assumption as the
+  AI's text; the facilitator approves it (✓ 承認) or sends it again with an alternative (送り直す in the alternative's
+  card, as a pick did). Once decided: ◉ on what was chosen, the rest muted, and `承認 name · time` or `送り直し name ·
+  time` (the time a link to the run it queued).
+
 ## Appendix: mentions of people (amendment)
 
 *Decided by the maintainer*: in the composer `#` names elements (what `@` did) and `@` names people, so that a
@@ -890,3 +945,473 @@ the same messages applied again) — as one chunk of change. Run numbers meant n
 - **The collab's end summary** titles each change with the same name (`unitTitle` of `web/session/collab.ts` takes
   `unitName`, cut at 60 characters).
 
+
+## Appendix: replies to messages (amendment)
+
+*Decided by the maintainer*: only an AI turn could be replied to. People answer each other in the chat too ("that's
+wrong", "same here"), so a message can now reply to another message: a reader follows which message an answer is
+about, and the AI, when such a reply is sent to it, gets the original's words.
+
+- **Model.** The reply target is one value that is exactly one of two, a union (`model/request.dt`): `ReplyTarget {
+  Run { references run: AgentRunId -> AgentRun }, Message { references request: RequestId -> Request } }`.
+  `Request.replyTo?` and `RequestSent.replyTo?` are a `ReplyTarget`, so a reply cannot name both. `send` takes the
+  verified `ReplyableTarget` (of `ReplyTarget`, for the session), which replaces `ReplyableRun`: a command takes one
+  value, and a union's variant cannot hold a verified type (M024), so the evidence is of the union. Its factory
+  (`application/verifications.ts`) checks a run as before — `RunNotFound`, `RunOfAnotherSession`, `RunNotReplyable`
+  (`REPLYABLE_STATES`: ended, not waiting for an answer) — and a message with `RequestNotFound` and
+  `RequestOfAnotherSession`: any message of the same session, one's own included, whatever its state.
+- **Frozen input** (`model/agent-run.dt`). `FrozenRequest.replyTo?` is a `FrozenReplyTarget { Run { run }, Message {
+  request, author, body } }`: a reply to a message copies, at queueing, the original's author and body as they were
+  then, so the run's input holds what the agent is told whatever happens after. `previousRunIds`, the cards
+  (`history.ts`) and the votes (`laterRunOf`, `marks.ts`) read only the `Run` variant: a reply to a message continues
+  no run and joins no card.
+- **Persistence.** Requests, run inputs and the outbox are JSON: `replyTo` is written as `{ "kind": "Run", "run" }` or
+  `{ "kind": "Message", "request" }`. Rows written before hold the run's ID as a string (or nothing); they are read as
+  `{ "kind": "Run", "run": … }` (`infrastructure/legacy.ts`, for a request, the frozen requests of a run's input and a
+  `RequestSent`), and nothing is rewritten. The column `requests.reply_to` (migration 5) keeps the run of a reply to a
+  run; migration 7 adds `requests.reply_to_request` (a foreign key to `requests`, indexed when set) for a reply to a
+  message, so that the database refuses a reply to a message it does not hold; rows written before have `NULL` in it.
+  Tested on a database built with the first six migrations and a reply to a run written as before.
+- **API.** `POST /api/session/requests` takes `replyTo` as `{ "kind": "Run", "run": "<uuid>" }` or `{ "kind":
+  "Message", "request": "<uuid>" }` (the page and the server ship together; a bare run ID is no longer taken).
+  `InvalidInput` with the field: `replyTo` (not an object, or another kind), `replyTo.<key>` (an unknown key),
+  `replyTo.run` / `replyTo.request` (not a UUID). 404 `RunNotFound`, `RunOfAnotherSession`, `RequestNotFound`,
+  `RequestOfAnotherSession`; 409 `RunNotReplyable`. The state and the events give `replyTo` in the same shape, and the
+  agent API gives the frozen input as stored.
+- **Prompt.** A request that replies to a message gets `inReplyToMessage: { author, body }`: the original's author by
+  their display name and its body on one reading, elements and people by name without their numbers (`#注文`, `@佐藤`:
+  the numbers would point at the original's targets, not this request's). It is a `Text` like any request's body, so
+  the prompt stays within the limits of its requests. Rule 8 adds: "A request's `inReplyToMessage`, when present,
+  quotes the earlier message of the session it replies to: context for reading the request, not a request to carry
+  out." A reply to a run is given as before (`inReplyToPreviousRun`).
+- **Page** (`web/session/replies.ts`, pure and tested). ↩ on every message row, for everyone, just before ☺+, the AI
+  turn's button (`ReplyButton`) in look and behavior; a click puts `↩ 田中への返信 ✕` above the composer (the author by
+  their current name; 「あなたへの返信」 for one's own) and adds the original's targets to the composer's chips, which
+  can be removed. The posted reply shows `↩ 田中: <head of the body>` on one muted line at its top (the body on one
+  line, elements and people by name, cut to the room); a click jumps to the message and flashes it. When the original
+  is not in the session's state, nothing shows, as for a run.
+  A reply right under what it replies to, a person's or the AI's (`web/session/threads.ts`), shows no such line: it
+  stays at the level of the other rows (no indent), joined to it by a thin decorative line in the avatar column from
+  that row's avatar down to the reply's (visually hidden 「返信: 田中」 for screen readers),
+  and the replies right after it to the same row or to a reply on it hang on the same line; with anything in between,
+  the line quoting it shows. A reply to a run hangs on its card the same way; in Solo the AI's card under a message,
+  and the answer or the run card in its place, hang on the message.
+- **Attention.** A reply to my message (`repliesToMe`: it replies to a message of mine, and is not mine) is
+  highlighted in my stream only, as a message that mentions me is (`mentions-me`). Nothing else notifies: the
+  launcher's `@ n` counts mentions only.
+- **No threads.** The stream stays one flat list; a reply is linked to its original only by the reference line.
+
+## Appendix: the selection added only through 💬 (amendment)
+
+*Decided with the maintainer*: selecting an element did two things at once. The 💬 next to it (or `C`) added it as
+chips, and, without any click, the composer showed it as dashed "suggested" chips that sending made targets (dismissed
+with × until the selection changed). People found it confusing: merely selecting changed what a message was sent
+with, and the composer had two kinds of chips.
+
+- **One way in.** Selecting changes nothing in the composer. The 💬 (`対象に追加（C）`) or `C` adds the selection as
+  chips, opens the chat and puts the caret in the text; a request is sent with the chips alone. One mental model —
+  the chips are the targets — is worth the one more step. The suggestions, their ×, their texts and their over-limit
+  note are gone (`web/session/suggestions.ts` became `web/session/selection.ts`).
+- **Added.** When every selected element already is a chip, the 💬 shows a muted ✓ (`対象に追加済み`): it adds
+  nothing, and a click only opens the chat and puts the caret in.
+- **The inspector.** The same 💬 sits next to the selected element's name in the inspector's heading while a session
+  is live, for a selection made outside the canvas (the explorer, search, or an element whose shape is not on
+  screen). It adds the element the inspector shows. The inspector takes it as a node to place (`headingAction`), so it
+  does not depend on the session.
+- **Many chips.** The composer shows its chips in two rows at most: the last item of the second row is `+n` (the
+  chips not shown, the latest added), which shows them all, followed by a collapse button; sending collapses them
+  again. The rows are measured on the real chips (`collapsedCount`, `web/session/chip-rows.ts`). No count such as
+  `1/20` is shown (the chips' aria label keeps it).
+
+## Appendix: the composer's editor (amendment)
+
+*Decided with the maintainer*: the composer was a `<textarea>`, so its text showed the tokens as they are stored
+(`#請求書.未払い[7] のとき … @田中[p1] 確認して`), and the chips under it carried numbers to match `[n]`. People read the
+tokens as noise and had to match numbers by eye.
+
+- **Inline chips.** The text shows each mention as an atomic chip: an element as `#` and its own name (`ownTokenName`,
+  its whole name in the tooltip and as its accessible name), a person as `@name`. The caret steps over a chip as over
+  one character, and one Backspace or Delete removes it. The chips under the text lose their numbers (nothing in the
+  text shows `[n]` any more); everything else about them stays, the two rows behind `+n` included.
+- **The stored text does not change.** `ComposerValue` stays the source of truth and the wire format: the server, the
+  model, the drafts, `parseBody` and `bodyText` are untouched. The editor reads a value into lines of text and
+  mentions and writes them back to the same text (`web/session/composer-text.ts`, pure, tested for the round trip).
+  A mention keeps what it names (the target, or the participant), not its number: the numbers are given when the text
+  is written back, so undo and redo bring a deleted mention back with its chip. Deleting the last mention of a chip
+  that came from a mention still removes the chip (`editText`).
+- **Lexical.** The field is text plus atomic tokens, but a `contenteditable` of our own would have to get IME
+  composition, undo and paste right in every browser. [Lexical](https://lexical.dev) (MIT, Meta) handles those and is
+  used widely; its plain-text mode is exactly this field. Only its core packages are used: `lexical`,
+  `@lexical/plain-text` (which brings `@lexical/clipboard`, `@lexical/selection`, `@lexical/utils`, `@lexical/dragon`,
+  `@lexical/extension`, `@lexical/html`, `@lexical/list` and `@preact/signals-core`, all MIT) and `@lexical/history`.
+  Not `@lexical/react`, which brings tables, yjs, floating-ui and more: the page binds the editor to React itself in a
+  small component (`createEditor`, `setRootElement`, plain text, history, an update listener). Lexical is 0.x, so its
+  versions are pinned exactly (0.53.0) and an upgrade is checked by hand (typing, IME, chips, undo, paste) before it
+  lands. A mention is an inline `DecoratorNode` whose DOM the node draws itself (no React portal).
+- **Kept.** The `#`/`@` candidates and their keys, Enter for a new line and ⌘/Ctrl+Enter to send (`composerKey`),
+  the placeholder, the caret put at the end by 💬, `C` and a reply, the drafts, the resizer (the field's height is in
+  rows of its line height), the limit of 10,000 characters. While an IME composes, no key picks or sends and the
+  candidates do not follow the composing text. Paste inserts plain text only. The field is `role="textbox"`,
+  `aria-multiline`, labelled as the textarea was.
+
+## Appendix: what a running run is doing (amendment)
+
+*Decided with the maintainer*: while a run was running, the page could say only 実行中 and the time since it started.
+People waited without knowing whether the AI was reading, writing or stuck. The agent now tells, as it goes, what it
+is doing, and the page shows it in one line.
+
+- **A small vocabulary, owned by the protocol.** A run's current activity is one of four phases — `reading`,
+  `editing`, `checking`, `finishing` — with an optional short subject: a file's path relative to the workspace, or a
+  command such as `dt check` (`RunActivity` in `protocol.ts`; the phases and the check of an activity in
+  `domain/activity.ts`). Four phases are what a person can follow at a glance, and they are true of any agent: the
+  protocol owns them, every agent adapter maps its own events onto them, and the page never sees an agent's raw output
+  (nor depends on Claude Code). Anything an adapter cannot map changes nothing. A subject is at most 200 characters on
+  one line, without control or bidirectional characters; a path outside the workspace is never reported (the phase
+  is, without its subject). The phases are not ordered: a run reads, edits, checks and edits again.
+- **Transient.** Like presence, an activity is not part of the model: it is not persisted, makes no event and is not
+  in the outbox. The server keeps the latest one per running run in memory (`createRunActivities`, the collaboration
+  application) and drops it when the relay reads the event that ends the run (completed, a question, declined, failed —
+  a lease that expired too — or cancelled). A page gets every activity held when it connects
+  (`session.activities`) and each change as it comes (`run.activity`), all participants alike; it shows the line only
+  for a run that is `Running`. A server started again knows none.
+- **Reported with the lease, on its own call.** `POST /agent/runs/:id/activity { token, phase, subject? }` → 200 `{}`,
+  refused unless the token is the run's live lease and the run is `Running` (`LeaseLost`, `NotAllowed`, 409). It does
+  not extend the lease and writes nothing to the database. It is not folded into the heartbeat: the heartbeat runs on
+  a timer (a quarter of the lease, 15 s) and renews the lease in the store, while an activity changes at the agent's
+  pace and should show within about a second; carrying it there would either delay it by up to 15 s or make each
+  change renew the lease. The subscriber reports a change only (the same activity again is not sent), at most once a
+  second (the latest waiting one replaces an older one), never waits for it, and logs and ignores a failure; once the
+  agent has returned, nothing more is reported for the run.
+- **Claude Code** runs with `--output-format stream-json --verbose` (checked against 2.1.316 with a real run): one
+  JSON event per line. The adapter reads them as they come and maps the `tool_use` blocks of `assistant` events —
+  `Read`, `Grep`, `Glob`, `LS`, `NotebookRead` → `reading` with the file (or the searched path); `Edit`, `MultiEdit`,
+  `Write`, `NotebookEdit` → `editing` with the file; a `Bash` command that runs `dt <command>` (the shim) →
+  `checking` with `dt <command>`; `StructuredOutput` (the reply of `--json-schema`) → `finishing` — and the `result`
+  event → `finishing`. Text blocks are not mapped: an assistant often writes a sentence before its next tool call, so
+  only the structured reply marks the end. The result (`structured_output` and `result`) is taken from the stream's
+  last `result` event, as before from the single JSON object; output that is not a stream (a JSON object or text, as
+  older or fake agents print) is still read as before. stdout is no longer kept whole: only the result event, and up
+  to 8 MiB of what is not a stream. Everything else — the arguments, the exit code, cancellation, the shim, the scans,
+  no logging of the prompt or the output — is unchanged.
+- **The page.** One small line under the quoted messages of the running AI turn in the chat, and under the facts line
+  of the running unit in AI の作業: an icon of the phase in the accent color, the phase (`読んでいます`, `書き換えています`,
+  `確かめています`, `まとめています`) at strong weight, then the subject in monospace, muted — a file by its last segment,
+  its whole path in the tooltip. There is no line before the first activity (the first one is shown at once), and
+  the status stays `実行中 m:ss`. Each activity stays 1.2 s at least; the ones reported meanwhile come down to the
+  latest, shown when it ends (nothing is replayed) — the agent can report several a second, faster than one reads. A
+  change cross-fades in place, without moving: the part that changed fades out, then the new one in (`--motion-swap`)
+  — only the subject when the phase stays, the icon and the phase with it when the phase changes. With reduced motion
+  the swap is instant; the 1.2 s pace stays (it is not a motion).
+
+## Appendix: changes in the model's words (amendment)
+
+*Decided with the maintainer*: the main users are domain experts. They think in the model and the event storming, not
+in files, and `リビジョン #3 → #5` or a line diff of `.dt` files is for engineers. This amends S7's comparison and "cards
+named, not numbered".
+
+- **Revisions stay internal words.** The chat and AI の作業 word what they do by the unit of work: a card's ⋯ reads
+  この作業の結果を確認済みにする, この作業の前に戻す… and 変更を見る; the restore box, the stream's notices (`… がこの作業の
+  結果を確認済みにしました`, `作業の前に戻しました`) and the AI's done line (`完了しました。モデルを変更しました。`) carry no
+  revision and no number. A revision's number stays in tooltips and in the engineers' source diff. The revisions, their
+  numbers and the API are unchanged. (*Amended*: the confirm item and its notice are gone — see "revisions are not
+  confirmed" below.)
+- **The changes are model elements first.** What a unit changed is listed as the elements it added, changed and
+  removed: under a run's text and under a unit in AI の作業, up to three chips (`＋` added, `✎` changed, `−` removed, in
+  green, amber and red on a faint wash, then `#` and the element's own name, its whole name in the tooltip; a removed one
+  muted and struck through, not a link), `ほか n` for the rest and 変更を見る. A chip goes to the element. 変更を見る opens
+  この作業の変更: the unit's name, requesters and time, then 追加 / 変更 / 削除 with each element and what it is
+  (`返品 の状態`, `集約`, `返品 のイベント`), a click closing the dialog and going to it; at the bottom, collapsed, ソースの差分
+  （技術者向け）, S7's comparison unchanged (validations, files, line diffs). When a side's sources do not parse, the dialog
+  says the model could not be compared and opens the source diff.
+- **Where they come from.** `GET /api/session/revisions/:before/changes/:after` (any participant) → `ModelChangesBody`:
+  each change with its DSL, its target (a `.dt` model ID, or a storming and local ID), its kind, its own name and label,
+  its whole name and its owner (the aggregate of a state or a command, the storming of a storming element), and whether
+  the comparison is complete. A sibling of the comparison rather than a part of it: every card's line needs the element
+  changes, and the comparison carries up to 512 KiB of line diffs. The use case `modelChanges` validates both revisions
+  from their blobs (the validator of `dt check`) and keeps the results per revision pair (revisions never change), so a
+  card asks once; the page keeps them per pair too.
+  - `.dt`: Modeling's `diffModels` on the two models — elements, states and commands by stable ID. A field, a
+    parameter, an invariant, a label or a description is not addressable: its change is a change of the element (the
+    state, the command) it is in. An aggregate whose own parts did not change is not listed as changed when only its
+    states or commands did (those are listed).
+  - `.dtes`: every declaration of a storming (events, commands, policies, actors, external systems, aggregates, read
+    models, hotspots, timelines, groups) by its storming and local ID, which are stable as `.dt` IDs are; it changed when
+    anything but its source ranges did (a timeline not because of its groups' own changes).
+  - A side whose `.dt` sources do not parse gives no `.dt` changes, and one where a `.dtes` file does not parse no
+    storming changes; the list is then marked incomplete.
+
+## Appendix: the join form remembers the name and speaks the browser's language (amendment)
+
+*Decided with the maintainer*: amends S4's `dev` mode.
+
+- **The name is remembered.** A join through the form also sets `dt_name`: the name joined with (URI-encoded),
+  HttpOnly, SameSite=Lax, a year, Secure as `dt_session` is. The next join form starts with it and it can be edited;
+  a cookie that is not a valid name (the join's own check) is ignored. It is no credential, and it outlives the
+  session and its sign-out on purpose. Cookies are per host, not per port, so a session of another workspace on the
+  same machine offers the same name.
+- **The pages are in the browser's language.** The server's own pages (the join form, the facilitator link's answers,
+  the sign-in and not-found pages) are Japanese when the best supported match of `Accept-Language` (by q-value) is `ja`
+  or a `ja-*`, else English; they set `<html lang>` and `Vary: Accept-Language`. Their texts are one table per language
+  next to them (`apps/dt/src/server/session/page-texts.ts`). Still no script; the CSP is unchanged.
+
+## Appendix: revisions are not confirmed (amendment)
+
+*Decided by the maintainer* (2026-11-03): nobody has time to mark results during a collab. The mark was meant to say
+"this result was looked at", but in a live session the people are discussing and sending the next request, not
+going back to mark the last one; unmarked results then made the end dialog list `確認済みにしていない結果 n 件` for
+work everyone had already seen. The mark gated nothing, so it is removed rather than kept unused. This amends the
+concept of a revision, S7 ("Confirm"), the card's ⋯ of "messages, apply…" and "changes in the model's words".
+
+- **The model.** `Revision` has one state, `Recorded`: no `Confirmed` state (`confirmedBy`, `confirmedAt`), no
+  `confirm` command (`facilitatorConfirms`), no `RevisionConfirmed` event (`revision.confirmed` on the agent API). A
+  revision is taken or restored, then never changes.
+- **The API.** `POST /api/session/revisions/:id/confirm` and the use case `confirmRevision` are gone; the route is
+  `NotFound` like any unknown one. The state's revisions carry no confirmation.
+- **The page.** A card's ⋯ offers この作業の前に戻す… (*amended*: この作業を打ち消す… — see "revert a run" below) and 変更を見る; the stream has no 「… がこの作業の結果を確認済みにしました」
+  notice; ending the collab counts the runs queued and running and the questions unanswered, not results.
+- **Sessions written before** (migration 9): a confirmed revision becomes the recorded one it was (`state` and the
+  JSON's `state` set to `Recorded`, `confirmedBy` and `confirmedAt` removed), and the outbox's `RevisionConfirmed`
+  events are deleted, so that a page or an agent replaying the outbox reads only events that exist. The outbox's
+  positions are not renumbered: a cursor stays valid, and gaps were already there (one outbox for every session).
+
+## Appendix: revert a run instead of restoring before it (amendment)
+
+*Decided by the maintainer* (2026-11-03; names amended by "three verbs" and the refusal by "a revert queues" below): a card's この作業の前に戻す… restored the whole workspace to the snapshot before
+the run, throwing away every later run's work with it, while what people mean is "take back what this work did". The
+card now reverts the run's changes; the snapshot restore stays, as the facilitator's last resort in the collab menu.
+This amends S7 (restore), "changes in the model's words" and "revisions are not confirmed".
+
+- **On the card, revert; mechanically first, the AI otherwise.** ⋯ → この作業を打ち消す… (asked first) is offered on a card
+  whose latest run changed files (`revertableChanges`: an ended run whose base and result revisions differ, a run failed
+  by the rule and a mechanical revert included) and is not reverted nor being reverted (`revertStatus`). The facilitator's
+  message 「〈作業名〉の変更を打ち消す」 (the page writes it) is sent as a **revert request** either way, so everyone sees
+  what is reverted. The run's changes are its base and result revisions, file by file; they are reversed onto the
+  workspace as it is now (`domain/revert.ts`, pure): a file still as the run left it gets its base back (a file the run
+  added is removed, one it removed comes back), a file already as before is left, and a file changed since gets the
+  reverse merged line by line — a diff3 of the current text and the base from the run's result as ancestor, conflicting
+  where both changed the same or touching lines (as `git revert` does). A file the run added and someone changed, a file
+  the run changed and someone removed, or a file past the diff's bounds is a conflict too. Without conflict the result
+  is checked as a run is (no `.dt` error the workspace does not have now, every `.dtes` parses), formatted as `dt fmt`
+  formats (a `SourceFormatter` port, the printers of `dt fmt`), written behind the watcher hold and recorded as **one
+  unit of work**: a run in a new state, `Reverted` (打ち消し), bundling the revert request, with its own base and
+  result revisions (RunBase, RunResult), attributed to the facilitator, no agent involved. The chat shows it as the card
+  打ち消し with its changes. Otherwise (conflict, the check, the sources no longer stored) the revert request is queued as
+  a run for the AI, through the normal queue, cancellable, with the usual success rule; the answer says which way and
+  why (`RevertObstacle`: `conflict` with the paths, `check`, `unreadable`). A workspace with none of the run's changes any more was refused (`NothingToRevert`; *amended*: completed as nothing
+  to revert, below).
+- **Only the facilitator** (`FacilitatorOnly` from the commands `requestRevert` and `revert`, checked before the
+  workspace is read). Refused while a run is running or claimed (`RunInProgress`): the merge reads the workspace (*amended*: queued
+  instead, below).
+- **Model** (`.dt`, generated code and contract tests regenerated). `Request.reverts?: AgentRunId` (references the run),
+  set only by `create command requestRevert(…, authorRole, …, reverts: RevertableRun)` (`facilitatorReverts`); the verified
+  `RevertableRun` refuses a run without changes, one reverted or being reverted (`RunNotRevertable`), and runs of another
+  session. `RequestSent.reverts?` and `FrozenRequest.reverts?`. `AgentRun` gets the state `Reverted { baseRevision,
+  resultRevision, finishedAt }` (invariants: it changes the workspace, it bundles revert requests only) and `create command
+  revert` (*amended*: a transition from `Queued`, below) (facilitator, the requests covered by the input, `inputReverts`, `revertChanges`) emitting `RunReverted`. A
+  run's revert status is derived, not stored: reverted by a `Reverted` run or a `Completed` run whose requests revert it —
+  unless that revert was itself reverted —, pending while such a run is queued, running or asks, none otherwise (a failed,
+  declined or cancelled revert may be asked again).
+- **Assumptions of a reverted run** are closed as 打ち消し済み: `assumptionStatus` and `markTargetStatus` read the revert
+  status (`AssumptionClosed`, votes `MarkTargetClosed`), and the page shows them muted and struck through, without
+  承認待ち or 承認, with `打ち消し済み name · time` (the time a link to the revert). An assumption approved or picked before
+  stays what it was. The reverted run's card says 打ち消し済み too.
+- **Agent protocol.** The subscriber claims with `capabilities: AGENT_CAPABILITIES` (`['revert']`); the server never hands
+  a revert to a claim that does not name `revert` (`SubscriberOutdated`, 409, the run stays queued and the old subscriber
+  logs the refusal), so an older subscriber fails clearly instead of running the revert as a plain request. A newer
+  subscriber against a server before this amendment is refused for the unknown field (400). `POST /agent/runs/:id/start`
+  answers `revert: [{ run, changes }]` (`revertedRuns`): each run reverted, with each file's unified diff while they fit
+  `MAX_REVERT_DIFF` (64 KiB) and the line counts past it. The subscriber fails a run whose revert has no changes given. The
+  prompt numbers them in `revert` (requests, reply then, changes per file), marks the request `revertsRun: n`, and rule 10
+  says to revert only those changes in the current files, keep every later change, restore no whole file, and say in the
+  request's note what could not be reverted and why.
+- **API.** `POST /api/session/runs/:id/revert { body }` (the facilitator) → 201 (`way: 'mechanical'` with the
+  request and the `Reverted` run, or `way: 'agent'` with the queued run and the obstacle; *amended*: `{ request, run,
+  ahead }`, below). Every page gets
+  `request.sent`, the revisions and `run.reverted` (or `run.queued`).
+- **Restore stays, in the collab menu.** 以前の状態に復元… (the facilitator's, next to いまの状態を記録) lists the earlier
+  states, newest first, by what they were (the collab's start, before or after a unit of work, a manual record, before
+  or after a restore; those with the latest's sources left out) and goes through the existing restore flow (the
+  confirmation, external changes recorded first, a running run cancelled or waited for, manual recovery).
+- **Persistence.** Migration 10 adds `requests.reverts` (a foreign key to `agent_runs`, indexed when set): the database
+  refuses a revert of a run it does not hold. Rows written before have none (NULL); a `Reverted` run is a row of
+  `agent_runs` like the others.
+- **Limits.** The merge is line-based: changes on adjacent lines conflict even when they would combine (then the AI
+  does it). The formatter formats the files the revert writes, as `dt fmt` formats a run's edits, so a hand-made layout in
+  those files is normalized. A write that fails midway is not recovered as a restore's is (the watcher then sees the
+  sources as external changes).
+
+## Appendix: three verbs, and a revert queues like any other change (amendment)
+
+*Decided by the maintainer* (2026-11-03), amending "revert a run" above (whose names are given here as they are now;
+it was written with "undo", a name that never shipped).
+
+- **Three concepts, three verbs**, in both languages, in the UI, the prompt, the docs and the code where cheap:
+  **stop** a queued or running run — 「実行を中止」 / Stop the run, state 中止 / Stopped (the domain keeps `cancel`,
+  `Cancelled`); **revert** a finished run — a new change that counteracts it, history and later changes kept —
+  「この作業を打ち消す…」 / Revert this work…, the card 打ち消し / Revert, the reverted run's card and assumptions
+  「打ち消し済み 〈誰〉 · 〈時刻〉」 / Reverted; **restore** the whole workspace to a snapshot — 「以前の状態に復元…」 /
+  Restore an earlier state…, the entries named without nested quotes (コラボの開始時, 〈作業名〉の前, 〈作業名〉の後,
+  〈作業名〉の打ち消しの前・の後, 復元の前・の後). The page writes the revert request 「〈作業名〉の変更を打ち消す」. Renamed
+  (unreleased): `Request.reverts`, `requestRevert`, `RevertableRun`, `RunNotRevertable`, `domain/revert.ts`
+  (`revertableChanges`, `revertStatus`, `isRevert`), `POST /api/session/runs/:id/revert`, the agent capability `revert`
+  and the start's `revert: [{ run, changes }]`, `MAX_REVERT_DIFF`, and migration 10's column `requests.reverts`.
+- **A revert queues.** `requestRevert` (the facilitator's) sends the revert request and queues its run behind the
+  other work through the normal queue — never refused because a run is running; stoppable (実行を中止) while it waits.
+  A second revert of the same run is refused while one is queued or under way (`RunNotRevertable`).
+- **The server takes its turn.** When a revert reaches the head of the queue, the server — not an agent — tries the
+  mechanical revert of "revert a run" against the workspace as it is then (`revertNext`): merge, check, format, write
+  behind the watcher hold, and record. It needs no agent, so a clean revert completes with none connected. The run
+  goes `Queued -> Reverted` (`command revert(baseRevision, resultRevision, changed, finishedAt)`, `inputReverts`,
+  `changedMatchesResult`; `RunReverted { runId, baseRevision, resultRevision, changed, finishedAt }`), replacing the
+  former `create command revert`. When none of the reverted run's changes is left by then, it completes as nothing to
+  revert (`changed: false`, the result revision is the base, nothing written; the card says so) rather than being
+  refused: `NothingToRevert` is gone. Otherwise — a conflict, the check, the sources no longer stored — the run stays
+  queued for the agent with why: `command leaveToAgent(obstacle: RevertObstacle) Queued -> Queued changes
+  revertObstacle`, emitting `RevertLeftToAgent { runId, obstacle }`; `Queued { revertObstacle: RevertObstacle? }` with
+  the union `RevertObstacle` (`Conflict { paths }`, `Check { newDtErrors, unparsedDtes }`, `Unreadable`).
+- **No race with an agent's claim** (the choice). The server claims the head with **its own lease** (owner `dt-server`,
+  the agent's lease length) through the same atomic claim of the queue's head as an agent (`RunQueue.claimNext`), in a
+  transaction that also checks that the head is a revert it has not tried (`awaitsServer`: queued, a revert, no
+  obstacle) and releases it at once otherwise. An agent's claim does the reverse: an untried revert at the head is
+  released in the same transaction and the agent is answered `RunInProgress` — so an agent never gets a revert before
+  the server tried it, and the server never takes one twice (once tried, it carries its obstacle). While the server
+  holds its lease the session has a live lease, so agents' claims and restores wait, as for any run. Writing and
+  recording are one transaction that first checks the lease is still the server's: a revert stopped meanwhile (the stop
+  ends its lease) writes nothing (`LeaseLost`). A refused write (the workspace changed meanwhile) releases the lease and
+  keeps the revert untried, for the next try; an exception does too. Chosen over a separate "tried" flag that agents
+  would skip past, which would let an agent run the work queued behind the revert first and break the queue's order.
+- **When the server tries.** After every event of the session (a run queued, ended, stopped; the relay's pump), on the
+  lease ticker (every 5 s, after expiring leases: a refused try, or a lease of a server that stopped mid-try, is retried)
+  and at startup; one pass at a time, each taking reverts at the head until the head is not one. An agent whose claim
+  met an untried revert nudges it too. The agent's stream gets `run.reverted` and `run.revert_left_to_agent`, after
+  which the subscriber claims again (as after `run.queued`): a run behind a mechanical revert, or the revert left to it.
+- **API and page.** `POST /api/session/runs/:id/revert { body }` → 201 `{ request, run, ahead }`: the run as it is once
+  the server had its turn — `Reverted` when the queue was empty and it went through at once, `Queued` with its
+  `revertObstacle` when it was left to the AI, `Queued` while it waits behind `ahead` runs. The page's revert box
+  follows the run live (queued and how many ahead, reverted, nothing to revert, left to the AI and why, with the AI,
+  stopped); the "run in progress" refusal is gone. A queued revert's card says why it waits for the AI. Telling that no
+  agent is connected (「AI 接続なし（n 件待ち）」) is a later amendment.
+- **Persistence.** None new: the obstacle is in the run's JSON (older rows have none), and `RevertLeftToAgent` is an
+  outbox event like the others.
+
+## Appendix: state outside the workspace (amendment)
+
+*Decided by the maintainer* (2026-11-03), amending "persistence and ports (S3)" and "the session server (S4)" above,
+ADR 0012 (`generated.json`) and ADR 0001 (`layout.json`): dt writes nothing of its own into the workspace any more.
+`.domaintrail/` held the session's database with its WAL files, the blobs, `server.json`, the layouts and the record of
+`dt generate ts`, and ignored itself through its own `.gitignore`; it showed up in editors' file trees and in copies of
+the repository, was read by every tool that walks the workspace, and had to be kept away from the agents by deny rules.
+
+- **Where.** Per user, one directory per workspace named `<basename>-<8 hex digits of the SHA-256 of its real path>`
+  (`realpathSync.native`; the name keeps letters, digits, `.`, `_`, `-`, no leading dot, 48 characters at most):
+  - the **state** — `session.db` and its WAL files, `blobs/`, `server.json`, `generated.json` (the record of the files
+    written, which no run can make again: losing it leaves stale generated files behind), and the seed script's
+    `seed.json` — in `$XDG_STATE_HOME/domaintrail/<workspace>/`, by default `~/.local/state/domaintrail/<workspace>/`;
+  - the **cache** — `layout.json`, laid out again from scratch when missing — in `$XDG_CACHE_HOME/domaintrail/<workspace>/`,
+    by default `~/.cache/domaintrail/<workspace>/`.
+  - *Decided by the maintainer*: **macOS uses the XDG paths too** (as `trust.json` does, `~/.config/domaintrail/`), and
+    honours `XDG_*` when set (a relative one is ignored, as the XDG specification asks). Windows:
+    `%LOCALAPPDATA%\domaintrail\state\<workspace>\` and `…\cache\<workspace>\` (else `~\AppData\Local`).
+  - `DOMAINTRAIL_STATE_DIR` replaces the state's root (CI, containers); the workspaces' directories go below it.
+  - Runtime files: none needs `$XDG_RUNTIME_DIR`; the agents' views and the `dt` shim stay in private `mkdtemp`
+    directories of `os.tmpdir()`. The configuration stays where it is (`$XDG_CONFIG_HOME/domaintrail/trust.json`).
+- **Owner.** `@domaintrail/workspace` (`state-dirs.ts`, `legacy-state.ts`, `workspace-state.ts`) says where and makes
+  the directories; the collaboration's persistence (`openSessionDatabase`, `openSessionBlobs`, `server.json`), the
+  layout store and the generated output take the directory they are given. The app opens the directories once per
+  command (`wiring/state.ts`): `dt open`, `dt collab`, `dt open link`, `dt collab link` / `invite` / `agent-link`,
+  `dt agent` (the running server's `server.json`) and `dt generate ts`.
+- **Safety.** Directories 0700 and files 0600 whatever the umask (the existing `restrict` and `PRIVATE_*` helpers; the
+  database still made 0600 before SQLite opens it, the WAL files only looked at while the connection is open). A
+  workspace's directory and what dt writes in it are never symbolic links (refused); the roots are the user's and may be
+  links. `workspace.json` in each directory records the real path: a directory recorded for another existing workspace
+  (two names and hashes alike) is refused and says to set `DOMAINTRAIL_STATE_DIR`; one recorded for a workspace that is
+  gone says `dt session prune`; a newly made one says where a gone workspace of the same name kept its state (a moved
+  workspace: its session stays under the old hash). A state or cache root inside the workspace, or a workspace inside
+  one, is refused (links followed).
+- **The agents.** The state is outside the workspace, so the agents cannot read it; `agent.read.paths` refuses a path
+  inside or holding the state or cache root (beside `~/.ssh` and the others). The deny rules for `.domaintrail` stay:
+  other checkouts and older versions still have one.
+- **Migration** (*decided by the maintainer*: move, then delete). The first command that opens the state moves an older
+  version's `.domaintrail/`: `session/session.db` with `-wal` and `-shm`, `session/blobs/**` and `seed.json` into the
+  state, `layout.json` into the cache; its `.gitignore` files, a stopped server's `server.json`, the old `agent.json`
+  and `generated.json` are dropped (see the hardening below). It prints `Moved .domaintrail/ to <state dir>/` once and deletes the emptied
+  directory; files that are not dt's (and links, never followed) stay with it, and that is said. While the `server.json`
+  there names a live process, it refuses (stop the older server first). When the state directory already holds files
+  (anything but its record), nothing is overwritten: `.domaintrail/` is kept, and that is said. Crash safety: the files
+  are copied into `.<workspace>.moving-<pid>-<random>/` beside the state directory, checked byte for byte, the record
+  written with `movedFrom` and `moved`, and the directory renamed into place; only then is `.domaintrail/` deleted. A copy left by a
+  killed run (its process gone) is removed by the next one; a run killed after the rename leaves both copies, and the
+  next run, seeing `movedFrom` and the recorded hashes, deletes the old one. The WAL files move with their database while no
+  server runs, so SQLite recovers what was not checkpointed when it next opens it.
+- **Hardening of the migration** (after a security review: a cloned repository may ship a crafted `.domaintrail/` —
+  a database with sign-ins, facilitator links and invites, a `generated.json` that steers deletions — which the first
+  `dt open` would otherwise import silently into the user's state). The move stays automatic (the maintainer's
+  decision), but:
+  - the directory's name on disk (from `readdir` of the root) must be exactly `.domaintrail`: a case variant, which a
+    case-insensitive file system also answers to, is never moved;
+  - nothing moves when git tracks or does not ignore any entry of `.domaintrail/` (`git ls-files --cached --others
+    --exclude-standard -- ':(icase).domaintrail'`, the results filtered again by their NFC-lowercased first segment), or
+    git fails: it is left in place, the workspace starts a new session, and one line says how to remove it. dt's own
+    `.domaintrail/` always ignored itself. Outside a repository git is not asked;
+  - only regular files owned by the user (`lstat().uid === process.getuid()` on POSIX) move, in directories — from
+    `.domaintrail` down — owned by the user and writable by neither group nor others; links never. Any other file is
+    skipped and named in one line, and stays; the database and its WAL files move all or none (fail closed);
+  - in the staging copy, before the rename, the collaboration's `cleanMovedDatabase` (given to the workspace by the app;
+    without it no database moves) first refuses any database that is not one dt made: its `user_version` must be a
+    known migration level and its whole `sqlite_master` (type, name, table and `sql` as written) exactly what the
+    first that many migrations make in memory — so no trigger, view, extra table or column, and no case variant of a
+    name (SQLite's identifiers are case-insensitive) — and pass `quick_check`. Then the rows of `sign_ins`,
+    `facilitator_links` (facilitator links, `dt open` sign-in codes, agent pairing codes), `invites` and
+    `facilitators` (who holds the role) are deleted by the names dt uses (a table the level predates is skipped) and
+    checked to be empty by the same names, `trusted_schema` off. The session's content stays (sessions, requests, runs, revisions,
+    the outbox, triages, proposals, interviews, marks, approvals, restores). A database that cannot be cleaned is not
+    moved (fail closed, one line). Join requests and the solo sign-in are in memory only;
+  - `generated.json` is not moved: the next `dt generate ts` records its own, and generated files of earlier runs
+    outside the output directories it writes are no longer deleted automatically;
+  - `workspace.json` records the SHA-256 of each file as it was in `.domaintrail/` (`moved`): a later run recognizes a
+    move that was killed before deleting the old directory by those hashes, the moved copy having been changed by the
+    cleaning.
+- **`dt session prune`** (*decided by the maintainer*: manual only). Lists the state and cache directories whose
+  workspace no longer exists, and with `--older-than <days>` those not changed for that long (the latest change of the
+  directory or of what is directly in it); `--yes` removes them, else it is a dry run. A running server's state, a
+  directory without a record and another process's unfinished move are kept; a killed move's copy goes. `dt session`'s
+  other subcommands stay removed (ADR 0030).
+- **Not changed.** `dt export sources` (never archived `.domaintrail`), the deny rules, the `.domaintrail` entries of
+  this repository's `.gitignore` and lint configuration (older checkouts). dt no longer writes a `.gitignore` anywhere.
+- **Tests.** `test/preload.ts` gives every test process its own `XDG_*` and `DOMAINTRAIL_STATE_DIR` (and a test that
+  starts `dt` with `Bun.spawn` passes `process.env`: Bun gives a child the environment the process started with).
+
+## Appendix: following someone (amendment)
+
+*Decided by the maintainer* (2026-11-06), from the approved preview 「追う」: the camera jumped to the AI's changes
+whenever none of a turn's marks was in view, so a participant reading elsewhere lost their place to someone else's
+request, and nobody could watch where another participant was looking. The rule is now: **the camera moves only for the
+reader and for whom the reader follows.**
+
+- **Whom.** The AI or one participant, one at a time, per page (never sent nor shared; a reload forgets it). A small
+  round toggle (◉ / ○) left of the AI's status in the app bar follows the AI — shown while it works, and while it is
+  idle only when followed (faint); not while no agent is connected —, and each row of the participants (the AI's after
+  yours) has one; under `dt open` only the app bar's.
+- **Starting.** The reader's choice; a request the reader sends to the AI (`@AI`, a reply to the AI or to an AI turn,
+  the facilitator's AI に送る, an answer or a pick, every message under `dt open`) follows the AI on the sender's page
+  only; a participant's change proposal approved follows it on that participant's page. Another's request starts
+  nothing.
+- **Stopping.** Any move of the reader's own, at once and without asking — a pan or zoom (drag, wheel, pinch, keys,
+  buttons), a selection, switching what is shown — and the participant followed leaving the session. The reader's own
+  moves are told from a followee's in one place: the workspace hands the page's controls a canvas, a navigation and
+  settings that stop following before each move (`apps/web/view/follow.ts`), and the canvas's own gestures are reported
+  by the port (`DiagramCanvas.onUserInput`); the followee's moves and the page's own (a view drawn, a resize) use the
+  bare ones.
+- **The AI followed** is brought to a turn's changes as it ends (the view switched as 図で見る does); a reader who does
+  not follow it keeps the camera, told by the marks and the bar.
+- **A participant followed**: the page opens the view of their location (`viewTargetOf`, and 詰めて表示 from its
+  `layoutKey`) and, once both locations are equal, fits their camera. Where they are has no canvas or is a view this
+  page cannot open (`canOpen`): the page stays and keeps following. The detail's pillar is not followed.
+- **The camera in presence.** `Presence` and `presence.update` gain an optional `camera: { x, y, w, h }`: the part of
+  the page the canvas shows, in page coordinates, sent only while the location has a canvas. A rectangle rather than a
+  camera (x, y, zoom), because the pages' canvases differ in size: the follower fits it to its own. A page sends it at
+  most every 150 ms (`CAMERA_INTERVAL_MS`), the last one always (a pan's end), rounded to a tenth of a unit, and with a
+  new location at once; it rides the presence updates (≤ 20 Hz per participant, the server's interval unchanged). The
+  server takes it only as four finite numbers, the corner within ±10⁷ and the size above 0 and at most 10⁷, with no
+  other key; a message with anything else is dropped whole, as for the cursor. A page before it sends none and gets it
+  ignored: following such a page opens its view and leaves the camera.

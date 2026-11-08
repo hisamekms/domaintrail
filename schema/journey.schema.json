@@ -1,0 +1,378 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://domaintrail.dev/schema/journey.schema.json",
+  "title": "DomainTrail journey file (domaintrail.journey.json)",
+  "description": "What the work in a workspace is for, how far it goes and how far it has come: one journey per event storming (keyed by the storming's ID) and named modeling journeys. dt writes it (a brief confirmed, a goal changed, a state set, a step marked done) with a stable key order and two-space indent; dt check validates it (J001) and warns of a journey naming a storming or context that does not exist (J002, J003). Enums are English; the why is free text in the language of the interview.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "const": 1
+    },
+    "stormings": {
+      "description": "The event storming's journey of each storming, by the storming's ID.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/definitions/stormingId"
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/esJourney"
+      }
+    },
+    "modeling": {
+      "description": "The named modeling journeys, several allowed (new ones last).",
+      "type": "array",
+      "maxItems": 50,
+      "items": {
+        "$ref": "#/definitions/modelJourney"
+      }
+    }
+  },
+  "definitions": {
+    "stormingId": {
+      "type": "string",
+      "pattern": "^[_a-zA-Z][A-Za-z0-9_]*$",
+      "maxLength": 100
+    },
+    "esJourney": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["purpose", "participants", "use", "level", "state", "marks"],
+      "properties": {
+        "purpose": {
+          "description": "Why the storming is held.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^[^\\n\\r]*$"
+        },
+        "scope": {
+          "description": "What it covers: where the story starts and ends.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^[^\\n\\r]*$"
+        },
+        "participants": {
+          "description": "Who takes part, as roles (「窓口担当」), never people's names.",
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "^[^\\n\\r]*$"
+          }
+        },
+        "use": {
+          "description": "What the result is for: align people, or lead into modeling (the guide then suggests /model:start).",
+          "enum": ["align", "modeling"]
+        },
+        "level": {
+          "description": "How far it goes: Big Picture (to the questions) or Design Level.",
+          "enum": ["BigPicture", "DesignLevel"]
+        },
+        "state": {
+          "description": "active: in progress; done: a person set it on reaching the goal; archived: out of the guide's picker.",
+          "enum": ["active", "done", "archived"]
+        },
+        "marks": {
+          "description": "The steps a person marked done (those the files cannot tell).",
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "enum": ["exceptions", "questions"]
+          }
+        }
+      }
+    },
+    "modelJourney": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "purpose", "participants", "pattern", "goal", "state", "marks"],
+      "properties": {
+        "id": {
+          "description": "A stable slug: marks and the session's current journey name it.",
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+          "maxLength": 60
+        },
+        "name": {
+          "description": "The label shown (「Billing の深掘り」).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100,
+          "pattern": "^[^\\n\\r]*$"
+        },
+        "purpose": {
+          "description": "Why the modeling is done (what the generated code is for).",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^[^\\n\\r]*$"
+        },
+        "scope": {
+          "description": "What it covers.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^[^\\n\\r]*$"
+        },
+        "constraints": {
+          "description": "What is fixed: existing systems, terms.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240,
+          "pattern": "^[^\\n\\r]*$"
+        },
+        "participants": {
+          "description": "Who takes part, as roles (「窓口担当」), never people's names.",
+          "type": "array",
+          "maxItems": 12,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 60,
+            "pattern": "^[^\\n\\r]*$"
+          }
+        },
+        "pattern": {
+          "description": "Where it starts: Whole (A, from the whole), FromStorming (B), OneContext (C, one BC in depth), Review (D, of an existing model).",
+          "enum": ["Whole", "FromStorming", "OneContext", "Review"]
+        },
+        "from": {
+          "description": "The pattern's subject: { stormings } for FromStorming, { context } for OneContext."
+        },
+        "goal": {
+          "description": "The step it ends at: one the pattern allows.",
+          "type": "string"
+        },
+        "state": {
+          "description": "active: in progress; done: a person set it on reaching the goal; archived: out of the guide's picker.",
+          "enum": ["active", "done", "archived"]
+        },
+        "marks": {
+          "description": "The steps a person marked done, and the BC rows by the context's name.",
+          "type": "object"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "pattern": {
+                "const": "Whole"
+              }
+            },
+            "required": ["pattern"]
+          },
+          "then": {
+            "properties": {
+              "pattern": {
+                "const": "Whole"
+              },
+              "goal": {
+                "enum": ["contextMap", "contexts", "invariants"]
+              },
+              "marks": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["steps", "contexts"],
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": ["subdomains", "bcSplit", "contextMap"]
+                    }
+                  },
+                  "contexts": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "maxItems": 1,
+                      "items": {
+                        "const": "contexts"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "not": {
+              "required": ["from"]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pattern": {
+                "const": "FromStorming"
+              }
+            },
+            "required": ["pattern"]
+          },
+          "then": {
+            "properties": {
+              "pattern": {
+                "const": "FromStorming"
+              },
+              "goal": {
+                "enum": ["aggregates", "commands", "invariants"]
+              },
+              "marks": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["steps", "contexts"],
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": ["review"]
+                    }
+                  },
+                  "contexts": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "maxItems": 1,
+                      "items": {
+                        "const": "bcCarved"
+                      }
+                    }
+                  }
+                }
+              },
+              "from": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["stormings"],
+                "properties": {
+                  "stormings": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "uniqueItems": true,
+                    "items": {
+                      "$ref": "#/definitions/stormingId"
+                    }
+                  }
+                }
+              }
+            },
+            "required": ["from"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pattern": {
+                "const": "OneContext"
+              }
+            },
+            "required": ["pattern"]
+          },
+          "then": {
+            "properties": {
+              "pattern": {
+                "const": "OneContext"
+              },
+              "goal": {
+                "enum": ["commands", "invariants"]
+              },
+              "marks": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["steps", "contexts"],
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "maxItems": 0
+                  },
+                  "contexts": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "maxItems": 1,
+                      "items": {
+                        "const": "aggregates"
+                      }
+                    }
+                  }
+                }
+              },
+              "from": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["context"],
+                "properties": {
+                  "context": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 100
+                  }
+                }
+              }
+            },
+            "required": ["from"]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "pattern": {
+                "const": "Review"
+              }
+            },
+            "required": ["pattern"]
+          },
+          "then": {
+            "properties": {
+              "pattern": {
+                "const": "Review"
+              },
+              "goal": {
+                "enum": ["invariants"]
+              },
+              "marks": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["steps", "contexts"],
+                "properties": {
+                  "steps": {
+                    "type": "array",
+                    "uniqueItems": true,
+                    "items": {
+                      "enum": ["termsAligned", "boundaries"]
+                    }
+                  },
+                  "contexts": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "array",
+                      "maxItems": 1,
+                      "items": {
+                        "const": "boundaries"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "not": {
+              "required": ["from"]
+            }
+          }
+        }
+      ]
+    }
+  }
+}

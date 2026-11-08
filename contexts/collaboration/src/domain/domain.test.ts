@@ -1,0 +1,647 @@
+// The pure decisions of contexts/collaboration/src/domain (ADR 0026): content hashes, the run success rule and the
+// diagnostics diff, target staleness, and the transitions of the commands beyond what the generated contract tests
+// check (src/contracts.test.ts).
+import { describe, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import type { Diagnostic } from '@domaintrail/kernel';
+import { Collaboration as C } from '../generated/index.js';
+import { agentRunCommands, revisionCommands, sessionCommands } from './commands.js';
+import { compareFiles, LINE_CUT, lineDiff, MAX_DIFF_BYTES, MAX_DIFF_LINES, MAX_EDITS, MAX_LINE_CHARS, MAX_OUTPUT_LINES } from './compare.js';
+import { checkAgentReplyDeep, readAnswer, readReply, REPLY_LIMITS, requestNumber, resolveAnswer, resolvePick, toAgentReply, type PickData } from './reply.js';
+import { sha256Hex } from './sha256.js';
+import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from './snapshot.js';
+import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from './targets.js';
+import { diagnosticsDiff, readToolOutcome, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
+import { check } from '../test-helpers.js';
+import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './ids.js';
+
+const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+    if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
+    return r.value;
+};
+const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
+const path = (p: string): C.WorkspacePath => value(C.makeWorkspacePath(p));
+const at = new Date('2026-10-31T09:00:00Z');
+const later = new Date('2026-10-31T10:00:00Z');
+
+describe('content hashes', () => {
+    test('sha256Hex agrees with node:crypto, across block boundaries and for multi-byte text', () => {
+        for (const text of ['', 'abc', 'a'.repeat(55), 'a'.repeat(56), 'a'.repeat(64), 'a'.repeat(1000), 'context 販売 { }\n']) {
+            expect(sha256Hex(bytes(text))).toBe(createHash('sha256').update(text).digest('hex'));
+        }
+        expect(sha256Hex(bytes('abc'))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
+    });
+
+    test('the snapshot hash depends on paths and file hashes only, not on their order', () => {
+        const a = snapshotFile(path('a.dt'), bytes('context A {}'));
+        const b = snapshotFile(path('s/b.dtes'), bytes('storming B {}'));
+        expect(snapshotHash([a, b])).toBe(snapshotHash([b, a]));
+        expect(snapshotHash([a, b])).not.toBe(snapshotHash([a]));
+        expect(snapshotHash([a])).not.toBe(snapshotHash([{ ...a, path: path('b.dt') }]));
+        expect<string>(snapshotHash([])).toBe(createHash('sha256').update('').digest('hex'));
+        expect<string>(snapshotHash([a])).toBe(createHash('sha256').update(`a.dt\u0000${a.hash}\n`).digest('hex'));
+    });
+
+    test('a snapshot file carries its language and size', () => {
+        expect(snapshotFile(path('x/y.dtes'), bytes('storming Y {}'))).toEqual({
+            path: path('x/y.dtes'),
+            language: 'Dtes',
+            hash: hashBytes(bytes('storming Y {}')),
+            bytes: 13,
+        });
+        expect(languageOf('x.dt')).toBe('Dt');
+    });
+
+    test('workspace paths are relative, without dot segments or backslashes', () => {
+        expect(value(workspacePath('sales/order.dt'))).toBe(path('sales/order.dt'));
+        for (const raw of ['/etc/passwd', '../x.dt', 'a/../b.dt', './a.dt', 'a//b.dt', 'a\\b.dt', '']) {
+            expect(workspacePath(raw)).toEqual({ ok: false, error: { type: 'PathOutsideRoot', path: raw } });
+        }
+    });
+
+    test('changed paths are the added, removed and changed files, sorted', () => {
+        const f = (p: string, text: string) => ({ path: path(p), hash: hashBytes(bytes(text)) });
+        expect(changedPaths([f('a.dt', '1'), f('b.dt', '1'), f('c.dt', '1')], [f('c.dt', '2'), f('a.dt', '1'), f('d.dt', '1')])).toEqual([
+            path('b.dt'),
+            path('c.dt'),
+            path('d.dt'),
+        ]);
+        expect(changedPaths([f('a.dt', '1')], [f('a.dt', '1')])).toEqual([]);
+    });
+});
+
+const diagnostic = (file: string, code: Diagnostic['code'], severity: Diagnostic['severity'], message: string, line = 1): Diagnostic => ({
+    file,
+    code,
+    severity,
+    message,
+    start: { line, column: 1 },
+    end: { line, column: 2 },
+});
+
+describe('validation per DSL and the run success rule', () => {
+    const base = [
+        diagnostic('a.dt', 'M001', 'error', 'Cannot resolve X.'),
+        diagnostic('a.dt', 'L001', 'warning', 'No label.'),
+        diagnostic('s.dtes', 'S003', 'warning', 'Unused event.'),
+        diagnostic('s.dtes', 'S010', 'error', 'The ref names nothing.'),
+    ];
+
+    test('the summary splits by DSL, with the link rules apart', () => {
+        expect(summarize(base, false)).toEqual({ dtErrors: tally(1), dtesErrors: tally(0), dtesWarnings: tally(1), linkWarnings: tally(1), stale: false });
+        expect(summarize([diagnostic('b.dtes', 'SYNTAX', 'error', 'Unexpected }.')], true)).toEqual({
+            dtErrors: tally(0),
+            dtesErrors: tally(1),
+            dtesWarnings: tally(0),
+            linkWarnings: tally(0),
+            stale: true,
+        });
+    });
+
+    test('the diff counts new .dt errors as a multiset, ignoring positions, and lists the .dtes files that do not parse', () => {
+        const result = [
+            diagnostic('a.dt', 'M001', 'error', 'Cannot resolve X.', 7), // moved, the same
+            diagnostic('a.dt', 'M001', 'error', 'Cannot resolve X.', 9), // a second one: new
+            diagnostic('b.dt', 'M008', 'error', 'Not a Bool.'),
+            diagnostic('s.dtes', 'S003', 'warning', 'Unused event.'),
+            diagnostic('t.dtes', 'SYNTAX', 'error', 'Unexpected }.'),
+        ];
+        const diff = diagnosticsDiff(base, result);
+        expect(diff.newDtErrors.map((d) => [d.file, d.code, d.start.line])).toEqual([
+            ['a.dt', 'M001', 9],
+            ['b.dt', 'M008', 1],
+        ]);
+        expect(diff.resolvedDtErrors).toEqual([]);
+        expect(diff.newDtes.map((d) => d.code)).toEqual(['SYNTAX']);
+        expect(diff.resolvedDtes.map((d) => d.code)).toEqual(['S010']);
+        expect(diff.unparsedDtes).toEqual(['t.dtes']);
+        expect(unparsedDtes(base)).toEqual([]);
+        expect(runReport({ exitCode: 0, formatted: 'Ran', checked: 'Ran' }, diff)).toEqual({
+            exitCode: 0,
+            formatted: 'Ran',
+            checked: 'Ran',
+            newDtErrors: tally(2),
+            unparsedDtes: tally(1),
+        });
+    });
+
+    test('pre-existing errors and new .dtes warnings do not fail a run', () => {
+        const diff = diagnosticsDiff(base, [...base, diagnostic('s.dtes', 'S003', 'warning', 'Another unused event.')]);
+        expect(succeeded(runReport({ exitCode: 0, formatted: 'Ran', checked: 'Ran' }, diff), true)).toBe(true);
+    });
+
+    test('a run that changed files succeeds only with exit 0, fmt and check run, no new .dt error and every .dtes parsing', () => {
+        const ok: C.RunReport = { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: tally(0), unparsedDtes: tally(0) };
+        expect(succeeded(ok, true)).toBe(true);
+        const broken: Partial<C.RunReport>[] = [
+            { exitCode: 1 },
+            { formatted: 'Failed' },
+            { checked: 'Failed' },
+            { formatted: 'Skipped' },
+            { checked: 'Skipped' },
+            { newDtErrors: tally(1) },
+            { unparsedDtes: tally(1) },
+        ];
+        for (const b of broken) expect(succeeded({ ...ok, ...b }, true)).toBe(false);
+    });
+
+    test('a run that changed nothing may skip fmt and check, but never fail them (ADR 0030)', () => {
+        const skipped: C.RunReport = { exitCode: 0, formatted: 'Skipped', checked: 'Skipped', newDtErrors: tally(0), unparsedDtes: tally(0) };
+        expect(succeeded(skipped, false)).toBe(true);
+        expect(succeeded({ ...skipped, formatted: 'Ran', checked: 'Ran' }, false)).toBe(true);
+        expect(succeeded({ ...skipped, checked: 'Failed' }, false)).toBe(false);
+        expect(succeeded({ ...skipped, formatted: 'Failed' }, false)).toBe(false);
+        expect(succeeded({ ...skipped, exitCode: 2 }, false)).toBe(false);
+        expect(succeeded({ ...skipped, newDtErrors: tally(1) }, false)).toBe(false);
+    });
+
+    test('the tool outcome of a finish body: the new words, and booleans from an older subscriber', () => {
+        expect(['ran', 'failed', 'skipped', true, false, 'yes', undefined, 1].map(readToolOutcome)).toEqual([
+            'Ran',
+            'Failed',
+            'Skipped',
+            'Ran',
+            'Failed',
+            undefined,
+            undefined,
+            undefined,
+        ]);
+    });
+});
+
+describe('target staleness', () => {
+    const sources = {
+        'sales.dt': `context Sales {
+  id OrderId: UUID
+  aggregate Order {
+    id: OrderId
+    state Draft
+    state Confirmed
+    create command place(id: OrderId)
+      -> Draft
+    command confirm()
+      Draft -> Confirmed
+  }
+}
+`,
+        'returns.dtes': `storming Returns {
+  event Requested
+  event Received
+  event Rejected
+  event Disposed
+  hotspot Who "誰が受け取る？"
+  timeline Rejecting {
+    Requested
+    Received
+    group Closing {
+      Rejected
+      Disposed
+    }
+  }
+}
+`,
+    };
+    const scopeOf = (files: Record<string, string>): Promise<TargetScope> => check(files);
+    const dt = (element: string): C.ModelTarget => ({ kind: 'DtElement', element: value(C.makeElementName(element)) });
+    const es = (storming: string, local: string): C.ModelTarget => ({
+        kind: 'DtesElement',
+        storming: value(C.makeStormingName(storming)),
+        local: value(C.makeStormingLocalName(local)),
+    });
+    const occurrence = (timeline: string, eventName: string, stepPath: number[]): C.ModelTarget => ({
+        kind: 'DtesOccurrence',
+        storming: value(C.makeStormingName('Returns')),
+        timeline: value(C.makeTimelineName(timeline)),
+        eventName: value(C.makeStormingEventName(eventName)),
+        occurrence: value(C.makeOccurrencePath(encodeOccurrencePath(stepPath))),
+    });
+
+    test('targets resolve by model ID, storming and local ID, and timeline, event and step path', async () => {
+        const scope = await scopeOf(sources);
+        expect(targetStatus({ kind: 'Workspace' }, scope)).toBe('current');
+        for (const id of ['Sales.Order', 'Sales.OrderId', 'Sales.Order#Confirmed', 'Sales.Order:confirm']) expect(targetStatus(dt(id), scope)).toBe('current');
+        for (const id of ['Sales.Invoice', 'Sales.Order#Shipped', 'Sales.Order:cancel']) expect(targetStatus(dt(id), scope)).toBe('stale');
+        expect(targetStatus(es('Returns', 'Who'), scope)).toBe('current');
+        expect(targetStatus(es('Returns', 'Closing'), scope)).toBe('current');
+        expect(targetStatus(es('Returns', 'Lost'), scope)).toBe('stale');
+        expect(targetStatus(es('Refunds', 'Who'), scope)).toBe('stale');
+        expect(targetStatus(occurrence('Rejecting', 'Received', [1]), scope)).toBe('current');
+        expect(targetStatus(occurrence('Rejecting', 'Disposed', [2, 1]), scope)).toBe('current');
+        expect(targetStatus(occurrence('Rejecting', 'Disposed', [2]), scope)).toBe('stale');
+        expect(targetStatus(occurrence('Rejecting', 'Requested', [1]), scope)).toBe('stale');
+        expect(targetStatus(occurrence('Accepting', 'Requested', [0]), scope)).toBe('stale');
+    });
+
+    test('an inserted step makes an occurrence stale: it is never re-bound', async () => {
+        const scope = await scopeOf({ ...sources, 'returns.dtes': sources['returns.dtes'].replace('    Requested\n', '    Requested\n    Requested\n') });
+        expect(targetStatus(occurrence('Rejecting', 'Received', [1]), scope)).toBe('stale');
+        expect(targetStatus(occurrence('Rejecting', 'Received', [2]), scope)).toBe('current');
+    });
+
+    test('a target is unknown, not stale, when the sources it would be in do not parse', async () => {
+        const scope = await scopeOf({ 'sales.dt': 'context Sales {', 'returns.dtes': 'storming Returns {' });
+        expect(targetStatus(dt('Sales.Order'), scope)).toBe('unknown');
+        expect(targetStatus(es('Returns', 'Who'), scope)).toBe('unknown');
+    });
+
+    test('occurrence paths are one or two indexes', () => {
+        expect(encodeOccurrencePath([2, 1])).toBe('2.1');
+        expect(decodeOccurrencePath('2.1')).toEqual([2, 1]);
+        expect(decodeOccurrencePath('0')).toEqual([0]);
+        for (const bad of ['', '01', '1.2.3', '-1', 'a', '1.']) expect(decodeOccurrencePath(bad)).toBeUndefined();
+    });
+});
+
+describe('transitions', () => {
+    const facilitator = value(C.makeParticipantId('facilitator'));
+    const guest = value(C.makeParticipantId('guest'));
+    const name = value(C.makeDisplayName('Ada'));
+    const sessionId = knownSessionId('00000000-0000-4000-8000-000000000001');
+    const base = knownRevisionId('00000000-0000-4000-8000-000000000002');
+    const result = knownRevisionId('00000000-0000-4000-8000-000000000003');
+
+    test('a session starts with its facilitator, admits a newcomer once, and closes', () => {
+        const open = value(sessionCommands.start({ id: sessionId, facilitator, name, mode: 'Collab', startedAt: at })).Open.aggregate;
+        expect(open.participants).toEqual([{ id: facilitator, name, role: 'Facilitator', joinedAt: at }]);
+        const joined = value(sessionCommands.join(open, { participant: guest, name, joinedAt: later })).Open.aggregate;
+        expect(joined.participants.map((p) => [p.id, p.role])).toEqual([
+            [facilitator, 'Facilitator'],
+            [guest, 'Participant'],
+        ]);
+        expect(sessionCommands.join(joined, { participant: guest, name, joinedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'AlreadyJoined', participant: guest },
+        });
+        expect(value(sessionCommands.close(joined, { closedByRole: 'Facilitator', closedAt: later })).Closed.aggregate).toMatchObject({
+            state: 'Closed',
+            closedAt: later,
+        });
+        expect(sessionCommands.close(joined, { closedByRole: 'Participant', closedAt: later })).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
+    });
+
+    const running: C.RunningAgentRun = {
+        state: 'Running',
+        id: knownAgentRunId('00000000-0000-4000-8000-000000000005'),
+        session: sessionId,
+        input: {
+            requests: [
+                {
+                    request: knownRequestId('00000000-0000-4000-8000-000000000004'),
+                    author: guest,
+                    targets: [],
+                    body: value(C.makeText('x')),
+                },
+            ],
+        },
+        queuedBy: facilitator,
+        queuedAt: at,
+        baseRevision: base,
+        startedAt: at,
+    };
+    const report = (newDtErrors: number): C.RunReport => ({
+        exitCode: 0,
+        formatted: 'Ran',
+        checked: 'Ran',
+        newDtErrors: tally(newDtErrors),
+        unparsedDtes: tally(0),
+    });
+
+    test('finish completes a run that meets the success rule and fails one that does not, with its report', () => {
+        const done = value(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: true, finishedAt: later }));
+        expect(done.Completed?.aggregate).toMatchObject({ state: 'Completed', resultRevision: result, changed: true, baseRevision: base });
+        expect(done.Completed?.events.RunCompleted).toEqual({
+            type: 'RunCompleted',
+            runId: running.id,
+            resultRevision: result,
+            changed: true,
+            finishedAt: later,
+        });
+        const failed = value(agentRunCommands.finish(running, { report: report(2), resultRevision: base, changed: false, finishedAt: later }));
+        expect(failed.Failed?.aggregate).toMatchObject({ state: 'Failed', reason: 'RuleNotMet', report: report(2), resultRevision: base });
+        expect(agentRunCommands.finish(running, { report: report(0), resultRevision: base, changed: true, finishedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'ChangedMismatch' },
+        });
+        expect(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: false, finishedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'ChangedMismatch' },
+        });
+    });
+
+    test("fail needs a reason other than the rule; cancel, the facilitator's, keeps the base revision of a running run", () => {
+        expect(agentRunCommands.fail(running, { reason: 'RuleNotMet', finishedAt: later })).toEqual({ ok: false, error: { type: 'ReportRequired' } });
+        const failed = value(agentRunCommands.fail(running, { reason: 'LeaseExpired', finishedAt: later })).Failed.aggregate;
+        expect(failed).toMatchObject({ state: 'Failed', reason: 'LeaseExpired', finishedAt: later });
+        expect('report' in failed).toBe(false);
+        expect(
+            value(agentRunCommands.cancel(running, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).Cancelled.aggregate,
+        ).toMatchObject({
+            baseRevision: base,
+            cancelledBy: facilitator,
+        });
+        expect(agentRunCommands.cancel(running, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
+            ok: false,
+            error: { type: 'FacilitatorOnly' },
+        });
+        const { baseRevision: _b, startedAt: _s, ...rest } = running;
+        const queued: C.QueuedAgentRun = { ...rest, state: 'Queued' };
+        expect(
+            'baseRevision' in
+                value(agentRunCommands.cancel(queued, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).Cancelled.aggregate,
+        ).toBe(false);
+        expect(agentRunCommands.cancel(queued, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
+            ok: false,
+            error: { type: 'FacilitatorOnly' },
+        });
+    });
+
+    test('take and restore require the content hash of the files; restore, the facilitator', () => {
+        const files = [snapshotFile(path('a.dt'), bytes('context A {}'))];
+        const validation = summarize([], false);
+        const id = knownRevisionId('00000000-0000-4000-8000-000000000006');
+        expect(
+            revisionCommands.take({
+                id,
+                session: sessionId,
+                origin: { kind: 'Manual', takenBy: facilitator },
+                contentHash: snapshotHash([]),
+                files,
+                validation,
+                takenAt: at,
+            }),
+        ).toEqual({
+            ok: false,
+            error: { type: 'ContentHashMismatch' },
+        });
+        expect(
+            revisionCommands.take({
+                id,
+                session: sessionId,
+                origin: { kind: 'Restored', restoredFrom: base, preRestore: result },
+                contentHash: snapshotHash(files),
+                files,
+                validation,
+                takenAt: at,
+            }),
+        ).toEqual({ ok: false, error: { type: 'RestoreNeedsCheck' } });
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for MakeRestorableRevision's check
+        const restorable = base as C.RestorableRevision;
+        const restoreParams = {
+            id,
+            session: sessionId,
+            restoredFrom: restorable,
+            preRestore: result,
+            contentHash: snapshotHash(files),
+            files,
+            validation,
+            takenAt: at,
+        };
+        expect(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Participant' })).toEqual({
+            ok: false,
+            error: { type: 'FacilitatorOnly' },
+        });
+        const restored = value(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Facilitator' })).Recorded;
+        expect(restored.aggregate.origin).toEqual({ kind: 'Restored', restoredFrom: base, preRestore: result });
+        expect(restored.events.RevisionRestored).toMatchObject({ restoredFrom: base, preRestore: result });
+    });
+});
+
+describe('comparing revisions', () => {
+    const lines = (n: number, f: (i: number) => string): string => `${Array.from({ length: n }, (_, i) => f(i)).join('\n')}\n`;
+
+    test('a unified line diff with three lines of context; hunks apart stay apart, close ones merge', () => {
+        const a = lines(20, (i) => `line ${i}`);
+        const b = a.replace('line 3\n', 'line 3x\n').replace('line 15\n', '').replace('line 18\n', 'line 18\nnew\n');
+        expect(lineDiff(a, b)).toEqual({
+            kind: 'diff',
+            unified: [
+                '@@ -1,7 +1,7 @@',
+                ' line 0',
+                ' line 1',
+                ' line 2',
+                '-line 3',
+                '+line 3x',
+                ' line 4',
+                ' line 5',
+                ' line 6',
+                '@@ -13,8 +13,8 @@',
+                ' line 12',
+                ' line 13',
+                ' line 14',
+                '-line 15',
+                ' line 16',
+                ' line 17',
+                ' line 18',
+                '+new',
+                ' line 19',
+            ].join('\n'),
+            added: 2,
+            removed: 2,
+            truncated: false,
+        });
+        expect(lineDiff(a, a)).toEqual({ kind: 'diff', unified: '', added: 0, removed: 0, truncated: false });
+    });
+
+    test('an added or removed file, and a line end missing at the end', () => {
+        expect(lineDiff('', 'x\ny\n')).toMatchObject({ unified: '@@ -0,0 +1,2 @@\n+x\n+y', added: 2, removed: 0 });
+        expect(lineDiff('x\n', '')).toMatchObject({ unified: '@@ -1,1 +0,0 @@\n-x', added: 0, removed: 1 });
+        expect(lineDiff('a\nb', 'a\nb\n')).toMatchObject({ unified: '@@ -1,2 +1,2 @@\n a\n-b\n\\ No newline at end of file\n+b', added: 1, removed: 1 });
+    });
+
+    test('bounded: too many lines or edits are not diffed; a long diff is cut', () => {
+        expect(
+            lineDiff(
+                lines(MAX_DIFF_LINES + 1, (i) => `${i}`),
+                '',
+            ),
+        ).toEqual({ kind: 'tooLarge' });
+        const n = MAX_EDITS / 2 + 1;
+        expect(
+            lineDiff(
+                lines(n, (i) => `a${i}`),
+                lines(n, (i) => `b${i}`),
+            ),
+        ).toEqual({ kind: 'tooLarge' });
+        const long = lineDiff(
+            '',
+            lines(MAX_OUTPUT_LINES + 10, (i) => `${i}`),
+        );
+        expect(long.kind === 'diff' && [long.truncated, long.unified.split('\n').length, long.added]).toEqual([true, MAX_OUTPUT_LINES, MAX_OUTPUT_LINES + 10]);
+    });
+
+    test('bounded before the work: a text over the byte limit, a very long line, and a character budget', () => {
+        expect(lineDiff('x'.repeat(MAX_DIFF_BYTES + 1), '')).toEqual({ kind: 'tooLarge' });
+        const long = lineDiff('a\n', `${'y'.repeat(MAX_LINE_CHARS * 50)}\n`);
+        expect(long.kind === 'diff' && long.unified.split('\n')).toEqual(['@@ -1,1 +1,1 @@', '-a', `+${'y'.repeat(MAX_LINE_CHARS - 1)}${LINE_CUT}`]);
+        const many = lineDiff(
+            '',
+            lines(1_500, (i) => `changed line ${i}`),
+            1_000,
+        );
+        if (many.kind !== 'diff') throw new Error('expected a diff');
+        expect([many.truncated, many.unified.length <= 1_000, many.added]).toEqual([true, true, 1_500]);
+        expect(lineDiff('a\n', 'b\n', 0)).toMatchObject({ unified: '', truncated: true });
+    });
+
+    test('the files of two revisions by path, with their status and DSL', () => {
+        const f = (path: string, hash: string): Pick<C.SnapshotFile, 'path' | 'language' | 'hash'> => ({
+            path: value(C.makeWorkspacePath(path)),
+            language: languageOf(path),
+            hash: value(C.makeContentHash(hash.repeat(64))),
+        });
+        expect(
+            compareFiles([f('a.dt', 'a'), f('b.dtes', 'b'), f('c.dt', 'c')], [f('a.dt', 'a'), f('b.dtes', 'd'), f('d.dtes', 'e')]).map((x): string[] => [
+                x.path,
+                x.language,
+                x.status,
+            ]),
+        ).toEqual([
+            ['a.dt', 'Dt', 'unchanged'],
+            ['b.dtes', 'Dtes', 'changed'],
+            ['c.dt', 'Dt', 'removed'],
+            ['d.dtes', 'Dtes', 'added'],
+        ]);
+    });
+});
+
+describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () => {
+    const L = REPLY_LIMITS;
+    const read = (raw: unknown, requests = 2): ReturnType<typeof readReply<number>> => readReply(raw, requestNumber(requests), requests);
+    const question = { id: 'q1', text: 'Which?', options: [{ id: 'a', label: 'A' }], multiple: false };
+    const asking = { outcome: 'clarification', summary: 'One question.', requests: [], questions: [question] };
+    const many = <T>(n: number, f: (i: number) => T): T[] => Array.from({ length: n }, (_, i) => f(i));
+
+    test('every limit is the one of REPLY_LIMITS: at the limit it is taken, one past it refused, at the path named', () => {
+        const cases: [string, (n: number) => unknown, number][] = [
+            ['reply.title', (n) => ({ ...asking, title: 't'.repeat(n) }), L.title],
+            ['reply.summary', (n) => ({ ...asking, summary: 's'.repeat(n) }), L.summary],
+            ['reply.requests[0].note', (n) => ({ ...asking, requests: [{ request: 1, status: 'partial', note: 'n'.repeat(n) }] }), L.requestNote],
+            ['reply.questions', (n) => ({ ...asking, questions: many(n, (i) => ({ ...question, id: `q${i}` })) }), L.questions],
+            ['reply.questions[0].text', (n) => ({ ...asking, questions: [{ ...question, text: 't'.repeat(n) }] }), L.questionText],
+            [
+                'reply.questions[0].options',
+                (n) => ({ ...asking, questions: [{ ...question, options: many(n, (i) => ({ id: `o${i}`, label: 'x' })) }] }),
+                L.options,
+            ],
+            [
+                'reply.questions[0].options[0].label',
+                (n) => ({ ...asking, questions: [{ ...question, options: [{ id: 'a', label: 'l'.repeat(n) }] }] }),
+                L.optionLabel,
+            ],
+            [
+                'reply.questions[0].options[0].detail',
+                (n) => ({ ...asking, questions: [{ ...question, options: [{ id: 'a', label: 'A', detail: 'd'.repeat(n) }] }] }),
+                L.optionDetail,
+            ],
+            ['reply.questions[0].id', (n) => ({ ...asking, questions: [{ ...question, id: 'k'.repeat(n) }] }), L.key],
+            ['reply.assumptions', (n) => ({ ...asking, assumptions: many(n, () => ({ text: 'x' })) }), L.assumptions],
+            ['reply.assumptions[0].text', (n) => ({ ...asking, assumptions: [{ text: 'a'.repeat(n) }] }), L.assumptionText],
+            [
+                'reply.assumptions[0].alternatives',
+                (n) => ({ ...asking, assumptions: [{ text: 'x', alternatives: many(n, (i) => ({ id: `a${i}`, label: 'x' })) }] }),
+                L.alternatives,
+            ],
+            [
+                'reply.assumptions[0].alternatives[0].label',
+                (n) => ({ ...asking, assumptions: [{ text: 'x', alternatives: [{ id: 'a', label: 'l'.repeat(n) }] }] }),
+                L.alternativeLabel,
+            ],
+        ];
+        for (const [where, make, limit] of cases) {
+            expect([where, read(make(limit)).ok]).toEqual([where, true]);
+            const refused = read(make(limit + 1));
+            expect([where, !refused.ok && refused.error.path]).toEqual([where, where]);
+        }
+    });
+
+    test('the title: optional, trimmed, on one line; kept in the model value when given', () => {
+        expect(read(asking)).toMatchObject({ ok: true, value: { summary: 'One question.' } });
+        expect(read({ ...asking, title: '  請求書の税区分 ' })).toMatchObject({ ok: true, value: { title: '請求書の税区分' } });
+        expect(read({ ...asking, title: '請求書の\n税区分' })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        expect(read({ ...asking, title: ' ' })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        expect(read({ ...asking, title: 3 })).toMatchObject({ ok: false, error: { path: 'reply.title' } });
+        const titled = read({ ...asking, title: '税区分' });
+        if (!titled.ok) throw new Error(titled.error.message);
+        expect(String(toAgentReply({ ...titled.value, requests: [], questions: [], assumptions: [] }).title)).toBe('税区分');
+        const untitled = read(asking);
+        if (!untitled.ok) throw new Error(untitled.error.message);
+        expect('title' in toAgentReply({ ...untitled.value, requests: [], questions: [], assumptions: [] })).toBe(false);
+    });
+
+    test('the shape: an outcome of three, questions for a clarification only, notes for partial and skipped, keys, plain text', () => {
+        expect(read({ ...asking, outcome: 'maybe' })).toMatchObject({ ok: false, error: { path: 'reply.outcome' } });
+        expect(read({ ...asking, questions: [] })).toMatchObject({ ok: false, error: { path: 'reply.questions' } });
+        expect(read({ ...asking, outcome: 'done' })).toMatchObject({ ok: false, error: { path: 'reply.questions' } });
+        expect(read({ ...asking, requests: [{ request: 1, status: 'skipped' }] })).toMatchObject({ ok: false, error: { path: 'reply.requests[0].note' } });
+        expect(read({ ...asking, requests: [{ request: 3, status: 'done' }] })).toMatchObject({ ok: false, error: { path: 'reply.requests[0].request' } });
+        expect(read({ ...asking, questions: [{ ...question, id: 'a b' }] })).toMatchObject({ ok: false, error: { path: 'reply.questions[0].id' } });
+        expect(read({ ...asking, questions: [{ ...question, options: [{ id: 'a', label: 'A\nB' }] }] })).toMatchObject({
+            ok: false,
+            error: { path: 'reply.questions[0].options[0].label' },
+        });
+        expect(read({ ...asking, summary: 'a\u0000b' })).toMatchObject({ ok: false, error: { path: 'reply.summary' } });
+        expect(read({ ...asking, questions: [question, question] })).toMatchObject({ ok: false, error: { path: 'reply.questions' } });
+        // a valid reply makes a model value that holds every invariant
+        const ok = read({ ...asking, requests: [{ request: 1, status: 'partial', note: 'half' }] });
+        if (!ok.ok) throw new Error(ok.error.message);
+        const reply = toAgentReply({ ...ok.value, requests: [], questions: ok.value.questions.map((q) => ({ ...q, requests: [] })), assumptions: [] });
+        expect(checkAgentReplyDeep(reply)).toEqual([]);
+    });
+
+    test('an answer: its shape, then the questions and options of the run it answers', () => {
+        expect(readAnswer({ answers: [] })).toMatchObject({ ok: false, error: { path: 'answer.answers' } });
+        expect(readAnswer({ answers: [{ question: 'q1', options: [] }] })).toMatchObject({ ok: false, error: { path: 'answer.answers[0]' } });
+        expect(readAnswer({ answers: [{ question: 'q1', options: [], text: 't'.repeat(L.answerText + 1) }] })).toMatchObject({
+            ok: false,
+            error: { path: 'answer.answers[0].text' },
+        });
+        expect(readAnswer({ answers: [{ question: 'q1', options: ['a', 'a'] }] })).toMatchObject({ ok: false, error: { path: 'answer.answers[0].options' } });
+        const reply = toAgentReply({ outcome: 'clarification', summary: 's', requests: [], questions: [{ ...question, requests: [] }], assumptions: [] });
+        const run = knownAgentRunId('6f0b0b1e-1f0a-4c3e-9a4e-000000000009');
+        const answer = readAnswer({ answers: [{ question: 'q1', options: ['a'], text: 'and more' }] });
+        if (!answer.ok) throw new Error(answer.error.message);
+        const resolved = resolveAnswer(answer.value, run, reply);
+        expect(resolved as unknown).toEqual({
+            ok: true,
+            value: { answerTo: run, answers: [{ question: 'q1', text: 'Which?', chosen: [{ id: 'a', label: 'A' }], freeText: 'and more' }] },
+        });
+        if (resolved.ok) expect([...C.checkAnswer(resolved.value), ...resolved.value.answers.flatMap((a) => C.checkAnsweredQuestion(a))]).toEqual([]);
+        expect(resolveAnswer({ answers: [{ question: 'q1', options: ['z'] }] }, run, reply)).toMatchObject({
+            ok: false,
+            error: { path: 'answer.answers[0].options[0]' },
+        });
+    });
+    test('a pick is of a completed run with assumptions, one of its alternatives, with its requests queued again', () => {
+        const id = knownAgentRunId('00000000-0000-4000-8000-00000000000a');
+        const m = knownRequestId('00000000-0000-4000-8000-000000000001');
+        const n = knownRequestId('00000000-0000-4000-8000-000000000002');
+        const assumption = { text: 'With tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] };
+        const run = (state: string, assumptions: unknown[] = [assumption]): C.AgentRun =>
+            ({
+                id,
+                state,
+                input: { requests: [{ request: m }, { request: n }] },
+                ...(state === 'Completed' && { reply: { summary: 's', requests: [], questions: [], assumptions } }),
+            }) as unknown as C.AgentRun;
+        const pick = (assumptionAt = 0, alternative = 'net'): PickData => {
+            const tally = C.makeTally(assumptionAt);
+            const key = C.makeReplyKey(alternative);
+            if (!tally.ok || !key.ok) throw new Error('not a pick');
+            return { pickOf: id, assumption: tally.value, alternative: key.value };
+        };
+        expect(resolvePick(pick(), run('Completed'), [n, m]) as unknown).toEqual({
+            ok: true,
+            value: { pickOf: id, assumption: 0, text: 'With tax', alternative: { id: 'net', label: 'Without tax' } },
+        });
+        expect(resolvePick(pick(), run('Completed', []), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        for (const state of ['Queued', 'Running', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled'])
+            expect(resolvePick(pick(), run(state), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'PickMismatch', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m, n, knownRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
+            ok: false,
+            error: { type: 'PickMismatch', run: id },
+        });
+    });
+});

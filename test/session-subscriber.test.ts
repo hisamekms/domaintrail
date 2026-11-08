@@ -1,30 +1,39 @@
 /**
- * `dt session subscribe` (ADR 0026, S6) against a real session server (dev identity) on a copy of examples/shop, with
+ * `dt agent` (ADR 0026, S6; was `dt session subscribe`) against a real session server (dev identity) on a copy of examples/shop, with
  * a fake agent instead of Claude Code (`test/fixtures/agent/fake-claude.mjs`): requests about `.dtes` and `.dt`
  * elements → a run → the agent's edits → the Live View's Big Picture, Design Level and Domain views, and a completed
  * run with its result revision; serial runs without confirmation; cancel; heartbeats and lease expiry; the stream's
  * reconnection with `Last-Event-ID`; idempotent completion; a change outside the DSL sources; the CLI on Bun and Node.
+ * The pipeline's tests run the agent cold (one process per run); the warm agent (one process across runs, each run a
+ * turn) has its own, and the CLI runs warm, as its config's default.
  */
 import { afterAll, afterEach, describe, expect, test } from 'bun:test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startSubscriber as startApplicationSubscriber, type SubscriberEnd } from '@domaintrail/agent/application/subscriber';
-import type { AgentApi, StreamItem, WorkspaceFiles } from '@domaintrail/agent/application/ports';
-import { createClaudeCodeRunner } from '@domaintrail/agent/infrastructure/claude-code';
-import { createDtTools } from '@domaintrail/agent/infrastructure/dt-tools';
-import { createHttpAgentApi } from '@domaintrail/agent/infrastructure/http-agent-api';
-import { systemClock } from '@domaintrail/agent/infrastructure/system';
-import { scanWorkspace } from '@domaintrail/agent/infrastructure/workspace-scan';
+import {
+    type AgentApi,
+    createClaudeCodeRunner,
+    createDtTools,
+    createHttpAgentApi,
+    scanWorkspace,
+    startSubscriber as startApplicationSubscriber,
+    type StreamItem,
+    type SubscriberEnd,
+    systemClock,
+    type WorkspaceFiles,
+} from '@domaintrail/agent';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { startSessionServer, type SessionServer } from '@domaintrail/composition/session';
-import { readCredential, startSubscriber, type RunningSubscriber, type SubscriberOptions } from '@domaintrail/composition/subscriber';
-import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
-import { SessionError } from '@domaintrail/presentation/cli/ports';
+import { issueAgentLink, type RunningSubscriber, type SessionServer, startSessionServer, startSubscriber, type SubscriberOptions } from '@domaintrail/dt';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { resolveConfig, type SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { findDomainFiles } from '@domaintrail/workspace/infrastructure/files';
+import { findDomainFiles } from '@domaintrail/workspace';
+import { createFilesKnowledgeStore, Knowledge } from '@domaintrail/knowledge';
 import { tempCopyOfExamples } from './helpers';
+import { sourceSelection } from '@domaintrail/analysis';
+import { hasElement } from '@domaintrail/modeling';
 
 const ROOT = path.join(import.meta.dir, '..');
 const FAKE = path.join(import.meta.dir, 'fixtures', 'agent', 'fake-claude.mjs');
@@ -70,7 +79,7 @@ afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
 });
 
-const sessionConfig = (): ResolvedSessionConfig => ({
+const sessionConfig = (): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
@@ -84,12 +93,16 @@ const json = { 'content-type': 'application/json' };
 
 interface Step {
     edits?: ({ path: string; replace: [string, string] } | { path: string; append: string } | { path: string; write: string })[];
+    /** The edits wait until this file exists. */
+    waitForFile?: string;
     delayMs?: number;
     hang?: boolean;
     exitCode?: number;
     outcome?: Record<string, unknown>;
     /** The structured output (`--json-schema`): the reply as the agent gives it, requests by number. */
     reply?: Record<string, unknown>;
+    /** A call of a tool of the `domaintrail` MCP server of `--mcp-config` (a cold run), its result logged. */
+    mcp?: { tool: string; arguments?: Record<string, unknown> };
 }
 
 interface Invocation {
@@ -98,6 +111,8 @@ interface Invocation {
     args: string[];
     cwd: string;
     prompt: string;
+    /** The result of the step's MCP call. */
+    mcp?: { content: { text: string }[]; isError?: boolean };
 }
 
 interface Context {
@@ -209,14 +224,26 @@ async function waitFor<T>(what: string, probe: () => Promise<T | undefined> | T 
     }
 }
 
-/** The composition's subscriber on the context's workspace, with the fake agent following `plan`. */
+/** The agent API's credential of the context's server, in memory (as the agent in process gets it). */
+const credentialOf = (ctx: Context): { url: string; token: string; session: string } => ({
+    url: ctx.server.agentUrl,
+    token: ctx.server.agentToken,
+    session: ctx.server.session,
+});
+
+/** The app's subscriber (`startSubscriber`) on the context's workspace, with the fake agent following `plan` (cold, unless `extra` says). */
 async function subscribe(ctx: Context, planFile: string, extra: Partial<SubscriberOptions> = {}): Promise<{ subscriber: RunningSubscriber; log: string[] }> {
     const log: string[] = [];
     const subscriber = await startSubscriber({
         root: ctx.root,
         agent: 'claude',
+        connect: { credential: credentialOf(ctx) },
         dt: DT,
         agentCommand: { command: process.execPath, args: [FAKE, planFile] },
+        // the review at a run's end (ADR 0034) has tests of its own: here a run is one turn
+        run: { warm: false, restartAfter: 20, idleTimeout: 30, review: false },
+        // the runner only: the answerer role (its own fake plan) has its tests in session-triage.test.ts
+        roles: ['run'],
         log: (l) => log.push(l),
         reconnect: { minMs: 100, maxMs: 500, giveUpMs: 5_000 },
         ...extra,
@@ -233,6 +260,27 @@ const alive = (pid: number): boolean => {
         return false;
     }
 };
+
+/** A knowledge item of the `files` store about a sticky of examples/shop. */
+const KNOWLEDGE_ITEM = [
+    '---',
+    'id: kn_00000001',
+    'version: 1',
+    'title: 注文は在庫を確かめてから受ける',
+    'when: as_is',
+    'kind: rule',
+    'origin: agreed',
+    'about:',
+    '  - OrderToCash.OrderPlaced',
+    'conflictsWith: []',
+    'createdAt: 2026-11-05T09:00:00.000Z',
+    'updatedAt: 2026-11-05T09:00:00.000Z',
+    'sources: []',
+    '---',
+    '',
+    '注文は在庫を確かめてから受ける。',
+    '',
+].join('\n');
 
 const RETURNS = 'stormings/returns.dtes';
 const ADD_RETURN_CANCELLED: Step['edits'] = [
@@ -298,7 +346,7 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             if (done.state !== 'Completed') return;
             expect(done.changed).toBe(true);
             expect(done.resultRevision).not.toBe(done.baseRevision);
-            expect(done.report).toEqual({ exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 });
+            expect(done.report).toEqual({ exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 });
             const revisions = (await state(ctx)).revisions;
             expect(revisions.find((r) => r.id === done.resultRevision)?.origin).toEqual({ kind: 'RunResult', run });
 
@@ -313,21 +361,28 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             // only the .dtes changed
             expect(await readFile(path.join(ctx.root, 'sales', 'order.dt'), 'utf8')).toBe(dtBefore);
 
-            // the agent: in the root, the configured tools only, print mode with JSON output; the prompt has the requests as data
+            // the agent: in the root, the configured tools only, print mode with its events streamed as JSON; the prompt has the requests as data
             const [invocation] = await ctx.invocations();
             expect(invocation.cwd).toBe(await realpath(ctx.root));
-            expect(invocation.args.slice(0, 9)).toEqual([
+            expect(invocation.args.slice(0, 10)).toEqual([
                 '--print',
                 '--output-format',
-                'json',
+                'stream-json',
+                '--verbose',
                 '--no-session-persistence',
                 '--strict-mcp-config',
                 '--setting-sources',
-                'user',
+                '',
                 '--permission-mode',
                 'dontAsk',
             ]);
-            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual([...DEFAULT_AGENT_TOOLS]);
+            expect(invocation.args.slice(invocation.args.indexOf('--allowedTools') + 1)).toEqual([
+                'Edit(./**)',
+                'Bash(dt fmt:*)',
+                'Bash(dt check:*)',
+                'Bash(dt guide:*)',
+            ]);
+            expect(invocation.args).toContain('Read(./.domaintrail/**)');
             expect(invocation.args[invocation.args.indexOf('--tools') + 1]).toBe('Read,Edit,Write,Glob,Grep,Bash');
             const prompt = invocation.prompt;
             const nonce = /<requests-([0-9a-f]{32})>/.exec(prompt)?.[1];
@@ -386,7 +441,7 @@ describe('a run from the browser to the Live View (the plan’s acceptance, with
             expect([done.state, done.state === 'Completed' && done.changed]).toEqual(['Completed', true]);
             const updated = await waitFor('the Domain view', () => {
                 const latest = view.latest();
-                return latest?.model?.elements['Sales.OrderArchived'] ? latest : undefined;
+                return latest?.model && hasElement(latest.model, 'Sales.OrderArchived') ? latest : undefined;
             });
             expect(updated.status).toBe('ok');
             expect(await readFile(path.join(ctx.root, 'sales', 'order.dt'), 'utf8')).toContain('  event OrderArchived "注文保管" {\n    orderId: OrderId\n  }');
@@ -460,7 +515,7 @@ describe('the pipeline', () => {
         expect(failed.state).toBe('Failed');
         if (failed.state !== 'Failed') return;
         expect(failed.reason).toBe('RuleNotMet');
-        expect(failed.report).toEqual({ exitCode: 3, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 });
+        expect(failed.report).toEqual({ exitCode: 3, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 });
     });
 
     integration('a .dtes the agent leaves broken: dt fmt skips it, the run fails with an unparsed .dtes', async () => {
@@ -470,7 +525,7 @@ describe('the pipeline', () => {
         const failed = await until(ctx, run, ['Completed', 'Failed']);
         expect(failed.state === 'Failed' && [failed.reason, failed.report]).toEqual([
             'RuleNotMet',
-            { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 1 },
+            { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 1 },
         ]);
     });
 
@@ -578,6 +633,184 @@ describe('the pipeline', () => {
         expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources: "src/notes.txt"'))).toBe(true);
     });
 
+    integration('a workspace with more than 500 ignored entries: the run is refused before the agent and fails as ReadScopeTooLarge', async () => {
+        const ctx = await setup();
+        await writeFile(path.join(ctx.root, '.gitignore'), '*.tmp\n', { flag: 'a' });
+        await mkdir(path.join(ctx.root, 'scratch'));
+        for (let i = 0; i <= 500; i++) await writeFile(path.join(ctx.root, 'scratch', `f${i}.tmp`), '');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{}]));
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('ReadScopeTooLarge');
+        expect(log.some((l) => l.includes('ignore whole directories'))).toBe(true);
+        // the agent never ran
+        expect(await ctx.invocations()).toHaveLength(0);
+    });
+
+    integration('what the runner reads outside the workspace: agent.read.paths and its own, added read-only; the answerer’s own are not its', async () => {
+        const ctx = await setup();
+        const outside = await realpath(await scratch('domaintrail-read-outside-'));
+        for (const name of ['common', 'runs', 'answers']) await mkdir(path.join(outside, name));
+        await writeFile(path.join(outside, 'glossary.md'), 'g');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const common = [path.join(outside, 'common'), path.join(outside, 'missing')];
+        const { log } = await subscribe(ctx, await ctx.plan([{}]), {
+            read: { answer: [...common, path.join(outside, 'answers')], run: [...common, path.join(outside, 'runs'), path.join(outside, 'glossary.md')] },
+        });
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args.filter((_, i) => invocation.args[i - 1] === '--add-dir')).toEqual([path.join(outside, 'common'), path.join(outside, 'runs')]);
+        expect(invocation.args).toContain(`Edit(/${path.join(outside, 'runs')}/**)`);
+        expect(invocation.args).toContain(`Read(/${path.join(outside, 'glossary.md')})`);
+        expect(invocation.args).toContain(`Edit(/${path.join(outside, 'glossary.md')})`);
+        expect(invocation.args.join('\n')).not.toContain('answers');
+        expect(log).toContain(`runner: not reading ${path.join(outside, 'missing')} (not found)`);
+    });
+
+    integration(
+        'a workspace with knowledge: the runner reads it through dt mcp, which its Claude Code starts from outside the workspace; none without',
+        async () => {
+            const ctx = await setup();
+            const file = path.join(ctx.root, 'domaintrail.jsonc');
+            const knowledge = { config: resolveConfig(await readFile(file, 'utf8'), file), approval: undefined };
+            // no knowledge/ yet: nothing to read, no tools, the prompt does not name them, nothing said
+            const first = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+            const without = await subscribe(ctx, await ctx.plan([{}]), { knowledge, once: true });
+            expect((await until(ctx, first, ['Completed', 'Failed'])).state).toBe('Completed');
+            await without.subscriber.done;
+            const [plain] = await ctx.invocations();
+            expect(plain.args).not.toContain('--mcp-config');
+            expect(plain.prompt).not.toContain('knowledge_');
+            expect(without.log.join('\n')).not.toContain('knowledge');
+
+            await mkdir(path.join(ctx.root, 'knowledge'));
+            await writeFile(path.join(ctx.root, 'knowledge', 'kn_00000001.md'), KNOWLEDGE_ITEM);
+            const second = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something else.')]);
+            const call = { tool: 'knowledge_for_element', arguments: { element: 'OrderToCash.OrderPlaced' } };
+            const { log } = await subscribe(ctx, await ctx.plan([{}, { mcp: call }]), { knowledge });
+            expect((await until(ctx, second, ['Completed', 'Failed'])).state).toBe('Completed');
+            const [, invocation] = await ctx.invocations();
+            expect(log).toContain('knowledge: the answers and the runs read it through dt mcp');
+            expect(invocation.args).toEqual(expect.arrayContaining(['mcp__domaintrail__knowledge_for_element', 'mcp__domaintrail__knowledge_get']));
+            const launcher = (JSON.parse(invocation.args[invocation.args.indexOf('--mcp-config') + 1]) as { mcpServers: { domaintrail: { command: string } } })
+                .mcpServers.domaintrail.command;
+            expect(launcher.startsWith(ctx.root)).toBe(false);
+            expect(invocation.prompt).toContain('Before changing an element, call\nknowledge_for_element');
+            // the tool answered from the workspace's files store
+            expect(invocation.mcp?.isError).toBeUndefined();
+            expect(invocation.mcp?.content[0].text).toContain('## kn_00000001');
+            expect(invocation.mcp?.content[0].text).toContain('注文は在庫を確かめてから受ける。');
+        },
+    );
+
+    integration('the files knowledge store written while a run runs (an extraction): the run completes, and the next run is claimed', async () => {
+        const ctx = await setup();
+        const file = path.join(ctx.root, 'domaintrail.jsonc');
+        const knowledge = { config: resolveConfig(await readFile(file, 'utf8'), file), approval: undefined };
+        expect(knowledge.config.knowledge.store).toBe('files');
+        const flag = path.join(await scratch('domaintrail-flag-'), 'go');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{ waitForFile: flag, edits: ADD_RETURN_CANCELLED }, {}]), { knowledge });
+        await until(ctx, run, ['Running']);
+        await waitFor('the agent', async () => (await ctx.invocations())[0]);
+
+        // the session's extraction applies an item while the agent runs: knowledge/ is made, an item and the audit written
+        const known = <T>(made: { ok: true; value: T } | { ok: false; error: unknown }): T => {
+            if (!made.ok) throw new Error(`invalid test value: ${JSON.stringify(made.error)}`);
+            return made.value;
+        };
+        const store = createFilesKnowledgeStore({
+            dir: path.join(ctx.root, 'knowledge'),
+            project: known(Knowledge.makeProjectName('shop')),
+            stateDir: await scratch('domaintrail-knowledge-state-'),
+        });
+        const session = known(Knowledge.makeSessionRef(ctx.server.session));
+        const applied = await store.applyExtraction(known(Knowledge.makeProjectName('shop')), {
+            by: { session, number: known(Knowledge.makeExtractionNumber(1)) },
+            operations: [
+                {
+                    kind: 'Add',
+                    id: known(Knowledge.makeKnowledgeItemId('kn_00000001')),
+                    content: {
+                        title: known(Knowledge.makeItemTitle('注文は在庫を確かめてから受ける')),
+                        text: known(Knowledge.makeItemText('注文は在庫を確かめてから受ける。')),
+                        labels: { when: 'as_is', kind: 'rule', origin: 'said' },
+                        about: [known(Knowledge.makeStickyRef('OrderToCash.OrderPlaced'))],
+                    },
+                    sources: [
+                        {
+                            session,
+                            message: known(Knowledge.makeMessageRef('m1')),
+                            at: new Date(),
+                            quote: known(Knowledge.makeQuote('在庫を見てから受ける')),
+                        },
+                    ],
+                    reason: known(Knowledge.makeReason('heard in the session')),
+                },
+            ],
+        });
+        expect(applied.items).toHaveLength(1);
+        await writeFile(flag, '');
+
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources'))).toBe(false);
+        expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnCancelled');
+        // the subscriber goes on: the next run is claimed and run
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+        expect(log.some((l) => l.includes('not claiming further runs'))).toBe(false);
+        // the agent may read knowledge/, never edit it
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args).toEqual(expect.arrayContaining(['Edit(./knowledge)', 'Edit(./knowledge/**)']));
+    });
+
+    integration(
+        'the journey file written by dt while a run runs (the facilitator unmarks a step): the run completes, and the next run is claimed',
+        async () => {
+            const ctx = await setup();
+            const file = path.join(ctx.root, 'domaintrail.journey.json');
+            const flag = path.join(await scratch('domaintrail-flag-'), 'go');
+            const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+            const { log } = await subscribe(ctx, await ctx.plan([{ waitForFile: flag, edits: ADD_RETURN_CANCELLED }, {}]));
+            await until(ctx, run, ['Running']);
+            await waitFor('the agent', async () => (await ctx.invocations())[0]);
+
+            // the facilitator's act on the journeys while the agent runs: dt writes the journey file at once
+            const before = await readFile(file, 'utf8');
+            const marked = await api(ctx.server, ctx.ada, 'journey/acts', { act: { kind: 'mark', journey: 'order-to-cash', step: 'review', done: false } });
+            expect(marked.status).toBe(200);
+            expect(await readFile(file, 'utf8')).not.toBe(before);
+            await writeFile(flag, '');
+
+            expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+            expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources'))).toBe(false);
+            expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnCancelled');
+            // the subscriber goes on: the next run is claimed and run
+            const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+            expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+            expect(log.some((l) => l.includes('not claiming further runs'))).toBe(false);
+            // the agent may read the journey file, never edit it
+            const [invocation] = await ctx.invocations();
+            expect(invocation.args).toEqual(expect.arrayContaining(['Edit(./domaintrail.journey.json)', 'Edit(**/domaintrail.journey.json)']));
+        },
+    );
+
+    integration('an agent that writes a configuration file in any case beside a -c file outside the workspace: its run fails', async () => {
+        const ctx = await setup();
+        const conf = await scratch('domaintrail-conf-');
+        await writeFile(path.join(conf, 'team.jsonc'), '{}');
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
+        const variant = path.relative(ctx.root, path.join(conf, 'Team.Local.JSONC'));
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: [{ path: variant, write: '{"agent":{}}' }] }]), {
+            configPath: path.join(conf, 'team.jsonc'),
+        });
+        const failed = await until(ctx, run, ['Completed', 'Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('AgentError');
+        expect(log.some((l) => l.includes('changed files other than .dt/.dtes sources') && l.includes('Team.Local.JSONC'))).toBe(true);
+        const [invocation] = await ctx.invocations();
+        expect(invocation.args).toContain(`Edit(/${path.join(conf, 'team.local.jsonc')})`);
+    });
+
     integration('an agent that writes the workspace’s .claude/ settings: its run fails, and no further run is claimed until a restart', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Something.')]);
@@ -596,7 +829,7 @@ describe('the pipeline', () => {
         await subscribe(ctx, await ctx.plan([{ edits: [{ path: '.claude/settings.local.json', write: settings }] }, {}]));
         expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
         const args = (await ctx.invocations()).at(-1)?.args ?? [];
-        expect(args[args.indexOf('--setting-sources') + 1]).toBe('user');
+        expect(args[args.indexOf('--setting-sources') + 1]).toBe('');
     });
 
     integration('an agent that writes .claude/ settings and is cancelled: the run is cancelled, and no further run is claimed', async () => {
@@ -670,6 +903,197 @@ describe('the pipeline', () => {
     });
 });
 
+describe('the warm agent', () => {
+    const WARM = { run: { warm: true, restartAfter: 20, idleTimeout: 30, review: false } };
+
+    integration('one process takes the runs one turn each; the next prompt names what changed since; a restore starts a fresh one', async () => {
+        const ctx = await setup();
+        const first = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'One.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{ edits: ADD_RETURN_CANCELLED }, {}, {}]), WARM);
+        const one = await until(ctx, first, ['Completed', 'Failed']);
+        expect(one.state === 'Completed' && one.changed).toBe(true);
+        // a person edits a file between the runs
+        await writeFile(path.join(ctx.root, 'README.md'), 'edited by a person\n');
+        const second = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Two.')]);
+        expect((await until(ctx, second, ['Completed', 'Failed'])).state).toBe('Completed');
+        const [a, b] = await ctx.invocations();
+        expect(b.pid).toBe(a.pid);
+        expect(a.args).toContain('--input-format');
+        expect(a.prompt).not.toContain('"changedSinceYourLastRun"');
+        const nonce = /<requests-([0-9a-f]{32})>/.exec(b.prompt)![1];
+        const data = JSON.parse(b.prompt.slice(b.prompt.indexOf(`<requests-${nonce}>`) + nonce.length + 11, b.prompt.indexOf(`</requests-${nonce}>`)));
+        // the person's edit, not the agent's own
+        expect(data.changedSinceYourLastRun).toEqual(['README.md']);
+        // the hook's notification of every turn: logged once, never failing a run
+        expect(log.filter((l) => l.includes('notified "stop-hook-error"'))).toHaveLength(1);
+
+        // the facilitator restores the first run's base: the process goes, the next run starts a fresh one
+        const base = one.state === 'Completed' ? one.baseRevision : '';
+        expect((await api(ctx.server, ctx.ada, `revisions/${base}/restore`, { recordExternalChanges: true })).status).toBe(200);
+        await waitFor('the reset', () => (log.some((l) => l.includes('ends (a revision was restored)')) ? true : undefined));
+        const third = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Three.')]);
+        expect((await until(ctx, third, ['Completed', 'Failed'])).state).toBe('Completed');
+        const c = (await ctx.invocations())[2];
+        expect(c.pid).not.toBe(a.pid);
+        expect(c.prompt).not.toContain('"changedSinceYourLastRun"');
+    });
+
+    integration('a cancel interrupts the turn: its tool processes stop, the agent stays and takes the next run', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
+        const { log } = await subscribe(ctx, await ctx.plan([{ hang: true }, {}]), WARM);
+        const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
+        expect((await until(ctx, run, ['Running'])).state).toBe('Running');
+        expect((await api(ctx.server, ctx.ada, `runs/${run}/cancel`, {})).status).toBe(200);
+        expect((await until(ctx, run, ['Cancelled'])).state).toBe('Cancelled');
+        await waitFor('the tool to stop', () => (!alive(invocation.childPid ?? invocation.pid) ? true : undefined));
+        expect(alive(invocation.pid)).toBe(true);
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Next.')]);
+        expect((await until(ctx, next, ['Completed', 'Failed'])).state).toBe('Completed');
+        expect((await ctx.invocations())[1].pid).toBe(invocation.pid);
+        expect(log.some((l) => l.includes('failed'))).toBe(false);
+    });
+
+    integration('stop (Ctrl+C) interrupts the turn, fails the run as Interrupted and ends the process', async () => {
+        const ctx = await setup();
+        const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
+        const { subscriber } = await subscribe(ctx, await ctx.plan([{ hang: true }]), WARM);
+        const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
+        expect(await subscriber.stop()).toBe('stopped');
+        const failed = await until(ctx, run, ['Failed']);
+        expect(failed.state === 'Failed' && failed.reason).toBe('Interrupted');
+        await waitFor('the agent to stop', () => (!alive(invocation.pid) && !alive(invocation.childPid ?? invocation.pid) ? true : undefined));
+    });
+});
+
+describe('reverting a run', () => {
+    /** Runs `steps` one per queued run (requests sent by Bob) through the fake agent, each completed: their IDs. */
+    async function runs(ctx: Context, steps: Step[], more: Step[] = []): Promise<{ ids: string[]; planFile: string; subscriber: RunningSubscriber }> {
+        const ids: string[] = [];
+        for (const [i] of steps.entries()) ids.push(await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, `Change ${i + 1}.`)]));
+        const planFile = await ctx.plan([...steps, ...more]);
+        const { subscriber } = await subscribe(ctx, planFile);
+        for (const id of ids) expect((await until(ctx, id, ['Completed', 'Failed'])).state).toBe('Completed');
+        return { ids, planFile, subscriber };
+    }
+    const BODY = '返品の取り消しの変更を打ち消す';
+    const revert = (ctx: Context, run: string, cookie = ctx.ada): Promise<Response> => api(ctx.server, cookie, `runs/${run}/revert`, { body: BODY });
+    const read = (ctx: Context, file: string): Promise<string> => readFile(path.join(ctx.root, file), 'utf8');
+    type Requested = { run: Run; request: { reverts: string; body: string }; ahead: number };
+
+    integration(
+        "mechanically, with no agent connected: only the facilitator; the run's .dtes change is reverted, a later run's .dt change stays, recorded as a run of its own",
+        async () => {
+            const ctx = await setup();
+            const later = { path: 'sales/order.dt', replace: ['context Sales', '// 販売。\ncontext Sales'] as [string, string] };
+            const { ids, subscriber } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [later] }]);
+            // no agent from here on: the server reverts by itself
+            await subscriber.stop();
+            const orderAfter = await read(ctx, 'sales/order.dt');
+            expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
+
+            expect((await revert(ctx, ids[0], ctx.bob)).status).toBe(403);
+            const res = await revert(ctx, ids[0]);
+            expect(res.status).toBe(201);
+            const body = (await res.json()) as Requested;
+            // the queue was empty: queued, then reverted at once, before the answer
+            expect(body.request).toMatchObject({ reverts: ids[0], body: BODY });
+            expect(body.run).toMatchObject({ state: 'Reverted', changed: true });
+            expect(body.ahead).toBe(0);
+            expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
+            expect(await read(ctx, 'sales/order.dt')).toBe(orderAfter);
+            const s = await state(ctx);
+            expect(s.runs.at(-1)).toMatchObject({ id: body.run.id, state: 'Reverted', queuedBy: s.session.facilitator });
+            expect(s.requests.at(-1)).toMatchObject({ reverts: ids[0] });
+            // asked again: it is reverted already
+            const again = await revert(ctx, ids[0]);
+            expect(again.status).toBe(409);
+            expect(((await again.json()) as { error: { type: string } }).error.type).toBe('RunNotRevertable');
+        },
+    );
+
+    integration('asked while a run is running: queued behind it, then reverted mechanically by the server once that run ends', async () => {
+        const ctx = await setup();
+        const later = { path: 'sales/order.dt', replace: ['context Sales', '// 販売。\ncontext Sales'] as [string, string] };
+        const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }], [{ edits: [later], delayMs: 1500 }]);
+        const busy = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Change 2.')]);
+        await until(ctx, busy, ['Running']);
+
+        const res = await revert(ctx, ids[0]);
+        expect(res.status).toBe(201);
+        const body = (await res.json()) as Requested;
+        // not refused: waiting its turn behind the running run, nothing written yet
+        expect(body.run).toMatchObject({ state: 'Queued' });
+        expect(body.run).not.toHaveProperty('revertObstacle');
+        expect(body.ahead).toBe(1);
+        expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
+
+        // the running run ends; the server takes the revert by itself, against the workspace as it is then
+        expect((await until(ctx, busy, ['Completed', 'Failed'])).state).toBe('Completed');
+        const done = await until(ctx, body.run.id, ['Reverted', 'Running', 'Completed', 'Failed']);
+        expect(done).toMatchObject({ state: 'Reverted', changed: true });
+        expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
+        expect(await read(ctx, 'sales/order.dt')).toContain('// 販売。');
+        // the agent never ran it: two runs played, no third
+        expect(await ctx.invocations()).toHaveLength(2);
+    });
+
+    integration('a queued revert can be stopped: it is never tried, and nothing is written', async () => {
+        const ctx = await setup();
+        const { ids } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }], [{ delayMs: 1500 }]);
+        const busy = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Change 2.')]);
+        await until(ctx, busy, ['Running']);
+        const body = (await (await revert(ctx, ids[0])).json()) as Requested;
+        expect(body.run.state).toBe('Queued');
+        expect((await api(ctx.server, ctx.ada, `runs/${body.run.id}/cancel`, {})).status).toBe(200);
+        expect((await until(ctx, busy, ['Completed', 'Failed'])).state).toBe('Completed');
+        await Bun.sleep(300);
+        expect((await state(ctx)).runs.find((r) => r.id === body.run.id)?.state).toBe('Cancelled');
+        expect(await read(ctx, RETURNS)).toContain('ReturnCancelled');
+    });
+
+    integration('a conflict waits for the AI: the subscriber gets the run reverted with its diff; an older subscriber is refused the run', async () => {
+        const ctx = await setup();
+        const relabel = { path: RETURNS, replace: ['"返品を取り消した"', '"返品がキャンセルされた"'] as [string, string] };
+        const revertStep: Step = {
+            edits: [{ path: RETURNS, replace: ['  event ReturnCancelled "返品がキャンセルされた"\n', ''] }],
+            reply: { outcome: 'done', summary: 'Removed ReturnCancelled.', requests: [{ request: 1, status: 'done' }] },
+        };
+        const { ids, planFile, subscriber } = await runs(ctx, [{ edits: ADD_RETURN_CANCELLED }, { edits: [relabel] }], [revertStep]);
+        await subscriber.stop();
+        const before = await read(ctx, RETURNS);
+
+        const res = await revert(ctx, ids[0]);
+        expect(res.status).toBe(201);
+        const body = (await res.json()) as Requested;
+        // tried by the server, left queued for the AI with why; nothing written
+        expect(body.run).toMatchObject({ state: 'Queued', revertObstacle: { kind: 'Conflict', paths: [RETURNS] } });
+        expect(await read(ctx, RETURNS)).toBe(before);
+
+        // an older subscriber names no capability: the revert is not given to it, and stays queued
+        const credential = credentialOf(ctx);
+        const claim = (b: unknown): Promise<Response> =>
+            fetch(`${credential.url}agent/runs/claim`, {
+                method: 'POST',
+                headers: { authorization: `Bearer ${credential.token}`, ...json },
+                body: JSON.stringify(b),
+            });
+        const old = await claim({ owner: 'old' });
+        expect(old.status).toBe(409);
+        expect(((await old.json()) as { error: { type: string; needs: string } }).error).toMatchObject({ type: 'SubscriberOutdated', needs: 'revert' });
+        expect((await state(ctx)).runs.find((r) => r.id === body.run.id)?.state).toBe('Queued');
+
+        await subscribe(ctx, planFile);
+        const done = await until(ctx, body.run.id, ['Completed', 'Failed']);
+        expect(done.state).toBe('Completed');
+        expect(await read(ctx, RETURNS)).not.toContain('ReturnCancelled');
+        const prompt = (await ctx.invocations()).at(-1)?.prompt ?? '';
+        expect(prompt).toContain('"revertsRun": 1');
+        expect(prompt).toContain('+  event ReturnCancelled');
+        expect(prompt).toContain('Revert only those changes');
+    });
+});
+
 describe('the stream and the completions', () => {
     /** The application's subscriber on the real adapters, with the agent API wrapped by `wrap`. */
     async function applicationSubscriber(
@@ -678,7 +1102,7 @@ describe('the stream and the completions', () => {
         wrap: (api: AgentApi) => AgentApi,
         wrapWorkspace: (workspace: WorkspaceFiles) => WorkspaceFiles = (w) => w,
     ): Promise<{ done: Promise<SubscriberEnd>; log: string[] }> {
-        const credential = await readCredential(ctx.root);
+        const credential = credentialOf(ctx);
         const real = createHttpAgentApi({ url: credential.url, token: credential.token });
         const log: string[] = [];
         const subscriber = startApplicationSubscriber(
@@ -686,13 +1110,16 @@ describe('the stream and the completions', () => {
                 api: wrap(real),
                 runner: await createClaudeCodeRunner({ root: ctx.root, command: { command: process.execPath, args: [FAKE, planFile] } }),
                 tools: createDtTools({ dt: DT, root: ctx.root, log: (l) => log.push(l) }),
-                workspace: wrapWorkspace({ scan: () => scanWorkspace(ctx.root), sources: async () => new Set(await findDomainFiles(ctx.root)) }),
+                workspace: wrapWorkspace({
+                    scan: () => scanWorkspace(ctx.root),
+                    sources: async () => new Set(await findDomainFiles(ctx.root, sourceSelection())),
+                }),
                 clock: systemClock,
                 owner: 'test@host',
                 nonce: () => 'n'.repeat(32),
                 log: (l) => log.push(l),
             },
-            { allowedTools: [...DEFAULT_AGENT_TOOLS], leaseMs: LEASE_MS, reconnect: { minMs: 100, maxMs: 300, giveUpMs: 5_000 } },
+            { allowedTools: [...DEFAULT_AGENT_TOOLS], leaseMs: LEASE_MS, reconnect: { minMs: 100, maxMs: 300, giveUpMs: 5_000 }, review: false },
         );
         cleanups.push(() => subscriber.stop());
         return { done: subscriber.done, log };
@@ -791,9 +1218,15 @@ async function fakeClaudeOnPath(planFile: string): Promise<string> {
     return bin;
 }
 
-/** Runs `dt session subscribe --agent claude` in a child process with the fake `claude` first on the PATH. */
-function cli(runtime: string[], root: string, bin: string, extra: string[] = []): { child: ChildProcess; output: () => string; exit: Promise<number | null> } {
-    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'session', 'subscribe', '--agent', 'claude', ...extra], {
+/** Runs `dt agent --code <a fresh pairing code>` in a child process with the fake `claude` first on the PATH. */
+async function cli(
+    runtime: string[],
+    root: string,
+    bin: string,
+    extra: string[] = [],
+): Promise<{ child: ChildProcess; output: () => string; exit: Promise<number | null> }> {
+    const { code } = await issueAgentLink(root);
+    const child = spawn(runtime[0], [...runtime.slice(1), '-r', root, 'agent', '--code', code, ...extra], {
         env: { ...process.env, PATH: `${bin}${path.delimiter}${process.env.PATH ?? ''}` },
         stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -808,29 +1241,19 @@ function cli(runtime: string[], root: string, bin: string, extra: string[] = [])
     return { child, output: () => output, exit };
 }
 
-/** The error `readCredential` refuses with (fails when it accepts). */
-async function refusal(root: string): Promise<Error> {
-    const e = await readCredential(root).then(
-        () => undefined,
-        (x: unknown) => x,
-    );
-    if (!(e instanceof Error)) throw new Error('expected readCredential to refuse');
-    return e;
-}
-
 describe('the CLI', () => {
     integration('on Node (dist/dt.js): --once runs the queued run with `claude` from the PATH, and dt fmt / dt check with itself', async () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Node.')]);
         const bin = await fakeClaudeOnPath(await ctx.plan([{ edits: ADD_RETURN_CANCELLED }]));
-        const { output, exit } = cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
+        const { output, exit } = await cli(['node', path.join(ROOT, 'dist', 'dt.js')], ctx.root, bin, ['--once']);
         expect(await exit).toBe(0);
-        expect(output()).toContain(`Subscribed to session ${ctx.server.session} with claude (one run)`);
+        expect(output()).toContain(`Agent on session ${ctx.server.session} with claude (roles answer, run) (one run); waiting.`);
         expect(output()).toContain('Done.');
         const done = await until(ctx, run, ['Completed', 'Failed']);
         expect(done.state === 'Completed' && [done.changed, done.report]).toEqual([
             true,
-            { exitCode: 0, formatted: true, checked: true, newDtErrors: 0, unparsedDtes: 0 },
+            { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
         ]);
     });
 
@@ -838,7 +1261,7 @@ describe('the CLI', () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
         const planFile = await ctx.plan([{ hang: true }]);
-        const { child, exit } = cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
+        const { child, exit } = await cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
         const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
         child.kill('SIGINT');
         expect(await exit).toBe(130);
@@ -851,7 +1274,7 @@ describe('the CLI', () => {
         const ctx = await setup();
         const run = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'Workspace' }, 'Long.')]);
         const planFile = await ctx.plan([{ hang: true }]);
-        const { child, exit } = cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
+        const { child, exit } = await cli([process.execPath, path.join(ROOT, 'bin', 'dt.ts')], ctx.root, await fakeClaudeOnPath(planFile));
         const [invocation] = await waitFor('the agent', async () => (await ctx.invocations())[0] && ctx.invocations());
         expect((await until(ctx, run, ['Running'])).state).toBe('Running');
         // the subscriber dies without a word, its agent with it
@@ -866,27 +1289,188 @@ describe('the CLI', () => {
         const failed = found.ok ? found.value.runs.find((r) => r.id === run) : undefined;
         expect(failed?.state === 'Failed' && failed.reason).toBe('LeaseExpired');
     });
+});
 
-    integration('refuses a missing, linked, shared or orphaned agent.json', async () => {
-        const root = await scratch('domaintrail-agent-cred-');
-        expect(await refusal(root)).toBeInstanceOf(SessionError);
-        const dir = path.join(root, '.domaintrail', 'session');
-        await mkdir(dir, { recursive: true });
-        const file = path.join(dir, 'agent.json');
-        const target = path.join(root, 'elsewhere.json');
-        const credential = { url: 'http://127.0.0.1:1/', token: 't', session: 's', pid: process.pid };
-        await writeFile(target, JSON.stringify(credential), { mode: 0o600 });
-        await symlink(target, file);
-        expect((await refusal(root)).message).toContain('not a plain file');
-        await rm(file);
-        await writeFile(file, JSON.stringify(credential), { mode: 0o644 });
-        await chmod(file, 0o644);
-        expect((await refusal(root)).message).toContain('mode 600');
-        await chmod(file, 0o600);
-        expect(await readCredential(root)).toEqual(credential);
-        const gone = spawn(process.execPath, ['-e', '0']);
-        await new Promise((resolve) => gone.once('close', resolve));
-        await writeFile(file, JSON.stringify({ ...credential, pid: gone.pid }));
-        expect((await refusal(root)).message).toContain('no longer running');
+describe("people's edits while a run runs (ADR 0033, the maintainer chose to re-apply)", () => {
+    type Edited = Extract<Run, { state: 'Edited' }>;
+    const editedRuns = (s: SessionStateBody): Edited[] => s.runs.filter((r): r is Edited => r.state === 'Edited');
+
+    /** A run of Bob's request queued, the fake agent writing `write` over Returns once the flag exists: the run, the flag. */
+    async function runWriting(ctx: Context, write: (read: string) => string): Promise<{ run: string; flag: string; read: string }> {
+        const read = await readFile(path.join(ctx.root, RETURNS), 'utf8');
+        const flag = path.join(await scratch('domaintrail-flag-'), 'go');
+        const planFile = await ctx.plan([
+            { waitForFile: flag, edits: [{ path: RETURNS, write: write(read) }], outcome: { outcome: 'done', summary: 'Added an event.' } },
+            { outcome: { outcome: 'done', summary: 'Nothing.' } },
+        ]);
+        const asked = await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'ItemDisposed' }, 'Add an event for a cancelled return.');
+        const run = await queue(ctx, [asked]);
+        await subscribe(ctx, planFile);
+        await until(ctx, run, ['Running']);
+        return { run, flag, read };
+    }
+
+    const relabel = (label: string) => ({
+        kind: 'wording',
+        storming: 'Returns',
+        element: 'ReturnRequested',
+        expected: { name: 'ReturnRequested', label: '返品が依頼された' },
+        label,
+        body: '「返品が依頼された」を直す',
+    });
+
+    integration('an edit the run dropped is written again when it ends, and the next run is told of it', async () => {
+        const ctx = await setup();
+        const { run, flag } = await runWriting(ctx, (read) =>
+            // the agent writes back what it read before the edit, with its new event
+            read.replace('  event ItemDisposed "商品を廃棄した"\n', '  event ItemDisposed "商品を廃棄した"\n  event ReturnCancelled "返品を取り消した"\n'),
+        );
+        // Bob edits a label while the run runs (on an element it targets in the same storming)
+        const res = await api(ctx.server, ctx.bob, 'stickies', relabel('返品の申し出があった'));
+        expect(res.status).toBe(201);
+        expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnRequested "返品の申し出があった"');
+        await writeFile(flag, '');
+        expect((await until(ctx, run, ['Completed', 'Failed'])).state).toBe('Completed');
+        const reapplied = await waitFor('the re-application', async () => editedRuns(await state(ctx)).find((r) => r.reapplies === run));
+        expect(reapplied.queuedBy).not.toBe('facilitator');
+        const text = await readFile(path.join(ctx.root, RETURNS), 'utf8');
+        expect(text).toContain('event ReturnRequested "返品の申し出があった"');
+        expect(text).toContain('event ReturnCancelled "返品を取り消した"');
+
+        // the next run's prompt names the edit, old → new
+        const next = await queue(ctx, [await request(ctx, ctx.bob, { kind: 'DtesStorming', storming: 'Returns' }, 'Tidy up.')]);
+        await until(ctx, next, ['Completed', 'Failed']);
+        const prompt = (await ctx.invocations()).at(-1)?.prompt ?? '';
+        expect(prompt).toContain('"editedByPeople"');
+        expect(prompt).toContain('"from": "返品が依頼された"');
+        expect(prompt).toContain('"to": "返品の申し出があった"');
+    });
+
+    integration("a label the run changed otherwise stays the run's; the edit shows both, and people settle it", async () => {
+        const ctx = await setup();
+        const { run, flag } = await runWriting(ctx, (read) => read.replace('"返品が依頼された"', '"返品を受け付けた"'));
+        const res = await api(ctx.server, ctx.bob, 'stickies', relabel('返品の申し出があった'));
+        expect(res.status).toBe(201);
+        const edit = ((await res.json()) as { run: { id: string } }).run.id;
+        await writeFile(flag, '');
+        await until(ctx, run, ['Completed', 'Failed']);
+        const noted = await waitFor('the conflict', async () => editedRuns(await state(ctx)).find((r) => r.id === edit && r.conflict));
+        expect(noted.conflict).toEqual({ run, runLabel: '返品を受け付けた', settled: false });
+        expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('event ReturnRequested "返品を受け付けた"');
+        expect(editedRuns(await state(ctx)).some((r) => r.reapplies === run)).toBe(false);
+
+        // a stale edit is refused with what it is now
+        const stale = await api(ctx.server, ctx.bob, 'stickies', relabel('別の文言'));
+        expect(stale.status).toBe(409);
+        expect(((await stale.json()) as { error: unknown }).error).toMatchObject({
+            type: 'StickyStale',
+            current: { name: 'ReturnRequested', label: '返品を受け付けた' },
+        });
+
+        expect((await api(ctx.server, ctx.bob, `runs/${edit}/settle`, {})).status).toBe(200);
+        expect(editedRuns(await state(ctx)).find((r) => r.id === edit)?.conflict?.settled).toBe(true);
+    });
+});
+
+describe("the review at a run's end (ADR 0034)", () => {
+    /** The hotspot on ReturnRequested resolved, the event left as it was: what stage 0 finds. */
+    const RESOLVE_DEADLINE: Step['edits'] = [
+        { path: RETURNS, replace: ['    on ReturnRequested\n  }', '    on ReturnRequested\n    status resolved\n    resolution "注文から30日まで"\n  }'] },
+    ];
+    /** The event changed as the decision says: what the review's turn does. */
+    const DEADLINE_ON_EVENT: Step['edits'] = [{ path: RETURNS, replace: ['"返品が依頼された"', '"返品が依頼された（30日以内）"'] }];
+    const done = { outcome: 'done', title: '返品の期限', summary: '期限を決めた', requests: [{ request: 1, status: 'done' }] };
+
+    integration(
+        'a run that resolved a hotspot and left its sticky: the same run reviews it, fixes the sticky, and the card keeps found, fixed and left',
+        async () => {
+            const ctx = await setup();
+            const planFile = await ctx.plan([
+                { edits: RESOLVE_DEADLINE, reply: done },
+                {
+                    edits: DEADLINE_ON_EVENT,
+                    reply: {
+                        outcome: 'done',
+                        title: '返品の期限',
+                        summary: '見直してイベントに期限を書いた',
+                        requests: [],
+                        review: { fixed: ['@{es:Returns/ReturnRequested} のラベルに期限を書いた'], kept: [] },
+                    },
+                },
+            ]);
+            const { log } = await subscribe(ctx, planFile, { run: { warm: false, restartAfter: 20, idleTimeout: 30 } });
+            const asked = await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'Deadline' }, '返品は注文から30日まで、で決まり');
+            const run = await until(ctx, await queue(ctx, [asked]), ['Completed', 'Failed']);
+            expect(run.state).toBe('Completed');
+
+            const [work, review] = await ctx.invocations();
+            expect(work.prompt).toContain('A decision that answers a hotspot');
+            // a cold agent starts afresh: the run's prompt, said done, then the review with what stage 0 found
+            expect(review.prompt).toContain('An earlier turn of this run already carried out the requests above');
+            const block = JSON.parse(
+                review.prompt.slice(review.prompt.indexOf('<review-') + '<review-'.length + 32 + 1, review.prompt.indexOf('</review-')),
+            ) as {
+                review: { found: { kind: string; element: string }[]; neighbourhood: { element: string; why: string }[]; knowledge?: unknown };
+            };
+            expect<unknown>(block.review.found).toEqual([
+                { kind: 'ResolvedUnchanged', storming: 'Returns', element: 'Deadline', other: { storming: 'Returns', element: 'ReturnRequested' } },
+            ]);
+            expect(block.review.neighbourhood.map((n) => `${n.why} ${n.element}`)).toContain('changed Deadline');
+            // no knowledge store: none given
+            expect(block.review.knowledge).toBeUndefined();
+
+            const completed = run as Extract<Run, { state: 'Completed' }>;
+            expect(completed.reply?.summary).toBe('期限を決めた');
+            expect(completed.review).toEqual({
+                found: [
+                    {
+                        kind: 'ResolvedUnchanged',
+                        sticky: { storming: 'Returns', element: 'Deadline' },
+                        other: { storming: 'Returns', element: 'ReturnRequested' },
+                    },
+                ],
+                left: [],
+                fixed: ['@{es:Returns/ReturnRequested} のラベルに期限を書いた'],
+                kept: [],
+                asked: true,
+            });
+            expect(await readFile(path.join(ctx.root, RETURNS), 'utf8')).toContain('"返品が依頼された（30日以内）"');
+            expect(log.some((l) => l.includes('reviewing (1 found'))).toBe(true);
+        },
+    );
+
+    integration('a warm agent reviews in the same conversation; what it keeps is kept with why, and what is left is left', async () => {
+        const ctx = await setup();
+        const planFile = await ctx.plan([
+            { edits: RESOLVE_DEADLINE, reply: done },
+            {
+                reply: {
+                    outcome: 'done',
+                    title: '返品の期限',
+                    summary: '見直した',
+                    requests: [],
+                    review: { fixed: [], kept: [{ what: '@{es:Returns/ReturnRequested} はそのまま', why: '期限はイベントでなく方針の話' }] },
+                },
+            },
+        ]);
+        await subscribe(ctx, planFile, { run: { warm: true, restartAfter: 20, idleTimeout: 30 } });
+        const asked = await request(ctx, ctx.bob, { kind: 'DtesElement', storming: 'Returns', local: 'Deadline' }, '返品は注文から30日まで、で決まり');
+        const run = (await until(ctx, await queue(ctx, [asked]), ['Completed', 'Failed'])) as Extract<Run, { state: 'Completed' }>;
+        const [work, review] = await ctx.invocations();
+        // one process, one more turn: the review alone, without the run's prompt again
+        expect(review.pid).toBe(work.pid);
+        expect(review.prompt).toStartWith('Before this run ends, review your work');
+        expect(run.review?.kept).toEqual([{ what: '@{es:Returns/ReturnRequested} はそのまま', why: '期限はイベントでなく方針の話' }]);
+        expect(run.review?.left.map((f) => f.kind)).toEqual(['ResolvedUnchanged']);
+    });
+
+    integration('a run that changed no storming is not reviewed: one turn', async () => {
+        const ctx = await setup();
+        const planFile = await ctx.plan([{ edits: [{ path: 'sales/order.dt', append: '\n' }], reply: done }]);
+        await subscribe(ctx, planFile, { run: { warm: false, restartAfter: 20, idleTimeout: 30 } });
+        const asked = await request(ctx, ctx.bob, { kind: 'DtElement', element: 'Sales.Order' }, 'Tidy it.');
+        const run = (await until(ctx, await queue(ctx, [asked]), ['Completed', 'Failed'])) as Extract<Run, { state: 'Completed' }>;
+        expect(await ctx.invocations()).toHaveLength(1);
+        expect(run.review).toBeUndefined();
     });
 });

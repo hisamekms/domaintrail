@@ -1,0 +1,526 @@
+// The session's chat as the left pane shows it (ADR 0026), without React: the main stream ("本筋") of what the
+// facilitator queued and what followed (the requests of each run, the facilitator's note, the agent's state as its
+// messages, and the revision events worth a line), the requests still waiting for approval, the status at a glance and
+// the names of the participants. Everything is derived from the session's state on the page: nothing here is sent.
+import type { Me, SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { listedParticipants, type Peers } from './presence';
+import { changeUnits, type ChangeUnit } from './history';
+import { timeline } from './timeline';
+import { guideAnswers } from './guide-view';
+import { slashCommandSpec } from '@domaintrail/collaboration';
+import { AI_CANDIDATE, AI_NAME, AI_PARTICIPANT, isSolo, type AiSlot, type ProposalJson } from './ai';
+import type { PersonCandidate } from './mentions';
+import { targetKey, targetName, targetShortName, type NamingContext, type TargetDraft } from './targets';
+
+type RequestJson = SessionStateBody['requests'][number];
+type SlashCommandJson = NonNullable<SessionStateBody['slashCommands']>[number];
+type RunJson = SessionStateBody['runs'][number];
+type FrozenRequest = RunJson['input']['requests'][number];
+type FailureReason = Extract<RunJson, { state: 'Failed' }>['reason'];
+type RevisionJson = SessionStateBody['revisions'][number];
+export type RecordJson = NonNullable<SessionStateBody['records']>[number];
+type ReplyJson = Extract<RunJson, { state: 'Declined' }>['reply'];
+export type RequestProgress = ReplyJson['requests'][number]['status'];
+
+/** A request a reply names: the frozen request of the run, and its number in the run (as the prompt numbered it). */
+export interface ReplyRequest {
+    readonly number: number;
+    readonly request: FrozenRequest;
+}
+
+/**
+ * The agent's reply as the page shows it: what the AI says (never a fact), with the requests it names resolved to the
+ * run's frozen requests (author, body). A request it names that is not the run's is left out.
+ */
+export interface ReplyView {
+    readonly summary: string;
+    /** The answer, when the run judged a request a question and answered it instead of editing (ADR 0030). */
+    readonly answer?: string;
+    readonly requests: readonly { readonly request: ReplyRequest; readonly status: RequestProgress; readonly note?: string }[];
+    readonly questions: readonly {
+        readonly id: string;
+        readonly text: string;
+        readonly requests: readonly ReplyRequest[];
+        readonly options: readonly { readonly id: string; readonly label: string; readonly detail?: string }[];
+        readonly multiple: boolean;
+    }[];
+    readonly assumptions: readonly {
+        readonly text: string;
+        readonly requests: readonly ReplyRequest[];
+        readonly alternatives: readonly { readonly id: string; readonly label: string }[];
+    }[];
+}
+
+/** What the agent says about a run, from the run's state; `files`: how many sources the run changed (measured). */
+export type AgentMessage =
+    /** Waiting its turn; a revert the server could not revert mechanically says why it waits for the AI. */
+    | { readonly kind: 'queued'; readonly revertObstacle?: NonNullable<Extract<RunJson, { state: 'Queued' }>['revertObstacle']> }
+    | { readonly kind: 'running'; readonly since: string }
+    | {
+          readonly kind: 'clarification';
+          readonly question: string;
+          readonly result: number | undefined;
+          readonly files: number | undefined;
+          readonly reply?: ReplyView;
+      }
+    | {
+          readonly kind: 'completed';
+          readonly changed: boolean;
+          readonly result: number | undefined;
+          readonly files: number | undefined;
+          readonly reply?: ReplyView;
+      }
+    | { readonly kind: 'declined'; readonly result: number | undefined; readonly files: number | undefined; readonly reply: ReplyView }
+    /** The changes of a run reverted mechanically, without the agent. */
+    | { readonly kind: 'reverted'; readonly changed: boolean; readonly result: number | undefined; readonly files: number | undefined }
+    /** A person's edit of a sticky, written by dt (ADR 0033). */
+    | { readonly kind: 'edited'; readonly result: number | undefined; readonly files: number | undefined }
+    | { readonly kind: 'failed'; readonly reason: FailureReason }
+    | { readonly kind: 'cancelled'; readonly by: string };
+
+/** The reply of a run with the requests it names resolved to the run's frozen requests. */
+export function replyView(input: RunJson['input'], reply: ReplyJson): ReplyView {
+    const byId = new Map(input.requests.map((request, i) => [request.request, { number: i + 1, request }]));
+    const resolve = (ids: readonly string[]): ReplyRequest[] => ids.flatMap((id) => byId.get(id) ?? []);
+    return {
+        summary: reply.summary,
+        ...(reply.answer !== undefined && { answer: reply.answer }),
+        requests: reply.requests.flatMap((r) => {
+            const request = byId.get(r.request);
+            return request ? [{ request, status: r.status, ...(r.note !== undefined && { note: r.note }) }] : [];
+        }),
+        questions: reply.questions.map((q) => ({ id: q.id, text: q.text, requests: resolve(q.requests), options: q.options, multiple: q.multiple })),
+        assumptions: reply.assumptions.map((a) => ({ text: a.text, requests: resolve(a.requests), alternatives: a.alternatives })),
+    };
+}
+
+/**
+ * How many sources differ between two revisions (added, changed or removed, by path and content hash): the files a
+ * run changed, measured by the server's snapshots. `undefined` when either revision is not known.
+ */
+export function filesChanged(before: RevisionJson | undefined, after: RevisionJson | undefined): number | undefined {
+    if (!before || !after) return undefined;
+    if (before.id === after.id) return 0;
+    const old = new Map(before.files.map((f) => [f.path, f.hash]));
+    let n = 0;
+    for (const f of after.files) {
+        if (old.get(f.path) !== f.hash) n++;
+        old.delete(f.path);
+    }
+    return n + old.size;
+}
+
+/**
+ * One item of the main stream. `at` is where it stands (ISO); `key` is stable across updates of the same item. A card
+ * stays where its first run was queued, `updatedAt` telling when it last changed.
+ */
+export type StreamItem =
+    | { readonly kind: 'session-start'; readonly key: string; readonly at: string; readonly revision: number }
+    | { readonly kind: 'message'; readonly key: string; readonly at: string; readonly request: RequestJson }
+    | { readonly kind: 'card'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly unit: ChangeUnit }
+    /**
+     * A person's edit of a sticky (ADR 0033), where it was written: an activity row of theirs, never a message (the AI
+     * is not asked, nothing unread). A re-application after a run and a conflict's choice are rows of the same kind.
+     */
+    | { readonly kind: 'edit'; readonly key: string; readonly at: string; readonly run: Extract<RunJson, { state: 'Edited' }> }
+    /** A change proposal the AI wrote for a participant's 依頼 (ADR 0030), where it was made. */
+    | { readonly kind: 'proposal'; readonly key: string; readonly at: string; readonly proposal: ProposalJson }
+    /**
+     * A candidate command's card (`/es:exceptions`, …), or an answer command's while the AI works on it (Collab) or when
+     * it had nothing to work on, where it started.
+     */
+    | { readonly kind: 'command'; readonly key: string; readonly at: string; readonly command: SlashCommandJson }
+    /**
+     * A record of what a person did (or of the journey file changed outside dt): a small row, where it was written;
+     * `updatedAt` when it was written again (marks merged, a request's outcome).
+     */
+    | { readonly kind: 'record'; readonly key: string; readonly at: string; readonly updatedAt: string; readonly record: RecordJson }
+    | {
+          readonly kind: 'restored';
+          readonly key: string;
+          readonly at: string;
+          readonly revision: number;
+          readonly from: number | undefined;
+          /** It went back to the state before a unit of work (else to one kept before a restore). */
+          readonly work: boolean;
+      };
+
+/** The numbers of the session's revisions, and the revisions by ID, for the agent's messages. */
+export function revisionLookup(state: Pick<SessionStateBody, 'revisions' | 'runs'>): {
+    readonly number: (id: string | undefined) => number | undefined;
+    readonly revision: (id: string) => RevisionJson | undefined;
+} {
+    const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
+    const revisions = new Map(state.revisions.map((r) => [r.id, r]));
+    return { number: (id) => (id === undefined ? undefined : numbers.get(id)), revision: (id) => revisions.get(id) };
+}
+
+/** The agent's message about a run, and when it was said: its latest change of state. */
+export function agentMessage(run: RunJson, lookup: ReturnType<typeof revisionLookup>): { at: string; message: AgentMessage } {
+    const revisionNumber = lookup.number;
+    const files = (base: string, result: string): number | undefined => filesChanged(lookup.revision(base), lookup.revision(result));
+    switch (run.state) {
+        case 'Queued':
+            return { at: run.queuedAt, message: run.revertObstacle ? { kind: 'queued', revertObstacle: run.revertObstacle } : { kind: 'queued' } };
+        case 'Running':
+            return { at: run.startedAt, message: { kind: 'running', since: run.startedAt } };
+        case 'NeedsClarification':
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'clarification',
+                    question: run.question,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                    ...(run.reply && { reply: replyView(run.input, run.reply) }),
+                },
+            };
+        case 'Completed':
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'completed',
+                    changed: run.changed,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                    ...(run.reply && { reply: replyView(run.input, run.reply) }),
+                },
+            };
+        case 'Declined':
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'declined',
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                    reply: replyView(run.input, run.reply),
+                },
+            };
+        case 'Failed':
+            return { at: run.finishedAt, message: { kind: 'failed', reason: run.reason } };
+        case 'Cancelled':
+            return { at: run.cancelledAt, message: { kind: 'cancelled', by: run.cancelledBy } };
+        case 'Edited':
+            return {
+                at: run.finishedAt,
+                message: { kind: 'edited', result: revisionNumber(run.resultRevision), files: files(run.baseRevision, run.resultRevision) },
+            };
+        case 'Reverted':
+            return {
+                at: run.finishedAt,
+                message: {
+                    kind: 'reverted',
+                    changed: run.changed,
+                    result: revisionNumber(run.resultRevision),
+                    files: files(run.baseRevision, run.resultRevision),
+                },
+            };
+    }
+}
+
+/**
+ * The main stream, oldest first: the session's start, every message as it was sent (each is chat; the AI's answers
+ * among them), one card per change unit where its first run was queued (`history.ts`), the change proposals where
+ * they were made, the cards of the `/` commands where they started, and the revisions restored.
+ */
+export function streamItems(
+    state: Pick<SessionStateBody, 'runs' | 'revisions' | 'requests' | 'proposals' | 'slashCommands' | 'records'> & {
+        readonly session?: SessionStateBody['session'];
+    },
+): StreamItem[] {
+    const numbers = new Map(timeline(state).map((e) => [e.revision.id, e.number]));
+    const byId = new Map(state.revisions.map((r) => [r.id, r]));
+    const items: StreamItem[] = [];
+    for (const r of state.revisions) {
+        const revision = numbers.get(r.id) ?? 0;
+        if (r.origin.kind === 'SessionStart') items.push({ kind: 'session-start', key: `start:${r.id}`, at: r.takenAt, revision });
+        if (r.origin.kind === 'Restored') {
+            const from = r.origin.restoredFrom;
+            const work = byId.get(from)?.origin.kind !== 'PreRestore';
+            items.push({ kind: 'restored', key: `restored:${r.id}`, at: r.takenAt, revision, from: numbers.get(from), work });
+        }
+    }
+    // a record before what was written with it (a journey marked done, then dt's note)
+    for (const record of state.records ?? [])
+        items.push({ kind: 'record', key: `record:${record.id}`, at: record.at, updatedAt: record.revisedAt ?? record.at, record });
+    // a guide's answer is its card's: not a message of its own
+    const answers = guideAnswers(state);
+    // a person's edit of a sticky (ADR 0033) is in AI の作業, not in the chat: neither its message nor its unit
+    for (const request of state.requests)
+        if (!answers.has(request.id) && request.edit === undefined) items.push({ kind: 'message', key: `message:${request.id}`, at: request.sentAt, request });
+    for (const unit of changeUnits(state))
+        if (unit.outcome !== 'edited') items.push({ kind: 'card', key: `card:${unit.key}`, at: unit.start, updatedAt: unit.at, unit });
+    for (const run of state.runs) if (run.state === 'Edited') items.push({ kind: 'edit', key: `edit:${run.id}`, at: run.finishedAt, run });
+    for (const proposal of state.proposals ?? []) items.push({ kind: 'proposal', key: `proposal:${proposal.id}`, at: proposal.proposedAt, proposal });
+    // an answer command's answer is the AI's message: its card says only that the AI works on it (in Solo, its slot
+    // does), or that it had nothing to work on (a guide stored from when it was `/es:next` and had no storming in view:
+    // listed with none, until closed); a guide is its card always, the map and what is known at once at once, its
+    // answer in it
+    const solo = state.session !== undefined && isSolo({ session: state.session });
+    for (const command of state.slashCommands ?? []) {
+        const card =
+            command.kind === 'Guide' ||
+            slashCommandSpec(command.kind).type === 'candidates' ||
+            (command.state === 'Working' && !solo) ||
+            command.state === 'Listed';
+        if (card) items.push({ kind: 'command', key: `command:${command.id}`, at: command.startedAt, command });
+    }
+    // by time; items at the same moment keep the order they were pushed in (a message before the card applying it)
+    return items
+        .map((item, i) => ({ item, i }))
+        .sort((a, b) => a.item.at.localeCompare(b.item.at) || a.i - b.i)
+        .map(({ item }) => item);
+}
+
+/**
+ * A line of the chat as Solo shows it: an item of the stream, or the AI's card under a message (`request`), which is
+ * pending (or given up) until the answer or the run card it went to takes its place.
+ */
+export type ChatEntry =
+    | { readonly kind: 'item'; readonly item: StreamItem }
+    | {
+          readonly kind: 'slot';
+          readonly request: string;
+          readonly content: { readonly kind: 'pending' | 'given-up' } | { readonly kind: 'item'; readonly item: StreamItem };
+      };
+
+/**
+ * The stream with the AI's card under each message that has one (`slots`, by the message's ID): the answer or the run
+ * card a message went to is taken from where it stands by time and put right under the message, in its card's place;
+ * a run card holding the runs of several messages stays under the first. Without slots (Collab) it is the stream as is.
+ */
+export function placeAiSlots(items: readonly StreamItem[], slots: ReadonlyMap<string, AiSlot>): ChatEntry[] {
+    const byKey = new Map(items.map((i) => [i.key, i]));
+    const cardOf = new Map<string, string>();
+    for (const i of items) if (i.kind === 'card') for (const { run } of i.unit.runs) cardOf.set(run.id, i.key);
+    // the item each slot shows once it is there, the first message taking it
+    const placed = new Map<string, StreamItem>();
+    const taken = new Set<string>();
+    for (const i of items) {
+        const slot = i.kind === 'message' ? slots.get(i.request.id) : undefined;
+        if (!slot || i.kind !== 'message' || (slot.kind !== 'answer' && slot.kind !== 'run')) continue;
+        const key = slot.kind === 'answer' ? `message:${slot.answer}` : cardOf.get(slot.run);
+        const item = key === undefined ? undefined : byKey.get(key);
+        if (!item || taken.has(item.key)) continue;
+        taken.add(item.key);
+        placed.set(i.request.id, item);
+    }
+    const entries: ChatEntry[] = [];
+    for (const i of items) {
+        if (taken.has(i.key)) continue;
+        entries.push({ kind: 'item', item: i });
+        if (i.kind !== 'message') continue;
+        const slot = slots.get(i.request.id);
+        if (!slot) continue;
+        const item = placed.get(i.request.id);
+        if (item) entries.push({ kind: 'slot', request: i.request.id, content: { kind: 'item', item } });
+        else if (slot.kind === 'pending' || slot.kind === 'given-up') entries.push({ kind: 'slot', request: i.request.id, content: { kind: slot.kind } });
+        // decided, its answer or card not on the page yet: pending until it is
+        else if (!taken.has(slot.kind === 'answer' ? `message:${slot.answer}` : (cardOf.get(slot.run) ?? '')))
+            entries.push({ kind: 'slot', request: i.request.id, content: { kind: 'pending' } });
+    }
+    return entries;
+}
+
+/** When an item last changed: a card when its runs did, anything else when it was added. */
+export const changedAt = (item: StreamItem): string => (item.kind === 'card' || item.kind === 'record' ? item.updatedAt : item.at);
+
+/** The status of the session's agent at a glance. */
+export type AgentStatus =
+    | { readonly kind: 'running'; readonly since: string }
+    | { readonly kind: 'clarification' }
+    | { readonly kind: 'queued' }
+    | { readonly kind: 'idle' };
+
+/**
+ * What the agent is doing: running (a run is), waiting for a run to start (one is queued), waiting for an answer (the
+ * latest run asked a question), or idle.
+ */
+export function agentStatus(runs: readonly RunJson[]): AgentStatus {
+    const running = runs.find((r) => r.state === 'Running');
+    if (running?.state === 'Running') return { kind: 'running', since: running.startedAt };
+    if (runs.some((r) => r.state === 'Queued')) return { kind: 'queued' };
+    let latest: RunJson | undefined;
+    for (const r of runs) if (!latest || r.queuedAt >= latest.queuedAt) latest = r;
+    return latest?.state === 'NeedsClarification' ? { kind: 'clarification' } : { kind: 'idle' };
+}
+
+/** Elapsed time as `m:ss` (or `h:mm:ss` from an hour on); never negative. */
+export function elapsed(since: string, now: number): string {
+    const total = Math.max(0, Math.floor((now - Date.parse(since)) / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = String(total % 60).padStart(2, '0');
+    return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+/** A text on one line (whitespace collapsed), for the one-line rows. */
+export const oneLine = (text: string): string => text.replace(/\s+/g, ' ').trim();
+
+/**
+ * What a target is called on the page: its name now in the display mode (`targetName`), else the label it was taken
+ * with (a target no longer in the sources, or no naming given), else its key; the whole workspace by the given word.
+ */
+export function targetText(target: Pick<TargetDraft, 'target' | 'label'>, workspace: string, naming?: NamingContext): string {
+    if (target.target.kind === 'Workspace') return workspace;
+    return (naming && targetName(target.target, naming)) ?? target.label ?? targetKey(target.target);
+}
+
+/**
+ * What a target is shown as where it stands alone (a chip, a mention, a one-line summary): its own name, without what it
+ * is in (`targetShortName`: `支払済み`, not `請求書.支払済み`), else its whole name as `targetText` gives it. The whole
+ * name goes in the tooltip.
+ */
+export function targetShortText(target: Pick<TargetDraft, 'target' | 'label'>, workspace: string, naming?: NamingContext): string {
+    if (target.target.kind === 'Workspace') return workspace;
+    return (naming && targetShortName(target.target, naming)) ?? targetText(target, workspace, naming);
+}
+
+/** A request's targets on one line: the first one's own name and how many more (`注文 +2`); none: the whole workspace. */
+export function targetsSummary(targets: readonly Pick<TargetDraft, 'target' | 'label'>[], workspace: string, naming?: NamingContext): string {
+    const [first, ...rest] = targets;
+    if (!first) return workspace;
+    const name = targetShortText(first, workspace, naming);
+    return rest.length ? `${name} +${rest.length}` : name;
+}
+
+/**
+ * The names participants are known by now: the ones they joined with, the facilitator's after its holder, then the
+ * names their pages (and this page) are signed in with.
+ */
+export function participantNames(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): Map<string, string> {
+    const names = new Map<string, string>(state.session.participants.map((p) => [p.id, p.name]));
+    for (const p of listedParticipants(state)) names.set(p.id, p.name);
+    for (const p of peers.values()) names.set(p.participant.id, p.participant.name);
+    names.set(me.participant.id, me.participant.name);
+    names.set(AI_PARTICIPANT, AI_NAME);
+    return names;
+}
+
+/** How the chat names a message's author: by the given word (「あなた」) when it is me, else by their name. */
+export const speakerName = (author: string, me: string, nameOf: (id: string) => string, you: string): string => (author === me ? you : nameOf(author));
+
+/** Whether a participant is the facilitator now: the session's facilitator, or who holds the role for it. */
+export const isFacilitator = (state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, id: string): boolean =>
+    id === state.session.facilitator || id === state.facilitatorHolder;
+
+/** A participant in the header's row of avatars. */
+export interface HeaderParticipant {
+    readonly id: string;
+    readonly name: string;
+    readonly role: 'facilitator' | 'participant';
+    readonly online: boolean;
+    readonly me: boolean;
+    readonly avatarUrl?: string;
+}
+
+/** Each participant's avatar URL, by ID, as their pages tell it (mine, and those online). */
+export function participantAvatars(peers: Peers, me: Me): Map<string, string> {
+    const avatars = new Map<string, string>();
+    for (const p of peers.values()) if (p.participant.avatarUrl) avatars.set(p.participant.id, p.participant.avatarUrl);
+    if (me.participant.avatarUrl) avatars.set(me.participant.id, me.participant.avatarUrl);
+    return avatars;
+}
+
+/** The participants for the header: me first, then the others online, then those away, by name within each. */
+export function headerParticipants(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): HeaderParticipant[] {
+    const names = participantNames(state, peers, me);
+    const online = new Set<string>([...peers.values()].map((p) => p.participant.id));
+    const avatars = participantAvatars(peers, me);
+    const rank = (p: HeaderParticipant): number => (p.me ? 0 : p.online ? 1 : 2);
+    return listedParticipants(state)
+        .map((p): HeaderParticipant => {
+            const avatarUrl = avatars.get(p.id);
+            const mine = p.id === me.participant.id;
+            return {
+                id: p.id,
+                name: names.get(p.id) ?? p.name,
+                role: p.role,
+                online: mine || online.has(p.id),
+                me: mine,
+                ...(avatarUrl && { avatarUrl }),
+            };
+        })
+        .sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
+}
+
+/**
+ * How many items of the stream changed after `seen` (an ISO time: when the chat was last shown): the messages sent, the
+ * cards whose runs moved on (each change of a run's state counts) and the records written (or written again). Nothing
+ * is unread before the chat was ever shown.
+ */
+export function unreadCount(items: readonly StreamItem[], seen: string | undefined): number {
+    if (seen === undefined) return 0;
+    return items.filter((i) => (i.kind === 'message' || i.kind === 'card' || i.kind === 'record') && changedAt(i) > seen).length;
+}
+
+/**
+ * Whether a message mentions me: it names me among its people, or names the facilitator while I hold that role. My
+ * own messages never do (I know what I wrote).
+ */
+export function mentionsMe(
+    request: Pick<RequestJson, 'author' | 'mentions'>,
+    state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>,
+    me: string,
+): boolean {
+    if (request.author === me) return false;
+    return request.mentions.includes(me) || (me === state.facilitatorHolder && request.mentions.includes(state.session.facilitator));
+}
+
+/** How many of the messages sent after `seen` mention me (`unreadCount`'s messages that ask for my attention). */
+export function unreadMentions(
+    items: readonly StreamItem[],
+    seen: string | undefined,
+    state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>,
+    me: string,
+): number {
+    if (seen === undefined) return 0;
+    return items.filter((i) => i.kind === 'message' && i.at > seen && mentionsMe(i.request, state, me)).length;
+}
+
+/**
+ * What arrived in the stream while the reader was away from its bottom: the messages and the AI turns (cards) whose keys
+ * are not among `known` (the items there when they scrolled up) — a card moving on is not one, nor a message of mine —
+ * and how many of those messages are for me (`toMe`: they mention me or reply to me).
+ */
+export function arrivedBelow(
+    items: readonly StreamItem[],
+    known: ReadonlySet<string>,
+    me: string,
+    toMe: (request: RequestJson) => boolean,
+): { readonly count: number; readonly forMe: number } {
+    let count = 0;
+    let forMe = 0;
+    for (const i of items) {
+        if (known.has(i.key)) continue;
+        if (i.kind === 'card') count++;
+        if (i.kind !== 'message' || i.request.author === me) continue;
+        count++;
+        if (toMe(i.request)) forMe++;
+    }
+    return { count, forMe };
+}
+
+/**
+ * The people `@` offers: the AI first (ADR 0030), then everyone in the session but me, online first then away, by name
+ * within each (the order of the header). The facilitator is one of them. In Solo (`dt open`) every message goes to the
+ * AI already: none.
+ */
+export function mentionablePeople(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>, peers: Peers, me: Me): PersonCandidate[] {
+    if (isSolo(state)) return [];
+    // holding the facilitator's role, I am the facilitator's row too
+    const holding = me.participant.id === state.facilitatorHolder;
+    const people = headerParticipants(state, peers, me).flatMap((p): PersonCandidate[] =>
+        p.me || (holding && p.id === state.session.facilitator)
+            ? []
+            : [{ id: p.id, name: p.name, role: p.role, online: p.online, ...(p.avatarUrl && { avatarUrl: p.avatarUrl }) }],
+    );
+    return [AI_CANDIDATE, ...people];
+}
+
+/** When the stream last changed (its latest change), for `unreadCount`. */
+export function latestAt(items: readonly StreamItem[]): string | undefined {
+    let latest: string | undefined;
+    for (const i of items) if (latest === undefined || changedAt(i) > latest) latest = changedAt(i);
+    return latest;
+}

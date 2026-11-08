@@ -1,11 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { generateTypeScript } from '@domaintrail/modeling/generator/typescript';
-import { check, tempCopyOfExamples } from './helpers.js';
+import { cliDeps, runCli } from '@domaintrail/dt';
+import { workspaceDirs } from '@domaintrail/workspace';
+import { generateTypeScript } from '@domaintrail/generation';
+import { check, linkNodeModules, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const dirs: string[] = [];
@@ -39,11 +39,11 @@ function tsc(dir: string, files: string[], exact = true): string {
     return r.stdout.toString() + r.stderr.toString();
 }
 
-/** A temporary directory that resolves fast-check from this repository. */
+/** A temporary directory that resolves fast-check and domaintrail/testing from this repository. */
 async function tempDir(): Promise<string> {
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-contract-'));
     dirs.push(dir);
-    await symlink(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
+    await linkNodeModules(dir);
     return dir;
 }
 
@@ -123,6 +123,7 @@ const dir = await tempDir();
 }
 const domain = await import(path.join(dir, 'index.ts'));
 const tests = await import(path.join(dir, 'tests', 'index.ts'));
+const testing = await import(path.join(dir, 'node_modules', 'domaintrail', 'testing', 'index.ts'));
 const { Shop, decide, ok, err } = domain;
 
 const forbidden = (code: string): boolean => code.startsWith('Z');
@@ -131,9 +132,9 @@ const added = (cart: { id: string }, n: number) => ({ Added: Array.from({ length
 /** A correct implementation; `change` replaces some of its parts. */
 function cart(change: Record<string, unknown> = {}) {
     return {
-        start: decide(Shop.CartShape, (id: string) => ok({ Open: { set: { id, lines: [] }, events: { Opened: { type: 'Opened', cart: id } } } })),
+        start: decide(Shop.CartShape, ({ id }: { id: string }) => ok({ Open: { set: { id, lines: [] }, events: { Opened: { type: 'Opened', cart: id } } } })),
         add: decide(Shop.CartShape, {
-            Open: (c: any, line: any, limit: number) => {
+            Open: (c: any, { line, limit }: any) => {
                 if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Duplicate' });
                 if (!(c.lines.length < limit)) return err({ type: 'Full' });
                 if (forbidden(line.code)) return err({ type: 'Forbidden' });
@@ -157,11 +158,13 @@ const makeCode = (v: string) => {
     if (v.length > 3) return err({ type: 'InvalidCode', value: v, invariant: 'short' });
     return ok(v);
 };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const makeCartId = (v: string) => (UUID.test(v) ? ok(v) : err({ type: 'InvalidCartId', value: v, invariant: 'uuid' }));
 
 /** Runs every case of a suite: the error message of each that fails, by name; todo cases as 'todo'. */
 async function run(suite: unknown): Promise<Record<string, string | undefined>> {
     const out: Record<string, string | undefined> = {};
-    for (const c of tests.cases(suite)) {
+    for (const c of testing.cases(suite)) {
         if (c.todo) {
             out[c.name] = 'todo';
             continue;
@@ -186,7 +189,7 @@ describe('generated contract tests', () => {
     });
 
     test('pass for a correct implementation, with todo cases for the constraints without an expression', async () => {
-        const r = await run(contract({ make: { Qty: makeQty, Code: makeCode, CartId: (v: string) => v }, Cart: cart() }));
+        const r = await run(contract({ make: { Qty: makeQty, Code: makeCode, CartId: makeCartId }, Cart: cart() }));
         expect(failing(r)).toEqual([]);
         expect(todos(r)).toEqual([
             "Shop > domain primitives > invariant 'reserved' of Shop.Code is not expressed in the DSL and not checked: pass a check in options.declared",
@@ -205,21 +208,38 @@ describe('generated contract tests', () => {
 
     test('the declared checks passed in are tested like the generated ones', async () => {
         const declared = {
-            Shop: { Code: { reserved: (v: string) => v !== 'AA0' }, AddCart: { allowed: (_c: unknown, line: { code: string }) => !forbidden(line.code) } },
+            Shop: {
+                Code: { reserved: (v: string) => v !== 'AA0' },
+                AddCart: { allowed: (_c: unknown, { line }: { line: { code: string } }) => !forbidden(line.code) },
+            },
         };
         const r = await run(contract({ make: { Code: makeCode }, Cart: cart() }, { declared }));
         expect(failing(r)).toEqual([]);
         expect(todos(r)).toEqual([]);
         // an implementation that ignores `allowed` is now caught
         const lax = cart({
-            add: decide(Shop.CartShape, { Open: (c: any, line: any) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }) }),
+            add: decide(Shop.CartShape, { Open: (c: any, { line }: any) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }) }),
         });
         expect(
             failing(
                 await run(
                     contract(
                         { Cart: lax },
-                        { declared, examples: { Cart: { commands: { add: [[{ state: 'Open', id: 'c', lines: [] }, { code: 'ZZ1', qty: 1 }, 5]] } } } },
+                        {
+                            declared,
+                            examples: {
+                                Cart: {
+                                    commands: {
+                                        add: [
+                                            [
+                                                { state: 'Open', id: 'c', lines: [] },
+                                                { line: { code: 'ZZ1', qty: 1 }, limit: 5 },
+                                            ],
+                                        ],
+                                    },
+                                },
+                            },
+                        },
                     ),
                 ),
             ),
@@ -238,16 +258,25 @@ describe('generated contract tests', () => {
         );
     });
 
+    test('T1 catches an ID on UUID whose constructor accepts any string, or only lower case', async () => {
+        const r1 = await run(contract({ make: { CartId: (v: string) => ok(v) } }));
+        expect(failing(r1)).toHaveLength(1);
+        expect(Object.values(r1).join()).toContain("accepted a value that violates 'uuid'");
+        const lower = (v: string) => (/^[0-9a-f-]{36}$/.test(v) ? makeCartId(v) : err({ type: 'InvalidCartId', value: v, invariant: 'uuid' }));
+        expect(failing(await run(contract({ make: { CartId: lower } })))).toHaveLength(1);
+        expect(failing(await run(contract({ make: { CartId: makeCartId } })))).toEqual([]);
+    });
+
     test('T2 catches requirements checked in the wrong order, a missing one, and an error returned although all hold', async () => {
         const name = 'Shop > Cart > Cart.add returns the error of the first requirement that does not hold, and none of their errors when all hold';
-        const add = (body: (c: any, line: any, limit: number) => unknown) => cart({ add: decide(Shop.CartShape, { Open: body }) });
-        const swapped = add((c, line, limit) => {
+        const add = (body: (c: any, params: any) => unknown) => cart({ add: decide(Shop.CartShape, { Open: body }) });
+        const swapped = add((c, { line, limit }) => {
             if (!(c.lines.length < limit)) return err({ type: 'Full' });
             if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Duplicate' });
             return ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } });
         });
         expect((await run(contract({ Cart: swapped })))[name]).toContain("requirement 'fresh' is the first that does not hold: expected Duplicate");
-        const missing = add((c, line) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }));
+        const missing = add((c, { line }) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }));
         expect((await run(contract({ Cart: missing })))[name]).toContain('succeeded, but requirement');
         const strict = add((c) => (c.lines.length > 2 ? err({ type: 'Full' }) : ok({ Open: { set: { lines: c.lines }, events: added(c, 2) } })));
         expect((await run(contract({ Cart: strict })))[name]).toBeDefined();
@@ -265,7 +294,7 @@ describe('generated contract tests', () => {
     test('T4 catches an event count outside bounds the types cannot express', async () => {
         const once = cart({
             add: decide(Shop.CartShape, {
-                Open: (c: any, line: any, limit: number) =>
+                Open: (c: any, { line, limit }: any) =>
                     c.lines.some((l: any) => l.code === line.code)
                         ? err({ type: 'Duplicate' })
                         : c.lines.length >= limit
@@ -282,7 +311,7 @@ describe('generated contract tests', () => {
 
     test('T5 catches randomness and a changed input', async () => {
         const random = cart({
-            start: decide(Shop.CartShape, (id: string) =>
+            start: decide(Shop.CartShape, ({ id }: { id: string }) =>
                 ok({
                     Open: {
                         set: { id, lines: Math.random() < 2 ? [{ code: `A${Math.floor(Math.random() * 1e9)}`, qty: 1 }] : [] },
@@ -348,16 +377,11 @@ describe('the shop example', () => {
     test('generates contract tests that pass against its implementation with bun:test', async () => {
         const shop = await tempCopyOfExamples();
         dirs.push(shop);
-        await symlink(path.join(ROOT, 'node_modules'), path.join(shop, 'node_modules'));
+        await linkNodeModules(shop);
         expect(await runCli(['-r', shop, 'generate', 'ts'], { out: () => {}, err: () => {} }, cliDeps())).toBe(0);
-        const manifest = JSON.parse(await readFile(path.join(shop, '.domaintrail', 'generated.json'), 'utf8'));
+        const manifest = JSON.parse(await readFile(path.join(workspaceDirs(shop).state, 'generated.json'), 'utf8'));
         expect(manifest.files).toEqual(
-            expect.arrayContaining([
-                'generated/domain/tests/_testing.ts',
-                'generated/domain/tests/_register.ts',
-                'generated/domain/tests/Sales.ts',
-                'generated/domain/tests/index.ts',
-            ]),
+            expect.arrayContaining(['generated/domain/tests/_register.ts', 'generated/domain/tests/Sales.ts', 'generated/domain/tests/index.ts']),
         );
         // all of src/ (domain, application, demo, tests), with the example's own tsconfig.json
         const typecheck = Bun.spawnSync([process.execPath, path.join(ROOT, 'node_modules', '.bin', 'tsc'), '-p', shop]);
@@ -369,7 +393,9 @@ describe('the shop example', () => {
         expect(r.exitCode).toBe(0);
         const demo = Bun.spawnSync([process.execPath, 'src/demo.ts'], { cwd: shop });
         expect(demo.stderr.toString()).toBe('');
-        expect(demo.stdout.toString()).toContain('policy BillConfirmedOrder: issued invoice-1 for order-1: 3380 JPY');
+        expect(demo.stdout.toString()).toContain(
+            'policy BillConfirmedOrder: issued 00000006-0000-4000-8000-000000000001 for 00000004-0000-4000-8000-000000000001: 3380 JPY',
+        );
         expect(demo.exitCode).toBe(0);
     }, 30_000);
 });

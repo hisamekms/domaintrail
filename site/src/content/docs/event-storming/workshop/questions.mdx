@@ -1,0 +1,83 @@
+---
+title: 問い
+description: 分からないこと・意見が割れること・危ないことを、問い（ホットスポット）として残す。開いたままでよい。
+sidebar:
+  label: 問い
+  order: 6
+  attrs:
+    data-n: '6'
+  badge:
+    text: BP
+    variant: success
+---
+
+import Chapter from '../../../../components/Chapter.astro';
+import FourCards from '../../../../components/FourCards.astro';
+import BeforeAfter from '../../../../components/BeforeAfter.astro';
+import StepsBeside from '../../../../components/StepsBeside.astro';
+
+<Chapter here="questions" />
+
+<p class="lead">分からないこと、意見が割れること、危ないことを、問いの付箋（ホットスポット）にして出来事に貼ります。推測で埋めずに、問いのまま残すのが大事です。</p>
+
+## この章の4つ
+
+<FourCards map="ガイドの地図で「問い」に ✓ が付きます（問いが1つ以上あり、すべて解決済み。問いが出なかったなら、地図の「済みにする」にチェック）。Big Picture のゴール（🏁）はここです。">
+  <Fragment slot="goal">
+    決まっていないことを見える場所に残し、決まったことは決まったと記す。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>疑問や異論をそのまま口にする</li>
+      <li>決まったら、何に決まったかを言う</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li>AI が問いを疑問文で出来事に貼る</li>
+      <li>ガイドの「聞くことをメモ」で問いを足す</li>
+      <li>決まった問いを AI に「解決済み」にしてもらう</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>問いが1つ以上ある</li>
+      <li>どの問いも解決済み（決まったことが書いてある）</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## 例外のある段階から、問いの貼られた段階へ
+
+<BeforeAfter
+  before="atstore-exceptions"
+  beforeLabel="いま：例外がそろった「コンビニでの発行」"
+  after="atstore-questions"
+  afterLabel="この章のあと：問いが貼られた"
+  caption="ピンクの付箋が問い。解決済みは薄く、緑のチェックが付く"
+/>
+
+## 進め方
+
+<StepsBeside shot="guide-card" alt="ガイドのカード：地図、すぐ分かること、次の一歩" caption="ガイドのカード。次の一歩に「聞くことをメモ」が付く">
+
+1. **疑問を拾う**　「再設定は市役所だけ？」のような声が出たら、そのまま AI に送る。AI が疑問文の問いにして出来事に貼る。
+2. **ガイドから足す**　`/guide` の次の一歩に「聞くことをメモ」があれば押す。その場所に問いが足される（参加者が押したものはファシリテーターの承認待ち）。
+3. **決まったら記す**　その場で決まった問いは、「〜に決まった」と AI に送る。問いは解決済みになり、決まったことが残る。図では薄く描かれ、緑のチェックが付く。
+4. **決まらない問いは残す**　だれに聞けばよいかを話して、次へ進む。
+
+</StepsBeside>
+
+## 開いたままの問いは、良い結果
+
+- 推測で埋めた答えより、開いたままの問いのほうが役に立ちます。業務の詳しい人に聞く宿題になります。
+- 開いた問いが残っていると、地図の「問い」には ✓ が付きません。それで正しい状態です。ガイドの「すぐ分かること」に、開いた問いの一覧が出ます。
+- 解決済みの問いのうち大事なもの（例外、境界、守るべき決まり）は残し、ささいなものは消して構いません。履歴は git に残ります。
+
+:::tip[コツ]
+問いは疑問文で、短く。「部数はだれが決める？」のように、だれに聞けば答えが出るかが分かる形にします。
+:::
+
+:::caution[よくあるつまずき]
+問いをその場で全部解こうとしない。議論が5分を超えたら問いとして残し、流れに戻ります。
+:::

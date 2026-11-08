@@ -1,0 +1,26 @@
+/// The `.dt` language: a domain model of bounded contexts, their elements and rules. What Modeling publishes is
+/// described here: the Typed Model (a resolved, serializable view of the model, the input of the TypeScript generator
+/// and of the Graph IR, sent to the Live View), the diff of two models, the dependencies between contexts and between
+/// aggregates, and Modeling's rule IDs. The shape of the language (the AST and the model as written that the rules
+/// read) is not described here (ADR 0027).
+context Modeling {
+  /// The stable ID of an element, a state or a command, derived from qualified names so that it survives re-parsing:
+  /// `Sales.Order` (element), `Sales.Order#Confirmed` (state), `Sales.Order:confirm` (command). Renaming an element
+  /// changes its ID.
+  id ElementId: String
+
+  /// The qualified name of an element (`Sales.Order`), as references name it; as written when a reference does not
+  /// resolve.
+  primitive QualifiedName: String
+
+  /// The name of a bounded context.
+  primitive ContextName: String
+
+  /// Display name and description shared by declarations.
+  fields Described {
+    /// Japanese (display) name.
+    label: String?
+    /// Description from `///` comments.
+    doc: String?
+  }
+}

@@ -1,7 +1,18 @@
 // The session's REST API as a seeded participant calls it (`/api/session/*`), with the participant's own `dev` cookie:
 // the same requests a page sends. Every failure throws with the route, the status and the server's error, so that a
 // seed stops loudly where it went wrong.
-import type { Me, MarkSetBody, QueueRunBody, SendRequestBody, SessionStateBody, SetMarkBody } from '@domaintrail/collaboration/protocol';
+import type {
+    AddressedBody,
+    ApproveBody,
+    ApprovedBody,
+    MarkSetBody,
+    Me,
+    QueueRunBody,
+    SendRequestBody,
+    SessionStateBody,
+    SetMarkBody,
+    RevertRequestedBody,
+} from '@domaintrail/collaboration/protocol';
 
 type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
@@ -53,9 +64,12 @@ export function sessionClient(base: string): {
     state(p: Participant): Promise<SessionStateBody>;
     targets(p: Participant): Promise<{ statuses: Record<string, string[]> }>;
     send(p: Participant, body: SendRequestBody): Promise<RequestJson>;
+    address(p: Participant, request: string): Promise<AddressedBody>;
     queue(p: Participant, body: QueueRunBody): Promise<RunJson>;
     cancel(p: Participant, run: string): Promise<RunJson>;
     mark(p: Participant, body: SetMarkBody): Promise<MarkSetBody>;
+    approve(p: Participant, body: ApproveBody): Promise<ApprovedBody>;
+    revert(p: Participant, run: string, body: string): Promise<RevertRequestedBody>;
 } {
     return {
         async join(name) {
@@ -76,9 +90,13 @@ export function sessionClient(base: string): {
         state: async (p) => (await call<SessionStateBody>(base, 'state', p.cookie)).value,
         targets: async (p) => (await call<{ statuses: Record<string, string[]> }>(base, 'targets', p.cookie)).value,
         send: async (p, body) => (await call<{ request: RequestJson }>(base, 'requests', p.cookie, body)).value.request,
+        // the facilitator's 「AI に送る」 on one message (ADR 0030): its triage opens, addressed by the facilitator
+        address: async (p, request) => (await call<AddressedBody>(base, `requests/${request}/address`, p.cookie, {})).value,
         queue: async (p, body) => (await call<{ run: RunJson }>(base, 'runs', p.cookie, body)).value.run,
         cancel: async (p, run) => (await call<{ run: RunJson }>(base, `runs/${run}/cancel`, p.cookie, {})).value.run,
         mark: async (p, body) => (await call<MarkSetBody>(base, 'marks', p.cookie, body)).value,
+        approve: async (p, body) => (await call<ApprovedBody>(base, 'approvals', p.cookie, body)).value,
+        revert: async (p, run, body) => (await call<RevertRequestedBody>(base, `runs/${run}/revert`, p.cookie, { body })).value,
     };
 }
 

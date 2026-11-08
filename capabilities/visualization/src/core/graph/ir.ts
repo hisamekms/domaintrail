@@ -1,0 +1,362 @@
+/**
+ * Graph IR: a view-independent graph derived from the Typed Model.
+ * Node and edge IDs are stable (derived from qualified names) so that layout and camera survive updates.
+ */
+
+export type NodeKind =
+    | 'context'
+    | 'sharedContext'
+    | 'aggregateBoundary'
+    | 'aggregate'
+    | 'entity'
+    | 'valueObject'
+    | 'union'
+    /** An element of another context, shown by name only (focused Structure View). */
+    | 'stub'
+    /** A bounded context as one node (Context Map). */
+    | 'boundedContext'
+    | 'state'
+    | 'initial'
+    /** The sticky notes of an Event Storming (`.dtes`, ADR 0024). */
+    | 'esEvent'
+    | 'esCommand'
+    | 'esPolicy'
+    | 'esActor'
+    | 'esExternal'
+    | 'esAggregate'
+    | 'esReadModel'
+    | 'esGap'
+    | 'esHotspot'
+    /** A group step of a timeline: a container of its event notes, without an order among them. */
+    | 'esGroup'
+    /** A stage of a storming: a frame around its main flow and its exceptions. */
+    | 'esStage';
+
+/**
+ * `dependsOn`: a context dependency that borrows types, not only IDs (Context Map). Event Storming (ADR 0032):
+ * `esCausal` (a policy's `on`, `issues`, a command's `handledBy` and `emits`, from its handler when it has one, an event
+ * `from` an external system), `esRelated` (`by`, `reads`, undirected), `esFeeds` (an event feeding a read model, a read
+ * model's `from`), `esHotspot` (a hotspot's `on`, undirected), `esSequence` (timeline order, and a stage's `after`)
+ * `esException` (the time order of exceptions only) and `esRejoin` (an exception's `then`, back to a main flow).
+ */
+export type EdgeKind =
+    | 'owns'
+    | 'value'
+    | 'references'
+    | 'transition'
+    | 'dependsOn'
+    | 'esCausal'
+    | 'esRelated'
+    | 'esFeeds'
+    | 'esHotspot'
+    | 'esSequence'
+    | 'esException'
+    | 'esRejoin';
+
+/**
+ * The edges drawn without an arrowhead: in Event Storming, arrows point along the flow and time, so only a hotspot's
+ * line to its subject (a question, not a step) has none.
+ */
+export const isUndirectedEdge = (kind: string): boolean => kind === 'esHotspot';
+
+/** How names are shown in the Live View: the label (the string after a declaration's name), the name, or both. */
+export type DisplayMode = 'label' | 'name' | 'both';
+export const DISPLAY_MODES: DisplayMode[] = ['label', 'name', 'both'];
+
+/**
+ * A label as it is shown: none when it is missing, empty or only whitespace (labels are optional), so that the name
+ * stands in for it in every display mode.
+ */
+export const shownLabel = (label: string | undefined): string | undefined => (label?.trim() ? label : undefined);
+
+/** Language of the Live View's own words (the model's names and labels are shown as written). */
+export type Lang = 'ja' | 'en';
+export const LANGS: Lang[] = ['ja', 'en'];
+
+/** A text in every display mode. */
+export type ModeTexts = Record<DisplayMode, string>;
+/** A text in every language and display mode; layout reserves room for the widest one. */
+export type Texts = Record<Lang, ModeTexts>;
+
+/** Every (language, display mode) a text is shown in. */
+export const TEXT_VARIANTS: [Lang, DisplayMode][] = LANGS.flatMap((l) => DISPLAY_MODES.map((m): [Lang, DisplayMode] => [l, m]));
+
+/** A text with no words of the Live View's own: the same in every language. */
+export const anyLang = (t: ModeTexts): Texts => ({ ja: t, en: t });
+export const sameText = (s: string): Texts => anyLang({ label: s, name: s, both: s });
+/* oxlint-disable typescript/no-unsafe-type-assertion -- Object.fromEntries over LANGS and DISPLAY_MODES gives every key */
+/** Builds a text from another, variant by variant. */
+export const mapTexts = (t: Texts, f: (s: string, lang: Lang, mode: DisplayMode) => string): Texts =>
+    Object.fromEntries(LANGS.map((l) => [l, Object.fromEntries(DISPLAY_MODES.map((m) => [m, f(t[l][m], l, m)]))])) as Texts;
+/** One text per language, the same in every display mode. */
+export const perLang = (words: Record<Lang, string>): Texts =>
+    Object.fromEntries(LANGS.map((l) => [l, { label: words[l], name: words[l], both: words[l] }])) as Texts;
+/* oxlint-enable typescript/no-unsafe-type-assertion */
+
+export interface GraphNode {
+    id: string;
+    kind: NodeKind;
+    label: Texts;
+    /** Small caption shown above the label, e.g. «aggregate». */
+    stereotype?: Texts;
+    /** Body rows (fields, etc.), drawn as aligned key / value columns; for a context, its description under the label. */
+    lines: GraphLine[];
+    /** Containing node, if nested. */
+    parent?: string;
+    /**
+     * A note stuck on another node, above it (an Event Storming hotspot on its event, an actor on its command): a layered
+     * layout lays them out as one block, so that it is not a step of the flow (`adapters/elk.ts`). Its only edges are to
+     * that node.
+     */
+    attachTo?: string;
+    /**
+     * An Event Storming handler drawn once for several commands converging on one event (ADR 0032): their element IDs,
+     * so that a change to any of them marks this note.
+     */
+    commands?: string[];
+    /** Commands that leave a state as it is, listed in a compartment at the bottom of its box (UML internal transitions). */
+    internal?: InternalTransition[];
+    /** Model element shown in the Detail Panel when the node is selected. */
+    elementId: string;
+    /** A hotspot settled by the team (`status resolved`, `.dtes` §3.5); absent while it is open, and on other nodes. */
+    status?: 'resolved';
+    /** A resolved hotspot's `resolution`: what was agreed. */
+    resolution?: string;
+    /**
+     * A resolved hotspot the reader hides (the 絞り込み's 「解決済みを表示」 off, `hideInDrawing`): not drawn, its place
+     * left empty; the notes it is `on` (their IDs) show a resolved hotspot's check for it. Absent in a graph as laid out.
+     */
+    folded?: string[];
+    /**
+     * A note off the path of the exception emphasized (`flowInDrawing`): drawn faint. Absent in a graph as laid out.
+     */
+    dimmed?: true;
+    /** A stage frame with nothing drawn in it (one main flow shown, `flowInDrawing`): drawn dashed. */
+    unused?: true;
+    width: number;
+    height: number;
+}
+
+/** A body row: `key` (e.g. a field name) and an optional `value` (e.g. its type), aligned in columns. */
+export interface GraphLine {
+    key: Texts;
+    value?: Texts;
+    /** The field set a field comes from, shown faded after the value. */
+    origin?: Texts;
+    /** The row compared with the baseline (see `markLineChanges`); a removed row is the baseline's, kept as a ghost. */
+    change?: LineChange;
+}
+
+export type LineChange = 'added' | 'changed' | 'removed';
+
+export interface GraphEdge {
+    id: string;
+    kind: EdgeKind;
+    source: string;
+    target: string;
+    label?: Texts;
+    /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
+    events?: Texts;
+    /**
+     * What an Event Storming line means (ADR 0032): the Live View says it in plain words when it is hovered or pressed,
+     * from the relation and the labels of its two ends (`apps/web/i18n.tsx`, `lines`).
+     */
+    relation?: EdgeRelation;
+    /**
+     * Laid out but not drawn: at Event Storming's Design Level, the time order the placement already shows (the steps
+     * left to right), so that only the lines the placement cannot show are drawn (an exception's branch, unless the
+     * design's lines already join its two events, ADR 0032 §15; a `then`).
+     */
+    hidden?: true;
+    /**
+     * With `hidden`: its label is still drawn, where it is laid out (only the line is not). At Design Level, the line
+     * into an exception's lane that the design's lines already show (ADR 0032 §15): its label names the lane.
+     */
+    labelDrawn?: true;
+    /** A line off the path of the exception emphasized (`flowInDrawing`): drawn faint. Absent in a graph as laid out. */
+    dimmed?: true;
+}
+
+/**
+ * The relations an Event Storming line can stand for, read from its source (A) to its target (B):
+ *
+ * - `issues`: an actor or external system issues a command (`by`); `follows`: an actor applies a policy (`by`)
+ * - `looksAt`: whoever decides (a command's issuer, or a policy) looks at a read model to decide (`reads`, ADR 0032 §9)
+ * - `handles`: a command goes to its handler (`handledBy`); `decides`: the handler decides an event (`emits`; `names`:
+ *   the commands of a merged handler); `results`: a command without a handler results in an event
+ * - `triggers`: an event triggers a policy (`on`); `policyIssues`: a policy issues a command (`issues`); `notices`: the
+ *   actor issuing a command reacts to an event (a command's `on`, ADR 0032 §14)
+ * - `updates`: an event updates a read model; `arrives`: an event arrives from an external system
+ * - `branches`: the time order into an exception's first step (`names`: the exceptions); `returns`: an exception's
+ *   `then` back to the main flow (`names`: the exceptions); `order`: the time order (`names`: the timelines, none when
+ *   it is in every timeline of the view)
+ * - `question`: a hotspot on a sticky; `undecided`: an open hotspot's empty slot of a command's issuer (`by`) or
+ *   handler (`handledBy`)
+ */
+export type LineRelation =
+    | 'issues'
+    | 'follows'
+    | 'looksAt'
+    | 'handles'
+    | 'decides'
+    | 'results'
+    | 'triggers'
+    | 'policyIssues'
+    | 'notices'
+    | 'updates'
+    | 'arrives'
+    | 'branches'
+    | 'returns'
+    | 'order'
+    | 'question'
+    | 'undecidedIssuer'
+    | 'undecidedHandler';
+
+/** What a line means: its relation, and the other names it is said with (the merged commands, the exceptions, the timelines). */
+export interface EdgeRelation {
+    kind: LineRelation;
+    names?: Texts[];
+}
+
+/** A command that leaves a state as it is, drawn as a row in the state's box instead of a loop. */
+export interface InternalTransition {
+    /** In the form of a transition edge's ID: `<command>|<state>-><state>`. */
+    id: string;
+    /** The command. */
+    elementId: string;
+    label: Texts;
+    events?: Texts;
+}
+
+/** What the State View writes on a transition: the command, the events it raises, or both (the events under the command). */
+export type TransitionLabels = 'command' | 'event' | 'both';
+export const TRANSITION_LABELS: TransitionLabels[] = ['command', 'event', 'both'];
+
+/**
+ * A transition's text in `labels`: the main line, and a smaller second line (the events under the command). Without
+ * events, the event labels fall back to the command, `faded`.
+ */
+export function transitionText(label: Texts, events: Texts | undefined, labels: TransitionLabels): { main: Texts; sub?: Texts; faded: boolean } {
+    if (labels === 'command') return { main: label, faded: false };
+    if (labels === 'event') return events ? { main: events, faded: false } : { main: label, faded: true };
+    return { main: label, sub: events && mapTexts(events, (s) => `⇒ ${s}`), faded: false };
+}
+
+/** Line heights of a transition's text (at text scale 1); the second line is smaller. */
+export const TRANSITION_LINE_HEIGHT = 19;
+export const TRANSITION_SUB_LINE_HEIGHT = 15;
+/** Size of the second line's text relative to the first. */
+export const TRANSITION_SUB_SIZE = 0.85;
+
+/** Height of an internal transition's row; rows are a little taller than edge labels, like the body rows. */
+export const internalRowHeight = (t: InternalTransition, labels: TransitionLabels): number =>
+    LINE_HEIGHT + (transitionText(t.label, t.events, labels).sub ? TRANSITION_SUB_LINE_HEIGHT : 0);
+/** Vertical padding of the internal transitions' compartment. */
+export const INTERNAL_PADDING = 5;
+/** Height of a node's internal transitions' compartment (0 without any). */
+export const compartmentHeight = (n: Pick<GraphNode, 'internal'>, labels: TransitionLabels): number =>
+    n.internal?.length ? 2 * INTERNAL_PADDING + n.internal.reduce((h, t) => h + internalRowHeight(t, labels), 0) : 0;
+
+/**
+ * Where a graph's nodes go when they are placed on a grid rather than laid out by the engine (an Event Storming's view of
+ * stages): a cell per node (a container's members are inside it), the columns of each frame, the first row of the
+ * nodes outside every frame. See `layoutGrid`.
+ */
+export interface GridPlan {
+    cells: Record<string, { col: number; row: number }>;
+    frames: Record<string, { from: number; to: number }>;
+    looseRow?: number;
+}
+
+export interface Graph {
+    id: string;
+    nodes: GraphNode[];
+    edges: GraphEdge[];
+    /** Placed on a grid (`layoutGrid`), not by the layout engine. */
+    grid?: GridPlan;
+    /** Text size relative to the normal views (the Structure overview uses larger text). */
+    textScale?: number;
+    /** State View: the transition texts the nodes and edge labels are sized for (default `both`). */
+    transitionLabels?: TransitionLabels;
+}
+
+/** Text scale of the Structure overview (names only, no field rows) and of the aggregates level. */
+export const OVERVIEW_TEXT_SCALE = 1.5;
+
+/**
+ * How much the Structure View shows: every field (detail), the elements' names only (overview), or the aggregates
+ * and the dependencies between them only (aggregates).
+ */
+export type StructureLevel = 'detail' | 'overview' | 'aggregates';
+export const STRUCTURE_LEVELS: StructureLevel[] = ['detail', 'overview', 'aggregates'];
+
+export interface Point {
+    x: number;
+    y: number;
+}
+
+export interface NodeLayout {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export interface EdgeLayout {
+    points: Point[];
+    /** Top-left corner and size of the edge label, when the edge has one. */
+    label?: NodeLayout;
+}
+
+/**
+ * How far apart a layout places things: the normal spacing, or a compact one (「詰めて表示」, and printing), with the
+ * gaps between notes closed up as far as arrowheads, edge labels and frame titles stay readable.
+ */
+export type LayoutSpacing = 'normal' | 'compact';
+export const LAYOUT_SPACINGS: LayoutSpacing[] = ['normal', 'compact'];
+
+/** A graph together with absolute coordinates for every node and edge. */
+export interface LaidOutGraph extends Graph {
+    nodeLayout: Record<string, NodeLayout>;
+    edgeLayout: Record<string, EdgeLayout>;
+    /** Changes whenever nodes, sizes, nesting or edges change; used to reuse cached layouts. */
+    signature: string;
+    /** Laid out with the compact spacing (absent: the normal one). */
+    spacing?: 'compact';
+}
+
+export const CHAR_WIDTH = 8.6;
+/** CJK and other full-width characters are about this many times wider than ASCII. */
+export const WIDE_FACTOR = 1.7;
+
+/** Width of `s` in units of one ASCII character. */
+export function textUnits(s: string): number {
+    let units = 0;
+    for (const ch of s) units += /[\u1100-\u115f\u2e80-\ua4cf\uac00-\ud7a3\uf900-\ufaff\ufe30-\ufe4f\uff00-\uff60\uffe0-\uffe6]/.test(ch) ? WIDE_FACTOR : 1;
+    return units;
+}
+
+/** Widest variant of a text, in ASCII character units. */
+export const maxUnits = (t: Texts): number => Math.max(...TEXT_VARIANTS.map(([l, m]) => textUnits(t[l][m])));
+export const LINE_HEIGHT = 21;
+export const HEADER_HEIGHT = 54;
+export const CONTAINER_PADDING = { top: 46, left: 20, bottom: 20, right: 20 };
+
+export function graphSignature(g: Graph): string {
+    // a hotspot's status too: the page finds the compact layouts it keeps by signature, with the nodes they came with
+    const nodes = g.nodes
+        .map(
+            (n) =>
+                `${n.id}|${n.parent ?? ''}|${n.attachTo ? `^${n.attachTo}|` : ''}${n.width}x${n.height}|${maxUnits(n.label)}${n.status ? `|${n.status}` : ''}`,
+        )
+        .sort();
+    const edges = g.edges.map((e) => `${e.id}|${e.source}|${e.target}|${e.label ? maxUnits(e.label) : ''}|${e.events ? maxUnits(e.events) : ''}`).sort();
+    const grid = g.grid ? `#grid${GRID_VERSION}:${JSON.stringify([byKey(g.grid.cells), byKey(g.grid.frames), g.grid.looseRow])}` : '';
+    return `${nodes.join(';')}#${edges.join(';')}${grid}`;
+}
+
+/** A record's entries in key order. */
+const byKey = <T>(r: Record<string, T>): [string, T][] => Object.entries(r).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+
+/** Bump when `layoutGrid` places or routes differently, so that the grid layouts kept from a previous run are redone. */
+export const GRID_VERSION = 2;

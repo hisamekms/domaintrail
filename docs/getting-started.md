@@ -8,7 +8,7 @@ when you need the details, is the guide: `dt guide` in the terminal, the same te
 
 DomainTrail is a language for domain models (`.dt` files) and a CLI, `dt`. The model states the **structure and the
 contracts** of a domain — bounded contexts, aggregates and their states, commands with their requirements and events,
-invariants — and is their single source of truth. `dt check` checks it, `dt view` shows it live in the browser, and
+invariants — and is their single source of truth. `dt check` checks it, `dt open` shows it live in the browser, and
 `dt generate ts` turns it into TypeScript types, command contracts, checks of the invariants, and contract tests for
 your implementation. It never generates business logic: that is written by hand (or by the agent) against the
 generated types, and the compiler and the tests hold it to the model.
@@ -16,7 +16,7 @@ generated types, and the compiler and the tests hold it to the model.
 ## Working with an AI agent
 
 This is the way DomainTrail is meant to be used. If you only want to get going: install it (`npm i -D domaintrail`,
-see [Install](#install)), add the block below to your agent's instructions, run `npx dt view`, and ask the agent to
+see [Install](#install)), add the block below to your agent's instructions, run `npx dt open`, and ask the agent to
 model something. The rest of the page walks through by hand what the agent does, so that you can follow its work.
 
 ### Who does what
@@ -55,7 +55,7 @@ structure and contracts; `generated/domain` is generated from it.
 - Never cast to a domain type (`as X`): make values with `make<Name>`, `parseDecimal` or a verified type's factory.
 - To look up one element, run `npx dt show <name>` (e.g. `npx dt show Booking.Reservation.confirm`) instead of reading
   the `.dt` files. Use `--format json` with `check`, `generate ts` and `show` when you parse the output.
-- People watch the model in the Live View (`npx dt view`). Do not wait for it: it runs until stopped.
+- People watch the model in the Live View (`npx dt open`). Do not wait for it: it runs until stopped.
 - After upgrading domaintrail, read the Upgrading steps in `node_modules/domaintrail/CHANGELOG.md` of every version
   since the previous one, and follow them.
 ```
@@ -69,7 +69,7 @@ points agents to it.
 Start the Live View in a terminal of your own and open it in the browser:
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 Then ask for the model in the words of the domain, one step at a time. A model is reviewed more easily when the agent
@@ -86,10 +86,10 @@ problems of the model are listed at the bottom while the agent fixes them.
 ### Give feedback from the Live View
 
 Select the element you want to talk about — in the explorer on the left or in a diagram — and look at it in the
-inspector on the right: its fields and invariants (構造), the states and transitions of its aggregate (状態遷移), what a
+detail under the explorer: its fields and invariants (構造), the states and transitions of its aggregate (状態遷移), what a
 command requires, changes and emits (振る舞い), who uses it (参照) and its source (ソース). In the ソース tab, the copy
 button on the highlighted declaration copies its code. Paste it into the conversation with what should change, or name
-the element (`Reservation.confirm`; the 名前 / 両方 setting (the gear at the foot of the left pane) shows the names next to the labels):
+the element (`Reservation.confirm`; the 名前 / 両方 setting (the gear at the foot of the left column) shows the names next to the labels):
 
 > `command confirm(capacity: Headcount, at: Timestamp) "確定する"` — a reservation should also record who confirmed
 > it.
@@ -109,6 +109,10 @@ discussed and changed, never the generated types.
 - `dt lsp` is a language server: the diagnostics of `dt check` after every edit, definitions, references, hover and
   rename. With Claude Code, a plugin makes Claude see the diagnostics after each edit of a `.dt` file (see
   [Claude Code](#claude-code)).
+- `dt mcp` gives Claude Code the project's **knowledge**: what was said and found in the sessions about each sticky —
+  why, how often, who said so — taken from the chat when the facilitator turns it on (`dt guide knowledge`). Register
+  it with `claude mcp add domaintrail -- dt mcp`; the agent calls `knowledge_for_element` before implementing an
+  element (`dt guide mcp`).
 
 ## Install and the first model
 
@@ -137,6 +141,10 @@ every `.dt` file below the current directory is part of the model.
   "sources": ["domain/**/*.dt"]
 }
 ```
+
+Settings that are yours only (a port, the model the AI runs with, the folders outside the project the AI may read) go
+into `domaintrail.local.jsonc` beside it, which you keep out of git: it is merged into `domaintrail.jsonc` key by key
+(`dt guide config`). When the settings that widen what the AI may do change, `dt open` asks you to approve them once.
 
 The recommended layout is one directory per bounded context and one file per aggregate:
 
@@ -344,15 +352,18 @@ domain/booking/reservation.dt
 ### Watch it in the Live View
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 ```text
 Config: domaintrail.jsonc
-Live View: http://127.0.0.1:4321/
+Live View: http://127.0.0.1:4321/session/open?code=…
+  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:4321/)
+Session: … (started, solo)
+AI: started in this process (claude …; role run)
 ```
 
-Open the address in the browser; it runs until Ctrl+C (`--port` to change the port). What to look at for this model:
+Open the printed link in the browser (it signs your browser in, once; afterwards the plain address works); it runs until Ctrl+C (`--port` to change the port). What to look at for this model:
 
 - **Structure** (the main view): the context `Booking` with `Reservation`, the value `Slot` it owns, and the ID it
   refers to.
@@ -361,6 +372,12 @@ Open the address in the browser; it runs until Ctrl+C (`--port` to change the po
 - Select `confirm`, then **振る舞い**: its requirement `roomFits`, its error `RoomTooSmall` and its event.
 - Change the file and save: the view follows. Break something: the problem appears at the bottom, and the last valid
   diagram stays.
+
+The session's record — the chat, the runs, the revisions — and the diagrams' layouts are kept outside the workspace
+(by default in `~/.local/state/domaintrail/<workspace>/` and `~/.cache/domaintrail/<workspace>/`, on macOS too): nothing
+is written into the workspace, and there is nothing to add to `.gitignore`. The `.domaintrail/` of an older version is
+moved there on the first run. `dt session prune` lists what is kept for workspaces that are gone, and removes it with
+`--yes` (`dt guide config`, Where dt keeps its files).
 
 The panes, the views and the settings are described in [The Live View](live-view.md).
 
@@ -417,6 +434,8 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 }
 ```
 
+With Bun, `"typecheck": "bun check"` type-checks the same way.
+
 ```jsonc
 // tsconfig.json
 {
@@ -443,7 +462,7 @@ set is a compile error that names it.
 import { Booking, decide, err, ok } from '../generated/domain/index.js';
 
 export const reservationCommands: Booking.ReservationCommands = {
-    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, (id, room, slot, attendees) =>
+    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, ({ id, room, slot, attendees }) =>
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
@@ -453,9 +472,10 @@ export const reservationCommands: Booking.ReservationCommands = {
     ),
 
     confirm: decide<Booking.ConfirmReservationDecision>(Booking.ReservationShape, {
-        Requested: (reservation, capacity, at) => {
+        Requested: (reservation, params) => {
             // the requirement's expression stays the DSL's: the generated check evaluates it
-            if (Booking.checkConfirmReservationRequires(reservation, capacity, at)) return err({ type: 'RoomTooSmall' });
+            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'RoomTooSmall' });
+            const { at } = params;
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
@@ -468,7 +488,10 @@ export const reservationCommands: Booking.ReservationCommands = {
 ```
 
 The decision of `confirm` has one handler per source state (here only `Requested`), so that a command that runs in
-several states is written the same way. `dt guide decide` explains the shape of the results.
+several states is written the same way. A command takes its parameters as one object after the aggregate
+(`Booking.ConfirmReservationParams`), and passes it on as it is to its generated check of requirements; a call names
+each parameter (`reservationCommands.confirm(reservation, { capacity, at })`). `dt guide decide` explains the shape of
+the results.
 
 ### Make domain values
 
@@ -486,13 +509,17 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
     if (Booking.checkSlot(slot).length > 0) throw new Error('a slot is 1 to 8 hours');
-    const id = Booking.makeReservationId(crypto.randomUUID()); // an ID has no invariants: it cannot fail
-    return reservationCommands.request(id, Booking.makeRoomId(input.room), slot, attendees.value);
+    const room = Booking.makeRoomId(input.room); // Result: an ID on UUID checks that the value is a UUID
+    if (!room.ok) return room;
+    const id = Booking.makeReservationId(crypto.randomUUID());
+    if (!id.ok) return id;
+    return reservationCommands.request({ id: id.value, room: room.value, slot, attendees: attendees.value });
 }
 ```
 
 - `make<Name>` exists for every ID and domain primitive. It returns a `Result` when the type has invariants
-  (`makeHeadcount`), the value itself when it has none (`makeReservationId`).
+  (`makeHeadcount`) or a `UUID` base, whose form it checks as the invariant `'uuid'` (`makeRoomId('room-1')` is an
+  `InvalidRoomId`); the value itself otherwise.
 - `check<Name>` returns the invariants a value violates (`checkSlot`): value objects are plain objects.
 - A `Decimal` is made with `parseDecimal(text)` from the runtime (`undefined` when the text is not a number).
 - Where IDs and times come from is the application's choice; the command only takes them.
@@ -502,7 +529,8 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
 The generated tests check what the types cannot: the values. They generate inputs with fast-check and use the
 generated checks as the oracle — the constructors accept exactly the valid values, a command returns the error of the
 first requirement that does not hold, an aggregate made by a command holds the invariants of its state, and commands
-are pure. Register them with one test file:
+are pure. Their helpers come with domaintrail, as `domaintrail/testing`, and they need fast-check, installed above.
+Register them with one test file:
 
 ```ts
 // src/contract.test.ts
@@ -631,16 +659,15 @@ storming RoomBooking "会議室予約" {
 
   command Request "申し込む" {
     ref Booking.Reservation.request
-    actor Member
-    target Reservation
+    by Member
+    handledBy Reservation
     emits ReservationRequested
   }
   command Confirm "確定する" {
     ref Booking.Reservation.confirm
     reads RoomCapacity
-    target Reservation
-    emits ReservationConfirmed
-    emits ReservationDeclined
+    handledBy Reservation
+    emits ReservationConfirmed, ReservationDeclined
   }
 
   timeline Confirmed "確定" {
@@ -653,13 +680,13 @@ storming RoomBooking "会議室予約" {
   }
 
   hotspot WhoConfirms "誰が確定する？ 申込みのときに自動で？" {
-    on ReservationConfirmed
+    on Confirm
   }
 }
 ```
 
-The storming says that confirming may decline a reservation, which the model does not have yet; the hotspot asks who
-confirms. `dt fmt` and `dt check` take the `.dtes` files with the `.dt` files, and the Live View shows a storming at Big
+The storming says that confirming may decline a reservation, which the model does not have yet; the hotspot on the command
+asks who confirms it, so that no one fills in an actor by guessing (`dt guide dtes-quick`). `dt fmt` and `dt check` take the `.dtes` files with the `.dt` files, and the Live View shows a storming at Big
 Picture (the events) or Design Level, as a whole or one timeline at a time.
 
 ### The complete picture
@@ -713,7 +740,7 @@ tree-sitter (Neovim, Helix, Emacs) can use the grammar in
 
 - `dt guide` and [guide.md](guide.md): the reference for the language and the CLI, one topic at a time.
 - [examples/shop](../examples/shop/README.md): a complete example with an implementation.
-- [The Live View](live-view.md): every pane and view of `dt view`.
+- [The Live View](live-view.md): every pane and view of `dt open`.
 - [CHANGELOG.md](../CHANGELOG.md): what changed in each version, with the steps to upgrade a model and its code
   (also in the package: the last line of the block for the agent tells it to read it after an upgrade).
 - [docs/adr](adr): the design decisions behind the language.

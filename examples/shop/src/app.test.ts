@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import { fixedProviders } from './app/providers.js';
 import { createShop } from './app/shop.js';
 import { verifications } from './app/verifications.js';
-import { makeEmailAddress, makeOrderId } from './domain/primitives.js';
+import { idOf, makeEmailAddress, makeOrderId } from './domain/primitives.js';
 
 async function confirmedOrder() {
     const shop = createShop(fixedProviders());
@@ -43,7 +43,12 @@ describe('use cases', () => {
             ok: false,
             error: { type: 'InvalidEmailAddress', value: 'no-at-sign', invariant: 'format' },
         });
-        const r = await shop.app.addItem(makeOrderId('order-1'), { sku: 'abc', quantity: 1, unitPrice: { amount: '1', currency: 'JPY' } });
+        expect(makeOrderId('order-1')).toEqual({ ok: false, error: { type: 'InvalidOrderId', value: 'order-1', invariant: 'uuid' } });
+        const r = await shop.app.addItem(idOf(makeOrderId('8c1e5f3a-6b2d-4e9f-a7c8-0d1e2f3a4b5c')), {
+            sku: 'abc',
+            quantity: 1,
+            unitPrice: { amount: '1', currency: 'JPY' },
+        });
         expect(r).toEqual({ ok: false, error: { type: 'InvalidSku', value: 'abc', invariant: 'valid' } });
     });
 

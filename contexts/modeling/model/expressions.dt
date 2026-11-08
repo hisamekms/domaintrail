@@ -1,0 +1,76 @@
+context Modeling {
+  /// The binary operators of expressions: `implies`, `or`, `and`, `==`, `!=`, `<`, `<=`, `>`, `>=`.
+  enum BinaryOp { implies or and eq ne lt le gt ge }
+
+  /// `all(collection, x => body)` and `any(collection, x => body)`.
+  enum Quantifier { all any }
+
+  /// An invariant or requirement expression as a tree (syntax only: names are resolved by whoever reads it, in the
+  /// scope of the invariant or requirement). Numbers keep their sign; `pattern` is the regular expression exactly as
+  /// written.
+  union ExprModel by k {
+    bool {
+      value: Bool
+    }
+    int {
+      value: Int
+    }
+    /// A decimal number as written.
+    decimal {
+      value: String
+    }
+    string {
+      value: String
+    }
+    name {
+      name: String
+    }
+    member {
+      receiver: ExprModel
+      member: String
+    }
+    not {
+      operand: ExprModel
+    }
+    binary {
+      op: BinaryOp
+      left: ExprModel
+      right: ExprModel
+    }
+    /// `operand in lower..upper`.
+    range {
+      operand: ExprModel
+      lower: ExprModel
+      upper: ExprModel
+    }
+    count {
+      collection: ExprModel
+    }
+    exists {
+      operand: ExprModel
+    }
+    length {
+      operand: ExprModel
+    }
+    matches {
+      operand: ExprModel
+      pattern: String
+    }
+    /// `unique(collection)`, or `unique(collection, x => key, …)`.
+    unique {
+      collection: ExprModel
+      param: String?
+      keys: ExprModel[0..*]
+    }
+    contains {
+      collection: ExprModel
+      element: ExprModel
+    }
+    quantifier {
+      quantifier: Quantifier
+      collection: ExprModel
+      param: String
+      body: ExprModel
+    }
+  }
+}

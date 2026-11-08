@@ -1,0 +1,108 @@
+storming ConvenienceStoreIssuance "住民票などのコンビニ交付（ビッグピクチャ）" {
+  event ResidentCertificateRequested "住民票を取ってきてと言われた"
+  event IssuanceMethodResearched "コンビニ交付のとり方（対応店舗・手順）を調べた"
+  event RequiredContentConfirmed "必要な証明書の種類と記載事項を確認した"
+  event RequiredCopiesConfirmed "必要な部数を確認した"
+  event LeftWithMyNumberCard "マイナンバーカードを持って出かけた"
+  event ConvenienceStoreVisited "コンビニに行った"
+  event OutsideServiceHours "利用時間外だった"
+  event MaintenanceDay "メンテナンス日だった"
+  event VisitPostponed "日を改めることにした"
+  event MultiCopierNotSupported "コピー機が対応していなかった"
+  event HeadedToSupportedStore "対応している店舗に向かった"
+  event GovernmentServiceMenuSelected "行政サービスのメニューを選んだ"
+  event MyNumberCardRead "マイナンバーカードが読み取られた"
+  event MyNumberCardExpired "カードの期限が切れていた"
+  event MyNumberCardChipDamaged "マイナンバーカードが破損していた（チップ）"
+  event CardRenewalAppliedAtCityOffice "市役所でカードの更新・再交付を申請した"
+  event PinEntered "暗証番号（4桁）を入力した"
+  event PinForgotten "暗証番号を忘れた"
+  event PinLocked "暗証番号を間違えてロックされた"
+  event PinResetAtCityOffice "市役所で暗証番号を初期化・再設定した"
+  event IssuingMunicipalitySelected "交付先の市区町村を選んだ"
+  event MunicipalityNotSupported "本籍地が対象外の自治体だった"
+  event RequestedFromDomicileOffice "本籍地の役所に郵送か窓口で請求した"
+  event CertificateOptionsSelected "証明書の種類・記載事項・部数を選んだ"
+  event RequestDetailsConfirmed "内容を確認した"
+  event FeePaid "手数料を払った"
+  event CertificateDataCreated "証明書データが作られた（市区町村）"
+  event IssuanceRecorded "交付記録が残った（市区町村）"
+  event CertificateIssuedAtMultiCopier "マルチコピー機で証明書を発行した"
+  event MyNumberCardCollected "マイナンバーカードを回収した"
+  event CertificateContentChecked "証明書の内容を確かめた"
+  event CertificateSubmitted "証明書を提出先に提出した"
+  event CertificateAccepted "提出先が証明書を受け取った"
+  event CertificateRejected "提出先に受け取ってもらえなかった（有効期限・記載事項の不足）"
+  event ReissueDecided "必要な記載事項を確かめ直して取り直すことにした"
+  timeline RequestAndPreparation "依頼・準備" {
+    ResidentCertificateRequested
+    IssuanceMethodResearched
+    RequiredContentConfirmed
+    RequiredCopiesConfirmed
+    LeftWithMyNumberCard
+  }
+  timeline IssuanceAtConvenienceStore "コンビニでの発行" {
+    ConvenienceStoreVisited
+    GovernmentServiceMenuSelected
+    MyNumberCardRead
+    PinEntered
+    IssuingMunicipalitySelected
+    CertificateOptionsSelected
+    RequestDetailsConfirmed
+    FeePaid
+    CertificateDataCreated
+    IssuanceRecorded
+    CertificateIssuedAtMultiCopier
+    MyNumberCardCollected
+  }
+  timeline Submission "提出" {
+    CertificateContentChecked
+    CertificateSubmitted
+    CertificateAccepted
+  }
+  timeline OutsideServiceHoursBranch "例外：利用時間外" {
+    ConvenienceStoreVisited
+    OutsideServiceHours
+    VisitPostponed
+  }
+  timeline MaintenanceDayBranch "例外：メンテナンス日" {
+    ConvenienceStoreVisited
+    MaintenanceDay
+    VisitPostponed
+  }
+  timeline MultiCopierNotSupportedBranch "例外：コピー機が非対応" {
+    ConvenienceStoreVisited
+    MultiCopierNotSupported
+    HeadedToSupportedStore
+  }
+  timeline MyNumberCardExpiredBranch "例外：カードの期限切れ" {
+    GovernmentServiceMenuSelected
+    MyNumberCardExpired
+    CardRenewalAppliedAtCityOffice
+  }
+  timeline MyNumberCardChipDamagedBranch "例外：カードの破損（チップ）" {
+    GovernmentServiceMenuSelected
+    MyNumberCardChipDamaged
+    CardRenewalAppliedAtCityOffice
+  }
+  timeline PinForgottenBranch "例外：暗証番号を忘れた" {
+    MyNumberCardRead
+    PinForgotten
+    PinResetAtCityOffice
+  }
+  timeline PinLockedBranch "例外：暗証番号のロック" {
+    MyNumberCardRead
+    PinLocked
+    PinResetAtCityOffice
+  }
+  timeline MunicipalityNotSupportedBranch "例外：交付先が対象外" {
+    PinEntered
+    MunicipalityNotSupported
+    RequestedFromDomicileOffice
+  }
+  timeline CertificateRejectedBranch "例外：提出先で受け取ってもらえない" {
+    CertificateSubmitted
+    CertificateRejected
+    ReissueDecided
+  }
+}

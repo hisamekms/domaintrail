@@ -5,6 +5,8 @@
 - Amends: [ADR 0011](0011-generated-code-boundary.md) (generated code may hold logic derived 1:1 from DSL
   expressions) and [ADR 0017](0017-command-requirements.md) (requirements are checked by generated code; the first
   failing one decides the error)
+- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (`check<Aggregate>Common`; the `'uuid'` invariant; the generic
+  helpers as `domaintrail/testing`; command parameters as an object; values of recursive types)
 
 ## Context
 

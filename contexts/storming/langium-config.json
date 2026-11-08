@@ -1,0 +1,11 @@
+{
+  "projectName": "EventStorming",
+  "languages": [
+    {
+      "id": "dtes",
+      "grammar": "src/infrastructure/syntax/storming.langium",
+      "fileExtensions": [".dtes"]
+    }
+  ],
+  "out": "src/infrastructure/syntax/generated"
+}

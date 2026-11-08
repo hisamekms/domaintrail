@@ -1,0 +1,334 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the status of each error type every error of the collaboration model and of the routes 1`] = `
+{
+  "AlreadyJoined": 409,
+  "AlternativeNotFound": 400,
+  "AnswerNotGivenUp": 409,
+  "AssumptionClosed": 409,
+  "AssumptionNotFound": 400,
+  "BlobMissing": 500,
+  "ChangedMismatch": 409,
+  "CollabSessionOpen": 409,
+  "CommandAlreadyRunning": 409,
+  "ContentHashMismatch": 409,
+  "DuplicateMention": 400,
+  "DuplicateRequest": 409,
+  "DuplicateTarget": 400,
+  "ExternalChangesSinceSnapshot": 409,
+  "FacilitatorDoesNotVote": 403,
+  "FacilitatorOnly": 403,
+  "Forbidden": 403,
+  "InputMismatch": 409,
+  "InterviewAlreadyRunning": 409,
+  "InterviewMovedOn": 409,
+  "InvalidAnswer": 400,
+  "InvalidInput": 400,
+  "InvalidReply": 400,
+  "InvalidTarget": 400,
+  "InvalidTriageStep": 400,
+  "LinkInvalid": 409,
+  "ManualRecoveryNeeded": 500,
+  "MarkNotForTarget": 400,
+  "MarkTargetClosed": 409,
+  "MarkTargetNotFound": 404,
+  "MentionedNotAParticipant": 400,
+  "NoRequests": 400,
+  "NoSuchCandidate": 400,
+  "NoSuchOption": 400,
+  "NotAParticipant": 403,
+  "NotFound": 404,
+  "NotSolo": 409,
+  "NotTheInterviewer": 403,
+  "NotTheRequester": 403,
+  "NotTheStarter": 403,
+  "NotYourRequest": 403,
+  "PathOutsideRoot": 409,
+  "PickMismatch": 400,
+  "ReactionLimitReached": 409,
+  "ReportRequired": 409,
+  "RequestAlreadyAddressed": 409,
+  "RequestAlreadyDismissed": 409,
+  "RequestNotAddressable": 409,
+  "RequestNotFound": 404,
+  "RequestOfAnotherSession": 409,
+  "RestoreNeedsCheck": 409,
+  "RevisionNotFound": 404,
+  "RevisionOfAnotherSession": 404,
+  "RunInProgress": 409,
+  "RunNotApprovable": 409,
+  "RunNotFound": 404,
+  "RunNotPickable": 409,
+  "RunNotReplyable": 409,
+  "RunNotRevertable": 409,
+  "RunOfAnotherSession": 404,
+  "SessionAlreadyClosed": 409,
+  "SessionNotFound": 404,
+  "SoloSession": 409,
+  "SubscriberOutdated": 409,
+  "SymlinkInWorkspace": 409,
+  "TooManyMentions": 400,
+  "TooManyTargets": 400,
+  "TriageAlreadyConcluded": 409,
+  "TriageNotConcludable": 409,
+  "TriageNotFound": 404,
+  "TriageNotOverridable": 409,
+  "TriageNotProposable": 409,
+  "TriageOfAnotherSession": 404,
+  "TriageStepOutOfOrder": 409,
+  "Unauthenticated": 401,
+  "UnknownRevision": 400,
+  "WorkspaceTarget": 400,
+}
+`;
+
+exports[`refused requests of a session in dev mode status and body of each refusal 1`] = `
+{
+  "DELETE runs": [
+    405,
+    {
+      "error": {
+        "message": "Use GET or POST.",
+        "type": "MethodNotAllowed",
+      },
+    },
+  ],
+  "GET an unknown API": [
+    404,
+    {
+      "error": {
+        "message": "No such session API.",
+        "type": "NotFound",
+      },
+    },
+  ],
+  "GET state, signed out": [
+    401,
+    {
+      "error": {
+        "message": "Sign in to the session first.",
+        "type": "Unauthenticated",
+      },
+    },
+  ],
+  "POST close, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST commands/:id/apply, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST facilitator/link, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST interviews/:id/confirm, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST interviews/:id/reject, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST marks Vote on a message, participant": [
+    400,
+    {
+      "error": {
+        "type": "MarkNotForTarget",
+      },
+    },
+  ],
+  "POST marks Vote, facilitator": [
+    403,
+    {
+      "error": {
+        "message": "The facilitator's answer is the decision: the facilitator does not vote.",
+        "type": "FacilitatorDoesNotVote",
+      },
+    },
+  ],
+  "POST marks on an unknown message": [
+    404,
+    {
+      "error": {
+        "type": "MarkTargetNotFound",
+      },
+    },
+  ],
+  "POST requests apply (gone), participant": [
+    400,
+    {
+      "error": {
+        "field": "apply",
+        "message": "Unknown field.",
+        "type": "InvalidInput",
+      },
+    },
+  ],
+  "POST requests mentioning a stranger": [
+    400,
+    {
+      "error": {
+        "participant": "<uuid>",
+        "type": "MentionedNotAParticipant",
+      },
+    },
+  ],
+  "POST requests replyTo a queued run": [
+    409,
+    {
+      "error": {
+        "run": "<uuid>",
+        "type": "RunNotReplyable",
+      },
+    },
+  ],
+  "POST requests replyTo an unknown message": [
+    404,
+    {
+      "error": {
+        "request": "<uuid>",
+        "type": "RequestNotFound",
+      },
+    },
+  ],
+  "POST requests replyTo an unknown run": [
+    404,
+    {
+      "error": {
+        "run": "<uuid>",
+        "type": "RunNotFound",
+      },
+    },
+  ],
+  "POST requests with an unknown field": [
+    400,
+    {
+      "error": {
+        "field": "extra",
+        "message": "Unknown field.",
+        "type": "InvalidInput",
+      },
+    },
+  ],
+  "POST requests, signed out": [
+    401,
+    {
+      "error": {
+        "message": "Sign in to the session first.",
+        "type": "Unauthenticated",
+      },
+    },
+  ],
+  "POST requests/address, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST revisions, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST revisions/:id/restore of an unknown revision": [
+    404,
+    {
+      "error": {
+        "aggregate": "Revision",
+        "id": "<uuid>",
+        "type": "NotFound",
+      },
+    },
+  ],
+  "POST revisions/:id/restore, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST runs of an unknown request": [
+    404,
+    {
+      "error": {
+        "request": "<uuid>",
+        "type": "RequestNotFound",
+      },
+    },
+  ],
+  "POST runs, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+  "POST runs/:id/cancel of a cancelled run": [
+    409,
+    {
+      "error": {
+        "command": "cancel",
+        "state": "Cancelled",
+        "type": "NotAllowed",
+      },
+    },
+  ],
+  "POST runs/:id/cancel of an unknown run": [
+    404,
+    {
+      "error": {
+        "aggregate": "AgentRun",
+        "id": "<uuid>",
+        "type": "NotFound",
+      },
+    },
+  ],
+  "POST runs/:id/cancel, participant": [
+    403,
+    {
+      "error": {
+        "message": "Only the facilitator may do this.",
+        "type": "FacilitatorOnly",
+      },
+    },
+  ],
+}
+`;

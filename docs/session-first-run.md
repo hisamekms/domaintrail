@@ -31,34 +31,44 @@ cd /tmp/dt-session && git init -q && git add -A && git commit -qm 'before the se
 
 ## The run
 
-1. **Start the session** (terminal 1): `dt -r /tmp/dt-session session start`. It prints `Session: … (started, identity
+1. **Start the session** (terminal 1): `dt -r /tmp/dt-session collab --no-agent`. It prints `Session: … (started, identity
    dev)`, the Live View's URL (`http://127.0.0.1:4321/`), a facilitator link and the agent API's address.
 2. **Become the facilitator**: open the Live View in your browser, give a name on the join form (*Ada*), then open the
-   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, コラボ中 ▾) list you once, as
+   facilitator link. The chat opens at the right end; its participants (the collab menu in its head, the avatars ▾) list you once, as
    *Facilitator*.
 3. **A second participant**: a private window, the same URL, another name (*Bob*). Each lists the other.
-4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session session subscribe --agent claude --once`. It prints
-   `Subscribed to session …; waiting for runs.`
+4. **Start the agent** (terminal 2): `dt -r /tmp/dt-session collab agent-link` prints a one-time code, then
+   `dt -r /tmp/dt-session agent --code <code> --once`. It prints
+   `Agent on session … with claude (role run) (one run); waiting.` (Without `--no-agent` in step 1, `dt collab` starts
+   the agent in its own process instead, and keeps it running.)
 5. **Messages** (as Bob): in the Event Storming view, pick the storming `Returns`, one timeline and Design Level, select
    an event's note, write a message about the selection (e.g. "Add an event for a return the customer cancels") and
    send it, then a second about the whole workspace. Both appear in everyone's chat, the first with its occurrence
    (the timeline and the step).
-6. **A run** (as Ada): Shift-click both messages and まとめてアプライ (or ⤓ on one). The run's card appears; terminal 2
+6. **A run** (as Ada): Shift-click both messages and まとめて送る (or the AI に送る button on one). The run's card appears; terminal 2
    logs its progress; within a few minutes the card is *done* (or asks questions — choose and 答えて再実行 — or is
    *declined* with its reason, or *failed* with its report). Both pages show the storming as the agent left it, without
    a reload. The agent runs `dt fmt` / `dt check` itself through the `dt` the subscriber puts on its `PATH`.
 7. **Check the files**: `git -C /tmp/dt-session status --short` lists only `.dt` and `.dtes` files, and
    `git -C /tmp/dt-session diff` is what the requests asked for. `--once` has ended the subscriber.
-8. **Revisions** (as Ada): the card's ⋯ → 比較 compares the run's revisions (the diff matches `git diff`); ⋯ → 確認済み
-   marks the result; ⋯ → 実行前に戻す… restores the workspace as before the run: both pages show the model as it was, and
-   `git -C /tmp/dt-session diff` is empty.
-9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt session start`). To end it,
-   as Ada, the collab menu → コラボを終える… → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.
+8. **Revert** (as Ada): the card's ⋯ → 変更を見る shows what the run changed (its source diff matches `git diff`);
+   ⋯ → この作業を打ち消す → 打ち消す reverts it: the page goes to Ada's 「〈作業名〉の変更を打ち消す」 in the chat, and the
+   AI card below it is done, with what it changed (the queue was empty, so the server reverted it at once, mechanically — the subscriber has ended, no agent is
+   needed), both pages show the model as it was, and `git -C /tmp/dt-session diff` is empty. Had a run been running,
+   the revert would have waited its turn behind it (実行待ち, 前に 1 件); had a later run changed the same lines, the revert
+   would have been left to the agent, still 実行待ち, why in the tooltip on its state (the subscriber, without `--once`, takes it). The collab menu's
+   以前の状態に復元 restores any earlier state of the whole workspace: the last resort.
+9. **Stop**: Ctrl+C in terminal 1 (the session stays open and is resumed by the next `dt collab`). To end it,
+   as Ada, the collab menu → コラボを終える → 終える — every page shows the summary, コラボを終えました. Then remove `/tmp/dt-session`.
 
 **Developing DomainTrail itself?** Point the agent's `dt` at your clone in the workspace's `domaintrail.jsonc`, outside
-the workspace: `"session": { "agent": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
-"../domaintrail/bin/dt.ts"]`). It is read when `dt session subscribe` starts; restart the subscriber after changing
-it, and after rebuilding the clone (a changed script stops the next run).
+the workspace: `"agent": { "run": { "dt": ["node", "../domaintrail/dist/dt.js"] } }` (or `["bun",
+"../domaintrail/bin/dt.ts"]`). It is read when the agent starts (`dt agent`, or with `dt collab`); restart the subscriber after changing
+it, and after rebuilding the clone (a changed script stops the next run). Since that path is yours, it fits in
+`domaintrail.local.jsonc` beside `domaintrail.jsonc` (merged into it, kept out of git), as does `"agent": { "read": {
+"paths": ["../specs"] } }` to let the AI read notes outside the workspace (honoured only there, with the file
+git-ignored) — every participant can have it quote them. `dt collab` asks you to approve such settings once when they
+change (`--yes` without a terminal).
 
 If terminal 2 logs `not claiming further runs: review …`, the agent changed a file other than a `.dt` or `.dtes`
 source: look at those files (`git -C /tmp/dt-session status`), in particular anything under `.claude/`, before you

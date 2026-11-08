@@ -2,6 +2,11 @@
 
 - Status: accepted. Three choices the spec leaves open were decided by the maintainer: storming IDs unique in the
   workspace, the hotspots of a timeline filter, and the default `sources` (marked *Decided by the maintainer*).
+  Amended 2026-11-03: events at Design Level only (`level design`, below); stages and exceptions; actors, read models
+  and aggregates drawn once per use; the cause of an event in a timeline's or a stage's view. Amended 2026-11-05:
+  Event Storming's grammar at Design Level (the drawing). Amended 2026-11-06 by [ADR 0032](0032-dtes-design-level-grammar.md):
+  the relations themselves are the grammar (`by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`), `actor` and
+  `target` are errors (S023), incomplete designs are errors unless an open hotspot asks about them (S024–S028).
 - Date: 2026-10-31
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
@@ -153,6 +158,14 @@ it; `dt guide S001` works). T6 changes the schema's `code` pattern to
 | S012 | `.dt` contract | A command's `ref` names a command of another aggregate than the `ref` of its `target` | warning | T4 |
 | S013 | `.dt` contract | A command `emits` an event that the `.dt` command provably never emits (below) | warning | T4 |
 | S014 | Graph | A type-level cycle Policy → Command → Event → Policy. The message says it is a cycle of possibilities, not an infinite loop | warning | T3 |
+| S015 | Label | A label too long for its sticky note even at the smallest font: the Live View cuts it short with «…» (every note is the same size) | warning | — |
+| S016 | Level | A `level` other than `design` on an event (`big-picture` included); see the amendment on events at Design Level only | error | — |
+| S017 | Stage | A stage `after` itself, or a cycle of `after`s; see the amendment on stages and exceptions | error | — |
+| S018 | Stage | A `then` on a main flow (`timeline`), or naming an event in no main flow | error | — |
+| S019 | Stage | A timeline (other than its section's trunk) whose first step is in no timeline it could branch off from | warning | — |
+| S020 | Stage | A timeline or exception outside the stages of a storming that has stages | error | — |
+| S021 | Stage | A second stage without `after` | warning | — |
+| S022 | Stage | A stage without a main flow (`timeline`) | warning | — |
 
 - **Not implemented in v0.1:** the optional Info rule (a policy with ≥2 `on` and ≥2 `issues`). The spec marks it 任意,
   and it would need a third severity through `Diagnostic`, the schema, the CLI summary and the LSP. The guide states
@@ -228,7 +241,7 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   both levels. A hotspot without `on` is shown only on the integrated canvas. This includes everything §9.3 lists,
   keeps hotspots visible in Big Picture (§6) and adds no causal edge.
 - **Levels**: `LEVEL_KINDS`. Big Picture keeps events, timeline order, groups, hotspots and `hotspot-on` edges.
-  Design Level adds the rest, `external` included (R17). Events are never dropped (R14).
+  Design Level adds the rest, `external` included (R17). Events are never dropped (R14), but for those marked `level design` at Big Picture (amendment below).
 - The graph is cyclic-safe: every element is one node, and the trie is finite (R10).
 
 ### Rendering: the existing graph, layout and Live View
@@ -236,8 +249,9 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
 - `renderToGraph(render, storming)` (T7, `src/dtes/view/graph.ts`) converts a `RenderGraph` into the existing `Graph`
   IR. Its node kinds are `esEvent`, `esCommand`, `esPolicy`, `esActor`, `esExternal`, `esAggregate`, `esReadModel`,
   `esHotspot` and `esGroup` (a container whose children are its event nodes). Its edge kinds are `esCausal` (solid,
-  directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed). Notes
-  are squares whose label wraps. These kinds are added to `NodeKind`/`EdgeKind` in
+  directed), `esRelated` (dotted), `esHotspot` (dotted, undirected: a hotspot's `on`) and `esSequence` (dashed)
+  (amended 2026-11-05: `target` is `esCausal`, `esRelated` is undirected; see the last amendment). Notes
+  are squares of one size (`STICKY_NOTE`) whose label wraps and shrinks to fit, cut short with «…» below a floor. These kinds are added to `NodeKind`/`EdgeKind` in
   `src/graph/ir.ts`. The label is the element's label, its ID in name mode, and both in both mode. The stereotype is
   the kind. The `.dt` `ref` and the occurrences with their timelines go to the inspector (§6, §8.4).
 - Layout uses the existing `ElkLayoutEngine`, with direction `RIGHT` for graph IDs with the prefix `storming`
@@ -249,13 +263,199 @@ These are pure functions of the storming IR (T5), with the types in `src/dtes/ir
   timeline order (§10.2's first priority), v0.1 ships canonical layout only and records incremental layout as a
   follow-up. Positions are never written to `.dtes`, only to `.domaintrail/layout.json` like every layout.
 - No new drawing library. tldraw shapes in `web/shapes.tsx` get the new kinds. The spec's colours are defaults, with
-  sufficient contrast in both themes.
+  sufficient contrast in both themes. (Amended by [ADR 0029](0029-react-flow-canvas.md): the kinds are drawn by
+  `diagram-items.tsx` on a React Flow canvas.)
 - Server: `ViewPayload.stormings` holds per storming its ID, label, file, timelines (ID, label), the `Storming` IR
   for the inspector, and a graph for every view (`VIEW_LEVELS` × (integrated + each timeline)), all precomputed like
   the state views. The key is `<level>|<timelineId or empty>`. There are few views, and toggling then needs no round
   trip. A workspace with `.dtes` files only is not `empty`.
 - Web: a fourth view kind `storming` (picker of stormings), with a level toggle and a timeline select as UI state,
   kept like the other view settings (local storage), never in the DSL (R11, R12).
+
+## Amendment (2026-11-03): events at Design Level only
+
+The spec gains `level design` (spec §3.6, §6, R18): an event so marked is a detail of the mechanism and is shown at
+Design Level only. R14 now reads "an event without `level design` never disappears at Big Picture".
+
+- **Grammar**: a fifth clause, `clause = … | "level" level-value ;` with `level-value = name { "-" name } ;` (`EsLevelClause`,
+  `EsLevelValue`). `level` is a keyword (also a `name` of a `ref` path). The value takes any word, hyphens included,
+  so that `level big-picture` parses and gets a message of its own instead of a `SYNTAX` error. The IR has a clause
+  `{ type: 'level'; value }`; `isDesignLevelOnly(element)` is true for an event whose first `level` is `design`.
+- **Rules**: S004 also counts `level` (at most one), S006 reports `level` on anything but an event, and a new rule
+  **S016** (error) reports a value other than `design`: for `big-picture`, that no `level` already means both levels;
+  otherwise, that `design` is the only level (with `did you mean`). An invalid `level` hides nothing.
+- **Formatter**: no space around the hyphens of a value. It never reorders clauses; the canonical place of
+  `level design` is the last clause, after `ref`, which the guide, the examples and the agent's rules follow.
+  (Superseded by [ADR 0032](0032-dtes-design-level-grammar.md): `dt fmt` now puts the clauses in one canonical order,
+  `level` last, and merges repeated relations of one keyword into one list.)
+- **Projection**: at Big Picture, `projectView` builds the prefix trie with the hidden events left out, as
+  `buildTrie` already does for steps naming no event. So the order edges join the neighbours of a hidden event, a
+  group of hidden events only has no step, a group keeps its visible events (its step key is theirs), and timelines that
+  differ only in hidden events share their prefix; the occurrences keep their source step paths. An event in no
+  timeline is hidden too. Hotspots stay; their `on` edge to a hidden event has no render node to end at and is not
+  drawn. With a timeline filter, the hotspots are chosen by the timeline's events, hidden ones included. Design Level
+  is unchanged, and the timeline axis is unchanged.
+- **Live View**: the inspector shows デザインレベルのみ / "Design Level only" next to the kind of such an event.
+- **Agent**: the run's input does not say which view or level a participant has open (the presence's `ViewLocation`
+  is ephemeral and never reaches a run), so the runner's rule is phrased on the event's nature: mark the fine-grained
+  events it adds while detailing a storming, and remove the clause to promote one. The answerer's prompt describes no
+  `.dtes` syntax and is unchanged.
+- tree-sitter and Zed still do not know `.dtes` (above), so there is nothing to keep in sync.
+
+## Amendment (2026-11-03): stages, main flows and exceptions
+
+The spec gains `stage`, `exception` and `then` (spec §3.7, §6, §8.6, R19–R25). A real storming (a resident certificate
+issued at a convenience store) had three phases written as three timelines, and exceptions that start mid-way by
+repeating the event they branch off at. The integrated canvas could not say that one phase follows another, could not
+attach an exception that does not share the whole prefix, and its left-to-right order was ELK's, not time.
+
+- **Grammar**: `EsStage: 'stage' name label? afters+=EsAfterClause* '{' timelines+=EsTimeline* '}'`, `EsAfterClause:
+  'after' stage=[EsDeclaration]`; `EsTimeline` is written `timeline` or `exception` (`exception?='exception'`) and may
+  end with `EsRejoin: 'then' event=[EsDeclaration]`. A stage holds timelines and exceptions only: events and the other
+  elements stay declared in the storming, and an event may appear in several stages. `stage`, `after`, `then` and
+  `exception` are keywords (also `name`s of a `ref` path). The IR has `Stage { afters, timelines }` among the
+  storming's elements and `Timeline.exception` / `Timeline.rejoin` (not `then`: an object with `then` is a thenable).
+  `after` is permissive (any number, S004 for a second) like the clauses; `then` is the last item of a body (a step
+  after it is a `SYNTAX` error).
+- **IDs**: a stage, its timelines and exceptions are declarations of the storming's one namespace (§2), like groups.
+  Per-stage IDs (`Main` in every stage) were considered and rejected: the namespace rule is the spec's, the timeline
+  picker, selections and collaboration targets name a timeline by its ID alone, and an ID shared with an event would
+  be ambiguous for the language server.
+- **Semantics** (`domain/stages.ts`): a *section* is a stage, or the top-level timelines of a storming without stages.
+  Its `timeline`s are main flows, the first its *trunk*; its `exception`s are exceptions. Main/exception is written,
+  never inferred from the order. Every timeline but the trunk branches off at its first step: the first step of the
+  trunk that is it (the same event, an event of that group, or a group of the same events), else of a timeline that
+  branches off itself (found by rounds from the trunk, then by ID: order-independent); else it is *dangling* (S019)
+  and drawn apart at the section's start. `then <Event>` (exceptions only) returns to the first step with the event of
+  the section's trunk, its other main flows, then the main flows of the other sections in time order: a later stage
+  (a certificate requested by post rejoins at 「証明書の内容を確かめた」) or an earlier one (a retry). `after` orders
+  the stages: Kahn's order, ties by source order; a stage without a valid `after` starts anew after those before it.
+- **Rules**: S002/S003 for an `after` or `then` that names nothing or the wrong kind, S004 for a second `after`, and
+  S017 (error: `after` itself or a cycle; the stages of a cycle are ordered as written), S018 (error: `then` on a main
+  flow, or to an event of no main flow), S019 (warning: dangling — only in a storming drawn in sections, so that the
+  top-level timelines of a storming without stages or exceptions are as free as before), S020 (error: a timeline or
+  exception outside the stages of a storming with stages), S021 (warning: a second stage without `after`; allowed, drawn
+  as a separate start), S022 (warning: a stage without a `timeline`).
+- **Which projection**: a storming with stages or with an exception is *drawn in sections* (`drawnInSections`); any
+  other keeps the prefix-trie projection and the ELK layout unchanged (the payload of `examples/shop` is the same:
+  `stages` is absent from a storming without them). A timeline's own view is unchanged in every storming.
+- **Projection** (`core/storming/stage-view.ts`): each section is a tree: the trunk from its first step; every other
+  timeline inserted from its branch point's node, its first step recorded there (one note for both, the shared prefix
+  of §8), its next steps shared with a timeline that goes on alike (keyed by step key), so an exception never draws
+  its branch event twice. The render graph keeps its kinds of edges and adds `rejoin` (`then`) and `stage` (`after`,
+  from the end of the previous trunk to the start of this one); a `sequence` edge of exceptions only is marked
+  `exception`, drawn `esException`. At Big Picture the `level design` events are left out as before; a hidden branch
+  point becomes the nearest visible step before it (or the section's start), a hidden `then` target the nearest visible
+  step after it (or before it). Views: the integrated canvas (every section in order), one per stage (`stageId`;
+  `then` to another stage is not drawn there; semantic edges filtered by §9.3 over the stage's events), and both again
+  without the exceptions (`hideExceptions`: their steps, the events only they have, the hotspots on those events and
+  their `then`s are not drawn). Keys: `<level>|@<stage>` and `-exceptions` after the scope; graph IDs alike.
+- **Placement**: each node gets a cell (`RenderGraph.grid`, `Graph.grid`): a column per step, the sections side by
+  side in time order, the trunks on row 0 through every stage, every other timeline on a *lane* below its branch step,
+  lanes packed into rows (first fit, one free column between lanes; the other main flows before the exceptions; from
+  the top of the tree down). Design Level elements stand above the event they belong to (hotspot nearest, then command,
+  policy, aggregate, read model, actor, external), the rest below every section. *Amended 2026-11-05*: each step is a
+  group of sub-columns and the elements stand in a band above their event's lane, read left to right; see "Event
+  Storming's grammar" below. ELK's layered algorithm was tried on
+  paper and rejected: it keeps the order along edges, but neither one straight row through every frame nor lanes inside
+  frames, and its partitioning does not cross hierarchy levels. `layoutGrid` (`core/graph/grid.ts`) turns cells into
+  coordinates and routes every edge through the gutters between cells, so that no route crosses a note (tested): into
+  a lane down from the branch step, along the gutter under its row, in from the left with the lane's caption (its
+  timelines' labels) above; a `then` down from the last step, back along the gutter under its lane and up into its
+  target from below. It is canonical: the persisted layout is reused while the graph's signature, which includes the
+  grid and `GRID_VERSION`, is the same; incremental hints are not needed.
+- **Live View**: a stage is a frame (`esStage`, neutral like a context); clicking it selects the stage, whose inspector
+  shows the stage it comes after, its main flows and exceptions and 「この段階を表示」. The timeline picker lists the
+  stages (「コンビニでの発行（例外を含む）」) between すべて（統合） and the timelines (「段階 / タイムライン」, an
+  exception as 「例外：…」). The toolbar's 「例外を表示」 toggle (only for a storming with exceptions, not on a
+  timeline's view) is the page's state like the level, saved per browser. Off, it also hides at Design Level the
+  elements that relate only to the events only exceptions have: the commands that emit only those, the policies `on`
+  only those with the commands they alone issue, and those commands' copies of actors, read models and aggregates.
+  The legend gains the exceptions' order and `then`.
+- **Agent**: the runner's rule 16: phases as `stage`s with `after`, the normal flow a `timeline` first, exceptions as
+  `exception`s starting at their branch event, `then` to rejoin, another normal path another `timeline`.
+
+## Amendment (2026-11-03): actors, read models and aggregates drawn once per use
+
+At Design Level an actor drawn once and linked to every command that used it ran lines across the whole diagram. Now
+an actor or external system (a command's issuer), a read model (what it `reads`) and an aggregate (its `target`) get a
+note beside each command of the view that uses it: a render node `n:<element>@<command>` with `use: <command>` and the
+element's ID (`core/storming/uses.ts`); an element no command of the view uses is the one note `n:<element>` as
+before. Only the drawing changes: the `.dtes`, the semantic graph and the edges' semantic keys do not, and each use's
+edge joins the copy and its command only. The ELK drawings place a copy beside its command through that edge (the
+issuer and the read model on its left, the aggregate on its right); the grid stacks it in its command's column.
+*Amended 2026-11-05*: the copy of an aggregate also carries the command's `emits`, the issuer is stuck on top of its
+command, and the grid places copies in the sub-columns of their step; see "Event Storming's grammar" below. The
+Live View resolves everything by element (selection, inspector, change marks, references, presence): selecting one
+note marks the element's other notes (`dn-same`, a fainter dashed ring), and a jump to the element picks the note
+nearest the middle of the view, else the first in reading order (`itemForElement`).
+
+## Amendment (2026-11-03): the cause of an event in a timeline's or a stage's view
+
+At Design Level a timeline's view (an exception's included) and a stage's view drew a command only on a 1-hop path
+`Event → Policy → Command → Event` within the view, so the command a user issues (`command EnterPin { actor Resident
+emits PinEntered }`, which no policy issues) was on the integrated canvas but on none of the views of its event. Now
+`filterEdges` (`core/storming/filter.ts`) also keeps, for each event in view, every `emits` into it, and the `actor`,
+`reads` and `target` edges of the commands so kept (copies per use as above; the grid stacks them in the column of the
+emitted event, as on the integrated canvas). An `emits` to an event out of view is not drawn, and the policy that
+issues such a command is drawn only on a 1-hop path within the view: nothing is followed back from a command, so R16
+(no multi-hop chain) holds. Big Picture draws no command and is unchanged; Design Level does not depend on `level
+design` marks. Spec §9.3 and R16.
+
+## Amendment (2026-11-05): Event Storming's grammar at Design Level
+
+The Design Level drawing did not read as Event Storming does (Brandolini): `emits` was drawn command → event with the
+aggregate a dead end beside the command; the stages' grid stacked every element above an event's column (the aggregate
+above its command, a policy above its own trigger, a lane's elements over the trunk's column, a command emitting
+several events once at the leftmost one); a repeated event fanned one command out to every occurrence; a hotspot took a
+layer of its own before its event in ELK; actors were separate notes with arrows; and the legend called the aggregate a
+non-causal relation while arrowheads sat on relations that "are not causes or time". Now the drawing follows the
+standard grammar, read left to right: **read model + actor → command → aggregate → event → policy → command …**. Only
+the drawing changes: the `.dtes`, its relations and the semantic graph do not (§9.1 keeps `Command → Event`).
+
+- **Chains** (`core/storming/chains.ts`, shared by `render.ts` and `stage-view.ts`, replacing `uses.ts`): a command with
+  a `target` (at most one, S004) goes to its aggregate's copy beside it, drawn `esCausal` (`target` is causal in
+  `isCausal`), and each `emits` of the command is drawn from that copy to the event, with the `emits` edge's semantic
+  key (`emits:C->E@n:G@C->…`); a command without `target` keeps command → event. The projection tells, for each event
+  note, its *slot* (its step: a trie node in a timeline's view, a step node in the grid; one slot for the whole
+  integrated ELK canvas, which draws each event once) and its place in time. A command whose events stand at several
+  slots gets a note per slot (`n:C#k`, k from 1 in time order) with its own copies (`n:G@C#k`); a policy on events at
+  several slots a note after each (`n:P#k`, its `on` from the event of its slot, its `issues` to the command's note at
+  the nearest later slot, every note when none is later); a hotspot on an event drawn at several slots a note on each
+  (`n:H#k`). This is the drawing-only split of §7.3/§10.2; with one slot nothing is copied, so plain stormings keep
+  their IDs. `RenderElementNode.use` is now the command note's ID without `n:` (`C` or `C#2`).
+- **The grid** (`placeChains` in `stage-view.ts`): each step's column becomes up to five sub-columns, left to right
+  read model, command, aggregate, event, policy (only those some step of the column uses; the event's always), and
+  above each lane's row a band as tall as the tallest stack of its steps. A step's chains (one per command note
+  emitting its events: read model, command, aggregate on one row, the command's actors above it in its sub-column)
+  are bottom-aligned in the band of the event's own lane, an exception's above the exception; its hotspots above the
+  event (nearest first) and its policies on its right. So the aggregate is always between its command and the event
+  and the policy between its trigger and the next step's command, every lane's elements belong to its events, and the
+  events keep their time order left to right on unchanged rows of lanes. Alternatives considered: one row per chain
+  with the event in it would put the commands on the timeline's straight line (the time order would have to bend
+  around them); stacking the chain vertically (as before) is what broke the reading. `layoutGrid` gained a straight
+  route for any edge along a row with no note between its ends (the time order across a step's empty sub-columns,
+  read model → command), and a stacked note joins a note of its column through the left gutter into the target's side
+  near its end (clear of the edges at the side's middle). `GRID_VERSION` is 2.
+- **ELK** (plain stormings and timeline views, direction RIGHT): the chain makes the layers (read model, command,
+  aggregate, event, policy). A note *stuck* on another (`GraphNode.attachTo`, set by `renderToGraph`: a hotspot whose
+  only edges go to one event, an actor's or external system's copy on its command, same container) is laid out with
+  it as one block, stacked above it, the block's edges in and out through fixed ports at the node's middle; its edge
+  is drawn straight down into the node (or down its left side when another stuck note is below it). So a hotspot never
+  takes a layer before its event, and the actor sits on its command's top-left. The engine's version is 12.
+- **Not done**: the actor is not smaller than the other notes: every note is the same square (§9.4, `STICKY_NOTE`), so
+  it is stuck on top of the command, aligned left, at full size.
+- **Edges and legend**: `esRelated` (`actor`, `reads`) and `esHotspot` have no arrowhead (`isUndirectedEdge`; canvas,
+  legend, portable SVG), so that 「矢印は因果と時間の向き」 holds; the legend calls the causal row 「型レベルの因果（コマンド
+  → 集約 → イベント → ポリシー → コマンド…）」 and the related row 「コマンドのアクター・リードモデル（向きを持たない）」.
+- **Focus** (`apps/web/scene.ts`): an event caused through an aggregate brings the commands that go to that aggregate
+  (with their actors and read models); a selected command brings the events its aggregate emits.
+- **Still needing a DSL change** (separate decision): the aggregate emitting events itself (today `emits` belongs to the
+  command), an external system receiving a command or producing events, event → read model → actor (a read model fed
+  by events), and hotspots on any sticky (today `on` an event only). Decided by [ADR 0032](0032-dtes-design-level-grammar.md)
+  (2026-11-06): `handledBy` (an aggregate or external system, from which the drawing starts `emits`), an event `from` an
+  external system, a read model `from` events drawn to the issuer that `reads` it, and a hotspot `on` any sticky; this
+  amendment's `actor` and `target` read `by` and `handledBy` there.
 
 ## Task interfaces
 

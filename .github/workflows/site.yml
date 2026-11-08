@@ -1,0 +1,70 @@
+name: Site
+
+# The Event Storming guide (site/) on GitHub Pages. Run by hand only, for now: when it publishes is decided later.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: 1.4.4
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      # the dt CLI the figures are drawn with
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+
+      # the site is a package of its own (site/package.json, site/bun.lock), outside the root's workspaces
+      - run: bun install --frozen-lockfile
+        working-directory: site
+
+      - name: Check the example workspaces
+        run: bun run examples:check
+        working-directory: site
+        env:
+          DT: node ../dist/dt.js
+
+      # `dt export svg` draws each figure of figures.json; a figure it cannot draw fails the build.
+      # The captures of the Live View (public/shots) are committed: `bun run site:shots` takes them again.
+      - name: Build the site
+        run: bun run build
+        working-directory: site
+        env:
+          DT: node ../dist/dt.js
+          SITE_ORIGIN: ${{ steps.pages.outputs.origin }}
+          SITE_BASE: ${{ steps.pages.outputs.base_path }}
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: site/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

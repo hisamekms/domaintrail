@@ -2,9 +2,10 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { Language, Parser, Query, type Node } from 'web-tree-sitter';
-import { loadWorkspace } from '@domaintrail/workspace/infrastructure/files';
+import { loadWorkspace } from '@domaintrail/workspace';
 import { GRAMMAR_DIR, STAMP, hashes } from '../scripts/tree-sitter.js';
 import { EXAMPLES } from './helpers.js';
+import { sourceSelection } from '@domaintrail/analysis';
 
 // The tree-sitter grammar (tree-sitter-domaintrail, for editors) must parse what the Langium grammar parses. It is
 // checked with the committed wasm; `bun run tree-sitter` rebuilds it after a change of grammar.js.
@@ -46,7 +47,7 @@ describe('tree-sitter grammar', () => {
     });
 
     test('parses every .dt file of examples/shop', async () => {
-        const sources = (await loadWorkspace(EXAMPLES)).filter((s) => s.path.endsWith('.dt'));
+        const sources = (await loadWorkspace(EXAMPLES, sourceSelection())).filter((s) => s.path.endsWith('.dt'));
         expect(sources.length).toBeGreaterThan(0);
         for (const s of sources) expect({ file: s.path, problems: problems(s.text) }).toEqual({ file: s.path, problems: [] });
     });
@@ -64,11 +65,12 @@ describe('tree-sitter grammar', () => {
         expect(problems('context A { aggregate G { command c() -> } }')).not.toEqual([]);
     });
 
-    test('takes the keywords that may name fields from the Langium grammar', async () => {
-        const langium = await readFile(path.join(ROOT, 'packages', 'modeling', 'src', 'language', 'domain.langium'), 'utf8');
+    test('takes the keywords that may be names from the Langium grammar', async () => {
+        const langium = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
         const grammar = await readFile(path.join(GRAMMAR_DIR, 'grammar.js'), 'utf8');
         const quoted = (s: string) => [...s.matchAll(/'([^']+)'/g)].map((m) => m[1]).sort();
         expect(quoted(/FEATURE_KEYWORDS = \[([^\]]*)\]/.exec(grammar)![1])).toEqual(quoted(/FeatureName returns string:([^;]*);/.exec(langium)![1]));
+        expect(quoted(/VALUE_KEYWORDS = \[([^\]]*)\]/.exec(grammar)![1])).toEqual(quoted(/ValueName returns string:([^;]*);/.exec(langium)![1]));
         expect(quoted(/primitive_type: \(_\) => choice\(([^)]*)\)/.exec(grammar)![1])).toEqual(
             quoted(/PrimitiveType returns string:([^;]*);/.exec(langium)![1]),
         );

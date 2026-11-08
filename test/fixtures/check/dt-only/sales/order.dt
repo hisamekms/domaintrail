@@ -1,0 +1,24 @@
+context Sales {
+  id OrderId: UUID
+  id OrderId: UUID
+
+  primitive Quantity: Int { value in 1..999 }
+
+  aggregate Order {
+    id: OrderId
+    quantity: Quantity
+    customer: CustomerRef
+
+    invariant positive { quantity > "zero" }
+
+    create command place(id: OrderId) -> Draft emits OrderPlaced
+
+    state Draft
+    state Confirmed
+
+    command confirm() Draft -> Shipped emits OrderConfirmd
+  }
+
+  event OrderPlaced { orderId: OrderId }
+  event OrderConfirmed { orderId: OrderId }
+}

@@ -1,0 +1,18 @@
+---
+// Numbered steps beside a capture of the Live View. The steps are an ordered list in the default slot.
+import Figure from './Figure.astro';
+
+interface Props {
+    /** the capture's name (public/shots/<name>.png) */
+    shot: string;
+    alt: string;
+    caption?: string;
+}
+
+const { shot, alt, caption } = Astro.props;
+---
+
+<div class="beside">
+    <div class="steps-col"><slot /></div>
+    <Figure name={shot} kind="shot" alt={alt} caption={caption} />
+</div>

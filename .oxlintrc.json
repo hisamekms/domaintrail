@@ -13,18 +13,22 @@
   "overrides": [
     {
       // tests cast partial fixtures and the JSON of the servers they test; their assertions check the values
-      "files": ["test/**"],
+      // (the integration tests in test/, the unit tests and their helpers next to the code)
+      "files": ["test/**", "**/*.test.ts", "**/*.test.tsx", "**/test-helpers.ts"],
       "rules": { "typescript/no-unsafe-type-assertion": "off" }
     }
   ],
   "ignorePatterns": [
     "dist/**",
-    "packages/modeling/src/language/generated/**",
+    "contexts/modeling/src/infrastructure/syntax/generated/**",
     "**/generated/**",
     "tree-sitter-domaintrail/src/**",
     "tree-sitter-domaintrail/bindings/**",
     "editors/zed/target/**",
     "editors/zed/grammars/**",
-    ".domaintrail/**"
+    ".domaintrail/**",
+    // the guide's site: its own package (Astro), whose tsconfig extends `astro/tsconfigs/strict` from its own
+    // dependencies, installed only to build the site (not in the root's `bun install`, nor in CI's checks)
+    "site/**"
   ]
 }

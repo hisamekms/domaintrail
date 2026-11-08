@@ -1,0 +1,260 @@
+/**
+ * Who may do what in a session, over HTTP (ADR 0026, S4; ADR 0027, Authorization): the status and the whole error body
+ * of every operation reserved to the facilitator, asked by a participant, by the facilitator and by no one, pinned so
+ * that moving the rules of the work into the domain changes neither.
+ */
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import * as path from 'node:path';
+import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
+import { type SessionServer, startSessionServer } from '@domaintrail/dt';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import type { SessionSettings } from '@domaintrail/dt';
+
+const DT = `context Shop {
+  id OrderId: UUID
+
+  aggregate Order {
+    id: OrderId
+
+    state Open
+    state Placed
+
+    create command start(id: OrderId) -> Open
+
+    command place()
+      Open -> Placed
+      emits OrderPlaced
+  }
+
+  event OrderPlaced {
+    orderId: OrderId
+  }
+}
+`;
+
+const sessionConfig: SessionSettings = {
+    port: 0,
+    host: '127.0.0.1',
+    identity: 'dev',
+    agent: { port: 0, allowedTools: [...DEFAULT_AGENT_TOOLS], maxPreviousRunDiff: 20 * 1024 },
+    maxParticipants: 50,
+    quickReactions: ['👍'],
+    classifier: { enabled: false, provider: 'cloudflare-clef', model: 'clef-flash', apiTokenEnv: 'CLOUDFLARE_API_TOKEN', threshold: 0.5 },
+};
+
+const json = { 'content-type': 'application/json' };
+const UNKNOWN = '00000000-0000-4000-8000-000000000000';
+
+const FACILITATOR_ONLY = { error: { type: 'FacilitatorOnly', message: 'Only the facilitator may do this.' } };
+
+describe('the operations reserved to the facilitator', () => {
+    let root: string;
+    let server: SessionServer;
+    let ada: string;
+    let bob: string;
+
+    const api = (cookie: string | undefined, p: string, body?: unknown): Promise<Response> =>
+        fetch(`${server.url}api/session/${p}`, {
+            method: body === undefined ? 'GET' : 'POST',
+            headers: { ...(cookie && { cookie }), ...(body !== undefined && json) },
+            ...(body !== undefined && { body: JSON.stringify(body) }),
+        });
+    const answer = async (res: Response): Promise<[number, unknown]> => [res.status, await res.json()];
+    const state = async (): Promise<SessionStateBody> => (await (await api(bob, 'state')).json()) as SessionStateBody;
+    const join = async (name: string): Promise<string> => {
+        const res = await fetch(`${server.url}api/session/join`, { method: 'POST', headers: json, body: JSON.stringify({ name }) });
+        expect(res.status).toBe(201);
+        return (res.headers.get('set-cookie') ?? '').split(';')[0];
+    };
+    const send = async (cookie: string, body: string): Promise<string> => {
+        const res = await api(cookie, 'requests', { targets: [], body });
+        expect(res.status).toBe(201);
+        return ((await res.json()) as { request: { id: string } }).request.id;
+    };
+
+    beforeAll(async () => {
+        root = await mkdtemp(path.join(tmpdir(), 'domaintrail-session-authorization-'));
+        await writeFile(path.join(root, 'shop.dt'), DT);
+        server = await startSessionServer({ root, debounceMs: 30, session: sessionConfig });
+        await server.ready;
+        ada = await join('Ada');
+        bob = await join('Bob');
+        expect((await fetch(server.facilitatorLink, { headers: { cookie: ada }, redirect: 'manual' })).status).toBe(303);
+    });
+    afterAll(async () => {
+        await server?.stop();
+        await rm(root, { recursive: true, force: true });
+    });
+
+    test('a participant gets 403 FacilitatorOnly, before the input or what it names is looked at', async () => {
+        const revision = (await state()).revisions[0].id;
+        const request = await send(bob, 'Add a cancel command.');
+        for (const [p, body] of [
+            ['runs', { requests: [request] }],
+            ['runs', { requests: 'not a list' }],
+            ['runs', { requests: [UNKNOWN] }],
+            [`runs/${UNKNOWN}/cancel`, {}],
+            ['runs/not-a-uuid/cancel', {}],
+            ['revisions', {}],
+            ['revisions', { extra: 1 }],
+            [`revisions/${revision}/restore`, {}],
+            [`revisions/${UNKNOWN}/restore`, {}],
+            [`revisions/${revision}/restore`, { recordExternalChanges: 'yes' }],
+            ['facilitator/link', {}],
+            ['close', {}],
+            ['close', { extra: 1 }],
+        ] as const) {
+            expect([p, body, ...(await answer(await api(bob, p, body)))]).toEqual([p, body, 403, FACILITATOR_ONLY]);
+        }
+        // addressing any message to the AI (「AI に送る」) is the facilitator's; the former `apply` is no field of a message
+        const before = (await state()).requests.length;
+        const someone = (await state()).requests[0]?.id ?? UNKNOWN;
+        expect(await answer(await api(bob, 'requests/address', { requests: [someone] }))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(bob, `requests/${someone}/address`, {}))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(bob, 'proposals/approve', { proposals: [{ proposal: UNKNOWN }] }))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(bob, `proposals/${UNKNOWN}/reject`, {}))).toEqual([403, FACILITATOR_ONLY]);
+        expect((await api(bob, 'requests', { targets: [], body: 'Do it now.', apply: true })).status).toBe(400);
+        expect((await state()).requests.length).toBe(before);
+    });
+
+    test('the facilitator does not vote: 403 FacilitatorDoesNotVote; reacting is anyone’s', async () => {
+        const target = { kind: 'QuestionOption', run: UNKNOWN, question: 'q', option: 'o' };
+        expect(await answer(await api(ada, 'marks', { target, sign: { kind: 'Vote' }, placed: true }))).toEqual([
+            403,
+            { error: { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." } },
+        ]);
+        expect(await answer(await api(bob, 'marks', { target, sign: { kind: 'Vote' }, placed: true }))).toEqual([
+            404,
+            { error: { type: 'MarkTargetNotFound' } },
+        ]);
+        const request = await send(bob, 'Rename Order.');
+        expect((await api(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Reaction', emoji: '👍' }, placed: true })).status).toBe(200);
+    });
+
+    test("the journeys: the facilitator's acts are done (dt writes the file); a participant's are requests the facilitator decides", async () => {
+        const file = path.join(root, 'domaintrail.journey.json');
+        await writeFile(
+            file,
+            JSON.stringify({
+                version: 1,
+                stormings: {},
+                modeling: [
+                    {
+                        id: 'billing',
+                        name: 'Billing',
+                        purpose: '請求',
+                        participants: [],
+                        pattern: 'Whole',
+                        goal: 'invariants',
+                        state: 'active',
+                        marks: { steps: [], contexts: {} },
+                    },
+                ],
+            }),
+        );
+        const read = async (): Promise<{ modeling: { goal: string; marks: { steps: string[] } }[] }> => JSON.parse(await readFile(file, 'utf8'));
+        // the session's old way: a guide step marked in the session is no longer taken
+        expect(
+            (await api(ada, 'marks', { target: { kind: 'GuideStep', journey: 'billing', step: 'bcSplit' }, sign: { kind: 'Done' }, placed: true })).status,
+        ).toBe(400);
+        // the facilitator: done, written by dt in its stable order
+        expect(await answer(await api(ada, 'journey/acts', { act: { kind: 'mark', journey: 'billing', step: 'bcSplit', done: true } }))).toEqual([
+            200,
+            { done: true },
+        ]);
+        expect((await read()).modeling[0]?.marks.steps).toEqual(['bcSplit']);
+        expect(await readFile(file, 'utf8')).toStartWith('{\n  "$schema": ');
+        // a goal the pattern does not allow, an act of no shape
+        expect((await api(ada, 'journey/acts', { act: { kind: 'goal', journey: 'billing', goal: 'commands' } })).status).toBe(400);
+        expect((await api(ada, 'journey/acts', { act: { kind: 'paint', journey: 'billing' } })).status).toBe(400);
+        // a participant: a request, nothing written yet
+        const asked = await answer(await api(bob, 'journey/acts', { act: { kind: 'goal', journey: 'billing', goal: 'contextMap' } }));
+        expect(asked).toMatchObject([202, { done: false, request: { act: { kind: 'goal', goal: 'contextMap' } } }]);
+        const id = (asked[1] as { request: { id: string } }).request.id;
+        expect((await read()).modeling[0]?.goal).toBe('invariants');
+        // only the facilitator decides it; approved, it is done as theirs
+        expect(await answer(await api(bob, `journey/requests/${id}/approve`, {}))).toEqual([403, FACILITATOR_ONLY]);
+        expect(await answer(await api(ada, `journey/requests/${id}/approve`, {}))).toEqual([200, { done: true }]);
+        expect((await read()).modeling[0]?.goal).toBe('contextMap');
+        expect((await api(ada, `journey/requests/${id}/approve`, {})).status).toBe(404);
+        // the current journey: the facilitator's at once (an event on the session), a participant's asked, then denied
+        expect(await answer(await api(ada, 'journey/current', { journey: 'billing' }))).toEqual([200, { done: true }]);
+        expect((await state()).session.currentJourney).toBe('billing');
+        const choose = await answer(await api(bob, 'journey/current', { journey: null }));
+        expect(choose[0]).toBe(202);
+        expect(await answer(await api(ada, `journey/requests/${(choose[1] as { request: { id: string } }).request.id}/deny`, {}))).toEqual([
+            200,
+            { done: true },
+        ]);
+        expect((await state()).session.currentJourney).toBe('billing');
+        // a participant withdraws their own request
+        const archive = await answer(await api(bob, 'journey/acts', { act: { kind: 'state', journey: 'billing', state: 'archived' } }));
+        const archiveId = (archive[1] as { request: { id: string } }).request.id;
+        expect(await answer(await api(bob, `journey/requests/${archiveId}/withdraw`, {}))).toEqual([200, { done: true }]);
+        // each act and request recorded in the chat; a request's outcome on its own record, the act approved as the
+        // facilitator's (the file written above from outside dt may be recorded too: left out here)
+        const records = ((await state()).records ?? []).filter((r) => r.fact.kind !== 'FileChangedOutside');
+        const bobId = records.find((r) => r.fact.kind === 'JourneyRequested')?.by;
+        expect(bobId).toStartWith('dev:');
+        expect(records.map((r) => [r.by, r.fact])).toMatchObject([
+            ['local:facilitator', { kind: 'MarksChanged', marks: [{ step: 'bcSplit' }], done: true }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'Goal', goal: 'contextMap' }, outcome: 'Approved', decidedBy: 'local:facilitator' }],
+            ['local:facilitator', { kind: 'GoalChanged', from: 'invariants', to: 'contextMap' }],
+            ['local:facilitator', { kind: 'CurrentChosen', journey: { journey: 'billing', label: 'Billing' } }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'Choose' }, outcome: 'Denied' }],
+            [bobId, { kind: 'JourneyRequested', act: { kind: 'State', state: 'Archived' }, outcome: 'Withdrawn', decidedBy: bobId }],
+        ]);
+    });
+
+    test('dismissing a message has no route: 404', async () => {
+        const request = await send(bob, 'Something.');
+        for (const cookie of [bob, ada]) {
+            expect(await answer(await api(cookie, `requests/${request}/dismiss`, {}))).toEqual([
+                404,
+                { error: { type: 'NotFound', message: 'No such session API.' } },
+            ]);
+        }
+    });
+
+    test('the facilitator: what is unknown is 404, what the state refuses is 409, the rest succeeds', async () => {
+        expect(await answer(await api(ada, `runs/${UNKNOWN}/cancel`, {}))).toEqual([404, { error: { type: 'NotFound', aggregate: 'AgentRun', id: UNKNOWN } }]);
+        expect(await answer(await api(ada, `revisions/${UNKNOWN}/restore`, {}))).toEqual([
+            404,
+            { error: { type: 'NotFound', aggregate: 'Revision', id: UNKNOWN } },
+        ]);
+        expect(await answer(await api(ada, 'runs', { requests: [UNKNOWN] }))).toEqual([404, { error: { type: 'RequestNotFound', request: UNKNOWN } }]);
+
+        const request = await send(bob, 'Add a total.');
+        const queued = await api(ada, 'runs', { requests: [request] });
+        expect(queued.status).toBe(201);
+        const run = ((await queued.json()) as { run: { id: string; state: string } }).run;
+        expect(run.state).toBe('Queued');
+        const cancelled = await api(ada, `runs/${run.id}/cancel`, {});
+        expect([cancelled.status, ((await cancelled.json()) as { run: { state: string } }).run.state]).toEqual([200, 'Cancelled']);
+        expect(await answer(await api(ada, `runs/${run.id}/cancel`, {}))).toEqual([
+            409,
+            { error: { type: 'NotAllowed', command: 'cancel', state: 'Cancelled' } },
+        ]);
+
+        const taken = await api(ada, 'revisions', {});
+        expect(taken.status).toBe(201);
+        const revision = ((await taken.json()) as { revision: { id: string; origin: { kind: string } } }).revision;
+        expect(revision.origin.kind).toBe('Manual');
+        expect((await api(ada, `revisions/${revision.id}/restore`, {})).status).toBe(200);
+        expect((await api(ada, 'facilitator/link', {})).status).toBe(201);
+    });
+
+    test('no one signed in: 401 Unauthenticated; the facilitator closes the session', async () => {
+        for (const p of ['runs', `runs/${UNKNOWN}/cancel`, 'revisions', 'close', 'facilitator/link']) {
+            expect([p, ...(await answer(await api(undefined, p, {})))]).toEqual([
+                p,
+                401,
+                { error: { type: 'Unauthenticated', message: 'Sign in to the session first.' } },
+            ]);
+        }
+        const closed = await api(ada, 'close', {});
+        expect([closed.status, ((await closed.json()) as { session: { state: string } }).session.state]).toEqual([200, 'Closed']);
+    });
+});

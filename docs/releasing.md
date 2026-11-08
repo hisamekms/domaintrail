@@ -3,7 +3,8 @@
 Releases go to npm through [staged publishing](https://docs.npmjs.com/staged-publishing): the Release workflow
 (`.github/workflows/release.yml`) tests, builds and stages the package, and nothing is public until a maintainer
 approves it with 2FA. The workflow also creates the version's GitHub Release as a **draft**, with the notes from the
-changelogs; a maintainer reviews it and publishes it.
+changelogs; a maintainer reviews it and publishes it. The one package holds the CLI and `domaintrail/testing`, the
+support of the generated contract tests (a subpath in its `exports`); nothing else is published.
 
 ## The changelog
 
@@ -30,6 +31,13 @@ match.
    through pull requests.
 
 2. On an up-to-date `main`, bump the version, which commits (`chore(release): X.Y.Z`, `.npmrc`) and tags, and push.
+   `npm version` runs the `version` script, so these go into the same commit:
+   - the Zed extension's version (`scripts/zed-version.ts`: the extension, its crate and lock entry, and the `dt` it
+     installs); `test/zed-version.test.ts` fails if they differ;
+   - DomainTrail's own generated code, regenerated from the root `domaintrail.jsonc`: its contract tests state the
+     version of domaintrail that generated them and fail when loaded with `domaintrail/testing` of another minor
+     version (`test/self-contracts.test.ts` ignores the version when it compares the output).
+
    Only an admin can push this commit, bypassing the ruleset of `main`:
 
    ```bash

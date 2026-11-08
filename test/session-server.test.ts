@@ -1,5 +1,5 @@
 /**
- * `dt session start` (ADR 0026, S4) over HTTP, the WebSocket and the agent API, on a temporary workspace with `.dt`
+ * The session server (`dt collab`; ADR 0026, S4) over HTTP, the WebSocket and the agent API, on a temporary workspace with `.dt`
  * and `.dtes` sources: without an identity nothing is served; Host and Origin are checked; participants cannot reach
  * the facilitator's routes or the agent API; the agent API needs its credential and is not on the public port; SSE
  * resumes with `Last-Event-ID`; claim and finish are idempotent; the watcher holds around a write; presence; revoke.
@@ -8,24 +8,24 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import type { AccessClaims } from '@domaintrail/collaboration/infrastructure/identity';
-import { createMockAccessVerifier } from '@domaintrail/collaboration/infrastructure/identity';
-import type { ComparisonBody, Me, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
-import { REPLY_LIMITS } from '@domaintrail/collaboration/domain/reply';
+import { type AccessClaims, type AccessTokenVerifier, REPLY_LIMITS } from '@domaintrail/collaboration';
+import type { ComparisonBody, Me, ModelChangesBody, RestoredBody, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import {
-    startSessionServer,
+    cliDeps,
+    createWatcherHold,
+    ECHO_MS,
     issueFacilitatorLink,
-    WS_REVOKED,
-    WS_SESSION_CLOSED,
     type SessionServer,
     type SessionServerOptions,
-} from '@domaintrail/composition/session';
-import { createWatcherHold, ECHO_MS } from '@domaintrail/composition/watcher-hold';
-import { listedParticipants } from '@domaintrail/web/session/presence';
-import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { SessionError } from '@domaintrail/presentation/cli/ports';
+    startSessionServer,
+    WS_REVOKED,
+    WS_SESSION_CLOSED,
+    runCli,
+    SessionError,
+} from '@domaintrail/dt';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { workspaceDirs } from '@domaintrail/workspace';
+import type { SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 
 const DT = `context Shop {
@@ -63,6 +63,9 @@ const DTES = `storming Ordering {
 }
 `;
 
+/** A verifier that knows a fixed set of tokens and their claims: a stand-in for the JWKS check. */
+const mockVerifier = (tokens: ReadonlyMap<string, AccessClaims>): AccessTokenVerifier => ({ verify: async (token) => tokens.get(token) });
+
 const dirs: string[] = [];
 afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
@@ -76,7 +79,7 @@ async function workspace(): Promise<string> {
     return dir;
 }
 
-const sessionConfig = (overrides: Partial<ResolvedSessionConfig> = {}): ResolvedSessionConfig => ({
+const sessionConfig = (overrides: Partial<SessionSettings> = {}): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'dev',
@@ -87,7 +90,7 @@ const sessionConfig = (overrides: Partial<ResolvedSessionConfig> = {}): Resolved
     ...overrides,
 });
 
-const accessConfig = (overrides: Partial<NonNullable<ResolvedSessionConfig['access']>> = {}): NonNullable<ResolvedSessionConfig['access']> => ({
+const accessConfig = (overrides: Partial<NonNullable<SessionSettings['access']>> = {}): NonNullable<SessionSettings['access']> => ({
     teamDomain: 'team.cloudflareaccess.com',
     audience: 'aud-tag',
     allowedHosts: [],
@@ -125,9 +128,8 @@ const api = (server: SessionServer, cookie: string, p: string, body?: unknown): 
         ...(body !== undefined && { body: JSON.stringify(body) }),
     });
 
-async function agentCredential(root: string): Promise<{ url: string; token: string }> {
-    return JSON.parse(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8'));
-}
+/** The agent API's credential, in memory (never on disk): as the agent in process gets it. */
+const agentCredential = (server: SessionServer): { url: string; token: string } => ({ url: server.agentUrl, token: server.agentToken });
 
 const agent = (cred: { url: string; token: string }, p: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> =>
     fetch(`${cred.url}agent/${p}`, {
@@ -185,12 +187,18 @@ async function refused(server: SessionServer, headers: Record<string, string>): 
     return result;
 }
 
-describe('messages applied, and classified for the facilitator', () => {
+describe('messages addressed to the AI, and the former apply', () => {
     let root: string;
     let server: SessionServer;
     let ada: string;
     let bob: string;
-    const classifier = { classify: async (text: string) => (text.startsWith('Add') ? 0.9 : 0.1) };
+    const asked: string[] = [];
+    const classifier = {
+        classify: async (text: string) => {
+            asked.push(text);
+            return { consultation: 0.1, changeRequest: text.includes('Add') ? 0.95 : 0.1, neither: 0.1 };
+        },
+    };
 
     beforeAll(async () => {
         root = await workspace();
@@ -202,31 +210,29 @@ describe('messages applied, and classified for the facilitator', () => {
     });
     afterAll(() => server?.stop());
 
-    test("the facilitator's pages learn how each message reads; the participants' never do", async () => {
-        const a = await socket(server, ada);
-        const b = await socket(server, bob);
-        try {
-            expect(await a.next('session.classifications')).toMatchObject({ classifications: {} });
-            const sent = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command.' })).json()) as { request: { id: string } };
-            await api(server, bob, 'requests', { targets: [], body: 'nice!' });
-            const first = await a.next('session.classification');
-            const second = await a.next('session.classification');
-            expect([first, second].map((m) => (m.classification as { kind: string }).kind).sort()).toEqual(['chat', 'request']);
-            expect([first, second].find((m) => m.request === sent.request.id)).toMatchObject({ classification: { kind: 'request', probability: 0.9 } });
-            await Bun.sleep(100);
-            expect(b.received.some((m) => m.type.startsWith('session.classification'))).toBe(false);
-        } finally {
-            a.ws.close();
-            b.ws.close();
+    test('talk between people is never sent to Clef; a mention of the AI is, and Clef decides', async () => {
+        const talk = (await (await api(server, bob, 'requests', { targets: [], body: 'Add a cancel command, Ada?' })).json()) as { triage?: unknown };
+        expect(talk.triage).toBeUndefined();
+        const res = await api(server, ada, 'requests', { targets: [], body: '@AI[p1] Add a total.', mentions: ['ai'] });
+        expect(res.status).toBe(201);
+        const sent = (await res.json()) as { request: { id: string }; triage: { state: string; steps: { stage: string }[] } };
+        expect(sent.triage).toMatchObject({ state: 'Pending', steps: [{ stage: 'Mechanical' }] });
+        let state: SessionStateBody | undefined;
+        for (let i = 0; i < 100; i++) {
+            state = (await (await api(server, ada, 'state')).json()) as SessionStateBody;
+            if (state.runs.length) break;
+            await Bun.sleep(20);
         }
+        // the facilitator's own 依頼, decided by Clef: queued at once
+        expect(asked).toEqual(['AI Add a total.']);
+        expect(state?.runs.map((r) => r.state)).toEqual(['Queued']);
+        expect(state?.triages?.[0]).toMatchObject({ state: 'Decided', kind: 'ChangeRequest', decidedBy: 'Clef', outcome: { kind: 'Run' } });
     });
 
-    test('the facilitator sends and applies at once, with a note; a new facilitator link to hand the role over', async () => {
+    test('the former apply is refused; a new facilitator link to hand the role over', async () => {
         const res = await api(server, ada, 'requests', { targets: [], body: 'Add a total.', apply: { note: 'Keep it short.' } });
-        expect(res.status).toBe(201);
-        const body = (await res.json()) as { request: { id: string }; run: { state: string; input: { requests: { request: string }[]; note: string } } };
-        expect(body.run).toMatchObject({ state: 'Queued', input: { requests: [{ request: body.request.id }], note: 'Keep it short.' } });
-        expect((await api(server, ada, 'requests', { targets: [], body: 'x', apply: { other: 1 } })).status).toBe(400);
+        expect(res.status).toBe(400);
+        expect(((await res.json()) as { error: { field: string } }).error.field).toBe('apply');
         const link = await api(server, ada, 'facilitator/link', {});
         expect(link.status).toBe(201);
         expect(((await link.json()) as { link: string }).link).toContain('/session/facilitator?code=');
@@ -279,11 +285,15 @@ describe('a session in dev mode', () => {
         expect((await fetch(`${server.url}api/state`, { headers: { cookie: `dt_session=${'A'.repeat(43)}` } })).status).toBe(401);
     });
 
-    test('serves the Live View to a participant, as dt view does', async () => {
+    test('serves the Live View to a participant, as the read-only Live View does', async () => {
         const res = await fetch(`${server.url}api/state`, { headers: { cookie: bob } });
         expect(res.status).toBe(200);
         expect(((await res.json()) as ViewPayload).files).toEqual(['ordering.dtes', 'shop.dt']);
-        expect(await (await fetch(server.url, { headers: { cookie: bob } })).text()).toContain('<div id="root"></div>');
+        const html = await (await fetch(server.url, { headers: { cookie: bob } })).text();
+        expect(html).toContain('<div id="root"></div>');
+        // the page's first frame has the chat's column and the workspace's name (the boot block)
+        const boot = /<script type="application\/json" id="dt-boot">(.*?)<\/script>/.exec(html)?.[1];
+        expect(JSON.parse(boot ?? 'null')).toEqual({ workspaceName: path.basename(root), session: { mode: 'Collab' } });
     });
 
     test('the baseline, shared by every page, is changed by the facilitator only; the view is read by any participant', async () => {
@@ -333,7 +343,6 @@ describe('a session in dev mode', () => {
             ['runs', { requests: [mine.request.id] }],
             [`runs/${mine.request.id}/cancel`, {}],
             ['revisions', {}],
-            [`revisions/${revision}/confirm`, {}],
             [`revisions/${revision}/restore`, {}],
             ['facilitator/link', {}],
             ['close', {}],
@@ -341,8 +350,8 @@ describe('a session in dev mode', () => {
             const res = await api(server, bob, p, body);
             expect([p, res.status, ((await res.json()) as { error: { type: string } }).error.type]).toEqual([p, 403, 'FacilitatorOnly']);
         }
-        // applying a message on sending it is the facilitator's; dismissing is gone (messages are chat)
-        const applied = await api(server, bob, 'requests', { targets: [], body: 'Do it now.', apply: true });
+        // addressing any message to the AI is the facilitator's; dismissing is gone (messages are chat)
+        const applied = await api(server, bob, 'requests/address', { requests: [adas.request.id] });
         expect([applied.status, ((await applied.json()) as { error: { type: string } }).error.type]).toEqual([403, 'FacilitatorOnly']);
         expect((await api(server, bob, `requests/${adas.request.id}/dismiss`, {})).status).toBe(404);
     });
@@ -476,14 +485,17 @@ describe('a session in dev mode', () => {
             a.ws.send('not json');
             a.ws.send(JSON.stringify({ type: 'presence.update', location: { kind: 'dt' } }));
             a.ws.send(JSON.stringify({ type: 'session.close' }));
-            for (let i = 1; i <= 10; i++) a.ws.send(JSON.stringify({ type: 'presence.update', location, cursor: { x: i, y: i } }));
+            for (let i = 1; i <= 10; i++)
+                a.ws.send(JSON.stringify({ type: 'presence.update', location, cursor: { x: i, y: i }, camera: { x: i, y: 0, w: 800, h: 600 } }));
             await Bun.sleep(300);
             const updates = b.received.filter((m) => m.type === 'presence.update') as unknown as {
-                presence: { cursor: { x: number }; participant: { name: string } };
+                presence: { cursor: { x: number }; camera: { x: number; y: number; w: number; h: number }; participant: { name: string } };
             }[];
             expect(updates.length).toBeGreaterThanOrEqual(1);
             expect(updates.length).toBeLessThanOrEqual(3);
             expect(updates.at(-1)!.presence.cursor.x).toBe(10);
+            // the camera too, for a page following Ada's (ADR 0026, "Following someone")
+            expect(updates.at(-1)!.presence.camera).toEqual({ x: 10, y: 0, w: 800, h: 600 });
             expect(updates[0].presence.participant).toEqual(expect.objectContaining({ name: 'Ada', role: 'facilitator' }));
             expect(JSON.stringify(updates)).not.toContain('email');
             expect(a.received.filter((m) => m.type === 'presence.update')).toEqual([]);
@@ -528,13 +540,19 @@ describe('the agent API', () => {
         ada = await join(server, 'Ada');
         bob = await join(server, 'Bob');
         await claim(server, ada);
-        cred = await agentCredential(root);
+        cred = agentCredential(server);
     });
     afterAll(() => server?.stop());
 
-    test('agent.json is the credential, private to the user; the listener is on 127.0.0.1 only', async () => {
-        const file = path.join(root, '.domaintrail', 'session', 'agent.json');
-        expect((await stat(file)).mode & 0o777).toBe(0o600);
+    test('the credential is never on disk; server.json (in the state directory, outside the workspace) has the addresses only; the listener is on 127.0.0.1 only', async () => {
+        const { state } = workspaceDirs(root);
+        expect(await readFile(path.join(state, 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        const address = await readFile(path.join(state, 'server.json'), 'utf8');
+        expect((await stat(path.join(state, 'server.json'))).mode & 0o777).toBe(0o600);
+        expect(address).not.toContain(cred.token);
+        expect(JSON.parse(address)).toMatchObject({ agentUrl: server.agentUrl });
+        // nothing of the session in the workspace
+        expect(await stat(path.join(root, '.domaintrail')).catch(() => 'absent')).toBe('absent');
         expect(new URL(cred.url).hostname).toBe('127.0.0.1');
         expect(cred.url).toBe(server.agentUrl);
         expect(new URL(cred.url).port).not.toBe(new URL(server.url).port);
@@ -635,6 +653,57 @@ describe('the agent API', () => {
         expect(events.at(-1)).toMatchObject({ event: 'run.cancel_requested' });
         const ended = await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true });
         expect(ended.status).toBe(409);
+    });
+
+    test("a running run's activity reaches every page as it changes, a page connecting gets the latest, and it ends with the run", async () => {
+        const state = (await (await api(server, bob, 'state')).json()) as SessionStateBody;
+        const target = { target: { kind: 'Workspace' }, sourceRevision: state.revisions[0].id };
+        const request = ((await (await api(server, bob, 'requests', { target, body: 'Rename.' })).json()) as { request: { id: string } }).request;
+        const run = ((await (await api(server, ada, 'runs', { requests: [request.id] })).json()) as { run: { id: string } }).run;
+        const { lease } = (await (await agent(cred, 'runs/claim', { owner: 'test-agent' })).json()) as { lease: { token: string } };
+        const activity = (body: object): Promise<Response> => agent(cred, `runs/${run.id}/activity`, { token: lease.token, ...body });
+        // only while it runs
+        expect((await activity({ phase: 'reading' })).status).toBe(409);
+        await agent(cred, `runs/${run.id}/start`, { token: lease.token });
+        const b = await socket(server, bob);
+        try {
+            expect(await b.next('session.activities')).toMatchObject({ activities: {} });
+            for (const [bad, field] of [
+                [{ phase: 'thinking' }, 'phase'],
+                [{ phase: 'reading', subject: 'a\nb' }, 'subject'],
+                [{ phase: 'reading', other: 1 }, 'other'],
+            ] as const) {
+                const refused = await activity(bad);
+                expect([refused.status, ((await refused.json()) as { error: { field: string } }).error.field]).toEqual([400, field]);
+            }
+            expect((await agent(cred, `runs/${run.id}/activity`, { token: 'wrong', phase: 'reading' })).status).toBe(409);
+            expect((await activity({ phase: 'reading', subject: 'shop.dt' })).status).toBe(200);
+            expect(await b.next('run.activity')).toEqual({ type: 'run.activity', run: run.id, activity: { phase: 'reading', subject: 'shop.dt' } });
+            // the same again is not sent again
+            expect((await activity({ phase: 'reading', subject: 'shop.dt' })).status).toBe(200);
+            expect((await activity({ phase: 'checking', subject: 'dt check' })).status).toBe(200);
+            expect(await b.next('run.activity')).toMatchObject({ activity: { phase: 'checking', subject: 'dt check' } });
+            expect(b.received.filter((m) => m.type === 'run.activity')).toHaveLength(2);
+        } finally {
+            b.ws.close();
+        }
+        const late = await socket(server, ada);
+        try {
+            expect(await late.next('session.activities')).toEqual({
+                type: 'session.activities',
+                activities: { [run.id]: { phase: 'checking', subject: 'dt check' } },
+            });
+        } finally {
+            late.ws.close();
+        }
+        expect((await agent(cred, `runs/${run.id}/finish`, { token: lease.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
+        expect((await activity({ phase: 'finishing' })).status).toBe(409);
+        const after = await socket(server, ada);
+        try {
+            expect(await after.next('session.activities')).toEqual({ type: 'session.activities', activities: {} });
+        } finally {
+            after.ws.close();
+        }
     });
 });
 
@@ -791,7 +860,7 @@ describe('revisions: comparison and restore (S7)', () => {
         ((await (await api(server, cookie, 'state')).json()) as SessionStateBody).revisions;
     const SHIPPED = DT.replace('state Placed', 'state Placed\n    state Shipped');
 
-    test('any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes, confirms and restores', async () => {
+    test('any participant compares two revisions: each file by DSL with a line diff, both validations; only the facilitator takes and restores', async () => {
         const root = await workspace();
         const server = await start(root);
         try {
@@ -802,19 +871,18 @@ describe('revisions: comparison and restore (S7)', () => {
             const [first] = await revisions(server, bob);
             await writeFile(path.join(root, 'shop.dt'), SHIPPED);
             await writeFile(path.join(root, 'more.dtes'), 'storming More {\n  event Happened\n}\n');
-            for (const p of ['revisions', `revisions/${first.id}/confirm`, `revisions/${first.id}/restore`]) {
+            for (const p of ['revisions', `revisions/${first.id}/restore`]) {
                 const res = await api(server, bob, p, {});
                 expect([p, res.status, (await errorOf(res)).type]).toEqual([p, 403, 'FacilitatorOnly']);
             }
             expect((await api(server, ada, 'revisions', {})).status).toBe(201);
-            expect((await api(server, ada, `revisions/${first.id}/confirm`, {})).status).toBe(200);
             const second = (await revisions(server, bob)).at(-1);
             if (!second) throw new Error('no revision');
 
             const res = await api(server, bob, `revisions/${first.id}/compare/${second.id}`);
             expect(res.status).toBe(200);
             const c = (await res.json()) as ComparisonBody;
-            expect([c.before.id, c.before.state, c.after.id]).toEqual([first.id, 'Confirmed', second.id]);
+            expect([c.before.id, c.before.state, c.after.id]).toEqual([first.id, 'Recorded', second.id]);
             expect(c.files.map((f) => [f.path, f.language, f.status])).toEqual([
                 ['more.dtes', 'Dtes', 'added'],
                 ['ordering.dtes', 'Dtes', 'unchanged'],
@@ -824,6 +892,18 @@ describe('revisions: comparison and restore (S7)', () => {
             expect(c.files[2].diff?.kind === 'diff' && c.files[2].diff.unified).toContain('+    state Shipped');
             expect(c.files[1].diff).toBeUndefined();
             expect([c.before.validation, c.after.validation].map((v) => v.dtErrors)).toEqual([0, 0]);
+
+            // the same, in the model's words: the elements added, changed and removed
+            const changed = await api(server, bob, `revisions/${first.id}/changes/${second.id}`);
+            expect(changed.status).toBe(200);
+            const m = (await changed.json()) as ModelChangesBody;
+            expect(m.complete).toBe(true);
+            expect(m.changes.map((e) => [e.change, e.kind, e.name, e.owner?.name])).toEqual([
+                ['added', 'state', 'Shipped', 'Order'],
+                ['added', 'event', 'Happened', 'More'],
+            ]);
+            const unknownChanges = await api(server, bob, `revisions/${first.id}/changes/00000000-0000-4000-8000-000000000000`);
+            expect(unknownChanges.status).toBe(404);
 
             const unknown = await api(server, bob, `revisions/${first.id}/compare/00000000-0000-4000-8000-000000000000`);
             expect([unknown.status, (await errorOf(unknown)).type]).toEqual([404, 'NotFound']);
@@ -906,7 +986,7 @@ describe('revisions: comparison and restore (S7)', () => {
             await server.ready;
             const ada = await join(server, 'Ada');
             await claim(server, ada);
-            const cred = await agentCredential(root);
+            const cred = agentCredential(server);
             const [first] = await revisions(server, ada);
             const target = { target: { kind: 'Workspace' }, sourceRevision: first.id };
             const request = ((await (await api(server, ada, 'requests', { target, body: 'Ship it.' })).json()) as { request: { id: string } }).request;
@@ -947,7 +1027,7 @@ describe('closing and resuming', () => {
         const id = first.session;
         expect(first.resumed).toBe(false);
         await first.stop();
-        expect(await readFile(path.join(root, '.domaintrail', 'session', 'agent.json'), 'utf8').catch(() => 'gone')).toBe('gone');
+        expect(await readFile(path.join(workspaceDirs(root).state, 'server.json'), 'utf8').catch(() => 'gone')).toBe('gone');
 
         const second = await start(root);
         try {
@@ -958,7 +1038,7 @@ describe('closing and resuming', () => {
             expect(another.link.startsWith(`${second.url}session/facilitator?code=`)).toBe(true);
             const bob = await join(second, 'Bob');
             const s = await socket(second, bob);
-            const cred = await agentCredential(root);
+            const cred = agentCredential(second);
             const stream = sse(cred, undefined, ['session.closed']);
             const closed = await api(second, ada, 'close', {});
             expect(closed.status).toBe(200);
@@ -991,7 +1071,7 @@ describe('closing and resuming', () => {
             exp: now + 600,
             email: `${sub}@example.com`,
         });
-        const verifier = createMockAccessVerifier(
+        const verifier = mockVerifier(
             new Map([
                 ['ada', claims('ada')],
                 ['bob', claims('bob')],
@@ -1045,7 +1125,7 @@ describe('identity modes', () => {
             name: 'Ada Lovelace',
             ...over,
         });
-        const verifier = createMockAccessVerifier(
+        const verifier = mockVerifier(
             new Map([
                 ['good', claims({})],
                 ['other-audience', claims({ aud: 'another' })],
@@ -1141,6 +1221,59 @@ describe('the join form (dev)', () => {
             await server.stop();
         }
     });
+
+    test('remembers the name it joined with for the next join form; speaks the browser’s language', async () => {
+        const root = await workspace();
+        const server = await start(root);
+        try {
+            const first = await fetch(server.url, { headers: { 'accept-language': 'ja-JP,ja;q=0.9,en;q=0.8' } });
+            expect(first.status).toBe(401);
+            expect(first.headers.get('vary')).toBe('Accept-Language');
+            const firstHtml = await first.text();
+            expect(firstHtml).toContain('<html lang="ja">');
+            expect(firstHtml).toContain('DomainTrail のセッションに参加');
+            expect(firstHtml).toMatch(/autocomplete="nickname">/);
+
+            const posted = await fetch(`${server.url}session/join`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ name: ' Ada "the first" ', next: '/' }).toString(),
+                redirect: 'manual',
+            });
+            expect(posted.status).toBe(303);
+            const set = posted.headers.getSetCookie();
+            const remembered = set.find((c) => c.startsWith('dt_name=')) ?? '';
+            expect(remembered).toBe('dt_name=Ada%20%22the%20first%22; Path=/; HttpOnly; SameSite=Lax; Max-Age=31536000');
+            expect(set.some((c) => c.startsWith('dt_session='))).toBe(true);
+
+            // signed out (only the name's cookie), the form starts with the name, escaped
+            const again = await fetch(`${server.url}session/join`, { headers: { cookie: remembered.split(';')[0], 'accept-language': 'en-US,ja;q=0.8' } });
+            const html = await again.text();
+            expect(html).toContain('<html lang="en">');
+            expect(html).toContain('value="Ada &quot;the first&quot;"');
+            // a cookie that is no valid name is ignored
+            const broken = await fetch(`${server.url}session/join`, { headers: { cookie: 'dt_name=%0A' } });
+            expect(await broken.text()).toMatch(/autocomplete="nickname">/);
+            // a failed join sets no cookie and keeps the language
+            const blank = await fetch(`${server.url}session/join`, {
+                method: 'POST',
+                headers: { 'content-type': 'application/x-www-form-urlencoded', 'accept-language': 'ja' },
+                body: 'name=%20',
+                redirect: 'manual',
+            });
+            expect(blank.status).toBe(400);
+            expect(blank.headers.get('set-cookie')).toBeNull();
+            expect(await blank.text()).toContain('名前は1行・60文字以内で入力してください。');
+
+            // the other pages too
+            const missing = await fetch(`${server.url}session/nope`, { headers: { 'accept-language': 'ja' } });
+            expect([missing.status, missing.headers.get('vary')]).toEqual([404, 'Accept-Language']);
+            expect(await missing.text()).toContain('<h1>ページがありません</h1>');
+            expect(await (await fetch(`${server.url}session/nope`, { headers: { 'accept-language': 'fr' } })).text()).toContain('<h1>Not found</h1>');
+        } finally {
+            await server.stop();
+        }
+    });
 });
 
 describe('the facilitator’s holder', () => {
@@ -1156,12 +1289,6 @@ describe('the facilitator’s holder', () => {
             const adaId = before.session.participants.find((p) => p.name === 'Ada')!.id;
             const bobId = before.session.participants.find((p) => p.name === 'Bob')!.id;
             expect(adaId).toMatch(/^dev:/);
-            expect(listedParticipants(before).map((p) => [p.name, p.role])).toEqual([
-                ['Facilitator', 'facilitator'],
-                ['Ada', 'participant'],
-                ['Bob', 'participant'],
-                ['Carol', 'participant'],
-            ]);
 
             // Carol's page stays connected through both claims: it is sent the state again each time
             const page = await socket(server, carol);
@@ -1171,22 +1298,12 @@ describe('the facilitator’s holder', () => {
             expect(afterAda.facilitatorHolder).toBe(adaId);
             expect(((await (await api(server, bob, 'state')).json()) as SessionStateBody).facilitatorHolder).toBe(adaId);
             // Ada is listed once, as the facilitator, under her name
-            expect(listedParticipants(afterAda).map((p) => [p.name, p.role])).toEqual([
-                ['Ada', 'facilitator'],
-                ['Bob', 'participant'],
-                ['Carol', 'participant'],
-            ]);
 
             // the role moves to Bob: Ada is a participant again
             const link = await server.issueFacilitatorLink();
             expect((await fetch(link, { headers: { cookie: bob }, redirect: 'manual' })).status).toBe(303);
             const afterBob = ((await page.next('session.state')) as unknown as { state: SessionStateBody }).state;
             expect(afterBob.facilitatorHolder).toBe(bobId);
-            expect(listedParticipants(afterBob).map((p) => [p.name, p.role])).toEqual([
-                ['Bob', 'facilitator'],
-                ['Ada', 'participant'],
-                ['Carol', 'participant'],
-            ]);
             page.ws.close();
         } finally {
             await server.stop();
@@ -1202,12 +1319,12 @@ describe('the CLI', () => {
         return { code, out, err };
     };
 
-    test('dt session start refuses a non-loopback bind in dev mode; dt session link needs a running server', async () => {
+    test('dt collab refuses a non-loopback bind in dev mode; dt collab link needs a running server', async () => {
         const root = await workspace();
-        const started = await run('-r', root, 'session', 'start', '--host', '0.0.0.0', '--port', '0');
+        const started = await run('-r', root, 'collab', '--no-agent', '--host', '0.0.0.0', '--port', '0');
         expect(started.code).toBe(1);
         expect(started.err.join('\n')).toContain('loopback');
-        const link = await run('-r', root, 'session', 'link');
+        const link = await run('-r', root, 'collab', 'link');
         expect(link.code).toBe(1);
         expect(link.err.join('\n')).toContain('No session server is running');
     });

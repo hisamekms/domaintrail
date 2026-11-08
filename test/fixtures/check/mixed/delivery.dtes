@@ -1,0 +1,12 @@
+storming Delivery {
+  event ShipmentCancelled { ref Delivery.ShipmentCancelled }
+  actor Customer
+  aggregate Shipment { ref Delivery.Shipment }
+  command Cancel {
+    ref Delivery.Shipment.cancel
+    by Customer
+    handledBy Shipment
+    emits ShipmentCancelled
+  }
+  timeline Main { ShipmentCancelled }
+}

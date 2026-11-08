@@ -1,0 +1,68 @@
+/// ADR 0027's shared kernel: what every module may take and nothing else needs to own — diagnostics, the candidates of
+/// a suggestion, sources and locations. Its TypeScript is generated into src/generated and is the kernel's definition of
+/// these types; other packages' generated code imports it from `@domaintrail/kernel` (ADR 0028).
+shared context Kernel {
+  /// How bad a diagnostic is.
+  enum Severity { error warning info }
+
+  /// A place in a source.
+  value Position {
+    /// 1-based
+    line: Int
+    /// 1-based
+    column: Int
+  }
+
+  /// What the analysis reports about a source.
+  value Diagnostic {
+    /// File path as given to the analyzer (usually relative to the workspace root).
+    file: String
+    start: Position
+    end: Position
+    severity: Severity
+    /// `SYNTAX` for lexer and parser errors, otherwise the ID of the rule that reports it. Each context owns its rule
+    /// IDs (Modeling's `ModelingRuleId`, Storming's `StormingRuleId`); the kernel knows none of them.
+    code: String
+    message: String
+    /// One line on what to change, when the message does not say it (e.g. `did you mean 'OrderConfirmed'?`).
+    hint: String?
+    /// Stable ID of the nearest model element (e.g. `Sales.Order`), when known.
+    elementId: String?
+  }
+
+  /// A diagnostic as written by `dt check --format json` (see schema/diagnostics.schema.json).
+  value JsonDiagnostic {
+    file: String
+    line: Int
+    column: Int
+    endLine: Int
+    endColumn: Int
+    severity: Severity
+    code: String
+    message: String
+    hint: String?
+  }
+
+  /// A name that could have been meant: `name` is what to write, `key` what the unresolved name is compared with.
+  value Candidate {
+    name: String
+    key: String?
+  }
+
+  /// A source handed to the analysis: a `.dt` or `.dtes` file and its text.
+  value SourceFile {
+    /// Path used in diagnostics (typically relative to the workspace root).
+    path: String
+    text: String
+  }
+
+  /// Where a declaration is in its source.
+  value Location {
+    /// Path as given to the analysis (usually relative to the workspace root).
+    file: String
+    /// 1-based first line of the declaration.
+    line: Int
+    /// 1-based last line of the declaration.
+    endLine: Int
+  }
+}

@@ -1,0 +1,100 @@
+context Knowledge {
+  /// 抽出が発見ごとに決める操作1つ。結果の状態ではなく操作として送る: 抽出のあいだに人が消した・直したナレッジへの操作は
+  /// 捨てられ、人の変更が残る（状態を送ると、消したナレッジが個人のデータごと戻ってしまう）。前のナレッジへの操作は、
+  /// 抽出が見た版（`base`）を持つ。
+  union Operation "操作" {
+    /// 新しい発見を足す。
+    Add "足す" {
+      id: KnowledgeItemId
+      content: ItemContent "中身"
+      sources: Source[1..*] "出典"
+      reason: Reason? "理由"
+    }
+    /// 同じ発見がまた言われた。
+    AddSource "出典を足す" {
+      item: KnowledgeItemId "ナレッジ"
+      base: ItemVersion "見た版"
+      source: Source "出典"
+      agreed: Bool "合意"
+      reason: Reason? "理由"
+    }
+    /// 詳しくする。拠りどころのメッセージを出典として持つ。
+    Update "詳しくする" {
+      item: KnowledgeItemId "ナレッジ"
+      base: ItemVersion "見た版"
+      revised: ItemContent "中身"
+      sources: Source[1..*] "出典"
+      reason: Reason? "理由"
+    }
+    /// 前のナレッジと食い違う発見を、両方残してつなぐ。
+    Conflict "食い違い" {
+      id: KnowledgeItemId
+      content: ItemContent "中身"
+      sources: Source[1..*] "出典"
+      item: KnowledgeItemId "食い違うナレッジ"
+      base: ItemVersion "見た版"
+      reason: Reason? "理由"
+    }
+    /// 廃止の候補を出す（人が承認する）。理由と根拠を必ず持つ。
+    ProposeRetire "廃止の候補を出す" {
+      item: KnowledgeItemId "ナレッジ"
+      retirementReason: RetirementReason "廃止の理由"
+      replacedBy: KnowledgeItemId? "置き換え先"
+      evidence: Evidence[1..*] "根拠"
+      reason: Reason "説明"
+    }
+    /// 廃止したナレッジと同じ話題が新しく話された: 作り直さずに、廃止を取り消す候補を出す。
+    ProposeUnretire "廃止を取り消す候補を出す" {
+      item: KnowledgeItemId "ナレッジ"
+      evidence: Evidence[1..*] "根拠"
+      reason: Reason "説明"
+    }
+  }
+
+  /// 1回の抽出の操作。ストアは1つの取引で当て、`by`（セッションと抽出の番号）を冪等キーにする。
+  value Extraction "抽出の操作" {
+    by: ExtractionRef "抽出"
+    operations: Operation[0..*] "操作"
+  }
+
+  /// 監査のログの操作の名前。
+  enum AuditOperation "監査の操作" {
+    add "足した"
+    addSource "出典を足した"
+    rewrite "書き換えた"
+    revise "新しい版にした"
+    linkConflict "食い違いをつないだ"
+    correct "直した"
+    delete "消した"
+    restore "元に戻した"
+    unlinkConflict "食い違いを外した"
+    handOverToHotspot "ホットスポットに引き継いだ"
+    retire "廃止した"
+    unretire "廃止を取り消した"
+    propose "廃止の候補を出した"
+    dismiss "廃止の候補を却下した"
+  }
+
+  /// 監査のログの1行: だれが・どのナレッジに・何を・なぜ。消したナレッジの理由は掃除が消す（発言を引くことがあるため）。
+  value AuditEntry "監査の記録" {
+    item: KnowledgeItemId "ナレッジ"
+    version: ItemVersion "版"
+    operation: AuditOperation "操作"
+    actor: Actor "変えたもの"
+    reason: Reason? "理由"
+    at: Timestamp "日時"
+  }
+
+  /// 出典のメッセージ1つの ID。
+  value MessageKey "メッセージの ID" {
+    session: SessionRef "セッション"
+    message: MessageRef "メッセージ"
+  }
+
+  /// 墨消しのログの1行: 掃除が消したナレッジと、その出典のメッセージ。ID だけなので、ずっと残す。プロジェクトのどの dt も
+  /// 読んだところから先を読み、自分のセッションのデータベースにあるメッセージを墨消しする。
+  value Redaction "墨消し" {
+    item: KnowledgeItemId "ナレッジ"
+    messages: MessageKey[0..*] "メッセージ"
+  }
+}

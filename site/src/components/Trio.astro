@@ -1,0 +1,26 @@
+---
+// The concept strip: people talk → the AI writes the sticky notes → everyone sees the same screen. HTML and CSS only.
+import Icon from './Icon.astro';
+---
+
+<div class="trio not-content">
+    <div class="tc">
+        <div class="ic"><Icon name="message-square-text" size={24} /></div>
+        <b>人が話す</b>
+        <span>業務で起きたことを、ふだんの言葉で</span>
+        <span class="bubble">カードが読めなかったら、窓口に行ってもらう</span>
+    </div>
+    <div class="ar" aria-hidden="true"><Icon name="arrow-right" size={22} /></div>
+    <div class="tc">
+        <div class="ic"><Icon name="bot" size={24} /></div>
+        <b>AI が付箋にする</b>
+        <span>過去形の出来事・流れ・例外・問いに整える</span>
+        <span class="notes"><span class="sticky">カードを読み取った</span><span class="sticky hot">窓口で何を確かめる？</span></span>
+    </div>
+    <div class="ar" aria-hidden="true"><Icon name="arrow-right" size={22} /></div>
+    <div class="tc">
+        <div class="ic"><Icon name="monitor" size={24} /></div>
+        <b>全員が同じ画面で見る</b>
+        <span>直したいところは、また話せばよい</span>
+    </div>
+</div>

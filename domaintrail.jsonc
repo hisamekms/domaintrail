@@ -1,0 +1,25 @@
+{
+  "$schema": "./schema/domaintrail.schema.json",
+  // The model of DomainTrail itself, one configuration for all its contexts (ADR 0028, decision 9): the kernel, Modeling,
+  // Collaboration and Knowledge, each generated into its package (committed) and imported from the others by the package's
+  // module. test/self-contracts.test.ts fails when the model does not check clean, is not formatted, or generating it
+  // again gives a different output (CONTRIBUTING.md, Bootstrap).
+  "sources": ["shared/kernel/model/**/*.dt", "contexts/modeling/model/**/*.dt", "contexts/collaboration/model/**/*.dt", "contexts/knowledge/model/**/*.dt"],
+  "generate": {
+    "ts": {
+      "contexts": {
+        // the shared kernel: the types of diagnostics, sources and locations
+        "Kernel": { "out": "shared/kernel/src/generated", "module": "@domaintrail/kernel" },
+        // what Modeling publishes (ADR 0027): its domain imports the generated types only
+        "Modeling": { "out": "contexts/modeling/src/generated", "module": "@domaintrail/modeling" },
+        // the collaboration contracts (ADR 0026)
+        "Collaboration": { "out": "contexts/collaboration/src/generated", "module": "@domaintrail/collaboration" },
+        // the knowledge taken from sessions (ADR 0031)
+        "Knowledge": { "out": "contexts/knowledge/src/generated", "module": "@domaintrail/knowledge" },
+      },
+      // the contract tests, into <out>/tests of each context, registered with bun:test (Collaboration's run in
+      // contexts/collaboration/src/contracts.test.ts; Modeling's arbitraries are drawn in contexts/modeling/src/contracts.test.ts)
+      "tests": { "runner": "bun" },
+    },
+  },
+}

@@ -1,6 +1,6 @@
 {
   "name": "domaintrail",
-  "version": "0.6.0",
+  "version": "0.9.0",
   "description": "Domain Modeling DSL — type-checkable domain models shared by humans and AI",
   "license": "MIT",
   "author": "hisamekms",
@@ -25,6 +25,13 @@
     "dt": "dist/dt.js",
     "domaintrail": "dist/dt.js"
   },
+  "exports": {
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "schema",
@@ -35,20 +42,30 @@
     "node": ">=22.13.0"
   },
   "workspaces": [
-    "packages/*",
-    "web"
+    "contexts/*",
+    "capabilities/*",
+    "platform/*",
+    "shared/*",
+    "apps/*"
   ],
   "scripts": {
-    "langium:generate": "langium generate --file packages/modeling/langium-config.json",
+    "langium:generate": "langium generate --file contexts/modeling/langium-config.json && langium generate --file contexts/storming/langium-config.json",
     "build": "bun run langium:generate && bun ./scripts/build.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "bun check -p tsconfig.json",
     "lint": "oxlint --type-aware --deny-warnings",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "bun test",
+    "test:unit": "bun test ./contexts ./capabilities ./platform ./shared ./apps",
+    "test:it": "bun test ./test",
     "dt": "bun ./bin/dt.ts",
     "tree-sitter": "bun ./scripts/tree-sitter.ts",
     "session:seed": "bun ./scripts/session-seed.ts",
+    "site:dev": "bun run --cwd site dev",
+    "site:build": "bun run --cwd site build",
+    "site:shots": "bun run --cwd site shots",
+    "site:examples": "bun run --cwd site examples:check",
+    "version": "bun ./scripts/zed-version.ts && git add editors/zed && bun run langium:generate && bun ./bin/dt.ts generate ts && git add shared/kernel/src/generated contexts/modeling/src/generated contexts/collaboration/src/generated contexts/knowledge/src/generated",
     "prepack": "bun run build"
   },
   "dependencies": {
@@ -61,12 +78,24 @@
     "vscode-languageserver": "10.1.2",
     "ws": "8.22.0"
   },
+  "peerDependencies": {
+    "fast-check": "^4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "fast-check": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@domaintrail/agent": "workspace:*",
+    "@domaintrail/analysis": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
-    "@domaintrail/composition": "workspace:*",
+    "@domaintrail/dt": "workspace:*",
+    "@domaintrail/generation": "workspace:*",
+    "@domaintrail/kernel": "workspace:*",
+    "@domaintrail/knowledge": "workspace:*",
     "@domaintrail/modeling": "workspace:*",
-    "@domaintrail/presentation": "workspace:*",
+    "@domaintrail/storming": "workspace:*",
     "@domaintrail/visualization": "workspace:*",
     "@domaintrail/web": "workspace:*",
     "@domaintrail/workspace": "workspace:*",

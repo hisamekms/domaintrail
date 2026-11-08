@@ -22,28 +22,30 @@ storming DeliveryCancellation "配送キャンセル" {
 
   command CancelShipment "配送キャンセル" {
     ref Delivery.Shipment.cancel
-    actor Customer
+    by Customer
     reads DeliveryDetails
-    target Shipment
+    handledBy Shipment
     emits ShipmentCancelled
   }
   command ReleaseBike "車両割当解除" {
     ref Fleet.BikeAssignment.release
-    target BikeAssignment
-    emits BikeReleased
-    emits ReleaseFailed
+    handledBy BikeAssignment
+    emits BikeReleased, ReleaseFailed
   }
   command ReceivePaymentNotice "決済通知受領" {
-    actor PaymentGateway
+    by PaymentGateway
   }
   command ReleaseSlot "配送枠解除" {
-    target ShipmentSlot
+    handledBy ShipmentSlot
     emits SlotReleased
   }
 
   policy CleanupAfterCancel "キャンセル後処理" {
     on ShipmentCancelled
     issues ReleaseBike
+  }
+  policy FreeSlotAfterCancel "キャンセル後に枠を空ける" {
+    on ShipmentCancelled
     issues ReleaseSlot
   }
 
@@ -60,6 +62,9 @@ storming DeliveryCancellation "配送キャンセル" {
     ReleaseFailed
   }
 
+  hotspot NoticeOutcome "決済通知を受けて、どの集約が何をする？" {
+    on ReceivePaymentNotice
+  }
   hotspot Compensation "車両の解放に失敗した場合、配送キャンセルを補償する？" {
     on ReleaseFailed
     status open

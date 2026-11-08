@@ -1,0 +1,452 @@
+// The ports of the collaboration application (ADR 0025's rule: defined on the consumer's side, implemented
+// structurally by the adapters). The stores are synchronous and used inside one transaction of a `UnitOfWork`; the
+// workspace, the blobs and the validator are asynchronous and used between transactions, never inside one.
+import type { DomainModel } from '@domaintrail/modeling';
+import type { Storming } from '@domaintrail/storming';
+import type { Diagnostic } from '@domaintrail/kernel';
+import type { Collaboration } from '../generated/index.js';
+import type { Identity, IdentityKey } from './identity.js';
+
+type SessionId = Collaboration.SessionId;
+type AgentRunId = Collaboration.AgentRunId;
+
+export interface Clock {
+    now(): Date;
+}
+
+/** New IDs: a UUID each time. */
+export interface IdGenerator {
+    newId(): string;
+}
+
+/** Secrets: a new random token each time (at least 256 bits, URL-safe), for links, cookies and credentials. */
+export interface SecretGenerator {
+    newSecret(): string;
+}
+
+export interface SessionRepository {
+    load(id: SessionId): Collaboration.Session | undefined;
+    /** Inserts or replaces the session. */
+    save(session: Collaboration.Session): void;
+    /** The sessions still open, oldest first (a workspace has at most one; see `currentSession`). */
+    listOpen(): Collaboration.OpenSession[];
+}
+
+export interface RequestRepository {
+    load(id: Collaboration.RequestId): Collaboration.Request | undefined;
+    /** Inserts or replaces the request. */
+    save(request: Collaboration.Request): void;
+    /** The requests of a session, in the order they were sent. */
+    listBySession(session: SessionId): Collaboration.Request[];
+}
+
+/** The marks of the sessions (votes and reactions): every mark kept, placed or removed. */
+export interface MarkRepository {
+    load(id: Collaboration.MarkId): Collaboration.Mark | undefined;
+    /** Inserts or replaces the mark. At most one placed mark per participant, target and sign (a unique index). */
+    save(mark: Collaboration.Mark): void;
+    /** The marks of a session still placed, in the order they were placed. */
+    placedBySession(session: SessionId): Collaboration.PlacedMark[];
+    /** The marks a participant still has placed in a session, in the order they were placed. */
+    placedBy(session: SessionId, participant: Collaboration.ParticipantId): Collaboration.PlacedMark[];
+}
+
+/** The facilitator's approvals of assumptions: at most one per run and assumption (a unique index). */
+export interface ApprovalRepository {
+    /** Inserts the approval; a second approval of the same assumption is refused by the store (it throws). */
+    save(approval: Collaboration.AssumptionApproval): void;
+    /** The approvals of a session, in the order they were made. */
+    listBySession(session: SessionId): Collaboration.AssumptionApproval[];
+}
+
+/** The triages of the addressed messages: at most one per message (a unique index). */
+export interface TriageRepository {
+    load(id: Collaboration.TriageId): Collaboration.Triage | undefined;
+    /** Inserts or replaces the triage; a second triage of the same message is refused by the store (it throws). */
+    save(triage: Collaboration.Triage): void;
+    /** The triage of a message, if it was addressed. */
+    ofRequest(request: Collaboration.RequestId): Collaboration.Triage | undefined;
+    /** The triages of a session, in the order they were opened. */
+    listBySession(session: SessionId): Collaboration.Triage[];
+}
+
+/** The interviews of the `/` commands. */
+export interface InterviewRepository {
+    load(id: Collaboration.InterviewId): Collaboration.Interview | undefined;
+    /** Inserts or replaces it. */
+    save(interview: Collaboration.Interview): void;
+    /** The interviews of a session, in the order they were started. */
+    listBySession(session: SessionId): Collaboration.Interview[];
+}
+
+/** The candidate and answer commands of the `/` list. */
+export interface SlashCommandRepository {
+    load(id: Collaboration.SlashCommandId): Collaboration.SlashCommand | undefined;
+    /** Inserts or replaces it. */
+    save(command: Collaboration.SlashCommand): void;
+    /** The commands of a session, in the order they were started. */
+    listBySession(session: SessionId): Collaboration.SlashCommand[];
+}
+
+/** The records of the sessions (the chat's small rows of what people did, and the journey file changed outside dt). */
+export interface RecordRepository {
+    load(id: Collaboration.SessionRecordId): Collaboration.SessionRecord | undefined;
+    /** Inserts or replaces it. */
+    save(record: Collaboration.SessionRecord): void;
+    /** The records of a session, in the order they were written. */
+    listBySession(session: SessionId): Collaboration.SessionRecord[];
+}
+
+/** The change proposals of the sessions. */
+export interface ProposalRepository {
+    load(id: Collaboration.ChangeProposalId): Collaboration.ChangeProposal | undefined;
+    /** Inserts or replaces the proposal. */
+    save(proposal: Collaboration.ChangeProposal): void;
+    /** The proposals of a session, in the order they were made. */
+    listBySession(session: SessionId): Collaboration.ChangeProposal[];
+}
+
+/** A claim on a run: who holds it, its secret token, and until when. */
+export interface Lease {
+    readonly owner: string;
+    readonly token: string;
+    readonly expiresAt: Date;
+}
+
+/** A run as the queue keeps it: the aggregate, its lease while claimed, the token it was completed with. */
+export interface StoredRun {
+    readonly run: Collaboration.AgentRun;
+    readonly lease: Lease | undefined;
+    /** The lease token of the call that ended the run (finish, askClarification, fail): a repeated call is recognized. */
+    readonly completedWith: string | undefined;
+}
+
+/**
+ * The agent runs of the sessions, in queue order, with their leases. One run of a session at a time holds a live
+ * lease or is running (`serial`); the store enforces it where it saves (a unique index), the claim checks it.
+ */
+export interface RunQueue {
+    /**
+     * Adds a run at the end of its session's queue, with the requests it bundles: a queued run, or a mechanical revert
+     * or a person's edit, recorded done (never claimed).
+     */
+    enqueue(run: Collaboration.QueuedAgentRun | Collaboration.RevertedAgentRun | Collaboration.EditedAgentRun): void;
+    load(id: AgentRunId): StoredRun | undefined;
+    /** Replaces a run's aggregate (its new state); the lease is kept. */
+    save(run: Collaboration.AgentRun): void;
+    /** The runs of a session, in queue order. */
+    listBySession(session: SessionId): Collaboration.AgentRun[];
+    /** The run of the session that is running or holds a live lease at `now`, if any. */
+    active(session: SessionId, now: Date): StoredRun | undefined;
+    /**
+     * Claims the first queued run of the session without a live lease, when no run of the session is active: one
+     * atomic update. `undefined` when there is none or another run is active.
+     */
+    claimNext(session: SessionId, lease: Lease, now: Date): AgentRunId | undefined;
+    /** Extends the live lease held with `token` to `expiresAt`; false when it is lost (expired, released, ended, another token). */
+    extend(id: AgentRunId, token: string, now: Date, expiresAt: Date): boolean;
+    /** Ends the lease held with `token` of a queued run (it can be claimed again); false when it is not held. */
+    release(id: AgentRunId, token: string): boolean;
+    /** Ends a run's lease, recording the token it ended with (`undefined`: ended by the facilitator or the recovery). */
+    endLease(id: AgentRunId, completedWith: string | undefined): void;
+    /** The runs whose lease expired at `now` (running, or claimed while queued). */
+    expired(now: Date): StoredRun[];
+}
+
+export interface RevisionStore {
+    load(id: Collaboration.RevisionId): Collaboration.Revision | undefined;
+    /** Inserts or replaces the revision. */
+    save(revision: Collaboration.Revision): void;
+    /** The revisions of a session, in the order they were taken. */
+    listBySession(session: SessionId): Collaboration.Revision[];
+    /** The revision of the session taken last. */
+    latest(session: SessionId): Collaboration.Revision | undefined;
+}
+
+/** An event appended to the outbox, with its position: the cursor of a subscriber (SSE event ID). */
+export interface OutboxEntry {
+    readonly seq: number;
+    readonly session: SessionId;
+    readonly event: Collaboration.PersistentEvent;
+    readonly recordedAt: Date;
+}
+
+/** The events of the commands, appended in the transaction that saves their aggregates. */
+export interface EventOutbox {
+    append(session: SessionId, events: readonly Collaboration.PersistentEvent[], recordedAt: Date): void;
+    /** At most `limit` entries after `cursor` (0: from the start), in order; of one session when given. */
+    readAfter(cursor: number, limit: number, session?: SessionId): OutboxEntry[];
+    /** The `RequestSent` entries of a message (one, unless the outbox was replayed into another database). */
+    requestSent(request: Collaboration.RequestId): OutboxEntry[];
+    /** Replaces the event of an entry, at its position (a redaction: `domain/redaction.ts`). */
+    replace(seq: number, event: Collaboration.PersistentEvent): void;
+}
+
+/** A sign-in of the `dev` identity mode: the session cookie's hash and the identity it stands for. */
+export interface SignIn {
+    readonly session: SessionId;
+    readonly identity: Identity;
+}
+
+/**
+ * Who may act in a session, outside the model (technical, ADR 0026): the one-time facilitator links, the identity
+ * bound to the facilitator, and the sign-ins of the `dev` mode. Secrets are kept only as their SHA-256.
+ */
+export interface AccessStore {
+    addLink(codeHash: string, session: SessionId, expiresAt: Date): void;
+    /** Marks a link used when it is unused and not expired at `now`: the session it is for; `undefined` otherwise. */
+    useLink(codeHash: string, now: Date): SessionId | undefined;
+    /** Marks every unused link of the session used (facilitator links and agent pairing codes alike). */
+    revokeLinks(session: SessionId, now: Date): void;
+    /** The identity that holds the facilitator role of the session, if one claimed it. */
+    facilitator(session: SessionId): IdentityKey | undefined;
+    setFacilitator(session: SessionId, identity: IdentityKey, at: Date): void;
+    addSignIn(tokenHash: string, signIn: SignIn, at: Date): void;
+    /** The sign-in of a cookie's hash, unless it was revoked. */
+    signIn(tokenHash: string): SignIn | undefined;
+    /** Revokes one sign-in; false when there was none (or it was revoked already). */
+    revokeSignIn(tokenHash: string, at: Date): boolean;
+    /** Revokes every sign-in of the session: the identities they stood for. */
+    revokeSignIns(session: SessionId, at: Date): IdentityKey[];
+    /** Revokes every sign-in of one identity in the session (the facilitator removed them): how many there were. */
+    revokeSignInsOf(session: SessionId, identity: IdentityKey, at: Date): number;
+    /** Adds the session's invite (`link` identity mode), revoking any other it has: one invite link at a time. */
+    addInvite(codeHash: string, session: SessionId, expiresAt: Date, at: Date): void;
+    /** The session of an invite that is neither revoked nor expired at `now` (an invite is used any number of times). */
+    invite(codeHash: string, now: Date): SessionId | undefined;
+    /** When the session's live invite expires, if it has one at `now`. */
+    liveInvite(session: SessionId, now: Date): Date | undefined;
+    /** Revokes the session's invites: whether one was live. */
+    revokeInvites(session: SessionId, now: Date): boolean;
+}
+
+/** How an attempted restore ended: written and recorded, refused before anything was written, or failed after. */
+export type RestoreResult = 'Restored' | 'Refused' | 'Failed';
+
+/**
+ * A restore as it was attempted (ADR 0026, S7), kept whatever its outcome: who asked, which revision, the revisions it
+ * recorded, and how it ended. Never a token, a cookie or an e-mail: the participant and the identity's provider and
+ * subject only.
+ */
+export interface RestoreOperation {
+    readonly id: string;
+    readonly session: SessionId;
+    readonly at: Date;
+    /** The participant who asked (the facilitator's participant is the same whoever holds the role). */
+    readonly by: Collaboration.ParticipantId;
+    /** The identity that acted as that participant, when known: who held the role then. */
+    readonly identity?: IdentityKey;
+    /** The revision to restore. */
+    readonly revision: Collaboration.RevisionId;
+    /** The revision of the external changes recorded first (the two-step), if any. */
+    readonly manual?: Collaboration.RevisionId;
+    readonly preRestore?: Collaboration.RevisionId;
+    readonly restored?: Collaboration.RevisionId;
+    readonly result: RestoreResult;
+    /** Why it was refused or failed: an error type (`RunInProgress`, `ExternalChangesSinceSnapshot`, `WriteFailed`, …). */
+    readonly reason?: string;
+    /** What failed, for a person to read (an error's message); never a secret. */
+    readonly detail?: string;
+}
+
+/** The operations of a session that are kept for the record but are not the model's (technical, ADR 0026). */
+export interface OperationLog {
+    recordRestore(operation: RestoreOperation): void;
+    /** The restores of a session, in the order they were attempted. */
+    restores(session: SessionId): RestoreOperation[];
+}
+
+/** The stores, as one transaction sees them. */
+export interface Stores {
+    readonly sessions: SessionRepository;
+    readonly requests: RequestRepository;
+    readonly runs: RunQueue;
+    readonly revisions: RevisionStore;
+    readonly marks: MarkRepository;
+    readonly approvals: ApprovalRepository;
+    readonly triages: TriageRepository;
+    readonly proposals: ProposalRepository;
+    readonly interviews: InterviewRepository;
+    readonly slashCommands: SlashCommandRepository;
+    readonly records: RecordRepository;
+    readonly outbox: EventOutbox;
+    readonly access: AccessStore;
+    readonly operations: OperationLog;
+}
+
+export interface UnitOfWork {
+    /**
+     * Runs `work` in one transaction: committed when it returns, rolled back when it throws. Transactions run one at a
+     * time; `work` must not wait for anything but the stores (no workspace or blob I/O inside).
+     */
+    transaction<T>(work: (stores: Stores) => T | Promise<T>): Promise<T>;
+    /**
+     * Leaves no earlier copy of what the transactions before it overwrote where the store keeps its log of changes (a
+     * redaction: the SQLite WAL checkpointed and truncated). Absent where there is no such log.
+     */
+    checkpoint?(): Promise<void>;
+}
+
+/** The bytes of the files of snapshots, by content hash: storing the same content twice keeps one copy. */
+export interface SnapshotBlobs {
+    put(files: readonly { readonly hash: string; readonly bytes: Uint8Array }[]): Promise<void>;
+    /** The bytes stored under `hash`; `undefined` when there are none (or they no longer have that hash). */
+    get(hash: string): Promise<Uint8Array | undefined>;
+}
+
+/** A source of the workspace as read: its path relative to the root (`/`-separated), bytes and SHA-256 (hex). */
+export interface ScannedFile {
+    readonly path: string;
+    readonly bytes: Uint8Array;
+    readonly hash: string;
+}
+
+/** The sources of the workspace (`sources` globs, `.dt` and `.dtes`), and the symbolic links among them, not read. */
+export interface WorkspaceScan {
+    readonly files: readonly ScannedFile[];
+    readonly symlinks: readonly string[];
+}
+
+/** Why a write of a snapshot to the workspace was refused; nothing was written. */
+export type WriteRefusal =
+    | { readonly type: 'SymlinkInWorkspace'; readonly path: string }
+    | { readonly type: 'PathOutsideRoot'; readonly path: string }
+    | { readonly type: 'ExternalChangesSinceSnapshot'; readonly paths: readonly string[] };
+
+/** The sources of the workspace on disk. Paths are plain strings here: the application makes them `WorkspacePath`s. */
+export interface WorkspaceSnapshot {
+    read(): Promise<WorkspaceScan>;
+    /**
+     * Makes the sources exactly `files`: writes each (a temporary file renamed into place) and removes the other
+     * sources. Refused when a path is outside the root or goes through a symbolic link, or when the sources are no
+     * longer `expected` (changed since that snapshot).
+     */
+    write(
+        files: readonly { readonly path: string; readonly bytes: Uint8Array }[],
+        expected: readonly { readonly path: string; readonly hash: string }[],
+    ): Promise<{ readonly ok: true } | { readonly ok: false; readonly error: WriteRefusal }>;
+}
+
+/** The analysis of a snapshot's sources. */
+export interface ValidationResult {
+    /** The diagnostics of the `.dt` and `.dtes` sources. */
+    readonly diagnostics: readonly Diagnostic[];
+    /** The Typed Model; absent when the `.dt` sources do not parse. */
+    readonly model: DomainModel | undefined;
+    /** The stormings of the `.dtes` files that parse. */
+    readonly stormings: readonly Storming[];
+    /** Whether every `.dtes` file parses. */
+    readonly stormingsComplete: boolean;
+}
+
+/** Validates sources as `dt check` does (`analyze`). */
+export interface ModelValidator {
+    validate(sources: readonly { readonly path: string; readonly text: string }[]): Promise<ValidationResult>;
+}
+
+/**
+ * Formats a source as `dt fmt` does (a `.dt` or a `.dtes` by its path), given that it parses: what a mechanical revert
+ * writes is formatted as a run's edits are.
+ */
+export interface SourceFormatter {
+    format(path: string, text: string): string;
+}
+
+/** What a sticky (a storming's declaration) is called: its local ID and its label (none when it has none). */
+export interface StickyWording {
+    readonly name: string;
+    readonly label?: string;
+}
+
+/** A person's edit of a sticky of one storming (ADR 0033), as Storming's `planStickyEdit` takes it. */
+export type StickyEditInput =
+    | {
+          readonly kind: 'wording';
+          readonly storming: string;
+          readonly element: string;
+          /** What the person saw: the edit is refused when the file says otherwise. */
+          readonly expected: StickyWording;
+          readonly label?: string;
+          readonly name?: string;
+      }
+    | {
+          readonly kind: 'addHotspot';
+          readonly storming: string;
+          readonly on: string;
+          readonly name: string;
+          readonly label: string;
+          /** A taken name gets the first free numeric suffix instead of being refused (a name the AI or dt gave). */
+          readonly uniqueName?: boolean;
+      }
+    | { readonly kind: 'resolveHotspot'; readonly storming: string; readonly element: string; readonly resolution: string }
+    /** A hotspot's question and resolution in one edit (`resolution: null` reopens it); its name is never changed. */
+    | {
+          readonly kind: 'hotspot';
+          readonly storming: string;
+          readonly element: string;
+          readonly expected: { readonly question?: string; readonly resolution?: string };
+          readonly question?: string;
+          readonly resolution?: string | null;
+      };
+
+/** Why an edit of a sticky is not made (see Storming's `StickyEditProblem`). */
+export type StickyEditProblem =
+    | { readonly type: 'SyntaxError' }
+    | { readonly type: 'StormingNotFound' }
+    | { readonly type: 'NotFound' }
+    | { readonly type: 'Stale'; readonly current: StickyWording }
+    | { readonly type: 'InvalidName'; readonly problem: 'format' | 'keyword' | 'duplicate' }
+    | { readonly type: 'InvalidLabel' }
+    | { readonly type: 'WrongKind' }
+    | { readonly type: 'NothingToChange' }
+    | { readonly type: 'NoLongerParses' };
+
+/** An edit planned on a file's text: its new text, the sticky before and after, the references rewritten. */
+export interface StickyEditPlan {
+    readonly text: string;
+    readonly before?: StickyWording;
+    readonly after: StickyWording;
+    readonly references: number;
+}
+
+/**
+ * People's edits of the stickies, planned on the parsed `.dtes` text (Storming's `planStickyEdit` and `stickyWording`,
+ * wired by the app): only the tokens concerned change, the result parses.
+ */
+export interface StickyEditor {
+    plan(
+        text: string,
+        input: StickyEditInput,
+    ): { readonly ok: true; readonly value: StickyEditPlan } | { readonly ok: false; readonly error: StickyEditProblem };
+    /** What a declaration is called in a file's text now; undefined when it is not there (or the file does not parse). */
+    wording(text: string, storming: string, element: string): StickyWording | undefined;
+    /** Every ID a storming declares in a file's text; undefined when the file has no such storming (or does not parse). */
+    names(text: string, storming: string): string[] | undefined;
+}
+
+/** Everything the use cases need. */
+/**
+ * The journey file (`domaintrail.journey.json` at the workspace root): its text, and a whole new text written
+ * atomically unless the file changed since its text `expected` was read (undefined: there was no file).
+ */
+export interface JourneyFileStore {
+    /** The file's text now; undefined when there is none. */
+    read(): Promise<string | undefined>;
+    /** Writes `text` unless the file is no longer `expected` (then false, nothing written). */
+    write(text: string, expected: string | undefined): Promise<boolean>;
+}
+
+export interface CollaborationDeps {
+    readonly uow: UnitOfWork;
+    /** The journey file the interviews' briefs and the journey acts write (absent: none, `NoJourneyFile`). */
+    readonly journeys?: JourneyFileStore;
+    readonly workspace: WorkspaceSnapshot;
+    readonly blobs: SnapshotBlobs;
+    readonly validator: ModelValidator;
+    /** Formats what a mechanical revert writes; without one it is written as merged. */
+    readonly formatter?: SourceFormatter;
+    /** Plans people's edits of the stickies (ADR 0033); without one, editing a sticky is refused (`StickyEditsUnavailable`). */
+    readonly stickies?: StickyEditor;
+    readonly clock: Clock;
+    readonly ids: IdGenerator;
+}

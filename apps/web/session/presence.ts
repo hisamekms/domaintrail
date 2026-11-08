@@ -1,0 +1,150 @@
+// The others' presence as the page holds it (ADR 0026, Presence): ephemeral, one entry per page of a participant
+// (`connection`), replaced by each update and dropped when the page leaves. Cursors are drawn only for a page whose
+// location equals this page's; the others are listed as on another view. Presence never starts anything (following
+// someone is the reader's choice: `follow.ts`).
+import type { CameraBounds, Cursor, Presence, SessionServerMessage, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
+import { hasCanvas, sameLocation } from './location';
+
+/** The others' pages by connection. */
+export type Peers = ReadonlyMap<string, Presence>;
+
+export const NO_PEERS: Peers = new Map();
+
+/** The peers after a presence message; any other message leaves them as they are. */
+export function receivePresence(peers: Peers, message: SessionServerMessage): Peers {
+    switch (message.type) {
+        case 'presence.snapshot':
+            return new Map(message.peers.map((p) => [p.connection, p]));
+        case 'presence.update':
+            return new Map(peers).set(message.presence.connection, message.presence);
+        case 'presence.leave': {
+            if (!peers.has(message.connection)) return peers;
+            const next = new Map(peers);
+            next.delete(message.connection);
+            return next;
+        }
+        default:
+            return peers;
+    }
+}
+
+/** A cursor to draw: whose, where, in which color. */
+export interface PeerCursor {
+    readonly connection: string;
+    readonly name: string;
+    readonly color: string;
+    readonly at: Cursor;
+}
+
+/** The cursors of the pages on the same view as `mine` (none when this page shows no canvas). */
+export function cursorsOn(peers: Peers, mine: ViewLocation | undefined): PeerCursor[] {
+    if (!mine || !hasCanvas(mine)) return [];
+    return [...peers.values()].flatMap((p) =>
+        p.cursor && sameLocation(p.location, mine)
+            ? [{ connection: p.connection, name: p.participant.name, color: participantColor(p.participant.id), at: p.cursor }]
+            : [],
+    );
+}
+
+/** Where a participant is, seen from this page. */
+export type Whereabouts = 'here' | 'same-view' | 'another-view' | 'away';
+
+/** Each participant's whereabouts: on this view when one of their pages is, else on another view while connected. */
+export function whereabouts(peers: Peers, mine: ViewLocation | undefined): Map<string, Exclude<Whereabouts, 'here' | 'away'>> {
+    const out = new Map<string, Exclude<Whereabouts, 'here' | 'away'>>();
+    for (const p of peers.values()) {
+        const same = sameLocation(p.location, mine);
+        if (same) out.set(p.participant.id, 'same-view');
+        else if (!out.has(p.participant.id)) out.set(p.participant.id, 'another-view');
+    }
+    return out;
+}
+
+/** How many identity hues there are (`--participant-1` … `--participant-6` in styles.css, issue #33 §4.3). */
+export const PARTICIPANT_HUES = 6;
+
+/**
+ * A stable color per participant: one of the identity hues, picked by the hash of the ID (the same on every page), as
+ * a CSS value (`var(--participant-3)`), so that it follows the theme's tokens. Never a status's or a model kind's hue.
+ */
+export function participantColor(id: string): string {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+    return `var(--participant-${1 + (h % PARTICIPANT_HUES)})`;
+}
+
+/** A character of a script whose one character already makes a name's mark: kanji, kana, hangul. */
+const CJK = /^[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/** The initials of a name (when there is no avatar): its first character in CJK (`高橋` → `高`), else up to two letters. */
+export function initials(name: string): string {
+    const words = name.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return '?';
+    if (CJK.test(words[0])) return Array.from(words[0])[0];
+    const chars = words.length > 1 ? [words[0][0], words[words.length - 1][0]] : Array.from(words[0]).slice(0, 2);
+    return chars.join('').toUpperCase();
+}
+
+/** Calls `send` at most once per `interval` ms, always with the latest value (the last one is never lost). */
+export function throttle<T>(interval: number, send: (value: T) => void, now: () => number = Date.now): { push(value: T): void; cancel(): void } {
+    let last = -Infinity;
+    let pending: { value: T } | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const flush = (): void => {
+        timer = undefined;
+        if (!pending) return;
+        const { value } = pending;
+        pending = undefined;
+        last = now();
+        send(value);
+    };
+    return {
+        push(value) {
+            pending = { value };
+            if (timer !== undefined) return;
+            const wait = last + interval - now();
+            if (wait <= 0) flush();
+            else timer = setTimeout(flush, wait);
+        },
+        cancel() {
+            if (timer !== undefined) clearTimeout(timer);
+            timer = undefined;
+            pending = undefined;
+        },
+    };
+}
+
+/**
+ * What a canvas shows, as a page sends it (`Presence.camera`): rounded to a tenth of a page unit; none for a canvas not
+ * laid out (no size).
+ */
+export function cameraBounds(viewport: { readonly x: number; readonly y: number; readonly w: number; readonly h: number }): CameraBounds | undefined {
+    const round = (n: number): number => Math.round(n * 10) / 10;
+    const c = { x: round(viewport.x), y: round(viewport.y), w: round(viewport.w), h: round(viewport.h) };
+    return [c.x, c.y, c.w, c.h].every(Number.isFinite) && c.w > 0 && c.h > 0 ? c : undefined;
+}
+
+export const sameCamera = (a: CameraBounds | undefined, b: CameraBounds | undefined): boolean =>
+    a === b || (!!a && !!b && a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h);
+
+/** A participant as the panel lists them. */
+export interface ListedParticipant {
+    readonly id: string;
+    readonly name: string;
+    readonly role: 'facilitator' | 'participant';
+}
+
+/**
+ * The session's participants, one entry per person: the identity holding the facilitator's role joined as a
+ * participant of its own before it claimed the role (`facilitatorHolder`), and acts as the facilitator's participant
+ * now, so that participant is folded into the facilitator's entry, which takes its name.
+ */
+export function listedParticipants(state: Pick<SessionStateBody, 'session' | 'facilitatorHolder'>): ListedParticipant[] {
+    const { participants, facilitator } = state.session;
+    const holder = state.facilitatorHolder === facilitator ? undefined : participants.find((p) => p.id === state.facilitatorHolder);
+    return participants.flatMap((p): ListedParticipant[] => {
+        if (p.id === holder?.id) return [];
+        if (p.id === facilitator) return [{ id: p.id, name: holder?.name ?? p.name, role: 'facilitator' }];
+        return [{ id: p.id, name: p.name, role: 'participant' }];
+    });
+}

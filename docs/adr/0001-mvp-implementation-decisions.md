@@ -3,6 +3,9 @@
 - Status: accepted
 - Date: 2026-10-17
 - Context: resolves the open items of the MVP spec v0.1 (§11) and records implementation choices.
+- Amended by: [ADR 0028](0028-generated-typescript-changes.md) (the constructor of an `id X: UUID` checks the form);
+  [ADR 0026](0026-collaboration-sessions.md#appendix-state-outside-the-workspace-amendment) (the layouts are cached
+  outside the workspace)
 
 ## Decisions
 
@@ -55,7 +58,8 @@ Verification result for mapping layout output to tldraw: node coordinates map di
 Edge routes do **not** map well to tldraw's bound arrows (an elbow arrow supports a single midpoint, so multi-bend routes and
 self-loops are lost and edges cross nodes). Edges are therefore drawn with a custom `domain-edge` shape that follows the
 layout route and label position exactly. Future GUI editing will need either relayout on change or bound arrows for
-simple routes.
+simple routes. (Amended by [ADR 0029](0029-react-flow-canvas.md): the canvas is drawn with React Flow, whose custom
+edge follows the route the same way.)
 
 ### Validation scope
 

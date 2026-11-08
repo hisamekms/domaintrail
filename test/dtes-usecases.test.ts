@@ -1,13 +1,11 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import type { Analysis } from '@domaintrail/modeling/core/analyze';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import type { ViewOptions } from '@domaintrail/visualization/domain/storming/ir';
-import { projectView } from '@domaintrail/visualization/domain/storming/render';
-import { EXAMPLES, check, tempCopyOfExamples } from './helpers.js';
+import { cliDeps, runCli } from '@domaintrail/dt';
+import { formatStorming } from '@domaintrail/storming';
+import { type Analysis } from '@domaintrail/analysis';
+import { projectView, stormingViewKey, type ViewOptions } from '@domaintrail/visualization';
+import { EXAMPLES, check, tempCopyOfExamples, viewPayloads } from './helpers.js';
 
 /**
  * The two use cases of the Event Storming DSL end to end (spec §1.1, §15, appendix), through `analyze`, the projection
@@ -37,7 +35,13 @@ async function clean(files: Record<string, string>): Promise<Analysis> {
 }
 
 /** The node IDs of one view of the workspace's only storming. */
-const view = (a: Analysis, options: ViewOptions): string[] => projectView(a.stormings.stormings[0]!, options).nodes.map((n) => n.id);
+const view = async (files: Record<string, string>, options: ViewOptions): Promise<string[]> => {
+    const [payload] = await viewPayloads(Object.entries(files).map(([p, text]) => ({ path: p, text })));
+    const storming = payload.stormings[0]!;
+    // a timeline's own projection (its one-hop causal paths) has no view in the payload: projected here
+    const render = options.timelineId !== undefined ? projectView(storming.storming, options) : storming.views[stormingViewKey(options)]!.render;
+    return render.nodes.map((n) => n.id);
+};
 const BIG_PICTURE: ViewOptions = { level: 'big-picture' };
 const DESIGN_LEVEL: ViewOptions = { level: 'design-level' };
 
@@ -92,28 +96,28 @@ const DESIGN = `storming Rental "自転車レンタル" {
   aggregate LateFee "延滞料"
 
   command Reserve "予約する" {
-    actor Member
+    by Member
     reads Availability
-    target Reservation
+    handledBy Reservation
     emits BikeReserved
   }
   command Expire "期限切れにする" {
-    actor Clock
-    target Reservation
+    by Clock
+    handledBy Reservation
     emits ReservationExpired
   }
   command PickUp "借りる" {
-    actor Member
-    target Loan
+    by Member
+    handledBy Loan
     emits BikePickedUp
   }
   command GiveBack "返す" {
-    actor Member
-    target Loan
+    by Member
+    handledBy Loan
     emits BikeReturned
   }
   command ChargeLateFee "延滞料を課金する" {
-    target LateFee
+    handledBy LateFee
     emits LateFeeCharged
   }
 
@@ -251,14 +255,24 @@ function addRef(text: string, kind: string, id: string, refPath: string): string
 
 describe('UC1: from events to a Design Level storming, then to a .dt model', () => {
     test('each stage checks clean: events only, then the Design Level, then the model, then the refs one by one', async () => {
-        const big = await clean({ 'stormings/rental.dtes': BIG });
-        const events = view(big, BIG_PICTURE);
+        await clean({ 'stormings/rental.dtes': BIG });
+        const events = await view({ 'stormings/rental.dtes': BIG }, BIG_PICTURE);
         expect(events.filter((id) => id.startsWith('n:'))).toEqual(['n:ExpiryTime']);
 
-        const design = await clean({ 'stormings/rental.dtes': DESIGN });
+        await clean({ 'stormings/rental.dtes': DESIGN });
         // the same file goes back to Big Picture: the events and the hotspot, as before the Design Level was added
-        expect(view(design, BIG_PICTURE)).toEqual(events);
-        expect(view(design, DESIGN_LEVEL)).toEqual(expect.arrayContaining(['n:Member', 'n:Clock', 'n:Availability', 'n:ChargeLateReturn', 'n:LateFee']));
+        expect(await view({ 'stormings/rental.dtes': DESIGN }, BIG_PICTURE)).toEqual(events);
+        expect(await view({ 'stormings/rental.dtes': DESIGN }, DESIGN_LEVEL)).toEqual(
+            // an actor, read model or aggregate beside each command that uses it
+            expect.arrayContaining([
+                'n:Member@Reserve',
+                'n:Member@PickUp',
+                'n:Clock@Expire',
+                'n:Availability@Reserve',
+                'n:ChargeLateReturn',
+                'n:LateFee@ChargeLateFee',
+            ]),
+        );
 
         // the model, proposed from the storming: the storming has no refs yet, and needs none
         await clean({ ...MODEL, 'stormings/rental.dtes': DESIGN });
@@ -275,9 +289,9 @@ describe('UC1: from events to a Design Level storming, then to a .dt model', () 
         }
         expect(storming.match(/^\s+ref /gm)).toHaveLength(13);
         // the refs change no view
-        const final = await check({ ...MODEL, 'stormings/rental.dtes': storming });
-        expect(view(final, DESIGN_LEVEL)).toEqual(view(design, DESIGN_LEVEL));
-        expect(view(final, BIG_PICTURE)).toEqual(events);
+        const final = { ...MODEL, 'stormings/rental.dtes': storming };
+        expect(await view(final, DESIGN_LEVEL)).toEqual(await view({ 'stormings/rental.dtes': DESIGN }, DESIGN_LEVEL));
+        expect(await view(final, BIG_PICTURE)).toEqual(events);
     });
 
     test('a ref is added only once the .dt symbol exists: before, it is an error', async () => {
@@ -321,7 +335,7 @@ describe('UC2: storming from the existing model of examples/shop', () => {
         const edited = original.replace('  event PaymentFailed', '  event InvoiceVoided "請求書が無効になった"\n    event PaymentFailed').replace(
             /\n}\n$/,
             `
-  command VoidInvoice "請求書を無効にする" { target Invoice
+  command VoidInvoice "請求書を無効にする" { handledBy Invoice
     emits InvoiceVoided }
   policy VoidInvoiceOfCancelledOrder { on RefundRequested
   issues VoidInvoice }
@@ -335,7 +349,7 @@ describe('UC2: storming from the existing model of examples/shop', () => {
         const fmt = await run('-r', dir, 'fmt');
         expect(fmt).toEqual({ code: 0, out: [SHOP_STORMING, '8 file(s): 1 formatted.'], err: [] });
         const formatted = await readFile(file, 'utf8');
-        expect(formatted).toContain('  command VoidInvoice "請求書を無効にする" {\n    target Invoice\n    emits InvoiceVoided\n  }\n');
+        expect(formatted).toContain('  command VoidInvoice "請求書を無効にする" {\n    handledBy Invoice\n    emits InvoiceVoided\n  }\n');
 
         const checked = await run('-r', dir, 'check');
         expect(checked).toEqual({ code: 0, out: ['8 file(s) checked: 0 error(s), 0 warning(s).'], err: [] });
@@ -352,12 +366,12 @@ describe('UC2: storming from the existing model of examples/shop', () => {
     });
 
     test('the timeline filter of the example shows a timeline with its one-hop causal paths, at both levels', async () => {
-        const a = await check(Object.fromEntries(await Promise.all([SHOP_STORMING].map(async (f) => [f, await readFile(path.join(EXAMPLES, f), 'utf8')]))));
-        const normal = view(a, { level: 'design-level', timelineId: 'Normal' });
+        const a = Object.fromEntries(await Promise.all([SHOP_STORMING].map(async (f) => [f, await readFile(path.join(EXAMPLES, f), 'utf8')])));
+        const normal = await view(a, { level: 'design-level', timelineId: 'Normal' });
         // OrderConfirmed → BillConfirmedOrder → IssueInvoice → InvoiceIssued: both ends are in Normal
-        expect(normal).toEqual(expect.arrayContaining(['n:BillConfirmedOrder', 'n:IssueInvoice', 'n:OrderTotal', 'n:Invoice']));
+        expect(normal).toEqual(expect.arrayContaining(['n:BillConfirmedOrder', 'n:OrderTotal@BillConfirmedOrder', 'n:IssueInvoice', 'n:Invoice@IssueInvoice']));
         expect(normal).not.toContain('n:CancelOrder');
-        const cancel = view(a, { level: 'big-picture', timelineId: 'CancelAfterConfirm' });
+        const cancel = await view(a, { level: 'big-picture', timelineId: 'CancelAfterConfirm' });
         expect(cancel.filter((id) => id.startsWith('n:'))).toEqual(['n:InvoiceOfCancelledOrder', 'n:MixedCurrencies']);
     });
 });

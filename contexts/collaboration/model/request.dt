@@ -1,0 +1,250 @@
+context Collaboration {
+  /// 依頼の識別子。
+  id RequestId "依頼ID": UUID
+
+  /// まだ見送られていない、そのセッションの依頼だと、エージェント実行に束ねるときに確かめたもの。
+  verified PendingRequest "未処理の依頼" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestAlreadyDismissed
+
+  /// 依頼が返信する相手。AI の実行か、人のメッセージ（依頼）のどちらか1つ。
+  union ReplyTarget "返信先" {
+    /// AI の実行への返信。
+    Run "実行" {
+      references run: AgentRunId -> AgentRun "実行"
+    }
+    /// メッセージへの返信。
+    Message "メッセージ" {
+      references request: RequestId -> Request "メッセージ"
+    }
+  }
+
+  /// 返信できると、依頼を送るときに確かめた相手。実行なら、そのセッションの終わった実行（完了・失敗・辞退・中止・打ち消し）。
+  /// 確認待ちには返信しない（問いに答える欄がある）。待機中・実行中にも返信しない。
+  /// メッセージなら、そのセッションのメッセージ（自分のものも、見送られたものも）。
+  verified ReplyableTarget "返信できる相手" of ReplyTarget for SessionId errors RunNotFound, RunOfAnotherSession, RunNotReplyable, RequestNotFound, RequestOfAnotherSession
+
+  /// 打ち消せると、打ち消しの依頼を送るときに確かめた実行: そのセッションの、ファイルの変更を記録した実行（基準と結果の
+  /// リビジョンが違う）で、まだ打ち消されておらず、打ち消しの待ちや最中でもない。
+  verified RevertableRun "打ち消せる実行" of AgentRunId for SessionId errors RunNotFound, RunOfAnotherSession, RunNotRevertable
+
+  /// 聞き取りを確定したあとに dt が AI の名で書くお知らせの、次の一手のボタン（文は本文）: どの道のりか、勧めるコマンド
+  /// （押すと入力欄に入る）と、見せる場（もとのストーミングなど）。お知らせは AI を呼ばずに、決まった文で書く。
+  value JourneyNote "旅程のお知らせ" {
+    journey: GuideJourneyKey "道のり"
+    command: SuggestedCommand? "勧めるコマンド"
+    targets: ModelTarget[0..3] "その場"
+  }
+
+  /// 人が付箋（ストーミングの要素）を直したこと（ADR 0033）。AI を通さずに dt が `.dtes` に書いた。前後の値を写し取る。
+  union StickyEdit "付箋の手直し" {
+    /// ラベルと名前。名前を変えたら、同じストーミングの参照も書き換えた。
+    Wording "文言" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      nameBefore: StormingLocalName "前の名前"
+      nameAfter: StormingLocalName "あとの名前"
+      labelBefore: Text? "前のラベル"
+      labelAfter: Text? "あとのラベル"
+      references: Tally "書き換えた参照"
+    }
+    /// イベントに付けたホットスポット（未解決）。
+    HotspotAdded "ホットスポット" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      label: Text "問い"
+      on: StormingLocalName "イベント"
+    }
+    /// ホットスポットの問いと解決（一度の編集で両方）。解決を書けば解決済み、消せば未解決に戻る。名前は変えない。
+    HotspotEdited "ホットスポットの編集" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      questionBefore: Text? "前の問い"
+      questionAfter: Text? "あとの問い"
+      resolutionBefore: Text? "前の解決"
+      resolutionAfter: Text? "あとの解決"
+    }
+    /// ホットスポットの解決。
+    HotspotResolved "解決" {
+      storming: StormingName "ストーミング"
+      path: WorkspacePath "ファイル"
+      hotspot: StormingLocalName "ホットスポット"
+      resolution: Text "解決"
+    }
+  }
+
+  /// 本文で言及できると、依頼を送るときに確かめた人。そのセッションの参加者（オフラインの人も）と、AI（予約の参加者 ID `ai`）。
+  verified MentionableParticipant "言及できる参加者" of ParticipantId for SessionId errors MentionedNotAParticipant
+
+  /// 参加者がモデルの要素について送るメッセージ（以前の名前は依頼）。送ったあとは変わらない。下書きはブラウザにだけ置く。
+  /// AI の回答も、書き手が AI（`ai`）のメッセージで、答えたメッセージへの返信。AI として送れるのはサーバーの `answer` だけ。
+  /// 対象は0〜20件。対象がなければワークスペース全体についての依頼。本文の要素の言及（`#注文[1]`、以前の `@注文[1]`）は
+  /// 対象の番号で、人の言及（`@佐藤[p1]`）は言及した人の番号で指す。
+  aggregate Request "メッセージ" {
+    id: RequestId
+    references session: SessionId -> Session
+    author: ParticipantId "依頼者"
+    owns targets: TargetSnapshot[0..20] "対象"
+    body: Text "本文"
+    sentAt: Timestamp "送信日時"
+    /// 返信なら、その相手（AI の実行か、人のメッセージ）。返信も依頼で、適用するかはファシリテーターが決める。
+    replyTo: ReplyTarget? "返信先"
+    /// 本文で言及した人（`@佐藤[p1]` の p1 が1件目）。言及された人のチャットで目立つだけで、ほかに通知はしない。
+    mentions: ParticipantId[0..20] "言及した人"
+    /// 作業の打ち消しの依頼なら、変更を打ち消す実行。ファシリテーターだけが送る（`requestRevert`）。本文は何を打ち消すかを
+    /// 皆に伝える（「〈作業名〉の変更を打ち消す」）。ほかの依頼と同じく実行として待ちに入り、順が来るとサーバーが機械的に打ち消すか、できなければ AI に任せる。
+    references reverts: AgentRunId? -> AgentRun "打ち消す実行"
+    /// 送ったときに依頼者が見ていたビュー。以前のメッセージ、AI の回答、打ち消しの依頼にはない。
+    viewedAt: ViewedAt? "送ったときのビュー"
+    /// 聞き取りを確定したあとの dt のお知らせ（AI の名で書く）なら、その道のりと次の一手のボタン。ほかのメッセージにはない。
+    journeyNote: JourneyNote? "旅程のお知らせ"
+    /// 人が付箋を直した記録なら、何をどう直したか（ADR 0033）。チャットには出さず、AI の作業に出す。ほかのメッセージにはない。
+    edit: StickyEdit? "付箋の手直し"
+    /// 墨消ししたなら、その日時。本文は決まった文（`REDACTED_BODY`）に置き換わり、行（だれが・いつ・何についての
+    /// メッセージか）は残る。ナレッジを消すと、その出典のメッセージが墨消しになる（ADR 0031 の 7）。
+    redactedAt: Timestamp? "墨消し日時"
+
+    invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
+    invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
+    invariant atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 }
+    invariant distinctMentions "同じ人の言及は1回" { unique(mentions) }
+    /// ワークスペース全体は、対象を挙げないことで表す。
+    invariant noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
+      all(targets, t => t.target.kind != ModelTarget.Workspace)
+    }
+
+    state Sent "送信済み"
+    /// 見送りは印で、依頼そのものは残る。見送る操作はもうない（#23 で画面と経路から外し、ADR 0027 の T12 でコマンドも
+    /// 外した）。以前のセッションに残る見送り済みの依頼を読み、実行に束ねないために、状態は残す。
+    state Dismissed "見送り" {
+      dismissedBy: ParticipantId "見送った人"
+      dismissedAt: Timestamp "見送り日時"
+    }
+
+    create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20], viewedAt: ViewedAt?) "依頼を送る"
+      -> Sent
+      requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
+      requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
+      requires noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
+        all(targets, t => t.target.kind != ModelTarget.Workspace)
+      } else WorkspaceTarget
+      requires atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 } else TooManyMentions
+      requires distinctMentions "同じ人の言及は1回" { unique(mentions) } else DuplicateMention
+      emits RequestSent
+
+    /// ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
+    create command requestRevert(id: RequestId, session: ActiveSession, author: ParticipantId, authorRole: ParticipantRole, body: Text, sentAt: Timestamp, reverts: RevertableRun) "打ち消しを頼む"
+      -> Sent
+      requires facilitatorReverts "ファシリテーターが打ち消す" {
+        authorRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      emits RequestSent
+
+    /// 参加者が付箋を直した（ADR 0033）。誰でも直せる。対象も言及もなく、本文は何を直したかの一文。
+    create command recordEdit(id: RequestId, session: ActiveSession, author: ParticipantId, body: Text, sentAt: Timestamp, edit: StickyEdit) "付箋の手直しを記録する"
+      -> Sent
+      emits RequestSent
+
+    /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
+    /// 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。道のりを完了にしたあとのお知らせは
+    /// 答えるメッセージがなく、返信にならない。
+    create command answer(id: RequestId, session: ActiveSession, answers: RequestId? "答えるメッセージ", body: Text, sentAt: Timestamp, journeyNote: JourneyNote?) "AI が答える"
+      -> Sent
+      emits RequestSent
+
+    /// 本文を墨消しする: 個人のデータを消すため（消したナレッジの出典だったメッセージ、ADR 0031 の 7）。本文を決まった文に
+    /// 置き換え、ほかは残す。もう墨消ししたメッセージは変えない（日時もそのまま）。
+    command redact(body: Text "置き換える本文", at: Timestamp) "墨消しする"
+      Sent -> Sent
+      Dismissed -> Dismissed
+      changes body, redactedAt
+      emits RequestRedacted
+  }
+
+  persistent event RequestSent "依頼送信" {
+    requestId: RequestId
+    session: SessionId
+    author: ParticipantId
+    targets: TargetSnapshot[0..20]
+    body: Text
+    sentAt: Timestamp
+    replyTo: ReplyTarget?
+    mentions: ParticipantId[0..20] "言及した人"
+    /// 打ち消しの依頼なら、打ち消す実行。
+    reverts: AgentRunId? "打ち消す実行"
+    viewedAt: ViewedAt? "送ったときのビュー"
+    /// 聞き取りを確定したあとの dt のお知らせなら、その道のりと次の一手のボタン。
+    journeyNote: JourneyNote? "旅程のお知らせ"
+    /// 付箋の手直しの記録なら、何をどう直したか。
+    edit: StickyEdit? "付箋の手直し"
+  }
+
+  /// 本文を墨消しした。ページには状態を送り直して伝える（アウトボックスには残さない: 残せば本文の代わりに墨消しの記録が
+  /// 増えるだけで、送ったときの `RequestSent` はアウトボックスの中で墨消しする）。
+  event RequestRedacted "墨消し" {
+    requestId: RequestId
+    redactedAt: Timestamp
+  }
+
+  /// 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
+  persistent event RequestDismissed "依頼見送り" {
+    requestId: RequestId
+    dismissedBy: ParticipantId
+    dismissedAt: Timestamp
+  }
+
+  /// 指定した依頼がない。
+  error RequestNotFound "依頼なし" {
+    request: RequestId
+  }
+
+  /// 依頼は別のセッションのもの。
+  error RequestOfAnotherSession "別のセッションの依頼" {
+    request: RequestId
+  }
+
+  /// 依頼はすでに見送られている。
+  error RequestAlreadyDismissed "見送り済みの依頼" {
+    request: RequestId
+  }
+
+  /// 言及した人は、そのセッションの参加者ではない。
+  error MentionedNotAParticipant "参加者でない人の言及" {
+    participant: ParticipantId
+  }
+
+  /// 返信先の実行がない。
+  error RunNotFound "実行なし" {
+    run: AgentRunId
+  }
+
+  /// 返信先の実行は別のセッションのもの。
+  error RunOfAnotherSession "別のセッションの実行" {
+    run: AgentRunId
+  }
+
+  /// 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・中止・打ち消しの実行）。
+  error RunNotReplyable "返信できない実行" {
+    run: AgentRunId
+  }
+
+  /// 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
+  error RunNotRevertable "打ち消せない実行" {
+    run: AgentRunId
+  }
+
+  /// 本文で言及する人が20人を超える。
+  error TooManyMentions "言及する人が多すぎる"
+
+  /// 本文で同じ人を2回言及している。
+  error DuplicateMention "言及する人の重複"
+
+  /// 依頼の対象が20件を超える。
+  error TooManyTargets "対象が多すぎる"
+
+  /// 依頼の対象に同じものが2回ある。
+  error DuplicateTarget "対象の重複"
+
+  /// 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
+  error WorkspaceTarget "対象にワークスペース全体"
+}

@@ -1,0 +1,91 @@
+context Modeling {
+  /// What changed between two models: the stable IDs of the elements, states and commands added, changed and removed.
+  value ModelDiff {
+    added: ElementId[0..*]
+    changed: ElementId[0..*]
+    removed: ElementId[0..*]
+  }
+
+  /// How one bounded context depends on another: by an identifier of the other context (`references`, or a field
+  /// typed with its ID), by any other type of it (value object, union, enum, domain primitive, event, field set), or by
+  /// an event of it that a policy reacts to (`policy … when Other.Event -> …`).
+  enum DependencyKind { id type event }
+
+  /// One use of an element of another context.
+  value Dependency {
+    /// Context that uses the element.
+    from: ContextName
+    /// Context that declares it.
+    to: ContextName
+    kind: DependencyKind
+    /// Element that holds the use (aggregate, entity, value object, union, event, error, policy).
+    source: ElementId
+    /// Where in the source: `field`, `State.field`, `VARIANT.field`, `command(param)`, `by`, `with`, `command ⇒ Event`,
+    /// `of`, `for`, `⇒ Error` of a verified type, and `when Event` of a policy.
+    path: String
+    /// The element used (qualified name).
+    target: QualifiedName
+  }
+
+  /// A dependency between two contexts with all its uses.
+  value ContextDependency {
+    from: ContextName
+    to: ContextName
+    uses: Dependency[0..*]
+    ids: Int
+    types: Int
+    /// Events that policies react to.
+    events: Int
+  }
+
+  /// A dependency of one aggregate on another, with the paths of the fields it goes through (`items.product`).
+  value AggregateDependency {
+    source: ElementId
+    target: ElementId
+    /// Holds a type of the other aggregate, not only its ID.
+    type: Bool
+    paths: String[0..*]
+  }
+
+  /// Modeling's rule IDs, a diagnostic's code: SYNTAX for lexer and parser errors of `.dt` files; the rules from the
+  /// spec (M001–M012), M013 (identity field), M014 (shared contexts), M015 (unions), M016 (field sets), M017 (events
+  /// carry the ID of their aggregate), M018 (invariants and requirements without an expression), M019 (parameters
+  /// named like fields their command's requirements see), M020 (factories take the new aggregate's ID as a parameter),
+  /// M021 (the fields a command `changes`), M022 (event and error fields named after their source), M023 (policies),
+  /// M024 (verified types), M025 (a context's description written once), M026 (a union without fields is an enum),
+  /// M027 (an ID kept as a primitive), L001–L003 (Japanese names). M011 (the generated TypeScript names) is reported
+  /// by the generator's check, which the project analysis runs.
+  enum ModelingRuleId {
+    SYNTAX
+    M001
+    M002
+    M003
+    M004
+    M005
+    M006
+    M007
+    M008
+    M009
+    M010
+    M011
+    M012
+    M013
+    M014
+    M015
+    M016
+    M017
+    M018
+    M019
+    M020
+    M021
+    M022
+    M023
+    M024
+    M025
+    M026
+    M027
+    L001
+    L002
+    L003
+  }
+}

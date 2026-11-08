@@ -3,8 +3,7 @@ import { chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, writeFile } from 
 import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps, runCli } from '@domaintrail/dt';
 import { tempCopyOfExamples } from './helpers.js';
 
 const dirs: string[] = [];
@@ -55,6 +54,36 @@ describe('dt check', () => {
             "order.dt:10:45 - error M004: 'Money' cannot own aggregate 'Order'; aggregates are referenced by ID ('references').",
             "  hint: write 'references order: OrderId -> Order' instead",
             '1 file(s) checked: 3 error(s), 0 warning(s).',
+        ]);
+    });
+
+    test("M025: a context's description written in two files, in the text and the JSON output", async () => {
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
+        dirs.push(dir);
+        await mkdir(path.join(dir, 'sales'));
+        await writeFile(path.join(dir, 'sales', 'customer.dt'), '/// Selling to customers.\ncontext Sales {\n  value Customer { name: String }\n}\n');
+        await writeFile(path.join(dir, 'sales', 'invoice.dt'), '/// Invoices.\ncontext Sales {\n  value Invoice { total: Int }\n}\n');
+        const r = await run('-r', dir, 'check');
+        expect(r.code).toBe(1);
+        expect(r.err).toEqual([
+            "sales/invoice.dt:1:1 - error M025: Context 'Sales' already has a description at sales/customer.dt:1.",
+            '  hint: merge this description into the one at sales/customer.dt:1, and remove it here',
+            '2 file(s) checked: 1 error(s), 0 warning(s).',
+        ]);
+        const json = await run('-r', dir, 'check', '--format', 'json');
+        expect(json.code).toBe(1);
+        expect(JSON.parse(json.out.join('\n')).diagnostics).toEqual([
+            {
+                file: 'sales/invoice.dt',
+                line: 1,
+                column: 1,
+                endLine: 1,
+                endColumn: 14,
+                severity: 'error',
+                code: 'M025',
+                message: "Context 'Sales' already has a description at sales/customer.dt:1.",
+                hint: 'merge this description into the one at sales/customer.dt:1, and remove it here',
+            },
         ]);
     });
 
@@ -253,7 +282,7 @@ describe('expected failures', () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-cli-'));
         dirs.push(dir);
         await writeFile(path.join(dir, 'file.txt'), '');
-        for (const command of ['check', 'view']) {
+        for (const command of ['check', 'open']) {
             expect(await run('-r', path.join(dir, 'missing'), command)).toEqual({
                 code: 1,
                 out: [],
@@ -282,7 +311,7 @@ describe('expected failures', () => {
     });
 
     test('an invalid port is a usage error', async () => {
-        const r = await run('view', '--port', 'abc');
+        const r = await run('open', '--port', 'abc');
         expect(r.code).toBe(1);
         expect(r.err).toEqual([expect.stringContaining('Expected a port number')]);
     });
@@ -294,7 +323,7 @@ describe('expected failures', () => {
         await new Promise<void>((resolve) => busy.listen(0, '127.0.0.1', resolve));
         const { port } = busy.address() as AddressInfo;
         try {
-            const r = await run('-r', dir, 'view', '--port', String(port));
+            const r = await run('-r', dir, 'open', '--no-agent', '--port', String(port));
             expect(r.code).toBe(1);
             expect(r.err).toEqual([`Port ${port} on 127.0.0.1 is already in use; pick another with --port.`]);
         } finally {

@@ -18,7 +18,8 @@
       "properties": {
         "files": { "description": "Number of .dt and .dtes files checked.", "type": "integer", "minimum": 0 },
         "errors": { "type": "integer", "minimum": 0 },
-        "warnings": { "type": "integer", "minimum": 0 }
+        "warnings": { "type": "integer", "minimum": 0 },
+        "infos": { "description": "Present when there are infos (they only inform; the exit code ignores them).", "type": "integer", "minimum": 0 }
       }
     },
     "written": {
@@ -42,16 +43,16 @@
       "additionalProperties": false,
       "required": ["file", "line", "column", "endLine", "endColumn", "severity", "code", "message"],
       "properties": {
-        "file": { "description": "Path of the .dt or .dtes file relative to the root.", "type": "string" },
+        "file": { "description": "Path of the .dt or .dtes file (or domaintrail.journey.json) relative to the root.", "type": "string" },
         "line": { "description": "1-based.", "type": "integer", "minimum": 1 },
         "column": { "description": "1-based.", "type": "integer", "minimum": 1 },
         "endLine": { "description": "1-based.", "type": "integer", "minimum": 1 },
         "endColumn": { "description": "1-based, exclusive.", "type": "integer", "minimum": 1 },
-        "severity": { "enum": ["error", "warning"] },
+        "severity": { "enum": ["error", "warning", "info"] },
         "code": {
-          "description": "Rule ID (see the Rules section of `dt guide`; S for .dtes files), or SYNTAX for lexer / parser errors.",
+          "description": "Rule ID (see the Rules section of `dt guide`; S for .dtes files, J for domaintrail.journey.json), or SYNTAX for lexer / parser errors.",
           "type": "string",
-          "pattern": "^(SYNTAX|[MLS]\\d{3})$"
+          "pattern": "^(SYNTAX|[MLSJ]\\d{3})$"
         },
         "message": { "type": "string" },
         "hint": {

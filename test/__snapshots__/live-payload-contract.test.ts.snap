@@ -1,0 +1,607 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`the Live View payload of examples/shop with its stormings 1`] = `
+{
+  "aggregates": {
+    "edges": 2,
+    "id": "structure-aggregates",
+    "nodes": 5,
+    "sha": "e071f5575a6c3fc9",
+  },
+  "all": "f947190a5392e65b",
+  "base": null,
+  "baseline": {
+    "kind": "previous",
+  },
+  "contextMap": {
+    "edges": 1,
+    "id": "context-map",
+    "nodes": 2,
+    "sha": "6d92ea28cf0d52b3",
+  },
+  "contextMapAll": {
+    "edges": 3,
+    "id": "context-map-all",
+    "nodes": 3,
+    "sha": "68e0e43fcee4e1ed",
+  },
+  "diagnostics": [],
+  "diff": {
+    "added": [],
+    "changed": [],
+    "removed": [],
+  },
+  "files": [
+    "billing/context.dt",
+    "billing/invoice.dt",
+    "common/context.dt",
+    "sales/context.dt",
+    "sales/customer.dt",
+    "sales/order.dt",
+    "stormings/order-to-cash.dtes",
+    "stormings/returns.dtes",
+  ],
+  "focusContexts": [
+    "Billing",
+    "Sales",
+  ],
+  "layoutEngine": "elk",
+  "model": "f18aff1cae39385e",
+  "modelVersion": 1,
+  "overview": {
+    "edges": 5,
+    "id": "structure-overview",
+    "nodes": 11,
+    "sha": "ea7fa79a0f268706",
+  },
+  "sources": "63dffc6188245541",
+  "stale": false,
+  "states": {
+    "Billing.Invoice": {
+      "both": {
+        "edges": 2,
+        "id": "states:Billing.Invoice",
+        "nodes": 3,
+        "sha": "6f656c1315d01aa2",
+      },
+      "command": {
+        "edges": 2,
+        "id": "states:Billing.Invoice:command",
+        "nodes": 3,
+        "sha": "62089cc056597889",
+      },
+      "event": {
+        "edges": 2,
+        "id": "states:Billing.Invoice:event",
+        "nodes": 3,
+        "sha": "c521d0b860552076",
+      },
+    },
+    "Sales.Customer": {
+      "both": {
+        "edges": 1,
+        "id": "states:Sales.Customer",
+        "nodes": 2,
+        "sha": "18f0ee353510e9d9",
+      },
+      "command": {
+        "edges": 1,
+        "id": "states:Sales.Customer:command",
+        "nodes": 2,
+        "sha": "da93fb76ac12924b",
+      },
+      "event": {
+        "edges": 1,
+        "id": "states:Sales.Customer:event",
+        "nodes": 2,
+        "sha": "07bb722a36e29194",
+      },
+    },
+    "Sales.Order": {
+      "both": {
+        "edges": 4,
+        "id": "states:Sales.Order",
+        "nodes": 4,
+        "sha": "d80c5df67dfe65b0",
+      },
+      "command": {
+        "edges": 4,
+        "id": "states:Sales.Order:command",
+        "nodes": 4,
+        "sha": "20be9ba342486d6a",
+      },
+      "event": {
+        "edges": 4,
+        "id": "states:Sales.Order:event",
+        "nodes": 4,
+        "sha": "793673f82d905e27",
+      },
+    },
+  },
+  "status": "ok",
+  "stormings": [
+    {
+      "file": "stormings/order-to-cash.dtes",
+      "id": "OrderToCash",
+      "stale": false,
+      "storming": "0c8764989de25d28",
+      "timelines": [
+        {
+          "id": "Normal",
+          "label": "通常の注文",
+        },
+        {
+          "id": "PaymentRetry",
+          "label": "支払の再試行",
+        },
+        {
+          "id": "CancelAfterConfirm",
+          "label": "確定後の取消",
+        },
+      ],
+      "views": {
+        "big-picture|": {
+          "graph": {
+            "edges": 12,
+            "id": "storming:OrderToCash:big-picture:*",
+            "nodes": 12,
+            "sha": "34b662fb54504e1d",
+          },
+          "render": {
+            "edges": 11,
+            "nodes": 14,
+            "sha": "2df505ef0b5807d1",
+          },
+        },
+        "design-level|": {
+          "graph": {
+            "edges": 39,
+            "id": "storming:OrderToCash:design-level:*",
+            "nodes": 35,
+            "sha": "0b521d004d2d007f",
+          },
+          "render": {
+            "edges": 39,
+            "nodes": 37,
+            "sha": "4c8ad39aea7bb14a",
+          },
+        },
+      },
+    },
+    {
+      "file": "stormings/returns.dtes",
+      "id": "Returns",
+      "stale": false,
+      "storming": "89f30b077a151260",
+      "timelines": [
+        {
+          "id": "Accepted",
+          "label": "受け付けた返品",
+        },
+        {
+          "id": "Rejected",
+          "label": "断った返品",
+        },
+      ],
+      "views": {
+        "big-picture|": {
+          "graph": {
+            "edges": 6,
+            "id": "storming:Returns:big-picture:*",
+            "nodes": 8,
+            "sha": "5689b72827cb0c6e",
+          },
+          "render": {
+            "edges": 5,
+            "nodes": 9,
+            "sha": "b5d7ec4b0484e92e",
+          },
+        },
+        "design-level|": {
+          "graph": {
+            "edges": 6,
+            "id": "storming:Returns:design-level:*",
+            "nodes": 8,
+            "sha": "6dd901b67efd3b76",
+          },
+          "render": {
+            "edges": 5,
+            "nodes": 9,
+            "sha": "bc82601f14400e7f",
+          },
+        },
+      },
+    },
+  ],
+  "structure": {
+    "edges": 5,
+    "id": "structure",
+    "nodes": 11,
+    "sha": "05cb5c562bee7e4c",
+  },
+}
+`;
+
+exports[`the Live View payload of examples/shop without stormings 1`] = `
+{
+  "aggregates": {
+    "edges": 2,
+    "id": "structure-aggregates",
+    "nodes": 5,
+    "sha": "e071f5575a6c3fc9",
+  },
+  "all": "2d2be043fcde8dcf",
+  "base": null,
+  "baseline": {
+    "kind": "previous",
+  },
+  "contextMap": {
+    "edges": 1,
+    "id": "context-map",
+    "nodes": 2,
+    "sha": "6d92ea28cf0d52b3",
+  },
+  "contextMapAll": {
+    "edges": 3,
+    "id": "context-map-all",
+    "nodes": 3,
+    "sha": "68e0e43fcee4e1ed",
+  },
+  "diagnostics": [],
+  "diff": {
+    "added": [],
+    "changed": [],
+    "removed": [],
+  },
+  "files": [
+    "billing/context.dt",
+    "billing/invoice.dt",
+    "common/context.dt",
+    "sales/context.dt",
+    "sales/customer.dt",
+    "sales/order.dt",
+  ],
+  "focusContexts": [
+    "Billing",
+    "Sales",
+  ],
+  "layoutEngine": "elk",
+  "model": "f18aff1cae39385e",
+  "modelVersion": 1,
+  "overview": {
+    "edges": 5,
+    "id": "structure-overview",
+    "nodes": 11,
+    "sha": "ea7fa79a0f268706",
+  },
+  "sources": "90674419f88da1a9",
+  "stale": false,
+  "states": {
+    "Billing.Invoice": {
+      "both": {
+        "edges": 2,
+        "id": "states:Billing.Invoice",
+        "nodes": 3,
+        "sha": "6f656c1315d01aa2",
+      },
+      "command": {
+        "edges": 2,
+        "id": "states:Billing.Invoice:command",
+        "nodes": 3,
+        "sha": "62089cc056597889",
+      },
+      "event": {
+        "edges": 2,
+        "id": "states:Billing.Invoice:event",
+        "nodes": 3,
+        "sha": "c521d0b860552076",
+      },
+    },
+    "Sales.Customer": {
+      "both": {
+        "edges": 1,
+        "id": "states:Sales.Customer",
+        "nodes": 2,
+        "sha": "18f0ee353510e9d9",
+      },
+      "command": {
+        "edges": 1,
+        "id": "states:Sales.Customer:command",
+        "nodes": 2,
+        "sha": "da93fb76ac12924b",
+      },
+      "event": {
+        "edges": 1,
+        "id": "states:Sales.Customer:event",
+        "nodes": 2,
+        "sha": "07bb722a36e29194",
+      },
+    },
+    "Sales.Order": {
+      "both": {
+        "edges": 4,
+        "id": "states:Sales.Order",
+        "nodes": 4,
+        "sha": "d80c5df67dfe65b0",
+      },
+      "command": {
+        "edges": 4,
+        "id": "states:Sales.Order:command",
+        "nodes": 4,
+        "sha": "20be9ba342486d6a",
+      },
+      "event": {
+        "edges": 4,
+        "id": "states:Sales.Order:event",
+        "nodes": 4,
+        "sha": "793673f82d905e27",
+      },
+    },
+  },
+  "status": "ok",
+  "stormings": [],
+  "structure": {
+    "edges": 5,
+    "id": "structure",
+    "nodes": 11,
+    "sha": "05cb5c562bee7e4c",
+  },
+}
+`;
+
+exports[`the Live View payload of examples/shop after a change to a .dt file: the diff, the baseline and the changed lines 1`] = `
+{
+  "aggregates": {
+    "edges": 2,
+    "id": "structure-aggregates",
+    "nodes": 5,
+    "sha": "e071f5575a6c3fc9",
+  },
+  "all": "4e3cb18e499da653",
+  "base": {
+    "aggregates": {
+      "edges": 2,
+      "id": "structure-aggregates",
+      "nodes": 5,
+      "sha": "e071f5575a6c3fc9",
+    },
+    "contextMap": {
+      "edges": 1,
+      "id": "context-map",
+      "nodes": 2,
+      "sha": "6d92ea28cf0d52b3",
+    },
+    "contextMapAll": {
+      "edges": 3,
+      "id": "context-map-all",
+      "nodes": 3,
+      "sha": "68e0e43fcee4e1ed",
+    },
+    "model": "f18aff1cae39385e",
+    "overview": {
+      "edges": 5,
+      "id": "structure-overview",
+      "nodes": 11,
+      "sha": "ea7fa79a0f268706",
+    },
+    "states": "22dd175e17e8d6e6",
+    "structure": {
+      "edges": 5,
+      "id": "structure",
+      "nodes": 11,
+      "sha": "05cb5c562bee7e4c",
+    },
+  },
+  "baseline": {
+    "kind": "previous",
+  },
+  "contextMap": {
+    "edges": 1,
+    "id": "context-map",
+    "nodes": 2,
+    "sha": "6d92ea28cf0d52b3",
+  },
+  "contextMapAll": {
+    "edges": 3,
+    "id": "context-map-all",
+    "nodes": 3,
+    "sha": "68e0e43fcee4e1ed",
+  },
+  "diagnostics": [],
+  "diff": {
+    "added": [],
+    "changed": [
+      "Sales.Order",
+    ],
+    "removed": [],
+  },
+  "files": [
+    "billing/context.dt",
+    "billing/invoice.dt",
+    "common/context.dt",
+    "sales/context.dt",
+    "sales/customer.dt",
+    "sales/order.dt",
+    "stormings/order-to-cash.dtes",
+    "stormings/returns.dtes",
+  ],
+  "focusContexts": [
+    "Billing",
+    "Sales",
+  ],
+  "layoutEngine": "elk",
+  "model": "120c43eac31cd3fc",
+  "modelVersion": 2,
+  "overview": {
+    "edges": 5,
+    "id": "structure-overview",
+    "nodes": 11,
+    "sha": "ea7fa79a0f268706",
+  },
+  "sources": "f237157660b3196c",
+  "stale": false,
+  "states": {
+    "Billing.Invoice": {
+      "both": {
+        "edges": 2,
+        "id": "states:Billing.Invoice",
+        "nodes": 3,
+        "sha": "6f656c1315d01aa2",
+      },
+      "command": {
+        "edges": 2,
+        "id": "states:Billing.Invoice:command",
+        "nodes": 3,
+        "sha": "62089cc056597889",
+      },
+      "event": {
+        "edges": 2,
+        "id": "states:Billing.Invoice:event",
+        "nodes": 3,
+        "sha": "c521d0b860552076",
+      },
+    },
+    "Sales.Customer": {
+      "both": {
+        "edges": 1,
+        "id": "states:Sales.Customer",
+        "nodes": 2,
+        "sha": "18f0ee353510e9d9",
+      },
+      "command": {
+        "edges": 1,
+        "id": "states:Sales.Customer:command",
+        "nodes": 2,
+        "sha": "da93fb76ac12924b",
+      },
+      "event": {
+        "edges": 1,
+        "id": "states:Sales.Customer:event",
+        "nodes": 2,
+        "sha": "07bb722a36e29194",
+      },
+    },
+    "Sales.Order": {
+      "both": {
+        "edges": 4,
+        "id": "states:Sales.Order",
+        "nodes": 4,
+        "sha": "d80c5df67dfe65b0",
+      },
+      "command": {
+        "edges": 4,
+        "id": "states:Sales.Order:command",
+        "nodes": 4,
+        "sha": "20be9ba342486d6a",
+      },
+      "event": {
+        "edges": 4,
+        "id": "states:Sales.Order:event",
+        "nodes": 4,
+        "sha": "793673f82d905e27",
+      },
+    },
+  },
+  "status": "ok",
+  "stormings": [
+    {
+      "file": "stormings/order-to-cash.dtes",
+      "id": "OrderToCash",
+      "stale": false,
+      "storming": "0c8764989de25d28",
+      "timelines": [
+        {
+          "id": "Normal",
+          "label": "通常の注文",
+        },
+        {
+          "id": "PaymentRetry",
+          "label": "支払の再試行",
+        },
+        {
+          "id": "CancelAfterConfirm",
+          "label": "確定後の取消",
+        },
+      ],
+      "views": {
+        "big-picture|": {
+          "graph": {
+            "edges": 12,
+            "id": "storming:OrderToCash:big-picture:*",
+            "nodes": 12,
+            "sha": "34b662fb54504e1d",
+          },
+          "render": {
+            "edges": 11,
+            "nodes": 14,
+            "sha": "2df505ef0b5807d1",
+          },
+        },
+        "design-level|": {
+          "graph": {
+            "edges": 39,
+            "id": "storming:OrderToCash:design-level:*",
+            "nodes": 35,
+            "sha": "0b521d004d2d007f",
+          },
+          "render": {
+            "edges": 39,
+            "nodes": 37,
+            "sha": "4c8ad39aea7bb14a",
+          },
+        },
+      },
+    },
+    {
+      "file": "stormings/returns.dtes",
+      "id": "Returns",
+      "stale": false,
+      "storming": "89f30b077a151260",
+      "timelines": [
+        {
+          "id": "Accepted",
+          "label": "受け付けた返品",
+        },
+        {
+          "id": "Rejected",
+          "label": "断った返品",
+        },
+      ],
+      "views": {
+        "big-picture|": {
+          "graph": {
+            "edges": 6,
+            "id": "storming:Returns:big-picture:*",
+            "nodes": 8,
+            "sha": "5689b72827cb0c6e",
+          },
+          "render": {
+            "edges": 5,
+            "nodes": 9,
+            "sha": "b5d7ec4b0484e92e",
+          },
+        },
+        "design-level|": {
+          "graph": {
+            "edges": 6,
+            "id": "storming:Returns:design-level:*",
+            "nodes": 8,
+            "sha": "6dd901b67efd3b76",
+          },
+          "render": {
+            "edges": 5,
+            "nodes": 9,
+            "sha": "bc82601f14400e7f",
+          },
+        },
+      },
+    },
+  ],
+  "structure": {
+    "edges": 5,
+    "id": "structure",
+    "nodes": 11,
+    "sha": "805903cd58d2178f",
+  },
+}
+`;

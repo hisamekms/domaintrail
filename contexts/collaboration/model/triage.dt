@@ -1,0 +1,238 @@
+context Collaboration {
+  /// 仕分けの識別子。
+  id TriageId "仕分けID": UUID
+
+  /// 段の答えの確からしさ（0 以上 1 以下）。Clef の確率、軽いモデルの申告。
+  primitive Confidence "確からしさ": Decimal { value >= 0 and value <= 1 }
+
+  /// 段にかかった時間（ミリ秒）。
+  primitive Milliseconds "ミリ秒": Int { value >= 0 }
+
+  /// メッセージが AI 宛てになったわけ。
+  enum AddressedBy "AI 宛てになったわけ" {
+    Mention "@AI の言及"
+    Reply "AI への返信"
+    Solo "ひとりのセッション"
+    Facilitator "ファシリテーターが AI に送った"
+  }
+
+  /// 仕分けの段。機械的な判定・Clef・軽いモデルが順に仕分け（カスケード）、回答役と実行役が結論を訂正し、ファシリテーターが
+  /// 「AI 宛てでない」と決まったメッセージを送り直す。
+  enum TriageStage "仕分けの段" {
+    Mechanical "機械的な判定"
+    Clef "Clef"
+    Model "軽いモデル"
+    Answerer "回答役の訂正"
+    Runner "実行役の訂正"
+    Facilitator "ファシリテーターの送り直し"
+  }
+
+  /// 段の答え。わからないときは次の段に回す。
+  enum TriageVerdict "段の答え" {
+    Consultation "相談"
+    ChangeRequest "変更依頼"
+    NotForAi "AI 宛てでない"
+    Unknown "わからない"
+  }
+
+  /// 段1つの記録。どの段が、何と答え、どのくらい確かで、なぜか（機械的な判定は規則、モデルと訂正はその理由）。
+  value TriageStep "段の記録" {
+    stage: TriageStage "段"
+    verdict: TriageVerdict "答え"
+    confidence: Confidence? "確からしさ"
+    reason: Text? "理由"
+    /// 答えたモデル（軽いモデルと訂正の段）。
+    model: String? "モデル"
+    durationMs: Milliseconds "かかった時間"
+    /// 段が失敗した・時間切れになったわけ（答えはわからない）。
+    error: Text? "失敗"
+    at: Timestamp "日時"
+
+    invariant errorIsUnknown "失敗した段の答えはわからない" { exists(error) implies verdict == TriageVerdict.Unknown }
+  }
+
+  /// 仕分けの行き先: AI の回答（メッセージと、回答が読んだリビジョン）、変更案、実行。
+  union TriageOutcome "仕分けの行き先" {
+    Answer "回答" {
+      references answer: RequestId -> Request "回答のメッセージ"
+      readRevision: RevisionId? "回答が読んだリビジョン"
+    }
+    Proposal "変更案" {
+      references proposal: ChangeProposalId -> ChangeProposal "変更案"
+    }
+    Run "実行" {
+      references run: AgentRunId -> AgentRun "実行"
+    }
+  }
+
+  /// AI 宛てにできると、仕分けを始めるときに確かめたメッセージ: そのセッションの人のメッセージで（AI の回答と打ち消しの依頼でない）、
+  /// まだ仕分けがない。
+  verified AddressableRequest "AI 宛てにできるメッセージ" of RequestId for SessionId errors RequestNotFound, RequestOfAnotherSession, RequestNotAddressable, RequestAlreadyAddressed
+
+  /// 変更案を書けると確かめた仕分け: そのセッションの、変更依頼と決まった、参加者のメッセージの仕分けで、行き先がまだない。
+  verified ProposableTriage "変更案にできる仕分け" of TriageId for SessionId errors TriageNotFound, TriageOfAnotherSession, TriageNotProposable
+
+  /// AI 宛てのメッセージ1件の仕分け。メッセージは変わらず、「AI 宛て」はメッセージの状態でなく仕分けがあること。人は相談か
+  /// 依頼かを言わない: 段が順に答え、わからなければ次の段に回し、確かなときだけ仕分けを終える。軽いモデルのあとまで
+  /// わからなければ相談とする（何も書かない側）。結論は、回答役（相談 → 変更依頼・AI 宛てでない）と実行役（変更依頼 → 相談）が
+  /// 訂正できる。行き先（回答・変更案・実行）は結論のあとに記録する。デバッグのための記録で、ファシリテーターが見る。
+  aggregate Triage "仕分け" {
+    id: TriageId
+    references session: SessionId -> Session
+    references request: RequestId -> Request "メッセージ"
+    addressedBy: AddressedBy "AI 宛てになったわけ"
+    addressedByParticipant: ParticipantId "AI 宛てにした人"
+    owns steps: TriageStep[0..*] "段の記録"
+    openedAt: Timestamp "開始日時"
+
+    /// メッセージ1件に仕分けは1つ（ストアの一意索引）。
+    invariant onePerRequest "メッセージ1件に仕分け1つ"
+
+    state Pending "仕分け中"
+    state Decided "仕分け済み" {
+      kind: TriageVerdict "結論"
+      decidedBy: TriageStage "決めた段"
+      decidedAt: Timestamp "決めた日時"
+      outcome: TriageOutcome? "行き先"
+
+      invariant known "結論はわからないでない" { kind != TriageVerdict.Unknown }
+      invariant answerIsConsultation "回答は相談の行き先" {
+        (exists(outcome) and outcome.kind == TriageOutcome.Answer) implies kind == TriageVerdict.Consultation
+      }
+      invariant notForAiGoesNowhere "AI 宛てでないメッセージに行き先はない" {
+        kind == TriageVerdict.NotForAi implies not exists(outcome)
+      }
+    }
+
+    /// AI 宛てのメッセージの仕分けを始める（送ったとき、またはファシリテーターが AI に送ったとき）。
+    create command open(id: TriageId, session: ActiveSession, request: AddressableRequest, addressedBy: AddressedBy, addressedByParticipant: ParticipantId, openedAt: Timestamp) "仕分けを始める"
+      -> Pending
+      emits TriageOpened
+
+    /// カスケードの段（機械的な判定・Clef・軽いモデル）の答えを記録する。答えが決まれば仕分け済み、わからなければ仕分け中のまま
+    /// （軽いモデルのあとは相談として仕分け済み）。
+    command record(step: TriageStep, recordedAt: Timestamp) "段の答えを記録する"
+      Pending -> Pending | Decided
+      requires cascadeStage "カスケードの段" {
+        step.stage == TriageStage.Mechanical or step.stage == TriageStage.Clef or step.stage == TriageStage.Model
+      } else InvalidTriageStep
+      /// 機械的な判定は「AI 宛てでない」だけを決める（相談と依頼を言葉で分けない）。
+      requires mechanicalDecidesNeither "機械的な判定は AI 宛てでないだけ" {
+        step.stage == TriageStage.Mechanical implies (step.verdict == TriageVerdict.NotForAi or step.verdict == TriageVerdict.Unknown)
+      } else InvalidTriageStep
+      /// 段は前の段より後（機械的な判定 → Clef → 軽いモデル）で、同じ段は1回。
+      requires inOrder "段の順" else TriageStepOutOfOrder
+      changes steps
+      emits TriageStepRecorded,
+            TriageDecided when -> Decided
+
+    /// 回答役（まだ答えていない相談を変更依頼か AI 宛てでないに）や実行役（変更依頼を相談に）が結論を訂正する。
+    command override(step: TriageStep, overriddenAt: Timestamp) "結論を訂正する"
+      Decided -> Decided
+      requires overridable "訂正できる結論" {
+        (step.stage == TriageStage.Answerer and kind == TriageVerdict.Consultation and not exists(outcome) and (step.verdict == TriageVerdict.ChangeRequest or step.verdict == TriageVerdict.NotForAi)) or (step.stage == TriageStage.Runner and kind == TriageVerdict.ChangeRequest and step.verdict == TriageVerdict.Consultation)
+      } else TriageNotOverridable
+      changes steps, kind, decidedBy, decidedAt
+      emits TriageOverridden
+
+    /// ファシリテーターが、AI 宛てでないと決まったメッセージを AI に送り直す。カスケードを飛ばして相談とし、ファシリテーターが
+    /// AI 宛てにしたものとする（変更依頼に訂正されれば、変更案を経ずに実行の待ちに入る）。
+    command readdress(by: ParticipantId, byRole: ParticipantRole, readdressedAt: Timestamp) "AI に送り直す"
+      Decided -> Decided
+      requires facilitatorReaddresses "ファシリテーターが送り直す" {
+        byRole == ParticipantRole.Facilitator
+      } else FacilitatorOnly
+      requires decidedNotForAi "AI 宛てでないと決まった" { kind == TriageVerdict.NotForAi } else RequestAlreadyAddressed
+      changes addressedBy, addressedByParticipant, steps, kind, decidedBy, decidedAt
+      emits TriageReaddressed
+
+    /// 仕分けの行き先（回答・変更案・実行）を記録する。1回だけ。
+    command conclude(to: TriageOutcome "行き先", concludedAt: Timestamp) "行き先を記録する"
+      Decided -> Decided
+      requires noOutcomeYet "行き先はまだない" { not exists(outcome) } else TriageAlreadyConcluded
+      requires outcomeFits "結論に合う行き先" {
+        kind != TriageVerdict.NotForAi and (to.kind == TriageOutcome.Answer implies kind == TriageVerdict.Consultation)
+      } else TriageNotConcludable
+      changes outcome
+      emits TriageConcluded
+  }
+
+  persistent event TriageOpened "仕分け開始" {
+    triageId: TriageId
+    session: SessionId
+    request: RequestId
+    addressedBy: AddressedBy
+    addressedByParticipant: ParticipantId
+    openedAt: Timestamp
+  }
+
+  persistent event TriageStepRecorded "段の答えの記録" {
+    triageId: TriageId
+    step: TriageStep
+  }
+
+  persistent event TriageDecided "仕分けの結論" {
+    triageId: TriageId
+    kind: TriageVerdict "結論"
+    decidedBy: TriageStage "決めた段"
+    decidedAt: Timestamp
+  }
+
+  persistent event TriageOverridden "結論の訂正" {
+    triageId: TriageId
+    step: TriageStep
+    kind: TriageVerdict "訂正した結論"
+  }
+
+  persistent event TriageReaddressed "送り直し" {
+    triageId: TriageId
+    by: ParticipantId
+    readdressedAt: Timestamp
+  }
+
+  persistent event TriageConcluded "行き先の記録" {
+    triageId: TriageId
+    to: TriageOutcome "行き先"
+    concludedAt: Timestamp
+  }
+
+  /// 段の記録が、その操作の段でない（カスケードの段でない・訂正の段でない）か、機械的な判定が相談か依頼を決めようとした。
+  error InvalidTriageStep "段の記録の不整合"
+
+  /// 段が前の段より前か、同じ段が2回。
+  error TriageStepOutOfOrder "段の順の違い"
+
+  /// 結論を、その段からは訂正できない（回答役は相談だけを、実行役は変更依頼だけを訂正する）。
+  error TriageNotOverridable "訂正できない結論"
+
+  /// 仕分けの行き先はもう記録されている。
+  error TriageAlreadyConcluded "行き先は記録済み"
+
+  /// 行き先が結論に合わない（AI 宛てでないものに行き先はなく、回答は相談の行き先）。
+  error TriageNotConcludable "結論に合わない行き先"
+
+  /// メッセージは AI 宛てにできない（AI の回答や打ち消しの依頼）。
+  error RequestNotAddressable "AI 宛てにできないメッセージ" {
+    request: RequestId
+  }
+
+  /// メッセージはもう AI 宛てになっている（仕分けがある）。AI 宛てでないと決まったものは、ファシリテーターが送り直せる。
+  error RequestAlreadyAddressed "AI 宛て済みのメッセージ" {
+    request: RequestId
+  }
+
+  /// 指定した仕分けがない。
+  error TriageNotFound "仕分けなし" {
+    triage: TriageId
+  }
+
+  /// 仕分けは別のセッションのもの。
+  error TriageOfAnotherSession "別のセッションの仕分け" {
+    triage: TriageId
+  }
+
+  /// 仕分けは変更案にできない（変更依頼と決まっていない、行き先がある、またはファシリテーターの依頼で変更案を経ない）。
+  error TriageNotProposable "変更案にできない仕分け" {
+    triage: TriageId
+  }
+}

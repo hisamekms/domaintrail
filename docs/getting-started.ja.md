@@ -8,14 +8,14 @@
 
 DomainTrail はドメインモデルを書くための言語（`.dt` ファイル）と、その CLI `dt` です。モデルにはドメインの**構造と
 契約**——境界づけられたコンテキスト、集約とその状態、要件とイベントを持つコマンド、不変条件——を書き、モデルがそれらの
-唯一の正となります。`dt check` がモデルを検査し、`dt view` がブラウザにライブで表示し、`dt generate ts` が
+唯一の正となります。`dt check` がモデルを検査し、`dt open` がブラウザにライブで表示し、`dt generate ts` が
 TypeScript の型・コマンドの契約・不変条件のチェック・実装のための契約テストを生成します。ビジネスロジックは生成しません。
 ロジックは生成された型に対して人（またはエージェント）が書き、コンパイラとテストがそれをモデルに沿わせます。
 
 ## AI エージェントと進める
 
 DomainTrail はこの使い方を前提にしています。とにかく始めたいなら、インストールし（`npm i -D domaintrail`、
-[インストール](#インストール)を参照）、下のブロックをエージェントの指示ファイルに加え、`npx dt view` を起動して、
+[インストール](#インストール)を参照）、下のブロックをエージェントの指示ファイルに加え、`npx dt open` を起動して、
 エージェントに何かをモデリングするよう頼んでください。このページの残りは、エージェントがすることを手で追っていくので、
 エージェントの作業を理解しながら見守れるようになります。
 
@@ -53,7 +53,7 @@ structure and contracts; `generated/domain` is generated from it.
 - Never cast to a domain type (`as X`): make values with `make<Name>`, `parseDecimal` or a verified type's factory.
 - To look up one element, run `npx dt show <name>` (e.g. `npx dt show Booking.Reservation.confirm`) instead of reading
   the `.dt` files. Use `--format json` with `check`, `generate ts` and `show` when you parse the output.
-- People watch the model in the Live View (`npx dt view`). Do not wait for it: it runs until stopped.
+- People watch the model in the Live View (`npx dt open`). Do not wait for it: it runs until stopped.
 - After upgrading domaintrail, read the Upgrading steps in `node_modules/domaintrail/CHANGELOG.md` of every version
   since the previous one, and follow them.
 ```
@@ -66,7 +66,7 @@ structure and contracts; `generated/domain` is generated from it.
 自分のターミナルで Live View を起動し、ブラウザで開きます。
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 そのうえで、ドメインの言葉で一歩ずつ頼みます。コードに進む前、`.dt` ファイルを書いたところで止めてもらうと、
@@ -82,7 +82,7 @@ Live View は保存のたびに追従します。追加・変更された要素�
 
 ### Live View からのフィードバック
 
-話題にしたい要素を左のエクスプローラーか図で選び、右のインスペクターで見ます。フィールドと不変条件（構造）、
+話題にしたい要素を左のエクスプローラーか図で選び、その下の詳細で見ます。フィールドと不変条件（構造）、
 その集約の状態と遷移（状態遷移）、コマンドの要件・変更・発生させるイベント（振る舞い）、使っている箇所（参照）、
 ソース（ソース）。ソースタブでは、強調された宣言のコピーボタンでそのコードをコピーできます。それを会話に貼って何を
 変えたいかを書くか、要素の名前（`Reservation.confirm`。左ペインの下の歯車（設定）の 名前 / 両方 でラベルの横に名前が出ます）
@@ -103,6 +103,10 @@ Live View は保存のたびに追従します。追加・変更された要素�
   パッケージの `schema/diagnostics.schema.json`）。
 - `dt lsp` は言語サーバーです。編集のたびの `dt check` と同じ診断、定義・参照、ホバー、リネーム。Claude Code では
   プラグインを使うと、`.dt` ファイルを編集するたびに Claude が診断を受け取ります（[Claude Code](#claude-code) を参照）。
+- `dt mcp` は Claude Code にプロジェクトの **ナレッジ** を渡します。セッションで付箋ごとに話されたこと・わかったこと
+  （なぜか、どのくらいの頻度か、誰が言ったか）で、ファシリテーターがオンにするとチャットから抽出されます
+  （`dt guide knowledge`）。`claude mcp add domaintrail -- dt mcp` で登録すると、エージェントは要素を実装する前に
+  `knowledge_for_element` を呼びます（`dt guide mcp`）。
 
 ## インストールと最初のモデル
 
@@ -131,6 +135,10 @@ npm i -D domaintrail
   "sources": ["domain/**/*.dt"]
 }
 ```
+
+自分だけの設定（ポート、AI のモデル、AI に読ませるプロジェクト外のフォルダなど）は、隣に置く
+`domaintrail.local.jsonc` に書き、git には含めません。`domaintrail.jsonc` にキーごとに重ねて読まれます（`dt guide config`）。
+AI にできることを広げる設定が変わると、`dt open` は一度だけ承認を求めます。
 
 推奨の構成は、境界づけられたコンテキストごとに 1 ディレクトリ、集約ごとに 1 ファイルです。
 
@@ -337,21 +345,30 @@ domain/booking/reservation.dt
 ### Live View で見る
 
 ```bash
-npx dt view
+npx dt open
 ```
 
 ```text
 Config: domaintrail.jsonc
-Live View: http://127.0.0.1:4321/
+Live View: http://127.0.0.1:4321/session/open?code=…
+  (a link for you only: opened once within 60 minutes, it signs that browser in; then http://127.0.0.1:4321/)
+Session: … (started, solo)
+AI: started in this process (claude …; role run)
 ```
 
-表示されたアドレスをブラウザで開きます。Ctrl+C まで動き続けます（ポートは `--port` で変更）。このモデルで見るところ:
+表示されたリンクをブラウザで開きます（一度だけ使えるリンクで、そのブラウザをサインインさせます。以後は素のアドレスで開けます）。Ctrl+C まで動き続けます（ポートは `--port` で変更）。このモデルで見るところ:
 
 - **Structure**（メインのビュー）: コンテキスト `Booking` と `Reservation`、それが持つ値 `Slot`、参照している ID。
 - `Reservation` を選び、インスペクターの **状態遷移** へ。`request` が `Requested` の予約を作り、`confirm` が
   `Confirmed` へ進めます。
 - `confirm` を選び、**振る舞い** へ。要件 `roomFits`、エラー `RoomTooSmall`、イベントが出ます。
 - ファイルを変えて保存すると表示が追従します。わざと壊すと問題が画面下部に出て、最後に正しかった図は残ります。
+
+チャット、実行、リビジョンといったセッションの記録と図のレイアウトは、ワークスペースの外（既定では
+`~/.local/state/domaintrail/<ワークスペース>/` と `~/.cache/domaintrail/<ワークスペース>/`。macOS も同じ）に保存され、
+ワークスペースには何も書かれません。`.gitignore` に足すものはありません。以前のバージョンが作った `.domaintrail/` は
+最初の実行でそこへ移されます。消えたワークスペースの分は `dt session prune` で一覧し、`--yes` で消せます
+（`dt guide config` の Where dt keeps its files）。
 
 ペイン、ビュー、設定の詳細は [Live View](live-view.md)（英語）にあります。
 
@@ -408,6 +425,8 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 }
 ```
 
+Bun を使う場合は、`"typecheck": "bun check"` でも同じように型検査できます。
+
 ```jsonc
 // tsconfig.json
 {
@@ -434,7 +453,7 @@ npm i -D typescript fast-check vitest oxlint oxlint-tsgolint
 import { Booking, decide, err, ok } from '../generated/domain/index.js';
 
 export const reservationCommands: Booking.ReservationCommands = {
-    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, (id, room, slot, attendees) =>
+    request: decide<Booking.RequestReservationDecision>(Booking.ReservationShape, ({ id, room, slot, attendees }) =>
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
@@ -444,9 +463,10 @@ export const reservationCommands: Booking.ReservationCommands = {
     ),
 
     confirm: decide<Booking.ConfirmReservationDecision>(Booking.ReservationShape, {
-        Requested: (reservation, capacity, at) => {
+        Requested: (reservation, params) => {
             // 要件の式は DSL のものを使う: 生成されたチェックが評価する
-            if (Booking.checkConfirmReservationRequires(reservation, capacity, at)) return err({ type: 'RoomTooSmall' });
+            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'RoomTooSmall' });
+            const { at } = params;
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
@@ -459,7 +479,9 @@ export const reservationCommands: Booking.ReservationCommands = {
 ```
 
 `confirm` の決定は遷移元の状態ごとにハンドラーを 1 つ持ちます（ここでは `Requested` だけ）。複数の状態で動くコマンドも
-同じ形で書けるようにするためです。結果の形は `dt guide decide` で説明しています。
+同じ形で書けるようにするためです。コマンドは集約のあとにパラメーターを 1 つのオブジェクトで受け取り
+（`Booking.ConfirmReservationParams`）、生成された要件のチェックにもそのまま渡します。呼び出しでは各パラメーターを名前で
+書きます（`reservationCommands.confirm(reservation, { capacity, at })`）。結果の形は `dt guide decide` で説明しています。
 
 ### ドメインの値を作る
 
@@ -477,13 +499,17 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
     if (Booking.checkSlot(slot).length > 0) throw new Error('a slot is 1 to 8 hours');
-    const id = Booking.makeReservationId(crypto.randomUUID()); // ID には不変条件がないので失敗しない
-    return reservationCommands.request(id, Booking.makeRoomId(input.room), slot, attendees.value);
+    const room = Booking.makeRoomId(input.room); // Result: UUID の ID は値が UUID であることを確かめる
+    if (!room.ok) return room;
+    const id = Booking.makeReservationId(crypto.randomUUID());
+    if (!id.ok) return id;
+    return reservationCommands.request({ id: id.value, room: room.value, slot, attendees: attendees.value });
 }
 ```
 
-- `make<Name>` はすべての ID とドメインプリミティブにあります。不変条件がある型（`makeHeadcount`）では `Result` を、
-  ない型（`makeReservationId`）では値そのものを返します。
+- `make<Name>` はすべての ID とドメインプリミティブにあります。不変条件がある型（`makeHeadcount`）と、基底が `UUID`
+  の型では `Result` を返します。`UUID` の型はその形を不変条件 `'uuid'` として確かめます（`makeRoomId('room-1')` は
+  `InvalidRoomId`）。それ以外では値そのものを返します。
 - `check<Name>` は値が破っている不変条件を返します（`checkSlot`）。値オブジェクトはただのオブジェクトです。
 - `Decimal` はランタイムの `parseDecimal(text)` で作ります（数でない文字列なら `undefined`）。
 - ID や時刻をどこから得るかはアプリケーションが決めます。コマンドは受け取るだけです。
@@ -492,7 +518,8 @@ export function requestReservation(input: { room: string; start: Date; hours: nu
 
 生成されたテストは、型では確かめられないこと、つまり値を検査します。fast-check で入力を生成し、生成されたチェックを
 正解として使います。コンストラクタがちょうど正しい値だけを受け付けること、コマンドが成り立たない最初の要件のエラーを
-返すこと、コマンドが作った集約がその状態の不変条件を満たすこと、コマンドが純粋であること。テストファイル 1 つで登録します。
+返すこと、コマンドが作った集約がその状態の不変条件を満たすこと、コマンドが純粋であること。補助関数は domaintrail に
+`domaintrail/testing` として含まれ、上で入れた fast-check を使います。テストファイル 1 つで登録します。
 
 ```ts
 // src/contract.test.ts
@@ -620,16 +647,15 @@ storming RoomBooking "会議室予約" {
 
   command Request "申し込む" {
     ref Booking.Reservation.request
-    actor Member
-    target Reservation
+    by Member
+    handledBy Reservation
     emits ReservationRequested
   }
   command Confirm "確定する" {
     ref Booking.Reservation.confirm
     reads RoomCapacity
-    target Reservation
-    emits ReservationConfirmed
-    emits ReservationDeclined
+    handledBy Reservation
+    emits ReservationConfirmed, ReservationDeclined
   }
 
   timeline Confirmed "確定" {
@@ -642,13 +668,13 @@ storming RoomBooking "会議室予約" {
   }
 
   hotspot WhoConfirms "誰が確定する？ 申込みのときに自動で？" {
-    on ReservationConfirmed
+    on Confirm
   }
 }
 ```
 
-この storming は、確定のときに予約が断られることがある（モデルにはまだない）と言い、誰が確定するのかをホットスポットで
-問うています。`dt fmt` と `dt check` は `.dt` ファイルと一緒に `.dtes` ファイルも扱い、Live View は storming を
+この storming は、確定のときに予約が断られることがある（モデルにはまだない）と言い、誰が確定するのかをコマンドに付けた
+ホットスポットで問うています。分からない関係を推測で埋めず、ホットスポットで問いとして残します（`dt guide dtes-quick`）。`dt fmt` と `dt check` は `.dt` ファイルと一緒に `.dtes` ファイルも扱い、Live View は storming を
 Big Picture（イベント）か Design Level で、全体または timeline ごとに表示します。
 
 ### 全体像
@@ -701,7 +727,7 @@ VS Code の拡張はまだありませんが、汎用の LSP クライアント�
 
 - `dt guide` と [guide.md](guide.md)（英語）: 言語と CLI のリファレンス。トピックごとに読めます。
 - [examples/shop](../examples/shop/README.md)（英語）: 実装まで含めた完全な例。
-- [Live View](live-view.md)（英語）: `dt view` のすべてのペインとビュー。
+- [Live View](live-view.md)（英語）: `dt open` のすべてのペインとビュー。
 - [CHANGELOG.ja.md](../CHANGELOG.ja.md): バージョンごとの変更点と、モデルとコードを更新する手順（アップグレード手順）。パッケージにも
   含まれ、エージェントは更新後にそれを読みます（指示のブロックの最後の項目）。
 - [docs/adr](adr): 言語の背後にある設計判断。

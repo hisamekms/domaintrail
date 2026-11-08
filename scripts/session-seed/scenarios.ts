@@ -5,7 +5,7 @@
 import type { Ctx, RunJson } from './seed.js';
 import { editFile, writeSource } from './workspace.js';
 
-export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references'] as const;
+export const SCENARIO_NAMES = ['chat', 'runs', 'questions', 'assumptions', 'replies', 'reactions', 'references', 'revert', 'marks'] as const;
 export type ScenarioName = (typeof SCENARIO_NAMES)[number];
 
 /** A text longer than the stream shows at once (clamped, with "more"). */
@@ -137,6 +137,30 @@ const runs = async (s: Ctx): Promise<void> => {
             title: '注文確定の条件の確認',
             summary: 'すでに @{Sales.Order:confirm} に requires hasItems（明細が1件以上）があります。変更はしていません。',
             requests: [{ request: 1, status: 'done', note: '確認のみ' }],
+        },
+    });
+
+    // answered instead of edited: the run judged the message a question; its answer is Markdown (a heading, a list,
+    // bold, element links), clamped on the card as the AI's answers are
+    const states = await s.say('takahashi', '#注文[1] はどんな状態を通って確定まで進みますか？', {
+        targets: [s.dt('Sales.Order', '注文')],
+        reads: 'request',
+    });
+    await s.apply([states], {
+        kind: 'reply',
+        reply: {
+            outcome: 'done',
+            title: '注文の状態の流れ',
+            summary: '@{Sales.Order} の状態の流れに答えました。変更はしていません。',
+            requests: [{ request: 1, status: 'answered' }],
+            answer: [
+                '## @{Sales.Order} の状態',
+                '',
+                '1. **@{Sales.Order#Draft}**: 明細を足したり外したりできます',
+                '2. @{Sales.Order:confirm} で @{Sales.Order#Confirmed} になります（明細が1件以上のときだけ）',
+                '',
+                'どちらからでも、取り消すと @{Sales.Order#Cancelled} です。',
+            ].join('\n'),
         },
     });
 
@@ -420,7 +444,8 @@ const questions = async (s: Ctx): Promise<void> => {
 };
 
 const assumptions = async (s: Ctx): Promise<void> => {
-    // assumptions with alternatives, votes open (for an alternative, and for keeping it)
+    // assumptions with alternatives: the first undecided, votes open (for an alternative, and for keeping it); the
+    // second approved by the facilitator as it is (承認 name · time, nothing sent to the AI), its votes frozen
     const cancel = await s.say('tanaka', '#注文を取り消す[1] とき、請求書も取り消されるようにしてください', {
         targets: [s.dt('Sales.Order:cancel', '注文を取り消す')],
         reads: 'request',
@@ -469,6 +494,7 @@ const assumptions = async (s: Ctx): Promise<void> => {
     await s.voteAssumption('takahashi', cancelRun, 0, 'paidToo');
     await s.voteAssumption('tanaka', cancelRun, 1, 'own');
     await s.voteAssumption('sato', cancelRun, 1);
+    await s.approveAssumption(cancelRun, 1);
 
     // an alternative picked: the run that redoes it continues the card (the pick's time links to it)
     const amount = await s.say('suzuki', '#請求書を発行する[1] とき、請求金額を注文の合計から計算するようにしてください', {
@@ -604,6 +630,14 @@ const replies = async (s: Ctx): Promise<void> => {
     });
     // a reply to the reply's run
     await s.say('takahashi', '理由が選べるのは良いですね。経理チームにも共有しておきます 👍', { replyTo: second, reads: 'chat' });
+    // replies to people's messages, not to the AI: a reference line names the author (sign in as 田中 to see the reply
+    // to their message marked), and a reply to a reply
+    const addressee = await s.say('suzuki', '宛名の誤りのときは、訂正前の宛名も残しておきたいです', { replyTo: reason, reads: 'request' });
+    await s.say('sato', '賛成です。#請求書再発行[1] に持たせましょう', {
+        replyTo: addressee,
+        targets: [s.dt('Billing.InvoiceReissued', '請求書再発行')],
+        reads: 'chat',
+    });
 };
 
 const reactions = async (s: Ctx): Promise<void> => {
@@ -704,7 +738,142 @@ const references = async (s: Ctx): Promise<void> => {
     });
 };
 
-export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references };
+const revert = async (s: Ctx): Promise<void> => {
+    // the storming of order to cash (no other scenario edits it): two units of work, each followed by a later one
+    const file = 'stormings/order-to-cash.dtes';
+    // mechanical: a later unit changes another part of the same file; reverting the first leaves the later one's change
+    const retry = await s.say('sato', '#支払に失敗した[1] のあとに、再請求のイベントを足してください', {
+        targets: [s.es('OrderToCash', 'PaymentFailed', '支払に失敗した')],
+        reads: 'request',
+    });
+    const retried = await s.apply([retry], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^( {2}event PaymentFailed .*\n)/m, '$1  event PaymentRetried "再請求した"\n'),
+        reply: {
+            outcome: 'done',
+            title: '再請求のイベント',
+            summary: '@{es:OrderToCash/PaymentFailed} のあとに @{es:OrderToCash/PaymentRetried} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+            assumptions: [{ text: '再請求は決済サービスが自動で行う', requests: [1], alternatives: [{ id: 'manual', label: '担当者が手動で再請求する' }] }],
+        },
+    });
+    await s.voteAssumption('tanaka', retried, 0);
+    const favorites = await s.say('suzuki', '#カート[1] のほかに、お気に入りの読みモデルも足してください', {
+        targets: [s.es('OrderToCash', 'Cart', 'カート')],
+        reads: 'request',
+    });
+    await s.apply([favorites], {
+        kind: 'reply',
+        // not used by a command yet: a hotspot on it says so (an unused read model alone is S027)
+        edit: (root) =>
+            editFile(
+                root,
+                file,
+                /^( {2}readmodel Cart .*\n)/m,
+                '$1  readmodel Favorites "お気に入り"\n  hotspot FavoritesUse "どのコマンドで見る？" {\n    on Favorites\n  }\n',
+            ),
+        reply: {
+            outcome: 'done',
+            title: 'お気に入りの読みモデル',
+            summary: '@{es:OrderToCash/Favorites} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+    await s.say('takahashi', '再請求は今回の範囲から外すことになりました。取り消してもらえますか？', { replyTo: retried, reads: 'chat' });
+    await s.revert(retried, '再請求のイベント');
+
+    // by the AI: a later unit renamed what the first one added, so the revert conflicts and goes to the agent
+    const remind = await s.say('takahashi', '#請求書が発行された[1] のあとに、支払の督促のイベントを足してください', {
+        targets: [s.es('OrderToCash', 'InvoiceIssued', '請求書が発行された')],
+        reads: 'request',
+    });
+    const reminded = await s.apply([remind], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^( {2}event InvoiceIssued .*\n)/m, '$1  event InvoiceReminded "支払を督促した"\n'),
+        reply: {
+            outcome: 'done',
+            title: '支払の督促',
+            summary: '@{es:OrderToCash/InvoiceIssued} のあとに @{es:OrderToCash/InvoiceReminded} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+            assumptions: [{ text: '督促は支払期限の翌日に1回だけ送る', requests: [1], alternatives: [{ id: 'weekly', label: '支払われるまで毎週送る' }] }],
+        },
+    });
+    const rename = await s.say('sato', '#支払を督促した[1] は「督促状を送った」と呼んでいます', {
+        targets: [s.es('OrderToCash', 'InvoiceReminded', '支払を督促した')],
+        reads: 'request',
+    });
+    await s.apply([rename], {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /"支払を督促した"/, '"督促状を送った"'),
+        reply: {
+            outcome: 'done',
+            title: '督促の名前',
+            summary: '@{es:OrderToCash/InvoiceReminded} の名前を「督促状を送った」にしました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+    await s.revert(reminded, '支払の督促', {
+        kind: 'reply',
+        edit: (root) => editFile(root, file, /^ {2}event InvoiceReminded .*\n/m, ''),
+        reply: {
+            outcome: 'done',
+            title: '支払の督促の取り消し',
+            summary: '@{es:OrderToCash/InvoiceReminded} を消しました。あとで付けた名前（督促状を送った）は、このイベントとともになくなっています。',
+            requests: [{ request: 1, status: 'done', note: '名前の変更は、取り消したイベントのものなので残していません' }],
+        },
+    });
+};
+
+/**
+ * What a turn changed, on the storming canvas (`stormings/returns.dtes`): a turn adding a sticky, then — after
+ * `--pause`, so that a page opened meanwhile sees it end and marks it — one adding a sticky, relabelling one and
+ * removing one. Each card's 図で見る marks its own changes.
+ */
+const marks = async (s: Ctx): Promise<void> => {
+    const file = 'stormings/returns.dtes';
+    const accepted = await s.say('tanaka', '#返品が依頼された[1] のあとに、返品を受け付けたことを表すイベントを足してください', {
+        targets: [s.es('Returns', 'ReturnRequested', '返品が依頼された')],
+        reads: 'request',
+    });
+    await s.apply([accepted], {
+        kind: 'reply',
+        edit: async (root) => {
+            await editFile(root, file, /^( {2}event ReturnRequested .*\n)/m, '$1  event ReturnAccepted "返品を受け付けた"\n');
+            await editFile(root, file, /^( {4}ReturnRequested\n)/m, '$1    ReturnAccepted\n');
+        },
+        reply: {
+            outcome: 'done',
+            title: '返品の受付',
+            summary: '@{es:Returns/ReturnRequested} のあとに @{es:Returns/ReturnAccepted} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+    const review = await s.say(
+        'sato',
+        '#商品を検品した[1] は「検品を終えた」と呼んでいます。#商品を廃棄した[2] はしないので消して、代わりに交換を提案するイベントを足してください',
+        {
+            targets: [s.es('Returns', 'ItemInspected', '商品を検品した'), s.es('Returns', 'ItemDisposed', '商品を廃棄した')],
+            reads: 'request',
+        },
+    );
+    await s.pause();
+    await s.apply([review], {
+        kind: 'reply',
+        edit: async (root) => {
+            await editFile(root, file, /"商品を検品した"/, '"検品を終えた"');
+            await editFile(root, file, /^ {2}event ItemDisposed .*\n/m, '  event ExchangeOffered "交換を提案した"\n');
+            await editFile(root, file, /^( {6})ItemDisposed\n/m, '$1ExchangeOffered\n');
+        },
+        reply: {
+            outcome: 'done',
+            title: '検品と廃棄の見直し',
+            summary: '@{es:Returns/ItemInspected} の名前を「検品を終えた」にし、廃棄のイベントを消して @{es:Returns/ExchangeOffered} を足しました。',
+            requests: [{ request: 1, status: 'done' }],
+        },
+    });
+};
+
+export const SCENARIOS: Record<ScenarioName, (s: Ctx) => Promise<void>> = { chat, runs, questions, assumptions, replies, reactions, references, revert, marks };
 
 const isScenario = (name: string): name is ScenarioName => (SCENARIO_NAMES as readonly string[]).includes(name);
 

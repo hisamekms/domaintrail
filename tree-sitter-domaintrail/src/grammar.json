@@ -481,7 +481,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_value_name"
           }
         },
         {
@@ -764,7 +764,7 @@
           "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "identifier"
+            "name": "_value_name"
           }
         },
         {
@@ -2460,7 +2460,7 @@
             "name": "member",
             "content": {
               "type": "SYMBOL",
-              "name": "_feature_name"
+              "name": "_value_name"
             }
           }
         ]
@@ -2907,6 +2907,78 @@
               },
               {
                 "type": "STRING",
+                "value": "context"
+              },
+              {
+                "type": "STRING",
+                "value": "shared"
+              },
+              {
+                "type": "STRING",
+                "value": "terms"
+              },
+              {
+                "type": "STRING",
+                "value": "primitive"
+              },
+              {
+                "type": "STRING",
+                "value": "enum"
+              },
+              {
+                "type": "STRING",
+                "value": "union"
+              },
+              {
+                "type": "STRING",
+                "value": "entity"
+              },
+              {
+                "type": "STRING",
+                "value": "aggregate"
+              },
+              {
+                "type": "STRING",
+                "value": "state"
+              },
+              {
+                "type": "STRING",
+                "value": "owns"
+              },
+              {
+                "type": "STRING",
+                "value": "references"
+              },
+              {
+                "type": "STRING",
+                "value": "create"
+              },
+              {
+                "type": "STRING",
+                "value": "command"
+              },
+              {
+                "type": "STRING",
+                "value": "emits"
+              },
+              {
+                "type": "STRING",
+                "value": "errors"
+              },
+              {
+                "type": "STRING",
+                "value": "event"
+              },
+              {
+                "type": "STRING",
+                "value": "error"
+              },
+              {
+                "type": "STRING",
+                "value": "invariant"
+              },
+              {
+                "type": "STRING",
                 "value": "count"
               },
               {
@@ -2936,6 +3008,77 @@
               {
                 "type": "STRING",
                 "value": "contains"
+              }
+            ]
+          },
+          "named": true,
+          "value": "identifier"
+        }
+      ]
+    },
+    "_value_name": {
+      "type": "CHOICE",
+      "members": [
+        {
+          "type": "SYMBOL",
+          "name": "_feature_name"
+        },
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "CHOICE",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "not"
+              },
+              {
+                "type": "STRING",
+                "value": "in"
+              },
+              {
+                "type": "STRING",
+                "value": "and"
+              },
+              {
+                "type": "STRING",
+                "value": "or"
+              },
+              {
+                "type": "STRING",
+                "value": "implies"
+              },
+              {
+                "type": "STRING",
+                "value": "true"
+              },
+              {
+                "type": "STRING",
+                "value": "false"
+              },
+              {
+                "type": "STRING",
+                "value": "String"
+              },
+              {
+                "type": "STRING",
+                "value": "Int"
+              },
+              {
+                "type": "STRING",
+                "value": "Decimal"
+              },
+              {
+                "type": "STRING",
+                "value": "Bool"
+              },
+              {
+                "type": "STRING",
+                "value": "Timestamp"
+              },
+              {
+                "type": "STRING",
+                "value": "UUID"
               }
             ]
           },

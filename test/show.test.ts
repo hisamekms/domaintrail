@@ -2,8 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps, runCli } from '@domaintrail/dt';
 import { EXAMPLES } from './helpers.js';
 
 const dirs: string[] = [];
@@ -52,6 +51,17 @@ describe('dt show', () => {
             '  referenced by: Billing.Invoice.order',
             '  ID used by: Billing.Invoice.issue(order), Sales.Order.place(id), Sales.OrderPlaced.orderId, Sales.OrderConfirmed.orderId, Sales.OrderCancelled.orderId, Sales.RefundRequested.orderId, Sales.NoteChanged.orderId',
         ]);
+    });
+
+    test('a context described in two files (M025): shown as before, with the first description, exit 0 with a note', async () => {
+        const dir = await workspace({
+            'customer.dt': '/// Selling to customers.\ncontext Sales {\n  value Customer { name: String }\n}\n',
+            'invoice.dt': '/// Invoices.\ncontext Sales {\n  value Invoice { total: Int }\n}\n',
+        });
+        const r = await run('-r', dir, 'show', 'Sales');
+        expect(r.code).toBe(0);
+        expect(r.out).toEqual(['context Sales', '  /// Selling to customers.', '  value Customer  // customer.dt:3', '  value Invoice  // invoice.dt:3']);
+        expect(r.err).toEqual(['note: the model has 1 error(s) (see `dt check`); shown as far as it resolves.']);
     });
 
     test('a short name that names one thing only', async () => {

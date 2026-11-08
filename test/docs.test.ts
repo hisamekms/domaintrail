@@ -1,13 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { parseJsonc } from '@domaintrail/modeling/core/config';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { check } from './helpers.js';
+import { cliDeps, runCli } from '@domaintrail/dt';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
+import { check, linkNodeModules } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const read = (file: string) => readFile(path.join(ROOT, file), 'utf8');
@@ -93,7 +91,8 @@ describe('getting started', () => {
         test(`${file}: its JSONC blocks are valid`, () => {
             const blocks = blocksOf(page, 'jsonc');
             expect(blocks.length).toBeGreaterThan(0);
-            for (const block of blocks) expect(parseJsonc(block)).toBeInstanceOf(Object);
+            // the config and tsconfig.json alike: JSONC as Bun reads it
+            for (const block of blocks) expect(Bun.JSONC.parse(block)).toBeInstanceOf(Object);
         });
     }
 
@@ -122,7 +121,7 @@ describe('getting started', () => {
     test('its model, config and code generate, type-check and pass the generated contract tests', async () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-getting-started-'));
         dirs.push(dir);
-        await symlink(path.join(ROOT, 'node_modules'), path.join(dir, 'node_modules'));
+        await linkNodeModules(dir);
         const page = pages[EN];
         // the last version of the model, and the config with `generate`, run with bun:test instead of vitest
         const model = blocksOf(page, 'dt').at(-1)!;

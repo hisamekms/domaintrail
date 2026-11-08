@@ -1,0 +1,101 @@
+context Collaboration {
+  /// ガイドの地図の区切り（`brief`、`events`、`bcSplit` など）。どの区切りがあり、どう済んだと決めるかはコード
+  /// （`domain/guide.ts`）が決める。
+  primitive GuideStepKey "ガイドの区切り": String { matches(value, "^[a-zA-Z]+$") and length(value) <= 40 }
+
+  /// ガイドの道のりの名前: ストーミングの ES の道のり（`es:` とストーミングの ID）か、名前の付いたモデリングの道のりの
+  /// ID（小文字・数字・ハイフンの短い名前）。道のりは道のりのファイル（`domaintrail.journey.json`）にある。
+  primitive GuideJourneyKey "道のり": String { length(value) >= 1 and length(value) <= 100 }
+
+  /// ガイドの地図の世界: まだ（ブリーフも見ているビューもない）、イベントストーミング、モデリング。
+  enum GuideWorld "ガイドの世界" { None "まだ" Storming "イベントストーミング" Model "モデリング" }
+
+  /// モデリングの進め方（`/model:start` で選ぶ）。道のりのファイルにも、この英語の名前で書く。
+  enum GuidePattern "モデリングの進め方" {
+    Whole "全体から"
+    FromStorming "ES から"
+    OneContext "1つの BC を深掘り"
+    Review "既存モデルの見直し"
+  }
+
+  /// 地図の区切りや BC の行が、済んだか、いまここか、これからか。
+  /// いまここは、済んだ最後の区切りより後の、最初の済んでいない区切り。それより前の済んでいない区切り（人の判断で、まだ誰も
+  /// 済みにしていない）は未確認。
+  enum GuideStepState "区切りの状態" { Done "済み" Here "いまここ" Todo "これから" Unconfirmed "未確認" }
+
+  /// 地図の区切り1つ。
+  value GuideStep "地図の区切り" {
+    key: GuideStepKey "区切り"
+    state: GuideStepState "状態"
+    /// ゴールの区切り。
+    goal: Bool "ゴール"
+    /// ゴールより先の区切り（行けるが、ゴールではない。薄く出す）。
+    after: Bool "ゴールより先"
+    /// ファイルからは決められず、人が済みにする区切り。
+    markable: Bool "人が済みにする"
+    /// 人が済みにした。
+    marked: Bool "済みの印"
+  }
+
+  /// `.dt` のコンテキスト1つの進み具合（「各 BC を深掘り」の行）。コンテキストが足されたり分かれたりすると、行も変わる。
+  value GuideContextRow "BC の行" {
+    context: ContextName "コンテキスト"
+    /// 共有のコンテキスト（共有カーネル）。集約がなくても済みとする。
+    shared: Bool "共有"
+    aggregates: Tally "集約"
+    commands: Tally "コマンド"
+    invariants: Tally "不変条件"
+    state: GuideStepState "状態"
+    /// 人が済みにした（ファイルからは済みと言えない行）。
+    marked: Bool "済みの印"
+  }
+
+  /// ガイドの地図: いまいる世界の、道のりのゴールまでの道。ゴールがなければ「ゴールを決める」だけ。
+  value GuideMap "ガイドの地図" {
+    world: GuideWorld "世界"
+    /// 地図の道のり（ゴールがなければない）。
+    journey: GuideJourneyKey? "道のり"
+    /// モデリングの道のりの名前（「Billing の深掘り」など）。
+    journeyName: String? "道のりの名前"
+    pattern: GuidePattern? "進め方"
+    /// 地図が見ているストーミング（ES の地図）。
+    storming: StormingName? "ストーミング"
+    steps: GuideStep[1..12] "区切り"
+    contexts: GuideContextRow[0..40] "BC の行"
+    /// BC の行を下に並べる区切り。
+    contextsAt: GuideStepKey? "BC の行の区切り"
+    /// 道のりが名指すストーミングかコンテキストが、もうない（名前が変わった、消えた）。前の地図にはない（なかった）。
+    missing: Bool? "見つからない"
+  }
+
+  /// ファイルを見ればすぐ分かることの種類。
+  enum GuideFindingKind "すぐ分かることの種類" {
+    StormingWithoutBrief "ブリーフのないストーミング"
+    StageWithoutExceptions "例外のない段階"
+    FlowWithoutExceptions "例外のない流れ"
+    OpenHotspots "未解決の問い"
+    LongLabels "長すぎるラベル"
+    Errors "エラー"
+    Warnings "警告"
+    ContextWithoutAggregates "集約のないコンテキスト"
+    AggregatesWithoutCommands "コマンドのない集約"
+    AggregatesWithoutInvariants "不変条件のない集約"
+  }
+
+  /// ファイルを見ればすぐ分かること1つ（AI を使わない）。その場へ行く先（選ぶ要素か、開くビュー）があれば添える。
+  value GuideFinding "すぐ分かること" {
+    kind: GuideFindingKind "種類"
+    count: Tally "件数"
+    /// 何についてか（段階・ストーミング・コンテキストの名前）。
+    subject: String? "何について"
+    target: ModelTarget? "選ぶ要素"
+    view: ViewShown? "開くビュー"
+  }
+
+  /// `/guide` を始めたときの下見: そのときの地図（モデリングの道のりが複数あれば、道のりごとに）と、すぐ分かること。
+  /// カードは履歴でもこれを出す。
+  value GuideSnapshot "ガイドの下見" {
+    maps: GuideMap[1..10] "地図"
+    findings: GuideFinding[0..10] "すぐ分かること"
+  }
+}

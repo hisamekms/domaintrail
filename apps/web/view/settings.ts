@@ -1,0 +1,63 @@
+import { STRUCTURE_LEVELS, type StructureLevel } from '@domaintrail/visualization';
+import { useState } from 'react';
+import { usePersistentState } from '../shared/layout';
+import type { StormingChoice, StormingFocus } from '../storming';
+
+/** localStorage key of 「詰めて表示」. */
+export const COMPACT_KEY = 'domaintrail.compact';
+
+/** What each view draws (remembered per browser). */
+export interface ViewSettings {
+    /** Structure View: all fields (detail), names only in larger text (overview), or aggregates only (aggregates). */
+    structureLevel: StructureLevel;
+    setStructureLevel: (level: StructureLevel) => void;
+    /** Structure View: the bounded contexts to draw (null = every context, including ones added later). */
+    structureContexts: string[] | null;
+    setStructureContexts: (contexts: string[] | null) => void;
+    /** Focused Structure View: contexts whose stubs (and the dependencies on and from them) are not drawn. */
+    hiddenContexts: string[];
+    setHiddenContexts: (contexts: string[]) => void;
+    /** Context Map: also show shared and ID-only contexts. */
+    mapAll: boolean;
+    setMapAll: (all: boolean) => void;
+    /** Event Storming: the storming, its level and its timeline filter (the page's state, never written to a .dtes file). */
+    stormingChoice: StormingChoice;
+    setStormingChoice: (choice: StormingChoice) => void;
+    /** Event Storming: the exception emphasized (ADR 0032 §11), close to a selection: never remembered nor followed. */
+    stormingFocus: StormingFocus | null;
+    setStormingFocus: (focus: StormingFocus | null) => void;
+    /** Every diagram laid out with the compact spacing (「詰めて表示」); off: the normal spacing. */
+    compact: boolean;
+    setCompact: (compact: boolean) => void;
+}
+
+export function useViewSettings(): ViewSettings {
+    const [savedLevel, setStructureLevel] = usePersistentState<StructureLevel>('domaintrail.structureMode', 'detail');
+    const structureLevel = STRUCTURE_LEVELS.includes(savedLevel) ? savedLevel : 'detail';
+    const [structureContexts, setStructureContexts] = usePersistentState<string[] | null>('domaintrail.structureContexts', null);
+    const [hiddenContexts, setHiddenContexts] = usePersistentState<string[]>('domaintrail.structureHiddenContexts', []);
+    const [mapAll, setMapAll] = usePersistentState('domaintrail.contextMapAll', false);
+    const [stormingChoice, setStormingChoice] = usePersistentState<StormingChoice>('domaintrail.storming', {
+        stormingId: undefined,
+        level: 'big-picture',
+        timelines: {},
+    });
+    const [compact, setCompact] = usePersistentState(COMPACT_KEY, false);
+    const [stormingFocus, setStormingFocus] = useState<StormingFocus | null>(null);
+    return {
+        structureLevel,
+        setStructureLevel,
+        structureContexts,
+        setStructureContexts,
+        hiddenContexts,
+        setHiddenContexts,
+        mapAll,
+        setMapAll,
+        stormingChoice,
+        setStormingChoice,
+        stormingFocus,
+        setStormingFocus,
+        compact: compact === true,
+        setCompact,
+    };
+}

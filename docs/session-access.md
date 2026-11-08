@@ -1,6 +1,6 @@
 # Running a session behind Cloudflare Access: the end-to-end check
 
-`dt session start` with `identity: "access"` verifies Cloudflare Access tokens itself (signature with the team's
+`dt collab` with `identity: "access"` verifies Cloudflare Access tokens itself (signature with the team's
 keys, issuer, audience, expiry) and is tested against a local stand-in for Cloudflare
 (`test/session-access.test.ts`). Whether it works with the real Cloudflare Tunnel and Access is checked by a person,
 with this page. The decisions behind it are in [ADR 0026](adr/0026-collaboration-sessions.md#appendix-cloudflare-access-s8).
@@ -21,7 +21,10 @@ DomainTrail never creates, changes or deletes anything in Cloudflare: the tunnel
   that is signed in to nothing.
 - Node.js 22.13 or later and the `dt` of the version under test; a workspace with `.dt` and `.dtes` sources (e.g.
   `examples/shop`), committed to git so a restore can be checked against `git diff`.
-- For the run step: `dt session subscribe --agent claude` and Claude Code, as for a local session.
+- For the run step: Claude Code, as for a local session (`dt collab` starts the agent in its process, or `dt agent`).
+- **No secret in the workspace that git does not ignore.** The AI reads any file of the workspace that `.gitignore`
+  does not ignore (never `.domaintrail/`, `.git/` or anything outside it) and answers every participant in the chat:
+  keeping secrets out of the repository, or ignored, is the facilitator's responsibility.
 
 ## Configuration
 
@@ -29,7 +32,7 @@ In the workspace's `domaintrail.jsonc`:
 
 ```jsonc
 {
-  "session": {
+  "collab": {
     "identity": "access",
     "host": "127.0.0.1", // the default: only cloudflared reaches the server
     "port": 4321,
@@ -48,7 +51,7 @@ In the workspace's `domaintrail.jsonc`:
 }
 ```
 
-- `dt session start` refuses a `publicUrl` that is not https, whose host is not in `allowedHosts`, or whose origin is
+- `dt collab` refuses a `publicUrl` that is not https, whose host is not in `allowedHosts`, or whose origin is
   not in `allowedOrigins` (the tunnel's requests would all be refused).
 - Any other Host or Origin is refused (403), with or without a token. Loopback names are always allowed, for the
   facilitator's own browser on the machine.
@@ -58,15 +61,15 @@ In the workspace's `domaintrail.jsonc`:
 ## Start
 
 1. Start the tunnel: `cloudflared tunnel run <tunnel>` (or the service you installed).
-2. Start the session in the workspace: `dt session start`. It prints the Live View URL (`http://127.0.0.1:4321/`), the
-   facilitator link and the agent API's address (on 127.0.0.1, credential in `.domaintrail/session/agent.json`).
+2. Start the session in the workspace: `dt collab`. It prints the Live View URL (`http://127.0.0.1:4321/`), the
+   facilitator link and the agent API's address (on 127.0.0.1; its credential stays in memory, `dt collab agent-link` pairs another agent).
    A line `Cloudflare Access keys are not fetched yet` means the JWKS
    (`https://<team>.cloudflareaccess.com/cdn-cgi/access/certs`) could not be fetched: check the team domain and the
    machine's network before going on.
 3. Claim the facilitator role: open `https://session.example.com/` in your browser and sign in through Access, then
    open the facilitator link, with its host changed to `session.example.com` (the path and the code stay). The link
-   works once, for 10 minutes; `dt session link` prints another. The role is never given by Access.
-4. Start the agent: `dt session subscribe --agent claude` in the workspace.
+   works once, for 10 minutes; `dt collab link` prints another. The role is never given by Access.
+4. The agent: `dt collab` starts it in its process when Claude Code is usable (it prints `AI: started …`, or why not); otherwise `dt collab agent-link`, then `dt agent --code <code>` in the workspace.
 
 ## Checklist
 
@@ -102,14 +105,18 @@ Tick each line; for a failure, record what is listed under [When something fails
 - [ ] `https://session.example.com/agent/events` does not reach the agent API: signed out, Access answers; signed in
       (open it in the participant's browser), the session server answers 404 (`curl` to `http://127.0.0.1:4321/agent/events`
       without a token: 401).
-- [ ] The agent API's port (from `agent.json`) is bound to 127.0.0.1 only: `lsof -nP -iTCP -sTCP:LISTEN | grep <port>`.
+- [ ] The agent API's port (printed by `dt collab`, also in `server.json`) is bound to 127.0.0.1 only: `lsof -nP -iTCP -sTCP:LISTEN | grep <port>`.
 
 **Expiry and leaving**
 
 - [ ] Set the Access application's session duration to its shortest (e.g. 15 minutes) for this check, or wait for the
       configured one. When a participant's token expires, their page's WebSocket closes (close code 4002, "token
-      expired", visible in the developer tools' Network tab); the page reconnects once Access gives it a fresh token,
-      or Access asks them to sign in again.
+      expired", visible in the developer tools' Network tab); the page reconnects once Access gives it a fresh token.
+      When the Access session itself has run out, Access answers the page's requests in place of the origin, with a
+      302 to `https://<team>.cloudflareaccess.com/cdn-cgi/access/login/…` (not the origin's 401): the page sees that
+      redirect (it does not follow it) and reloads, so Access's sign-in shows and brings the participant back to the
+      session. It reloads at most once every 30 seconds; it never shows "Network (0)" for this, nor keeps reconnecting
+      in silence. A page whose server is down shows the network error and does not reload.
 - [ ] A participant who leaves the session (`POST /api/session/leave`, from the collab menu's 退出, else from the developer
       tools' console) has their pages closed (code 4001); the answer names `/cdn-cgi/access/logout`,
       where the page sends them to end the Access session.
@@ -121,8 +128,9 @@ Tick each line; for a failure, record what is listed under [When something fails
       model's update live, without reloading.
 - [ ] The facilitator restores the revision before the run; both participants see the model as it was, and
       `git diff` in the workspace shows the sources back as they were.
-- [ ] The facilitator closes the session: every page closes (code 4000), and a reload gets 401 from the origin even
-      with a valid Access session.
+- [ ] The facilitator closes the session: every page closes (code 4000), and `dt session start` exits. A reload,
+      even with a valid Access session, reaches no server: Cloudflare answers with its error page (502, the tunnel's
+      origin is gone), and nothing of the model or the chat is served.
 
 ## When something fails
 
@@ -130,7 +138,7 @@ Record, without tokens, cookies or e-mail addresses (they are personal data and 
 
 - the step, the time (with time zone) and what was expected and seen;
 - the domaintrail version (`npm ls domaintrail`, or the commit of a clone), Node's version, the OS, and the `cloudflared` version;
-- the `dt session start` output around that time (it never prints tokens or e-mail);
+- the `dt collab` output around that time (it never prints tokens or e-mail);
 - the HTTP status and the error `type` of the failing request (developer tools → Network), the WebSocket's close code;
 - whether the request carried a `Cf-Access-Jwt-Assertion` header at the origin (if you can see the request at the
   origin, only whether the header was there, not its value);

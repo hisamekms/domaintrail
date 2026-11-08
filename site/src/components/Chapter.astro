@@ -1,0 +1,15 @@
+---
+// The head of a phase chapter: its place on the way, then the path with 📍.
+import JourneyPath from './JourneyPath.astro';
+import { STEPS, type StepKey } from '../journey';
+
+interface Props {
+    here: StepKey;
+}
+
+const { here } = Astro.props;
+const n = STEPS.findIndex((s) => s.key === here) + 1;
+---
+
+<p class="kicker not-content">ワークショップの道のり · {n} / {STEPS.length}</p>
+<JourneyPath here={here} />

@@ -13,7 +13,10 @@
     "skipLibCheck": true,
     "noEmit": true,
     "allowImportingTsExtensions": false,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    // the support of the generated contract tests, a subpath of this package, from its source (built into dist/ for
+    // the package); Bun resolves it the same way for the code below this file
+    "paths": { "domaintrail/testing": ["./testing/index.ts"] }
   },
-  "include": ["packages", "bin", "web", "test", "scripts"]
+  "include": ["contexts", "capabilities", "platform", "shared", "apps", "bin", "test", "scripts", "testing"]
 }

@@ -1,5 +1,5 @@
 /**
- * The contracts of `dt view` and `dt generate ts` the M0 refactoring keeps (ADR 0025, T1): what the other tests of the
+ * The contracts of the Live View and `dt generate ts` the M0 refactoring keeps (ADR 0025, T1): what the other tests of the
  * Live View do not pin down yet. A deliberate change to one of them updates the snapshots with `bun test -u`.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -7,11 +7,9 @@ import { createHash } from 'node:crypto';
 import { readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { connect } from 'node:net';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
+import { cliDeps, startViewServer, type ViewServer, runCli } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
-import { tempCopyOfExamples } from './helpers.js';
+import { tempCopyOfExamples, withoutVersion } from './helpers.js';
 
 let dir: string;
 let server: ViewServer;
@@ -92,7 +90,13 @@ describe('the Live View server', () => {
 
     test('pushes an update after a .dtes file is saved', async () => {
         const file = path.join(dir, 'stormings', 'order-to-cash.dtes');
-        await writeFile(file, (await readFile(file, 'utf8')).replace('  actor Customer "顧客"', '  actor Customer "顧客"\n  actor Clerk "店員"'));
+        await writeFile(
+            file,
+            (await readFile(file, 'utf8')).replace(
+                '  actor Customer "顧客"',
+                '  actor Customer "顧客"\n  actor Clerk "店員"\n  hotspot ClerkRole "店員は何をする？" {\n    on Clerk\n  }',
+            ),
+        );
         const p = await nextUpdate((u) => u.stormings.some((s) => s.storming.elements.some((e) => e.id === 'Clerk')));
         expect(p.status).toBe('ok');
     });
@@ -129,7 +133,7 @@ describe('dt generate ts', () => {
         for (const f of files) {
             const file = path.join(f.parentPath, f.name);
             hashes[path.relative(out, file).split(path.sep).join('/')] = createHash('sha256')
-                .update(await readFile(file))
+                .update(withoutVersion(await readFile(file, 'utf8')))
                 .digest('hex');
         }
         expect(Object.fromEntries(Object.entries(hashes).sort(([a], [b]) => a.localeCompare(b)))).toMatchSnapshot();

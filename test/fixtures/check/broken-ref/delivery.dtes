@@ -1,0 +1,20 @@
+storming Delivery "配送" {
+  event ShipmentCancelled "配送キャンセル" { ref Delivery.ShipmentCancelled }
+  event ShipmentDelivered { ref Delivery.ShipmentDelivered }
+  event Lost { ref Delivery.Shipment }
+  event Gone { ref ShipmentGone }
+  actor Courier
+  aggregate Shipment { ref Delivery.Shipment }
+  command Cancel {
+    ref Delivery.Courier.assign
+    by Courier
+    handledBy Shipment
+  }
+  hotspot CancelOutcome "取り消すと何が起きる？" { on Cancel }
+  command Deliver {
+    ref Delivery.Shipment.deliver
+    by Courier
+    handledBy Shipment
+    emits ShipmentCancelled
+  }
+}

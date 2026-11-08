@@ -1,0 +1,94 @@
+{
+  "$comment": "The sticky-note figures of each guide, drawn by `dt export svg` from a workspace of examples/<guide>/ (scripts/figures.ts writes public/figures/<guide>/<name>.svg). example: the workspace; storming, stage, timeline, level (big-picture | design), exceptions (show | hide), theme (light | dark), lang (ja | en), names (label | name | both), heading and legend (true) become the command's flags.",
+  "guides": {
+    "event-storming": {
+      "figures": {
+        "overall": {
+          "example": "questions",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "exceptions": "include",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "events-loose": {
+          "example": "events",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "flows-stages": {
+          "example": "flows",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "atstore-mainflow": {
+          "example": "flows",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "atstore-exceptions": {
+          "example": "exceptions",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "exceptions": "include",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "exceptions-hidden": {
+          "example": "exceptions",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "exceptions": "exclude",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "exceptions-overall": {
+          "example": "exceptions",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "exceptions": "include",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "atstore-questions": {
+          "example": "questions",
+          "storming": "CertificateIssuance",
+          "level": "big-picture",
+          "exceptions": "include",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "atstore-design": {
+          "example": "design",
+          "storming": "CertificateIssuance",
+          "level": "design",
+          "exceptions": "exclude",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "issuance-timeline-design": {
+          "example": "design",
+          "storming": "CertificateIssuance",
+          "timeline": "IssuanceFlow",
+          "level": "design",
+          "theme": "light",
+          "lang": "ja"
+        },
+        "design-overall": {
+          "example": "design",
+          "storming": "CertificateIssuance",
+          "level": "design",
+          "exceptions": "include",
+          "theme": "light",
+          "lang": "ja"
+        }
+      }
+    }
+  }
+}

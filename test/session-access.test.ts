@@ -1,36 +1,27 @@
 /**
  * The `access` identity mode (ADR 0026, S8) against a local stand-in for Cloudflare: RSA keys made with `node:crypto`,
- * a JWKS and `get-identity` served from a local HTTP server, tokens signed here. The verifier (signature, `alg`, `kid`,
- * issuer, audience, times, required claims, key rotation, timeouts), the Identity API (name, fallback, cache, avatar
- * rules), and the session server in access mode (no identity, no answer; roles; Host and Origin; e-mail never sent;
- * pages closed at the token's expiry and on leaving).
+ * a JWKS and `get-identity` served from a local HTTP server, tokens signed here. The session server in access mode (no
+ * identity, no answer; roles; Host and Origin; e-mail never sent; pages closed at the token's expiry and on leaving),
+ * and what the page meets behind the edge once the Access session ran out (Access's redirect to its sign-in; the
+ * page's handling of it: apps/web/session/api.test.ts, apps/web/app/sign-in.test.ts).
+ * The verifier and the Identity API: contexts/collaboration/src/infrastructure/identity.test.ts.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { createHmac, generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
+import { generateKeyPairSync, sign, type KeyObject } from 'node:crypto';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import type { Clock } from '@domaintrail/collaboration/application/ports';
-import {
-    allowedAvatarUrl,
-    createCloudflareAccess,
-    createJwksAccessVerifier,
-    type AccessAdapterOptions,
-    type AccessSettings,
-} from '@domaintrail/collaboration/infrastructure/identity';
+import { type AccessAdapterOptions } from '@domaintrail/collaboration';
 import type { Me } from '@domaintrail/collaboration/protocol';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { startSessionServer, WS_EXPIRED, WS_REVOKED, type SessionServer, type SessionServerOptions } from '@domaintrail/composition/session';
-import { DEFAULT_AGENT_TOOLS, type ResolvedSessionConfig } from '@domaintrail/modeling/core/config';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { SessionError } from '@domaintrail/presentation/cli/ports';
+import { cliDeps, type SessionServer, type SessionServerOptions, startSessionServer, WS_EXPIRED, WS_REVOKED, runCli, SessionError } from '@domaintrail/dt';
+import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import type { SessionSettings } from '@domaintrail/dt';
 
 const TEAM = 'team.cloudflareaccess.com';
 const ISSUER = `https://${TEAM}`;
 const AUD = 'a'.repeat(64);
-const settings: AccessSettings = { teamDomain: TEAM, audience: AUD, avatarHosts: ['avatars.example.com'] };
 
 interface Key {
     readonly kid: string;
@@ -116,262 +107,11 @@ async function mockCloudflare(keys: Key[]): Promise<MockCloudflare> {
     });
 }
 
-/** A clock a test moves. */
-const testClock = (): Clock & { advance(ms: number): void } => {
-    let offset = 0;
-    return { now: () => new Date(Date.now() + offset), advance: (ms) => void (offset += ms) };
-};
-
 const adapter = (mock: MockCloudflare, over: AccessAdapterOptions = {}): AccessAdapterOptions => ({
     certsUrl: `${mock.url}/cdn-cgi/access/certs`,
     identityUrl: `${mock.url}/cdn-cgi/access/get-identity`,
     timeoutMs: 300,
     ...over,
-});
-
-describe('the JWKS verifier', () => {
-    const k1 = newKey('k1');
-    const k2 = newKey('k2');
-    const intruder = newKey('k1');
-    let mock: MockCloudflare;
-    beforeAll(async () => {
-        mock = await mockCloudflare([k1]);
-    });
-    afterAll(() => mock.close());
-
-    const verifier = (over: AccessAdapterOptions = {}, clock: Clock = testClock()): ReturnType<typeof createJwksAccessVerifier> =>
-        createJwksAccessVerifier(settings, clock, adapter(mock, over));
-
-    test('accepts a token of the team and the application, with `aud` a list or a string; the claims are returned', async () => {
-        const v = verifier();
-        expect(await v.verify(token(claims('ada'), k1))).toEqual(expect.objectContaining({ sub: 'ada-0000-uuid', email: 'ada@example.com', iss: ISSUER }));
-        expect(await v.verify(token(claims('ada', { aud: AUD }), k1))).toEqual(expect.objectContaining({ sub: 'ada-0000-uuid' }));
-        expect(await v.verify(token(claims('ada', { aud: ['other', AUD] }), k1))).toBeDefined();
-    });
-
-    test('refuses expired and not-yet-valid tokens, with a small clock skew', async () => {
-        const v = verifier();
-        expect(await v.verify(token(claims('ada', { exp: nowS() - 60 }), k1))).toBeUndefined();
-        expect(await v.verify(token(claims('ada', { exp: nowS() - 5 }), k1))).toBeDefined();
-        expect(await v.verify(token(claims('ada', { nbf: nowS() + 120 }), k1))).toBeUndefined();
-        expect(await v.verify(token(claims('ada', { nbf: nowS() + 5 }), k1))).toBeDefined();
-        expect(await v.verify(token(claims('ada', { iat: nowS() + 120 }), k1))).toBeUndefined();
-        expect(await v.verify(token(claims('ada', { exp: undefined }), k1))).toBeUndefined();
-        expect(await v.verify(token(claims('ada', { exp: String(nowS() + 600) }), k1))).toBeUndefined();
-        // the clock is the server's
-        const late = testClock();
-        late.advance(3600_000);
-        expect(await verifier({}, late).verify(token(claims('ada'), k1))).toBeUndefined();
-    });
-
-    test('refuses another audience, another issuer, and tokens without `sub` or `email`', async () => {
-        const v = verifier();
-        for (const over of [
-            { aud: ['another'] },
-            { aud: 'another' },
-            { aud: [] },
-            { aud: [1] },
-            { iss: 'https://evil.cloudflareaccess.com' },
-            { iss: `${ISSUER}/` },
-            { iss: `http://${TEAM}` },
-            { sub: undefined },
-            { sub: '' },
-            { email: undefined },
-        ]) {
-            expect([over, await v.verify(token(claims('ada', over), k1))]).toEqual([over, undefined]);
-        }
-    });
-
-    test('refuses a wrong signature, a changed payload, and anything but a three-part token', async () => {
-        const v = verifier();
-        expect(await v.verify(token(claims('ada'), intruder))).toBeUndefined();
-        const [h, , s] = token(claims('ada'), k1).split('.');
-        expect(await v.verify(`${h}.${b64(claims('eve'))}.${s}`)).toBeUndefined();
-        expect(await v.verify(`${h}.${b64(claims('ada'))}.`)).toBeUndefined();
-        for (const t of ['', 'abc', 'a.b', 'a.b.c.d', `${token(claims('ada'), k1)}x!`, 'x'.repeat(9000)]) expect(await v.verify(t)).toBeUndefined();
-    });
-
-    test('refuses `alg` confusion: none, HS256 keyed with the public key, RS512, a missing `kid`, a `crit` header', async () => {
-        const v = verifier();
-        const payload = b64(claims('ada'));
-        expect(await v.verify(`${b64({ alg: 'none', kid: 'k1' })}.${payload}.`)).toBeUndefined();
-        expect(await v.verify(`${b64({ alg: 'none', kid: 'k1' })}.${payload}.AAAA`)).toBeUndefined();
-        const pem = k1.publicKey.export({ format: 'pem', type: 'spki' });
-        const hsData = `${b64({ alg: 'HS256', kid: 'k1' })}.${payload}`;
-        expect(await v.verify(`${hsData}.${createHmac('sha256', pem).update(hsData).digest('base64url')}`)).toBeUndefined();
-        expect(await v.verify(token(claims('ada'), k1, { alg: 'RS512', kid: 'k1' }))).toBeUndefined();
-        expect(await v.verify(token(claims('ada'), k1, { alg: 'RS256' }))).toBeUndefined();
-        expect(await v.verify(token(claims('ada'), k1, { alg: 'RS256', kid: 'k1', crit: ['exp'] }))).toBeUndefined();
-        // the header's key URLs are never followed
-        expect(await v.verify(token(claims('ada'), intruder, { alg: 'RS256', kid: 'k1', jku: `${mock.url}/evil` }))).toBeUndefined();
-    });
-
-    test('an unknown `kid` fetches the keys again, at most once per interval; rotation keeps working', async () => {
-        mock.keys = [k1];
-        const clock = testClock();
-        const v = verifier({ minRefetchMs: 10_000 }, clock);
-        const before = mock.certsFetches;
-        expect(await v.verify(token(claims('ada'), k1))).toBeDefined();
-        expect(mock.certsFetches - before).toBe(1);
-        // a token of a key not published (yet): one fetch, then none within the interval
-        expect(await v.verify(token(claims('ada'), k2))).toBeUndefined();
-        clock.advance(10_000);
-        expect(await v.verify(token(claims('ada'), k2))).toBeUndefined();
-        expect(await v.verify(token(claims('ada'), k2))).toBeUndefined();
-        expect(mock.certsFetches - before).toBe(2);
-        // Cloudflare rotates: k2 is published beside k1; after the interval the unknown kid is fetched again
-        mock.keys = [k2, k1];
-        expect(await v.verify(token(claims('ada'), k2))).toBeUndefined();
-        clock.advance(10_000);
-        expect(await v.verify(token(claims('ada'), k2))).toBeDefined();
-        expect(await v.verify(token(claims('ada'), k1))).toBeDefined();
-        expect(mock.certsFetches - before).toBe(3);
-        // k1 is withdrawn: once the keys are old, they are fetched again and k1 no longer verifies
-        mock.keys = [k2];
-        clock.advance(60 * 60_000);
-        const later = { exp: nowS() + 7200 };
-        expect(await v.verify(token(claims('ada', later), k1))).toBeUndefined();
-        expect(await v.verify(token(claims('ada', later), k2))).toBeDefined();
-        mock.keys = [k1];
-    });
-
-    test('concurrent tokens share one fetch; a failed or slow JWKS is told without the token and keeps the keys known', async () => {
-        const lines: string[] = [];
-        const clock = testClock();
-        const v = verifier({ minRefetchMs: 0, maxKeyAgeMs: 1000, log: (l) => lines.push(l) }, clock);
-        const before = mock.certsFetches;
-        const t = token(claims('ada'), k1);
-        expect((await Promise.all([v.verify(t), v.verify(t), v.verify(t)])).every(Boolean)).toBe(true);
-        expect(mock.certsFetches - before).toBe(1);
-        clock.advance(2000);
-        mock.certsStatus = 500;
-        expect(await v.verify(t)).toBeDefined();
-        mock.certsStatus = 'hang';
-        clock.advance(2000);
-        const started = Date.now();
-        expect(await v.verify(t)).toBeDefined();
-        expect(Date.now() - started).toBeLessThan(2000);
-        mock.certsStatus = 200;
-        expect(lines.length).toBe(2);
-        expect(lines.join('\n')).toContain('keeping the keys known');
-        expect(lines.join('\n')).not.toContain(t.split('.')[1]);
-        expect(lines.join('\n')).not.toContain('@');
-
-        mock.certsStatus = 500;
-        const cold = verifier({ log: (l) => lines.push(l) });
-        expect(await cold.refresh()).toBe(false);
-        expect(await cold.verify(t)).toBeUndefined();
-        mock.certsStatus = 200;
-    });
-
-    test('skips keys that are not RSA signing keys of 2048 bits or more', async () => {
-        const small = { kid: 'small', ...generateKeyPairSync('rsa', { modulusLength: 1024 }) };
-        const ec = generateKeyPairSync('ec', { namedCurve: 'P-256' });
-        const server = createServer((_req, res) => {
-            const keys = [
-                { ...small.publicKey.export({ format: 'jwk' }), kid: 'small' },
-                { ...ec.publicKey.export({ format: 'jwk' }), kid: 'ec' },
-                { ...k1.publicKey.export({ format: 'jwk' }), kid: 'enc', use: 'enc' },
-                { ...k1.publicKey.export({ format: 'jwk' }), kid: 'ps', alg: 'PS256' },
-                { kty: 'RSA', kid: 'broken', n: 'AQAB', e: 'AQAB' },
-            ];
-            res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ keys }));
-        });
-        await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-        try {
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- listening on TCP
-            const certsUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}/`;
-            const v = createJwksAccessVerifier(settings, testClock(), { certsUrl, log: () => {} });
-            expect(await v.refresh()).toBe(false);
-            expect(await v.verify(token(claims('ada'), small))).toBeUndefined();
-            for (const kid of ['enc', 'ps']) expect(await v.verify(token(claims('ada'), k1, { alg: 'RS256', kid }))).toBeUndefined();
-        } finally {
-            server.closeAllConnections();
-            server.close();
-        }
-    });
-});
-
-describe('the Identity API and the identity', () => {
-    const k1 = newKey('k1');
-    let mock: MockCloudflare;
-    beforeAll(async () => {
-        mock = await mockCloudflare([k1]);
-    });
-    afterAll(() => mock.close());
-
-    test('the name and the avatar come from get-identity, asked once per subject while cached', async () => {
-        mock.identities.set('ada-0000-uuid', {
-            name: ' Ada Lovelace ',
-            email: 'ada@example.com',
-            picture: 'https://avatars.example.com/ada.png',
-            idp: { type: 'google' },
-        });
-        const { provider } = createCloudflareAccess(settings, testClock(), adapter(mock));
-        const before = mock.identityFetches;
-        const t = token(claims('ada'), k1);
-        const [a, b] = await Promise.all([provider.verify(t), provider.verify(t)]);
-        expect(a).toEqual({
-            provider: 'access',
-            subject: 'ada-0000-uuid',
-            displayName: 'Ada Lovelace',
-            email: 'ada@example.com',
-            avatarUrl: 'https://avatars.example.com/ada.png',
-            expiresAt: expect.any(Date),
-        });
-        expect(b).toEqual(a);
-        expect(await provider.verify(t)).toEqual(a);
-        expect(mock.identityFetches - before).toBe(1);
-    });
-
-    test('a failing, slow or redirecting Identity API falls back to the e-mail’s local part, told without the token or e-mail', async () => {
-        const lines: string[] = [];
-        const { provider } = createCloudflareAccess(settings, testClock(), adapter(mock, { log: (l) => lines.push(l) }));
-        mock.identities.set('bob-0000-uuid', 500);
-        mock.identities.set('cy-0000-uuid', 'hang');
-        mock.identities.set('di-0000-uuid', 302);
-        for (const [who, name] of [
-            ['bob', 'bob'],
-            ['cy', 'cy'],
-            ['di', 'di'],
-            ['eve', 'eve'],
-        ]) {
-            const identity = await provider.verify(token(claims(who), k1));
-            expect([who, identity?.displayName, identity?.avatarUrl]).toEqual([who, name, undefined]);
-        }
-        expect(lines.length).toBe(4);
-        expect(lines.join('\n')).not.toContain('@');
-        expect(lines.join('\n')).not.toContain('eyJ');
-    });
-
-    test('an avatar only when https, without credentials or port, on an allowed host; else initials (none)', () => {
-        const hosts = ['avatars.example.com'];
-        expect(allowedAvatarUrl('https://avatars.example.com/a.png?s=64', hosts)).toBe('https://avatars.example.com/a.png?s=64');
-        expect(allowedAvatarUrl('https://AVATARS.example.com/a.png', hosts)).toBe('https://avatars.example.com/a.png');
-        for (const raw of [
-            'http://avatars.example.com/a.png',
-            'https://evil.example.com/a.png',
-            'https://avatars.example.com.evil.example/a.png',
-            'https://user:pw@avatars.example.com/a.png',
-            'https://avatars.example.com:8443/a.png',
-            'data:image/png;base64,AAAA',
-            'javascript:alert(1)',
-            '/relative.png',
-            `https://avatars.example.com/${'a'.repeat(2100)}`,
-        ]) {
-            expect([raw, allowedAvatarUrl(raw, hosts)]).toEqual([raw, undefined]);
-        }
-        expect(allowedAvatarUrl('https://avatars.example.com/a.png', [])).toBeUndefined();
-    });
-
-    test('the OIDC picture claim is used too; a picture of another host is dropped', async () => {
-        mock.identities.set('fay-0000-uuid', { name: 'Fay', oidc_fields: { picture: 'https://avatars.example.com/fay.png' } });
-        mock.identities.set('gus-0000-uuid', { name: 'Gus', picture: 'https://tracker.example.net/gus.png' });
-        const { provider } = createCloudflareAccess(settings, testClock(), adapter(mock));
-        expect((await provider.verify(token(claims('fay'), k1)))?.avatarUrl).toBe('https://avatars.example.com/fay.png');
-        const gus = await provider.verify(token(claims('gus'), k1));
-        expect([gus?.displayName, gus?.avatarUrl]).toEqual(['Gus', undefined]);
-    });
 });
 
 // --- the session server in access mode -------------------------------------------------------------------------------
@@ -402,7 +142,7 @@ async function workspace(): Promise<string> {
     return dir;
 }
 
-type AccessConfig = NonNullable<ResolvedSessionConfig['access']>;
+type AccessConfig = NonNullable<SessionSettings['access']>;
 
 const accessConfig = (over: Partial<AccessConfig> = {}): AccessConfig => ({
     teamDomain: TEAM,
@@ -415,7 +155,7 @@ const accessConfig = (over: Partial<AccessConfig> = {}): AccessConfig => ({
     ...over,
 });
 
-const sessionConfig = (access: AccessConfig): ResolvedSessionConfig => ({
+const sessionConfig = (access: AccessConfig): SessionSettings => ({
     port: 0,
     host: '127.0.0.1',
     identity: 'access',
@@ -499,7 +239,7 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         await mock.close();
     });
 
-    test('dt session start runs the access mode now, and refuses a publicUrl the hosts and origins do not allow', async () => {
+    test('dt collab runs the access mode now, and refuses a publicUrl the hosts and origins do not allow', async () => {
         expect(server.url.startsWith('http://127.0.0.1:')).toBe(true);
         for (const access of [
             accessConfig({ publicUrl: 'http://session.example.com' }),
@@ -512,11 +252,12 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         const dir = await workspace();
         await writeFile(
             path.join(dir, 'domaintrail.json'),
-            JSON.stringify({ session: { identity: 'access', access: { teamDomain: TEAM, audience: AUD, publicUrl: 'https://session.example.com' } } }),
+            JSON.stringify({ collab: { identity: 'access', access: { teamDomain: TEAM, audience: AUD, publicUrl: 'https://session.example.com' } } }),
         );
         const out: string[] = [];
         const err: string[] = [];
-        const code = await runCli(['-r', dir, 'session', 'start', '--port', '0'], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
+        // collab.access is approved with --yes (no terminal here)
+        const code = await runCli(['-r', dir, 'collab', '--no-agent', '--port', '0', '--yes'], { out: (l) => out.push(l), err: (l) => err.push(l) }, cliDeps());
         expect(code).toBe(1);
         expect(err.join('\n')).toContain('allowedHosts must include the host of publicUrl');
     });
@@ -646,12 +387,49 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
     });
 
     test('the cookie is accepted when configured; the header comes first', async () => {
-        const other = await start({ session: sessionConfig(accessConfig({ acceptCookie: true })) });
+        // another workspace: one live server per workspace
+        const other = await start({ root: await workspace(), session: sessionConfig(accessConfig({ acceptCookie: true })) });
         try {
             const cookie = `CF_Authorization=${token(claims('ada'), k1)}`;
             expect((await fetch(`${other.url}api/state`, { headers: { cookie } })).status).toBe(200);
             const both = { cookie, 'Cf-Access-Jwt-Assertion': 'garbage' };
             expect((await fetch(`${other.url}api/state`, { headers: both })).status).toBe(401);
+        } finally {
+            await other.stop();
+        }
+    });
+
+    test('an Access participant joins: the facilitator’s page on loopback is told at once, and sees them online', async () => {
+        // another workspace: a fresh session, with only the facilitator in it
+        const other = await start({ root: await workspace() });
+        try {
+            await other.ready;
+            const fac = header('fay');
+            expect((await fetch(other.facilitatorLink, { headers: fac, redirect: 'manual' })).status).toBe(303);
+            // the facilitator's page on the machine (Host 127.0.0.1), connected before anyone else came
+            const page = await socket(other, fac);
+            try {
+                await until(() => page.received.some((m) => m.type === 'presence.snapshot'));
+                // Eve comes through Access (the tunnel's host): her page's first request joins her, then her page connects
+                const eve = { ...header('eve'), Host: 'session.example.com', Origin: 'https://session.example.com' };
+                expect((await fetch(`${other.url}api/session/me`, { headers: eve })).status).toBe(200);
+                const theirs = await socket(other, eve);
+                try {
+                    theirs.ws.send(JSON.stringify({ type: 'presence.update', location: { kind: 'dt', viewKey: 'contextMap', layoutKey: 'g#1' } }));
+                    const eveId = 'access:eve-0000-uuid';
+                    // the facilitator's page learns she joined (her row) and where she is (online), without a reload
+                    await until(() =>
+                        page.received.some((m) => m.type === 'session.participant_joined' && (m.event as { participant?: string }).participant === eveId),
+                    );
+                    await until(() =>
+                        page.received.some((m) => m.type === 'presence.update' && (m.presence as { participant: { id: string } }).participant.id === eveId),
+                    );
+                } finally {
+                    theirs.ws.close();
+                }
+            } finally {
+                page.ws.close();
+            }
         } finally {
             await other.stop();
         }
@@ -681,5 +459,97 @@ describe('a session in access mode (against a mock of Cloudflare)', () => {
         } finally {
             await other.stop();
         }
+    });
+});
+
+/**
+ * Access in front of the server, as the page meets it: while the participant's Access session lasts, each request goes
+ * to the origin with the application token; once it ran out, Access answers itself with a 302 to the team's login,
+ * and the origin never sees the request (so never answers its 401).
+ */
+interface MockEdge {
+    readonly url: string;
+    signedIn: boolean;
+    originRequests: number;
+    close(): Promise<void>;
+}
+
+async function mockEdge(origin: string, token: () => string): Promise<MockEdge> {
+    const edge: Omit<MockEdge, 'url' | 'close'> = { signedIn: true, originRequests: 0 };
+    const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+        if (!edge.signedIn) {
+            const login = `${ISSUER}/cdn-cgi/access/login/session.example.com?kid=${AUD}&redirect_url=${encodeURIComponent(req.url ?? '/')}`;
+            return void res.writeHead(302, { location: login }).end();
+        }
+        edge.originRequests++;
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        const headers: Record<string, string> = { 'Cf-Access-Jwt-Assertion': token() };
+        if (req.headers['content-type']) headers['content-type'] = req.headers['content-type'];
+        const answer = await fetch(new URL(req.url ?? '/', origin), {
+            method: req.method,
+            headers,
+            ...(chunks.length && { body: Buffer.concat(chunks) }),
+            redirect: 'manual',
+        });
+        res.writeHead(answer.status, Object.fromEntries(answer.headers)).end(Buffer.from(await answer.arrayBuffer()));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- listening on TCP
+    const port = (server.address() as AddressInfo).port;
+    return Object.assign(edge, {
+        url: `http://127.0.0.1:${port}`,
+        close: () =>
+            new Promise<void>((resolve) => {
+                server.closeAllConnections();
+                server.close(() => resolve());
+            }),
+    });
+}
+
+describe('behind Access, once the Access session runs out (what the page meets)', () => {
+    const k1 = newKey('k1');
+    let mock: MockCloudflare;
+    let server: SessionServer;
+    let edge: MockEdge;
+    /** As the page calls its server (apps/web/app/sign-in.ts `SAME_ORIGIN`): a redirect is answered, not followed. */
+    const page = (p: string, init: RequestInit = {}): Promise<Response> =>
+        fetch(`${edge.url}/${p}`, { ...init, credentials: 'same-origin', redirect: 'manual' });
+    const post = (p: string, body: unknown): Promise<Response> =>
+        page(p, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+    beforeAll(async () => {
+        mock = await mockCloudflare([k1]);
+        server = await startSessionServer({
+            root: await workspace(),
+            debounceMs: 30,
+            session: sessionConfig(accessConfig()),
+            accessAdapter: adapter(mock, { clockSkewS: 0 }),
+        });
+        await server.ready;
+        edge = await mockEdge(server.url, () => token(claims('ada'), k1));
+    });
+    afterAll(async () => {
+        await edge?.close();
+        await server?.stop();
+        await mock.close();
+    });
+
+    test('signed in, the page’s calls reach the server through the edge', async () => {
+        const me = await page('api/session/me');
+        expect(me.status).toBe(200);
+        expect(((await me.json()) as Me).participant.name).toBe('ada');
+        expect((await post('api/session/runs', { requests: [] })).status).toBe(403);
+        expect(edge.originRequests).toBe(2);
+    });
+
+    test('expired, Access answers each call itself with a 302 to its login (never the origin’s 401); the origin is not asked', async () => {
+        edge.signedIn = false;
+        const before = edge.originRequests;
+        for (const res of [await page('api/session/me'), await post('api/session/runs', { requests: [] }), await page('api/state')]) {
+            expect(res.status).toBe(302);
+            expect(res.headers.get('location')).toStartWith(`${ISSUER}/cdn-cgi/access/login/`);
+        }
+        expect(edge.originRequests).toBe(before);
     });
 });

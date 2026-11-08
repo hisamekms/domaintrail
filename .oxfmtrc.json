@@ -17,11 +17,14 @@
   "ignorePatterns": [
     // the guide, the ADRs and the READMEs are wrapped by hand, and the guide quotes files verbatim
     "**/*.md",
-    "packages/modeling/src/language/generated/**",
+    "contexts/modeling/src/infrastructure/syntax/generated/**",
     "**/generated/**",
     // build-stamp.json records the hash of grammar.js: formatting it needs `bun run tree-sitter`
     "tree-sitter-domaintrail/**",
     "editors/zed/**",
-    "bun.lock"
+    "bun.lock",
+    // the guide's site: its pages (MDX) are wrapped by hand, its lockfile is Bun's; its scripts, styles and configs are formatted
+    "site/**/*.mdx",
+    "site/bun.lock"
   ]
 }

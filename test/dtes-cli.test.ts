@@ -2,11 +2,9 @@ import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { cliDeps } from '@domaintrail/composition/cli';
-import { runCli } from '@domaintrail/presentation/cli/main';
-import { formatStorming } from '@domaintrail/modeling/storming/format';
-import { formatDomain } from '@domaintrail/modeling/format/format';
-import { check } from './helpers.js';
+import { cliDeps, runCli } from '@domaintrail/dt';
+import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming } from '@domaintrail/storming';
 
 const DT = `context Delivery {
   id ShipmentId: UUID
@@ -28,7 +26,7 @@ const DT = `context Delivery {
 }
 `;
 
-/** A storming with one problem of each `.dt` rule: S011 (line 4), S010 (5), S012 (8), S013 (14). */
+/** A storming with one problem of each `.dt` rule: S011 (line 4), S010 (5), S012 (8), S013 (15). */
 const FLOW = `storming Delivery "配送" {
   event ShipmentCancelled "配送キャンセル" { ref Delivery.ShipmentCancelled }
   event ShipmentDelivered { ref Delivery.ShipmentDelivered }
@@ -37,22 +35,27 @@ const FLOW = `storming Delivery "配送" {
   aggregate Shipment { ref Delivery.Shipment }
   command Cancel {
     ref Delivery.Courier.assign
-    target Shipment
+    handledBy Shipment
   }
   command Deliver {
     ref Delivery.Shipment.deliver
-    target Shipment
+    handledBy Shipment
+    by Courier
     emits ShipmentCancelled
   }
+  actor Courier
+  hotspot CancelOpen "誰が取り消す？" { on Cancel }
 }
 `;
 
 const VALID = `storming Delivery {
   event ShipmentCancelled { ref Delivery.ShipmentCancelled }
   aggregate Shipment { ref Delivery.Shipment }
+  actor Courier
   command Cancel {
     ref Delivery.Shipment.cancel
-    target Shipment
+    by Courier
+    handledBy Shipment
     emits ShipmentCancelled
   }
   timeline Main { ShipmentCancelled }
@@ -87,66 +90,35 @@ async function run(...args: string[]): Promise<{ code: number; out: string[]; er
     return { code, out, err };
 }
 
-const where = (d: { file: string; start: { line: number }; code: string }) => `${d.file}:${d.start.line} ${d.code}`;
-
-describe('analyze with .dtes sources', () => {
-    test('reports S010–S013 at their file and line, merged with the .dt diagnostics', async () => {
-        const a = await check({ 'domain.dt': DT, 'flow.dtes': FLOW });
-        expect(a.diagnostics.map(where)).toEqual(['flow.dtes:4 S011', 'flow.dtes:5 S010', 'flow.dtes:8 S012', 'flow.dtes:14 S013']);
-        expect(a.ok).toBe(false);
-        expect(a.syntaxOk).toBe(true);
-        expect(a.files).toEqual(['domain.dt', 'flow.dtes']);
-        expect(a.documents).toHaveLength(1);
-        expect(a.stormings).toMatchObject({
-            files: ['flow.dtes'],
-            syntaxOk: true,
-            stormings: [{ id: 'Delivery', label: '配送', range: { file: 'flow.dtes' } }],
-        });
-        expect(a.stormings.diagnostics).toEqual(a.diagnostics);
-        expect(a.diagnostics.find((d) => d.code === 'S013')?.elementId).toBe('es/Delivery/Deliver');
-    });
-
-    test('a broken .dtes does not hide the model, and a valid one makes the workspace ok', async () => {
-        const broken = await check({ 'domain.dt': DT, 'flow.dtes': 'storming Delivery {\n  event\n' });
-        expect(broken.diagnostics.map(where)).toEqual(['flow.dtes:2 SYNTAX']);
-        expect(broken.syntaxOk).toBe(true);
-        expect(broken.model?.elements['Delivery.Shipment']).toBeDefined();
-        expect(broken.stormings).toMatchObject({ syntaxOk: false, stormings: [] });
-        expect(broken.ok).toBe(false);
-
-        const valid = await check({ 'domain.dt': DT, 'flow.dtes': VALID });
-        expect(valid.diagnostics).toEqual([]);
-        expect(valid.ok).toBe(true);
-    });
-
-    test('without a .dt model the refs are not checked, the local rules are', async () => {
-        const a = await check({ 'domain.dt': 'context Delivery {', 'flow.dtes': FLOW.replace('target Shipment', 'target Gone') });
-        expect(a.model).toBeUndefined();
-        expect(a.diagnostics.map(where)).toEqual(['domain.dt:1 SYNTAX', 'flow.dtes:9 S003']);
-    });
-
-    test('a workspace of .dtes files only is valid', async () => {
-        const a = await check({ 'flow.dtes': VALID.replace(/ \{ ref [\w.]+ \}/g, '').replace(/    ref [\w.]+\n/, '') });
-        expect(a.diagnostics).toEqual([]);
-        expect(a.ok).toBe(true);
-    });
-});
-
 describe('dt check', () => {
     test('prints the .dtes diagnostics with the .dt ones and exits 1 on an error', async () => {
         const dir = await workspace({ 'domain.dt': DT, 'flow.dtes': FLOW });
         const r = await run('-r', dir, 'check');
         expect(r.code).toBe(1);
         expect(r.err).toContain("flow.dtes:5:16 - error S010: The event ref 'ShipmentGone' is not fully qualified: write 'Context.Event'.");
-        expect(r.out.some((l) => l.startsWith('flow.dtes:14:5 - warning S013: '))).toBe(true);
-        expect(r.err.at(-1)).toBe('2 file(s) checked: 2 error(s), 2 warning(s).');
+        expect(r.out.some((l) => l.startsWith('flow.dtes:15:5 - warning S013: '))).toBe(true);
+        expect(r.err.at(-1)).toBe('2 file(s) checked: 2 error(s), 2 warning(s), 3 info(s).');
+    });
+
+    test('lists the gaps open hotspots keep open, and counts infos apart; neither changes the exit code', async () => {
+        const dir = await workspace({
+            'flow.dtes':
+                'storming Delivery {\n  event Asked\n  event Done\n  command Cancel {\n    emits Done\n  }\n  hotspot Who "誰が？" {\n    on Cancel\n  }\n}\n',
+        });
+        const r = await run('-r', dir, 'check');
+        expect(r.code).toBe(0);
+        expect(r.out).toContain('1 element(s) incomplete under open hotspots: Delivery/Cancel.');
+        expect(r.out.some((l) => l.startsWith('flow.dtes:2:9 - info S029: '))).toBe(true);
+        expect(r.out.at(-1)).toBe('1 file(s) checked: 0 error(s), 0 warning(s), 1 info(s).');
+        const json = await run('-r', dir, 'check', '--format', 'json');
+        expect((JSON.parse(json.out.join('\n')) as { summary: object }).summary).toEqual({ files: 1, errors: 0, warnings: 0, infos: 1 });
     });
 
     test('exits 0 on warnings only, and on a workspace of .dtes files only', async () => {
         const warnings = await workspace({ 'domain.dt': DT, 'flow.dtes': FLOW.replace(/  event (Lost|Gone) .*\n/g, '') });
         const r = await run('-r', warnings, 'check');
         expect(r.code).toBe(0);
-        expect(r.out.at(-1)).toBe('2 file(s) checked: 0 error(s), 2 warning(s).');
+        expect(r.out.at(-1)).toBe('2 file(s) checked: 0 error(s), 2 warning(s), 1 info(s).');
 
         const only = await workspace({ 'flow.dtes': 'storming Delivery {\n  event ShipmentCancelled\n}\n' });
         expect((await run('-r', only, 'check')).out).toEqual(['1 file(s) checked: 0 error(s), 0 warning(s).']);
@@ -157,17 +129,52 @@ describe('dt check', () => {
         const r = await run('-r', dir, 'check', '--format', 'json');
         expect(r.code).toBe(1);
         const report = JSON.parse(r.out.join('\n')) as { diagnostics: { file: string; line: number; code: string }[]; summary: object };
-        expect(report.diagnostics.map((d) => `${d.file}:${d.line} ${d.code}`)).toEqual([
+        expect(report.diagnostics.filter((d) => d.code !== 'S029').map((d) => `${d.file}:${d.line} ${d.code}`)).toEqual([
             'domain.dt:16 M007',
             'flow.dtes:4 S011',
             'flow.dtes:5 S010',
             'flow.dtes:8 S012',
-            'flow.dtes:14 S013',
+            'flow.dtes:15 S013',
         ]);
-        expect(report.summary).toEqual({ files: 2, errors: 3, warnings: 2 });
+        expect(report.summary).toEqual({ files: 2, errors: 3, warnings: 2, infos: 3 });
         const schema = JSON.parse(await readFile(path.join(import.meta.dir, '..', 'schema', 'diagnostics.schema.json'), 'utf8'));
         const pattern = new RegExp(schema.definitions.diagnostic.properties.code.pattern);
         for (const d of report.diagnostics) expect(d.code).toMatch(pattern);
+    });
+
+    test('--format json: a command a policy issues with `reads` (S030), a policy issuing two commands (S031)', async () => {
+        const dir = await workspace({
+            'flow.dtes': `storming Allocation {
+  event Cutoff
+  event Allocated
+  event Notified
+  readmodel Requests
+  aggregate Plan
+  external Messenger
+  command Allocate {
+    reads Requests
+    handledBy Plan
+    emits Allocated
+  }
+  command Notify {
+    handledBy Messenger
+    emits Notified
+  }
+  policy AtCutoff {
+    on Cutoff
+    issues Allocate, Notify
+  }
+}
+`,
+        });
+        const r = await run('-r', dir, 'check', '--format', 'json');
+        expect(r.code).toBe(1);
+        const report = JSON.parse(r.out.join('\n')) as { diagnostics: { line: number; code: string; severity: string; hint?: string }[] };
+        expect(report.diagnostics.filter((d) => d.severity !== 'info').map((d) => `${d.line} ${d.severity} ${d.code}`)).toEqual([
+            '9 error S030',
+            '19 error S031',
+        ]);
+        expect(report.diagnostics[0]!.hint).toBe("move it: write `reads Requests` in policy 'AtCutoff' and remove it here (`dt migrate dtes` moves it)");
     });
 
     test('finds .dtes files by the sources and .gitignore, like .dt files', async () => {
@@ -236,7 +243,7 @@ describe('dt generate ts', () => {
         const r = await run('-r', dir, 'generate', 'ts', '--format', 'json');
         expect(r.code).toBe(0);
         const report = JSON.parse(r.out.join('\n')) as { diagnostics: { code: string }[]; written: string[] };
-        expect(report.diagnostics.map((d) => d.code)).toEqual(['S011', 'S010', 'S012', 'S013']);
+        expect(report.diagnostics.filter((d) => d.code !== 'S029').map((d) => d.code)).toEqual(['S011', 'S010', 'S012', 'S013']);
         expect(report.written).toHaveLength(1);
     });
 

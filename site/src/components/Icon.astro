@@ -1,0 +1,78 @@
+---
+// A lucide icon by its name (the names the app uses: docs/plans/layout.md), drawn as inline SVG at build time.
+import ArrowRight from '@lucide/astro/icons/arrow-right';
+import Bot from '@lucide/astro/icons/bot';
+import CircleCheckBig from '@lucide/astro/icons/circle-check-big';
+import CircleQuestionMark from '@lucide/astro/icons/circle-question-mark';
+import Clock from '@lucide/astro/icons/clock';
+import Compass from '@lucide/astro/icons/compass';
+import DoorOpen from '@lucide/astro/icons/door-open';
+import Eye from '@lucide/astro/icons/eye';
+import FileDown from '@lucide/astro/icons/file-down';
+import Flag from '@lucide/astro/icons/flag';
+import GitFork from '@lucide/astro/icons/git-fork';
+import Globe from '@lucide/astro/icons/globe';
+import Info from '@lucide/astro/icons/info';
+import Layers from '@lucide/astro/icons/layers';
+import Lightbulb from '@lucide/astro/icons/lightbulb';
+import Link from '@lucide/astro/icons/link';
+import ListChecks from '@lucide/astro/icons/list-checks';
+import MapPin from '@lucide/astro/icons/map-pin';
+import MessageSquareText from '@lucide/astro/icons/message-square-text';
+import Microscope from '@lucide/astro/icons/microscope';
+import Monitor from '@lucide/astro/icons/monitor';
+import Printer from '@lucide/astro/icons/printer';
+import Route from '@lucide/astro/icons/route';
+import Sparkles from '@lucide/astro/icons/sparkles';
+import StickyNote from '@lucide/astro/icons/sticky-note';
+import Telescope from '@lucide/astro/icons/telescope';
+import TriangleAlert from '@lucide/astro/icons/triangle-alert';
+import UserRound from '@lucide/astro/icons/user-round';
+import Users from '@lucide/astro/icons/users';
+
+const ICONS = {
+    'arrow-right': ArrowRight,
+    bot: Bot,
+    'circle-check-big': CircleCheckBig,
+    'circle-question-mark': CircleQuestionMark,
+    clock: Clock,
+    compass: Compass,
+    'door-open': DoorOpen,
+    eye: Eye,
+    'file-down': FileDown,
+    flag: Flag,
+    'git-fork': GitFork,
+    globe: Globe,
+    info: Info,
+    layers: Layers,
+    lightbulb: Lightbulb,
+    link: Link,
+    'list-checks': ListChecks,
+    'map-pin': MapPin,
+    'message-square-text': MessageSquareText,
+    microscope: Microscope,
+    monitor: Monitor,
+    printer: Printer,
+    route: Route,
+    sparkles: Sparkles,
+    'sticky-note': StickyNote,
+    telescope: Telescope,
+    'triangle-alert': TriangleAlert,
+    'user-round': UserRound,
+    users: Users,
+} as const;
+
+export type IconName = keyof typeof ICONS;
+
+interface Props {
+    name: IconName;
+    size?: number;
+    class?: string;
+}
+
+const { name, size = 16, class: className } = Astro.props;
+const Lucide = ICONS[name];
+if (!Lucide) throw new Error(`Unknown icon: ${name}`);
+---
+
+<Lucide size={size} class={className} aria-hidden="true" />

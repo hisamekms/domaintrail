@@ -1,19 +1,18 @@
 /**
  * What the collaboration sessions (ADR 0026, M1-0) build on and the other Live View tests do not pin down yet: the
  * payload of a workspace with `.dt` only, `.dtes` only and both, a `ref` that stops resolving, a `.dtes` syntax error,
- * an event shared by timelines, and that `dt view` exposes no session surface.
+ * an event shared by timelines, and that the read-only Live View (`dt open --host`) exposes no session surface.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { startViewServer, type ViewServer } from '@domaintrail/composition/view';
-import { createViewService, type ViewService } from '@domaintrail/visualization/application/view-service';
-import { ElkLayoutEngine } from '@domaintrail/visualization/infrastructure/elk';
-import { createFileLayoutStore } from '@domaintrail/visualization/infrastructure/file-layout-store';
-import { createGitRevisions } from '@domaintrail/visualization/infrastructure/git';
+import { startViewServer, type ViewServer } from '@domaintrail/dt';
+import { createFileLayoutStore, createGitRevisions, createViewService, ElkLayoutEngine, projectView, type ViewService } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
-import { createWorkspaceReader } from '@domaintrail/workspace/infrastructure/files';
+import { createWorkspaceReader } from '@domaintrail/workspace';
+import { sourceSelection } from '@domaintrail/analysis';
+import { elementOf } from '@domaintrail/modeling';
 
 const DT = `context Shop {
   id OrderId: UUID
@@ -69,7 +68,13 @@ async function workspace(files: Record<string, string>): Promise<string> {
 
 /** The view service of the workspace at `dir`, with the real adapters. */
 const viewService = (dir: string): ViewService =>
-    createViewService({ root: dir, engine, workspace: createWorkspaceReader(dir), layoutStore: createFileLayoutStore(dir), git: createGitRevisions(dir) });
+    createViewService({
+        root: dir,
+        engine,
+        workspace: createWorkspaceReader(dir, sourceSelection()),
+        layoutStore: createFileLayoutStore(dir),
+        git: createGitRevisions(dir),
+    });
 
 const errors = (p: ViewPayload): string[] => p.diagnostics.filter((d) => d.severity === 'error').map((d) => `${d.file} ${d.code}`);
 
@@ -78,7 +83,7 @@ describe('the Live View payload by the kinds of sources', () => {
         const p = await viewService(await workspace({ 'shop.dt': DT })).refresh();
         expect(p).toMatchObject({ type: 'update', status: 'ok', stale: false, files: ['shop.dt'], stormings: [] });
         expect(p.sources).toEqual([{ path: 'shop.dt', text: DT }]);
-        expect(Object.keys(p.model!.elements)).toEqual(expect.arrayContaining(['Shop.Order', 'Shop.OrderPlaced']));
+        expect(p.model!.elements.map((e) => e.id)).toEqual(expect.arrayContaining(['Shop.Order', 'Shop.OrderPlaced']));
         expect(p.structure?.nodes.map((n) => n.id)).toContain('Shop.Order');
         expect(p.diagnostics).toEqual([]);
     });
@@ -89,7 +94,7 @@ describe('the Live View payload by the kinds of sources', () => {
         expect(p).toMatchObject({ status: 'ok', stale: false, files: ['ordering.dtes'] });
         expect(p.sources).toEqual([{ path: 'ordering.dtes', text: dtes }]);
         expect(p.model).not.toBeNull();
-        expect(p.model!.elements).toEqual({});
+        expect(p.model!.elements).toEqual([]);
         expect(p.structure?.nodes).toEqual([]);
         expect(p.stormings.map((s) => [s.id, s.file, s.stale])).toEqual([['Ordering', 'ordering.dtes', false]]);
         expect(p.diagnostics).toEqual([]);
@@ -102,7 +107,7 @@ describe('the Live View payload by the kinds of sources', () => {
         const p = await viewService(await workspace({ 'shop.dt': DT, 'ordering.dtes': DTES })).refresh();
         expect(p).toMatchObject({ status: 'ok', stale: false, files: ['ordering.dtes', 'shop.dt'] });
         expect(p.sources.map((s) => s.path)).toEqual(p.files);
-        expect(p.model!.elements['Shop.OrderPlaced']).toBeDefined();
+        expect(elementOf(p.model!, 'Shop.OrderPlaced')).toBeDefined();
         expect(p.stormings.map((s) => s.id)).toEqual(['Ordering']);
         expect(p.diagnostics).toEqual([]);
     });
@@ -120,7 +125,7 @@ describe('a .dtes ref that stops resolving after a .dt edit', () => {
         expect(p.stale).toBe(false);
         expect(errors(p)).toEqual(['ordering.dtes S010']);
         expect(p.diagnostics[0].message).toContain('Shop.OrderPlaced');
-        expect(p.model!.elements['Shop.OrderSubmitted']).toBeDefined();
+        expect(elementOf(p.model!, 'Shop.OrderSubmitted')).toBeDefined();
         expect(p.sources).toEqual([
             { path: 'ordering.dtes', text: DTES },
             { path: 'shop.dt', text: renamed },
@@ -183,7 +188,7 @@ describe('an event shared by timelines', () => {
     test('is one e:<eventId> note on the integrated canvas, and occurrence nodes with their timelines in each timeline view', async () => {
         const [storming] = (await viewService(await workspace({ 'shared.dtes': SHARED })).refresh()).stormings;
         expect(storming.timelines.map((t) => t.id)).toEqual(['T1', 'T2', 'T3']);
-        for (const level of ['big-picture', 'design-level']) {
+        for (const level of ['big-picture', 'design-level'] as const) {
             const integrated = storming.views[`${level}|`];
             const notes = integrated.graph.nodes.filter((n) => n.kind === 'esEvent');
             expect(notes.filter((n) => n.elementId === 'es/S/B').map((n) => n.id)).toEqual(['e:B']);
@@ -200,19 +205,19 @@ describe('an event shared by timelines', () => {
                 ['T2', 't:e:X>e:B'],
                 ['T3', 't:e:A>e:B'],
             ]) {
-                const view = storming.views[`${level}|${timelineId}`];
-                const ids = view.graph.nodes.map((n) => n.id);
+                // a timeline's own projection (no view of its own in the payload: one main flow is drawn on the canvas)
+                const render = projectView(storming.storming, { level, timelineId });
+                const ids = render.nodes.map((n) => n.id);
                 expect(ids).not.toContain('e:B');
                 expect(ids.every((id) => id.startsWith('t:') || id.startsWith('n:'))).toBe(true);
-                const b = view.render.nodes.filter((n) => n.type === 'event' && n.eventId === 'B');
+                const b = render.nodes.filter((n) => n.type === 'event' && n.eventId === 'B');
                 expect(b).toEqual([{ type: 'event', id: nodeId, eventId: 'B', occurrences: [{ timelineId, eventId: 'B', stepPath: [1] }] }]);
-                expect(view.graph.nodes.find((n) => n.id === nodeId)?.elementId).toBe('es/S/B');
             }
         }
     });
 });
 
-describe('dt view exposes no session surface', () => {
+describe('the read-only Live View exposes no session surface', () => {
     let dir: string;
     let server: ViewServer;
     beforeAll(async () => {

@@ -1,0 +1,4 @@
+context Broken {
+  value Money { amount: Int
+  aggregate {
+}

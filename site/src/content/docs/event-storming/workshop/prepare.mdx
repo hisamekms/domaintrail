@@ -1,0 +1,94 @@
+---
+title: 準備
+description: 全員が同じ Live View を見て、AI に話しかけられる場を用意する。dt open と dt collab、トンネル、招待リンク、役割。
+sidebar:
+  label: 準備
+  order: 1
+  attrs:
+    data-n: '1'
+---
+
+import Chapter from '../../../../components/Chapter.astro';
+import FourCards from '../../../../components/FourCards.astro';
+import BeforeAfter from '../../../../components/BeforeAfter.astro';
+import StepsBeside from '../../../../components/StepsBeside.astro';
+
+<Chapter here="prepare" />
+
+<p class="lead">全員が同じ画面を見て、AI に話しかけられる場を用意します。ここはファシリテーターがひとりで済ませておく段階です。</p>
+
+## この章の4つ
+
+<FourCards map="この段階はガイドの地図にはありません。ファシリテーターが自分で確かめます。">
+  <Fragment slot="goal">
+    参加者が同じ Live View を開き、チャットで話せる状態にする。
+  </Fragment>
+  <Fragment slot="people">
+    <ul>
+      <li>場所（同じ部屋か、リモートか）と時間を決める</li>
+      <li>業務を実際に知っている人を呼ぶ</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="dt">
+    <ul>
+      <li><code>dt open</code>（ひとり）か <code>dt collab</code>（複数人）を始める</li>
+      <li>リモートなら <code>dt collab --tunnel</code> と招待リンク</li>
+      <li>参加の申し込みを許可する</li>
+    </ul>
+  </Fragment>
+  <Fragment slot="done">
+    <ul>
+      <li>全員が画面を開けている</li>
+      <li>ファシリテーターがファシリテーターとして入っている</li>
+      <li>チャットの見出しに「AI 接続なし」が出ていない</li>
+    </ul>
+  </Fragment>
+</FourCards>
+
+## 何もない画面から、全員がそろった画面へ
+
+<BeforeAfter
+  before="empty-world"
+  beforeKind="shot"
+  beforeLabel="いま：dt open の直後。まだ何も書いていない"
+  after="collab-menu"
+  afterKind="shot"
+  afterLabel="この章のあと：コラボに参加者がそろった"
+/>
+
+## どう始めるか
+
+| 場面 | 始め方 | 参加者がすること |
+|---|---|---|
+| ひとりで、または画面を映して進める | `dt open` | 映された画面を見て話す |
+| 参加者もチャットで話す（どこからでも） | `dt collab --tunnel` | 招待リンクを開き、名前を入れて許可を待つ |
+| 組織で Cloudflare Access を使っている | `dt collab`（`access` モード） | いつもの ID で入る |
+
+- `dt open` と `dt collab` はファシリテーターの PC で動き、`127.0.0.1` だけで待ち受けます。
+- 同じ LAN の人に直接開いてもらう方法はありません。`dt open --host <アドレス>` は**読み取り専用**の Live View になり、チャットも AI も使えません。話してもらうなら `--tunnel` を使います。
+- `--tunnel` は Cloudflare の quick tunnel（`cloudflared`、アカウント不要）を使います。アドレスは `https://….trycloudflare.com` で、コラボを終えると止まります。自分のトンネルやリバースプロキシを使うなら `collab.link.publicUrl` を設定します。
+
+## 進め方（リモートのコラボ）
+
+<StepsBeside shot="collab-menu" alt="コラボのメニュー：参加者と招待" caption="コラボのメニュー（チャットの見出しのアバター ▾）">
+
+1. **ワークスペースで始める**　`domaintrail.jsonc` のあるフォルダで `dt collab --tunnel`。初回は、インターネットに出す設定を一覧して確認を求められる。
+2. **ファシリテーターとして入る**　表示された**ファシリテーターリンク**を自分のブラウザで開き、名前を入れる。
+3. **招待する**　コラボのメニューの **招待** でリンクを作ってコピーし、参加者に送る。
+4. **許可する**　申し込んだ人がチャットの見出しに並ぶ。名前を確かめて **許可** か **拒否**。
+5. **AI を確かめる**　Claude Code が使えないと、起動時に `AI: not started (…)` と出る。直してから始め直す。
+
+</StepsBeside>
+
+:::tip[コツ]
+ブリーフ（次の章）は、本番の前にファシリテーターひとりで `dt open` で済ませておけます。同じワークスペースで `dt collab` を始めると、そのセッションが続きになります。
+:::
+
+:::caution[よくあるつまずき]
+ファシリテーターリンクは、使われるまでインターネットのどこからでも開けます（10分間）。表示中のターミナルを画面共有しないでください。招待リンクは60分で切れ、新しく作ると前のものは使えなくなります。
+:::
+
+## 役割
+
+- **ファシリテーター**：ファシリテーターリンクを開いた人。1人だけです。メニューの「ファシリテーターを引き継ぐ」で渡せます。
+- **参加者**：それ以外の全員。話す、コマンドを実行する、票を入れる。ファイルを変えるものはファシリテーターの承認を待ちます（[人と AI の分担](../../roles/)）。

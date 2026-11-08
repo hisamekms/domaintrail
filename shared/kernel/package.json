@@ -1,0 +1,13 @@
+{
+  "name": "@domaintrail/kernel",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./tests": "./src/generated/tests/Kernel.ts"
+  },
+  "devDependencies": {
+    "fast-check": "4.10.2"
+  }
+}

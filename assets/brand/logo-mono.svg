@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 128" fill="none" role="img" aria-label="DomainTrail symbol">
+  <g stroke="#4338CA" stroke-width="9" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M22 20 H61 C92 20 108 37 108 64 C108 91 92 108 61 108 H22"/>
+    <path d="M22 45 H43 C53 45 57 64 72 64"/>
+    <path d="M22 83 H43 C53 83 57 64 72 64"/>
+    <path d="M72 64 H121"/>
+  </g>
+  <circle cx="72" cy="64" r="9" fill="#4338CA"/>
+</svg>
