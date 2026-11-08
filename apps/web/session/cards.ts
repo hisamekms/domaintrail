@@ -121,7 +121,12 @@ export function messageMarks(units: readonly ChangeUnit[]): Map<string, MessageM
                 const seen = latest.get(r.request);
                 if (!seen || run.queuedAt >= seen.run.queuedAt) latest.set(r.request, { run, unit });
             }
-    return new Map([...latest].map(([request, { run, unit }]) => [request, { state: markState(run, request), card: unit.key }]));
+    return new Map(
+        [...latest].map(([request, { run, unit }]) => {
+            const segment = unit.runs.slice(0, unit.runs.findIndex((r) => r.run.id === run.id) + 1).findLast((r) => r.run.input.answer);
+            return [request, { state: markState(run, request), card: segment?.run.id ?? unit.key }];
+        }),
+    );
 }
 
 /** An item of a card's menu (the facilitator's): revert the unit's changes, see them. */
