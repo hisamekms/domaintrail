@@ -2465,7 +2465,8 @@ it (its main flows and its exceptions); its row in the navigator brings the fram
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014–S033 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S033 need only the storming, S010–S013 check its `ref`s against the model, and S034 needs
+`dt check --storming-level=design-level`. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID
 (`by`, `handledBy` and `from` included), a list with a comma too many (`emits A,`).
@@ -3054,6 +3055,22 @@ storming Checkout {
     on OrderConfirmed
     handledBy Invoice
     emits InvoiceIssued
+  }
+}
+```
+
+**S034** (info, only with `dt check --storming-level=design-level`): adjacent events in a timeline have no stated origin for
+the later event. Investigate whether there is a human decision, policy, external fact, or only time order. The diagnostic
+does not require a causal edge.
+
+```dtes
+// S034
+storming Checkout {
+  event OrderConfirmed
+  event InvoiceIssued
+  timeline Main {
+    OrderConfirmed
+    InvoiceIssued
   }
 }
 ```

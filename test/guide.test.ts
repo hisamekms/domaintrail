@@ -9,6 +9,7 @@ import { generateTypeScript } from '@domaintrail/generation';
 import { analyze, sourceSelection } from '@domaintrail/analysis';
 import { resolveConfig } from '@domaintrail/dt';
 import { loadWorkspace } from '@domaintrail/workspace';
+import { designLevelAdvice } from '../apps/dt/src/cli/storming-advice.js';
 import { EXAMPLES, check } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
@@ -99,7 +100,8 @@ describe('dt guide', () => {
             expect(formatStorming(block)).toBe(block);
             const a = await check({ ...workspace(), 'example.dtes': block });
             // an info (S029) informs about the rest of a one-problem example: only its own rule counts
-            const found = a.diagnostics.filter((d) => d.code === code || d.severity !== 'info');
+            const diagnostics = [...a.diagnostics, ...(code === 'S034' ? designLevelAdvice(a.stormings.stormings) : [])];
+            const found = diagnostics.filter((d) => d.code === code || d.severity !== 'info');
             expect({ code, found: [...new Set(found.map((d): string => d.code))] }).toEqual({ code, found: [code] });
         }
     });
