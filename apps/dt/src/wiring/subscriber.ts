@@ -201,8 +201,6 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     if (session.value.state !== 'Open') throw new SessionError('The session is closed.');
     if (options.agent === 'codex' && JSON.stringify(session.value.allowedTools) !== JSON.stringify(DEFAULT_AGENT_TOOLS))
         throw new SessionError('agent.run.allowedTools contains Claude Code rules; Codex supports only the default tool policy.');
-    if (options.agent === 'codex' && [...(options.read?.answer ?? []), ...(options.read?.run ?? [])].length)
-        throw new SessionError('agent.read.paths is not supported with Codex.');
 
     const roles = new Set<AgentRole>(taken);
     const sources = options.sources ?? DEFAULT_SOURCES;
@@ -250,6 +248,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                               ? createCodexAnswerer({
                                     root: viewDir,
                                     prepare,
+                                    ...(extraViews && { extraRead: extraViews.extra }),
                                     ...(knowledgeMcp && { knowledge: knowledgeMcp }),
                                     ...((options.answerCommand ?? options.agentCommand) && { command: options.answerCommand ?? options.agentCommand }),
                                     ...(answerConfig.model && { model: answerConfig.model }),
@@ -344,6 +343,8 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     }
 
     const runTargets = readOf('run');
+    // Codex's --add-dir grants writes, so its runner uses the same private read copies as the answerer.
+    const codexRunViews = options.agent === 'codex' ? await answererExtraViews(runTargets) : undefined;
     // the `files` knowledge store's directory: only dt writes it (an extraction may while a run runs), never the agent
     const knowledgeDir = options.knowledge && dtWrittenKnowledgeDir(options.knowledge.config, root);
     const dtWrittenDirs = knowledgeDir ? [knowledgeDir] : [];
@@ -373,6 +374,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                       root,
                       command: options.agentCommand,
                       dt,
+                      ...(codexRunViews && { prepare: () => codexRunViews.refresh(), extraRead: codexRunViews.extra }),
                       ...(run?.model && { model: run.model }),
                       ...(run?.effort && { effort: run.effort }),
                       ...(knowledgeMcp && { knowledge: knowledgeMcp }),
@@ -386,7 +388,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
                     })
                   : await createClaudeCodeRunner(claude);
     } catch (e) {
-        await Promise.all([answerer?.stop(), extractor?.stop(), launcher?.dispose()]);
+        await Promise.all([answerer?.stop(), extractor?.stop(), launcher?.dispose(), codexRunViews?.dispose()]);
         throw new SessionError(e instanceof Error ? e.message : String(e));
     }
     const subscriber: Subscriber = subscribe(
@@ -428,7 +430,7 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
         subscriber.done.then(async (why) => {
             await readOnlyEnd(why);
             return why;
-        }),
+        }).finally(() => codexRunViews?.dispose()),
     );
     return {
         session: session.value.session,

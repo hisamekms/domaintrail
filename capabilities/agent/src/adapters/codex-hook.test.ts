@@ -12,8 +12,10 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
     try {
         writeFileSync(path.join(root, 'model.dt'), 'context Example {}\n');
         symlinkSync(outside, path.join(root, 'link'));
-        const allowed = (role: CodexHookRole, tool_name: string, command: string): boolean => {
-            writeFileSync(policy, codexHookSource(root, role));
+        writeFileSync(path.join(outside, 'reference.txt'), 'approved context\n');
+        writeFileSync(path.join(outside, "reader's-notes.txt"), 'other context\n');
+        const allowed = (role: CodexHookRole, tool_name: string, command: string, extras: readonly string[] = []): boolean => {
+            writeFileSync(policy, codexHookSource(root, role, extras));
             const result = spawnSync(process.execPath, [policy], {
                 input: JSON.stringify({ tool_name, tool_input: { command } }), encoding: 'utf8',
             });
@@ -33,6 +35,11 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
         expect(allowed('read', 'Bash', 'rg --files')).toBe(true);
         expect(allowed('read', 'Bash', "rg -n '^' -- 'model.dt'")).toBe(true);
         expect(allowed('read', 'apply_patch', '*** Begin Patch\n*** Update File: model.dt\n@@\n-old\n+new\n*** End Patch')).toBe(false);
+        expect(allowed('run', 'Bash', `rg --files --hidden '${outside}'`, [outside])).toBe(true);
+        expect(allowed('read', 'Bash', `rg -n '^' -- '${path.join(outside, 'reference.txt')}'`, [outside])).toBe(true);
+        expect(allowed('read', 'Bash', `rg -n '^' -- '${path.join(outside, 'reader')}'\\''s-notes.txt'`, [outside])).toBe(true);
+        expect(allowed('run', 'Bash', `rg -n '^' -- '${path.join(outside, 'reference.txt')}'`, [outside])).toBe(true);
+        expect(allowed('run', 'apply_patch', `*** Begin Patch\n*** Update File: ${path.join(outside, 'reference.txt')}\n@@\n-old\n+new\n*** End Patch`, [outside])).toBe(false);
         expect(allowed('none', 'Bash', 'rg --files')).toBe(false);
     } finally {
         rmSync(root, { recursive: true, force: true });

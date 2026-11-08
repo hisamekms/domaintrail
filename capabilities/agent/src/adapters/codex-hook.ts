@@ -8,14 +8,15 @@ import * as path from 'node:path';
 export type CodexHookRole = 'run' | 'read' | 'none';
 
 /** The policy script only receives fixed values dt wrote; it never evaluates workspace text. */
-export function codexHookSource(root: string, role: CodexHookRole): string {
+export function codexHookSource(root: string, role: CodexHookRole, extraDirs: readonly string[] = []): string {
     return `
 const fs = require('node:fs');
 const path = require('node:path');
 const root = fs.realpathSync.native(${JSON.stringify(root)});
 const role = ${JSON.stringify(role)};
-const inside = (target) => {
-  const rel = path.relative(root, target);
+const extraDirs = ${JSON.stringify(extraDirs)}.map((shown) => ({ shown, real: fs.realpathSync.native(shown) }));
+const inside = (base, target) => {
+  const rel = path.relative(base, target);
   return rel !== '' && rel !== '..' && !rel.startsWith('..' + path.sep) && !path.isAbsolute(rel);
 };
 const real = (p) => {
@@ -26,14 +27,42 @@ const local = (name, extension, allowAbsolute = false) => {
   if (typeof name !== 'string' || !name || (path.isAbsolute(name) && !allowAbsolute) || name.split(/[\\/]/).some((part) => part === '..' || part === '.') || /[\\0\\r\\n]/.test(name)) return false;
   if (extension && !/\\.dt(?:es)?$/.test(name)) return false;
   const target = path.resolve(root, name);
-  return inside(target) && real(target) === target;
+  return inside(root, target) && real(target) === target;
 };
+const extraFile = (name) => {
+  if (typeof name !== 'string' || !path.isAbsolute(name) || /[\\0\\r\\n]/.test(name)) return false;
+  const target = path.resolve(name);
+  return fs.existsSync(target) && fs.statSync(target).isFile() && extraDirs.some((dir) =>
+    [dir.shown, dir.real].some((base) => inside(base, target) && real(target) === path.join(dir.real, path.relative(base, target))));
+};
+const quote = (name) => String.fromCharCode(39) + name.replaceAll(String.fromCharCode(39), String.fromCharCode(39, 92, 39, 39)) + String.fromCharCode(39);
+const unquote = (value) => {
+  if (!value.startsWith("'")) return null;
+  let name = '';
+  for (let i = 0; i < value.length;) {
+    if (value[i] !== "'") return null;
+    const end = value.indexOf("'", i + 1);
+    if (end < 0) return null;
+    name += value.slice(i + 1, end);
+    i = end + 1;
+    if (i === value.length) return name;
+    if (value.charCodeAt(i) !== 92 || value[i + 1] !== "'") return null;
+    name += "'";
+    i += 2;
+  }
+  return null;
+};
+const readPrefix = "rg -n '^' -- ";
+const readFileName = (command) => command.startsWith(readPrefix) ? unquote(command.slice(readPrefix.length)) : null;
 const read = (command) => {
-  if (role === 'run') return command === "rg --files -g '*.dt' -g '*.dtes'" || command === "rg -n '^' -g '*.dt' -g '*.dtes' .";
-  if (role !== 'read') return false;
+  if (role === 'none') return false;
+  if (role === 'run' && (command === "rg --files -g '*.dt' -g '*.dtes'" || command === "rg -n '^' -g '*.dt' -g '*.dtes' .")) return true;
+  if (role === 'run' && extraDirs.some((dir) => command === 'rg --files --hidden ' + quote(dir.shown) || command === 'rg --files --hidden ' + quote(dir.real))) return true;
+  if (role === 'run') { const name = readFileName(command); return name !== null && extraFile(name); }
   if (command === 'rg --files' || command === "rg -n '^' .") return true;
-  const one = /^rg -n '\\^' -- '([^'\\r\\n\\0]+)'$/.exec(command);
-  return !!one && local(one[1], false) && fs.existsSync(path.resolve(root, one[1])) && fs.statSync(path.resolve(root, one[1])).isFile();
+  if (extraDirs.some((dir) => command === 'rg --files --hidden ' + quote(dir.shown) || command === 'rg --files --hidden ' + quote(dir.real))) return true;
+  const name = readFileName(command);
+  return name !== null && ((local(name, false) && fs.existsSync(path.resolve(root, name)) && fs.statSync(path.resolve(root, name)).isFile()) || extraFile(name));
 };
 const patch = (command) => {
   if (role !== 'run' || typeof command !== 'string' || !command.startsWith('*** Begin Patch\\n') || !command.includes('\\n*** End Patch')) return false;
@@ -73,11 +102,11 @@ export interface CodexHook {
 }
 
 /** A preflight is required: a broken hook can let Codex continue the tool call. */
-export async function createCodexHook(root: string, role: CodexHookRole): Promise<CodexHook> {
+export async function createCodexHook(root: string, role: CodexHookRole, extraDirs: readonly string[] = []): Promise<CodexHook> {
     const dir = await mkdtemp(path.join(tmpdir(), 'dt-codex-hook-'));
     const file = path.join(dir, 'policy.cjs');
     try {
-        await writeFile(file, codexHookSource(root, role), { mode: 0o600 });
+        await writeFile(file, codexHookSource(root, role, extraDirs), { mode: 0o600 });
         const check = (tool_name: string, command: string, expected: 'allow' | 'deny'): void => {
             const result = spawnSync(process.execPath, [file], {
                 input: JSON.stringify({ cwd: root, tool_name, tool_input: { command } }),

@@ -9,7 +9,7 @@ import { extractorJsonSchema, gateJsonSchema, hotspotNameJsonSchema } from '@dom
 import type { AgentInvocation, AgentOutcome, AgentRunner, AnswerAgent, AnswerTurn, AnswerTurnResult, ExtractAgent, ExtractTurn } from '../core/ports.js';
 import { parseReply } from '../core/prompt.js';
 import { extractorInstructions, gateInstructions, hotspotNameInstructions } from '../core/extract-prompt.js';
-import { type AgentCommand, KILL_GRACE_MS, killTree, type KnowledgeMcp } from './claude-code.js';
+import { type AgentCommand, KILL_GRACE_MS, killTree, type ExtraRead, type KnowledgeMcp } from './claude-code.js';
 import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 import { createCodexHook, type CodexHookRole } from './codex-hook.js';
 
@@ -77,6 +77,7 @@ export interface CodexTurnOptions {
     effort?: string;
     dt?: PinnedDt;
     knowledge?: KnowledgeMcp;
+    extraRead?: ExtraRead;
     onEvent?: (event: Record<string, unknown>) => void;
 }
 
@@ -87,7 +88,7 @@ export async function runCodexOnce(options: CodexTurnOptions): Promise<AnswerTur
     let shim: Awaited<ReturnType<typeof writeDtShim>> | undefined;
     let hook: Awaited<ReturnType<typeof createCodexHook>> | undefined;
     try {
-        hook = await createCodexHook(options.root, options.hookRole);
+        hook = await createCodexHook(options.root, options.hookRole, options.extraRead?.dirs);
         const schemaFile = path.join(dir, 'schema.json');
         const outputFile = path.join(dir, 'answer.json');
         await writeFile(schemaFile, JSON.stringify(codexSchema(options.schema)), { mode: 0o600 });
@@ -182,7 +183,9 @@ export async function runCodexOnce(options: CodexTurnOptions): Promise<AnswerTur
                 if (killer) clearTimeout(killer);
                 resolve(code ?? -1);
             });
-            child.stdin.end(options.prompt);
+            child.stdin.end(options.extraRead?.note
+                ? `${options.prompt}\n\n${options.extraRead.note}\nUse rg --files --hidden '<copy directory>' to list a copy, and rg -n '^' -- '<copy file>' to read one file. These copies are read-only.`
+                : options.prompt);
         });
         if (options.signal.aborted) return { text: '', error: 'stopped', exitCode: -1 };
         const text = await readFile(outputFile, 'utf8').catch(() => '');
@@ -242,6 +245,8 @@ export async function checkCodex(command: AgentCommand = CODEX, timeoutMs = 5_00
 
 export async function createCodexRunner(options: {
     root: string;
+    prepare?: () => Promise<void>;
+    extraRead?: ExtraRead;
     command?: AgentCommand;
     dt: PinnedDt;
     model?: string;
@@ -252,6 +257,7 @@ export async function createCodexRunner(options: {
     const fingerprint = await fingerprintDt(pinned);
     return {
         async run(invocation: AgentInvocation): Promise<AgentOutcome> {
+            await options.prepare?.();
             if ((await fingerprintDt(pinDt(dtCommandOf(pinned), options.root))) !== fingerprint)
                 throw new Error("A file of the agent's dt changed since it started: refusing to run it.");
             const result = await runCodexOnce({
@@ -266,6 +272,7 @@ export async function createCodexRunner(options: {
                 ...(options.model && { model: options.model }),
                 ...(options.effort && { effort: options.effort }),
                 ...(options.knowledge && { knowledge: options.knowledge }),
+                ...(options.extraRead && { extraRead: options.extraRead }),
                 onEvent: (event) => {
                     const activity = codexActivity(event);
                     if (activity) invocation.onActivity?.(activity);
@@ -279,6 +286,7 @@ export async function createCodexRunner(options: {
 export function createCodexAnswerer(options: {
     root: string;
     prepare?: () => Promise<void>;
+    extraRead?: ExtraRead;
     command?: AgentCommand;
     model?: string;
     effort?: string;
@@ -299,6 +307,7 @@ export function createCodexAnswerer(options: {
                 ...(model && { model }),
                 ...(options.effort && { effort: options.effort }),
                 ...(knowledge && { knowledge }),
+                ...(role === 'read' && options.extraRead && { extraRead: options.extraRead }),
             });
         } catch (e) {
             return { text: '', error: e instanceof Error ? e.message : String(e) };

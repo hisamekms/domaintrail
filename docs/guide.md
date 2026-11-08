@@ -3919,7 +3919,9 @@ standalone agent. Codex uses a fresh CLI process for each turn, so the `warm` an
 Its default model is Codex's own; set `agent.run.model`, `agent.answer.model`, `agent.triage.model`, or
 `agent.extract.model` to choose a model. A Codex PreToolUse Hook enforces the default runner tool policy:
 DSL file reads and edits plus `dt fmt`, `dt check` and `dt guide`. Answer turns use a read-only Hook; triage and
-extraction have no tools. Codex does not accept custom Claude Code `agent.run.allowedTools` rules or `agent.read.paths`.
+extraction have no tools. Codex supports `agent.read.paths` through read-only private copies, refreshed before each
+turn. The Hook permits listing and reading only those copies; it never grants them as writable directories. Codex
+does not accept custom Claude Code `agent.run.allowedTools` rules.
 `dt view`, `dt session start`, `dt session link` and `dt session subscribe` were
 removed: each fails with the name of its replacement.
 
@@ -4437,13 +4439,14 @@ result.
   work tree the files git does not ignore there, elsewhere every file; never `.git` nor `.domaintrail` at any depth; a
   nested repository inside it denied as a whole (the path itself may be one). The answerer reads private copies of
   them, as of the workspace (200 MiB at most, all together; copies an agent that was killed left behind are removed
-  when the next starts); the runner reads them in place (`--add-dir` for a directory, a `Read(//…)` rule for a file)
+  when the next starts); the Claude Code runner reads them in place (`--add-dir` for a directory, a `Read(//…)` rule for a file)
   and may never edit, write or remove anything there (`Edit(//…)` deny rules, which win over every allow rule); what
   git ignores there, the nested repositories and the symbolic links are denied to it as a whole, counted with the
   workspace's against the 500 entries; a name no permission rule can express (a line break in it) makes the run fail
-  rather than go without its rule. `dt open`, `dt collab` and `dt agent` print what each role reads beyond the
-  workspace when they start (`AI answers read outside the workspace: …`, `AI runs read (never write) outside the
-  workspace: …`). **In a collab session, any participant can make the AI quote these files in the chat**: name only
+  rather than go without its rule. With Codex, both roles read private copies refreshed before each turn (200 MiB
+  total per role); its Hook allows reads of those copies and edits only in the workspace. `dt open`, `dt collab` and
+  `dt agent` print what each role reads beyond the workspace when they start (`AI answers read outside the workspace: …`,
+  `AI runs read (never write) outside the workspace: …`). **In a collab session, any participant can make the AI quote these files in the chat**: name only
   what every participant may read.
 - **The configuration files are never written by the agents.** Deny rules keep them from editing
   `domaintrail.jsonc`, `domaintrail.json`, `domaintrail.local.jsonc` and `domaintrail.local.json` at any depth and in any
