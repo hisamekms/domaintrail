@@ -427,10 +427,12 @@ export async function startSubscriber(options: SubscriberOptions): Promise<Runni
     // the runner's end ends the answerer and the extractor too (the session closed — after the last extraction —, the
     // server is gone, Ctrl+C, `--once`)
     const done = knowledgeGone(
-        subscriber.done.then(async (why) => {
-            await readOnlyEnd(why);
-            return why;
-        }).finally(() => codexRunViews?.dispose()),
+        subscriber.done
+            .then(async (why) => {
+                await readOnlyEnd(why);
+                return why;
+            })
+            .finally(() => codexRunViews?.dispose()),
     );
     return {
         session: session.value.session,

@@ -98,7 +98,7 @@ process.stdin.on('end', () => {
 `;
 }
 
-const shellQuote = (value: string): string => process.platform === 'win32' ? `"${value}"` : `'${value.replaceAll("'", `'\\''`)}'`;
+const shellQuote = (value: string): string => (process.platform === 'win32' ? `"${value}"` : `'${value.replaceAll("'", `'\\''`)}'`);
 
 export interface CodexHook {
     /** The value of `-c`: one hook on all local tools. */
@@ -115,17 +115,28 @@ export async function createCodexHook(root: string, role: CodexHookRole, extraDi
         const check = (tool_name: string, command: string, expected: 'allow' | 'deny'): void => {
             const result = spawnSync(process.execPath, [file], {
                 input: JSON.stringify({ cwd: root, tool_name, tool_input: { command } }),
-                encoding: 'utf8', timeout: 5_000, windowsHide: true,
+                encoding: 'utf8',
+                timeout: 5_000,
+                windowsHide: true,
             });
             if (result.status !== 0) throw new Error('The Codex tool hook failed its local check.');
             if (expected === 'allow' && result.stdout === '') return;
             if (expected === 'deny') {
                 try {
                     const decision: unknown = JSON.parse(result.stdout);
-                    if (typeof decision === 'object' && decision !== null && 'hookSpecificOutput' in decision &&
-                        typeof decision.hookSpecificOutput === 'object' && decision.hookSpecificOutput !== null &&
-                        'permissionDecision' in decision.hookSpecificOutput && decision.hookSpecificOutput.permissionDecision === 'deny') return;
-                } catch { /* invalid output */ }
+                    if (
+                        typeof decision === 'object' &&
+                        decision !== null &&
+                        'hookSpecificOutput' in decision &&
+                        typeof decision.hookSpecificOutput === 'object' &&
+                        decision.hookSpecificOutput !== null &&
+                        'permissionDecision' in decision.hookSpecificOutput &&
+                        decision.hookSpecificOutput.permissionDecision === 'deny'
+                    )
+                        return;
+                } catch {
+                    /* invalid output */
+                }
             }
             throw new Error('The Codex tool hook failed its local deny/allow check.');
         };
@@ -136,5 +147,8 @@ export async function createCodexHook(root: string, role: CodexHookRole, extraDi
         const command = `${shellQuote(process.execPath)} ${shellQuote(file)}`;
         const config = `hooks.PreToolUse=[{matcher=".*",hooks=[{type="command",command=${JSON.stringify(command)}}]}]`;
         return { config, dispose: () => rm(dir, { recursive: true, force: true }) };
-    } catch (e) { await rm(dir, { recursive: true, force: true }); throw e; }
+    } catch (e) {
+        await rm(dir, { recursive: true, force: true });
+        throw e;
+    }
 }

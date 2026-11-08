@@ -17,7 +17,8 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
         const allowed = (role: CodexHookRole, tool_name: string, command: string, extras: readonly string[] = []): boolean => {
             writeFileSync(policy, codexHookSource(root, role, extras));
             const result = spawnSync(process.execPath, [policy], {
-                input: JSON.stringify({ tool_name, tool_input: { command } }), encoding: 'utf8',
+                input: JSON.stringify({ tool_name, tool_input: { command } }),
+                encoding: 'utf8',
             });
             expect(result.status).toBe(0);
             if (!result.stdout) return true;
@@ -32,7 +33,9 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
         expect(allowed('run', 'Bash', 'dt check')).toBe(true);
         expect(allowed('run', 'Bash', 'echo unsafe')).toBe(false);
         expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Update File: model.dt\n@@\n-old\n+new\n*** End Patch')).toBe(true);
-        expect(allowed('run', 'apply_patch', `*** Begin Patch\n*** Update File: ${path.join(realpathSync(root), 'model.dt')}\n@@\n-old\n+new\n*** End Patch`)).toBe(true);
+        expect(
+            allowed('run', 'apply_patch', `*** Begin Patch\n*** Update File: ${path.join(realpathSync(root), 'model.dt')}\n@@\n-old\n+new\n*** End Patch`),
+        ).toBe(true);
         expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Add File: script.ts\n+bad\n*** End Patch')).toBe(false);
         expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Add File: ../escape.dt\n+bad\n*** End Patch')).toBe(false);
         expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Add File: link/escape.dt\n+bad\n*** End Patch')).toBe(false);
@@ -43,7 +46,9 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
         expect(allowed('read', 'Bash', `rg -n '^' -- '${path.join(outside, 'reference.txt')}'`, [outside])).toBe(true);
         expect(allowed('read', 'Bash', `rg -n '^' -- '${path.join(outside, 'reader')}'\\''s-notes.txt'`, [outside])).toBe(true);
         expect(allowed('run', 'Bash', `rg -n '^' -- '${path.join(outside, 'reference.txt')}'`, [outside])).toBe(true);
-        expect(allowed('run', 'apply_patch', `*** Begin Patch\n*** Update File: ${path.join(outside, 'reference.txt')}\n@@\n-old\n+new\n*** End Patch`, [outside])).toBe(false);
+        expect(
+            allowed('run', 'apply_patch', `*** Begin Patch\n*** Update File: ${path.join(outside, 'reference.txt')}\n@@\n-old\n+new\n*** End Patch`, [outside]),
+        ).toBe(false);
         expect(allowed('none', 'Bash', 'rg --files')).toBe(false);
     } finally {
         rmSync(root, { recursive: true, force: true });

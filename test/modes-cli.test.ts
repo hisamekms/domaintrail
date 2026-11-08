@@ -133,7 +133,10 @@ function fakeDeps(
                 },
             };
         },
-        checkAgent: async (agent) => { calls.checked.push(agent); return usable; },
+        checkAgent: async (agent) => {
+            calls.checked.push(agent);
+            return usable;
+        },
         startAgent: async (options) => {
             calls.selected.push(options.agent);
             calls.agents.push({ roles: options.roles, once: options.once });

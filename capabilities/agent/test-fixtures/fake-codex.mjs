@@ -11,7 +11,9 @@ if (args.includes('--version')) {
     const prompt = await new Promise((resolve) => {
         let text = '';
         process.stdin.setEncoding('utf8');
-        process.stdin.on('data', (chunk) => { text += chunk; });
+        process.stdin.on('data', (chunk) => {
+            text += chunk;
+        });
         process.stdin.on('end', () => resolve(text));
     });
     const schema = JSON.parse(await readFile(option('--output-schema'), 'utf8'));

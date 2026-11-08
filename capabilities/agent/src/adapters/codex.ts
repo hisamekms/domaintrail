@@ -183,16 +183,26 @@ export async function runCodexOnce(options: CodexTurnOptions): Promise<AnswerTur
                 if (killer) clearTimeout(killer);
                 resolve(code ?? -1);
             });
-            const toolNote = options.hookRole === 'run'
-                ? "Tool commands permitted for this run: rg --files -g '*.dt' -g '*.dtes' lists DSL sources; rg -n '^' -- '<relative .dt or .dtes path>' reads one source; rg -n '^' -g '*.dt' -g '*.dtes' . reads all DSL sources. Edit .dt and .dtes files with apply_patch. Other shell commands are rejected."
-                : options.hookRole === 'read'
-                  ? "Tool commands permitted for this answer: rg --files lists files; rg -n '^' -- '<relative file path>' reads one file; rg -n '^' . reads all files. Other shell commands are rejected."
-                  : '';
-            child.stdin.end([
-                toolNote,
-                options.prompt,
-                ...(options.extraRead?.note ? [options.extraRead.note, "Use rg --files --hidden '<copy directory>' to list a copy, and rg -n '^' -- '<copy file>' to read one file. These copies are read-only."] : []),
-            ].filter(Boolean).join('\n\n'));
+            const toolNote =
+                options.hookRole === 'run'
+                    ? "Tool commands permitted for this run: rg --files -g '*.dt' -g '*.dtes' lists DSL sources; rg -n '^' -- '<relative .dt or .dtes path>' reads one source; rg -n '^' -g '*.dt' -g '*.dtes' . reads all DSL sources. Edit .dt and .dtes files with apply_patch. Other shell commands are rejected."
+                    : options.hookRole === 'read'
+                      ? "Tool commands permitted for this answer: rg --files lists files; rg -n '^' -- '<relative file path>' reads one file; rg -n '^' . reads all files. Other shell commands are rejected."
+                      : '';
+            child.stdin.end(
+                [
+                    toolNote,
+                    options.prompt,
+                    ...(options.extraRead?.note
+                        ? [
+                              options.extraRead.note,
+                              "Use rg --files --hidden '<copy directory>' to list a copy, and rg -n '^' -- '<copy file>' to read one file. These copies are read-only.",
+                          ]
+                        : []),
+                ]
+                    .filter(Boolean)
+                    .join('\n\n'),
+            );
         });
         if (options.signal.aborted) return { text: '', error: 'stopped', exitCode: -1 };
         const text = await readFile(outputFile, 'utf8').catch(() => '');
@@ -241,7 +251,15 @@ export async function checkCodex(command: AgentCommand = CODEX, timeoutMs = 5_00
     try {
         const version = await probe(['--version']);
         const help = await probe(['exec', '--help']);
-        const needed = ['--output-schema', '--output-last-message', '--ignore-user-config', '--ignore-rules', '--dangerously-bypass-hook-trust', '--sandbox', '--json'];
+        const needed = [
+            '--output-schema',
+            '--output-last-message',
+            '--ignore-user-config',
+            '--ignore-rules',
+            '--dangerously-bypass-hook-trust',
+            '--sandbox',
+            '--json',
+        ];
         if (version.code !== 0 || help.code !== 0 || needed.some((flag) => !help.text.includes(flag)))
             return { ok: false, reason: 'codex CLI lacks the flags required by dt' };
         return { ok: true, version: version.text.trim().replace(/^codex-cli\s+/, '') };
@@ -300,7 +318,13 @@ export function createCodexAnswerer(options: {
     triageModel?: string;
     knowledge?: KnowledgeMcp;
 }): AnswerAgent {
-    const turn = async (request: AnswerTurn, schema: Record<string, unknown>, role: CodexHookRole, model?: string, knowledge?: KnowledgeMcp): Promise<AnswerTurnResult> => {
+    const turn = async (
+        request: AnswerTurn,
+        schema: Record<string, unknown>,
+        role: CodexHookRole,
+        model?: string,
+        knowledge?: KnowledgeMcp,
+    ): Promise<AnswerTurnResult> => {
         try {
             await options.prepare?.();
             return await runCodexOnce({
