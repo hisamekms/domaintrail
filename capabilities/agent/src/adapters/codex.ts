@@ -183,9 +183,16 @@ export async function runCodexOnce(options: CodexTurnOptions): Promise<AnswerTur
                 if (killer) clearTimeout(killer);
                 resolve(code ?? -1);
             });
-            child.stdin.end(options.extraRead?.note
-                ? `${options.prompt}\n\n${options.extraRead.note}\nUse rg --files --hidden '<copy directory>' to list a copy, and rg -n '^' -- '<copy file>' to read one file. These copies are read-only.`
-                : options.prompt);
+            const toolNote = options.hookRole === 'run'
+                ? "Tool commands permitted for this run: rg --files -g '*.dt' -g '*.dtes' lists DSL sources; rg -n '^' -- '<relative .dt or .dtes path>' reads one source; rg -n '^' -g '*.dt' -g '*.dtes' . reads all DSL sources. Edit .dt and .dtes files with apply_patch. Other shell commands are rejected."
+                : options.hookRole === 'read'
+                  ? "Tool commands permitted for this answer: rg --files lists files; rg -n '^' -- '<relative file path>' reads one file; rg -n '^' . reads all files. Other shell commands are rejected."
+                  : '';
+            child.stdin.end([
+                toolNote,
+                options.prompt,
+                ...(options.extraRead?.note ? [options.extraRead.note, "Use rg --files --hidden '<copy directory>' to list a copy, and rg -n '^' -- '<copy file>' to read one file. These copies are read-only."] : []),
+            ].filter(Boolean).join('\n\n'));
         });
         if (options.signal.aborted) return { text: '', error: 'stopped', exitCode: -1 };
         const text = await readFile(outputFile, 'utf8').catch(() => '');

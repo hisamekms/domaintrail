@@ -53,12 +53,17 @@ const unquote = (value) => {
   return null;
 };
 const readPrefix = "rg -n '^' -- ";
-const readFileName = (command) => command.startsWith(readPrefix) ? unquote(command.slice(readPrefix.length)) : null;
+const readFileName = (command) => {
+  if (!command.startsWith(readPrefix)) return null;
+  const arg = command.slice(readPrefix.length);
+  return unquote(arg) ?? (/^[A-Za-z0-9_./-]+$/.test(arg) ? arg : null);
+};
+const workspaceDsl = (name) => local(name, true, true) && fs.existsSync(path.resolve(root, name)) && fs.statSync(path.resolve(root, name)).isFile();
 const read = (command) => {
   if (role === 'none') return false;
   if (role === 'run' && (command === "rg --files -g '*.dt' -g '*.dtes'" || command === "rg -n '^' -g '*.dt' -g '*.dtes' .")) return true;
   if (role === 'run' && extraDirs.some((dir) => command === 'rg --files --hidden ' + quote(dir.shown) || command === 'rg --files --hidden ' + quote(dir.real))) return true;
-  if (role === 'run') { const name = readFileName(command); return name !== null && extraFile(name); }
+  if (role === 'run') { const name = readFileName(command); return name !== null && (workspaceDsl(name) || extraFile(name)); }
   if (command === 'rg --files' || command === "rg -n '^' .") return true;
   if (extraDirs.some((dir) => command === 'rg --files --hidden ' + quote(dir.shown) || command === 'rg --files --hidden ' + quote(dir.real))) return true;
   const name = readFileName(command);

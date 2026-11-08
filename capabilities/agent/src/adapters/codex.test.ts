@@ -28,7 +28,8 @@ test('Codex CLI is detected and a read-only turn uses a strict schema and isolat
     });
     expect(result).toMatchObject({ exitCode: 0, structured: { kind: 'answer', answer: 'Codex answered' } });
     const invocation = JSON.parse(await readFile(log, 'utf8')) as { args: string[]; prompt: string; schema: { required: string[] } };
-    expect(invocation.prompt).toBe('Answer this');
+    expect(invocation.prompt).toContain('Answer this');
+    expect(invocation.prompt).toContain("rg -n '^' -- '<relative file path>'");
     expect(invocation.args).toContain('--ignore-user-config');
     expect(invocation.args).toContain('--ignore-rules');
     expect(invocation.args).toContain('--dangerously-bypass-hook-trust');

@@ -25,6 +25,10 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
             return false;
         };
         expect(allowed('run', 'Bash', "rg --files -g '*.dt' -g '*.dtes'")).toBe(true);
+        expect(allowed('run', 'Bash', "rg -n '^' -- 'model.dt'")).toBe(true);
+        expect(allowed('run', 'Bash', "rg -n '^' -- model.dt")).toBe(true);
+        expect(allowed('run', 'Bash', "rg -n '^' -- 'policy.cjs'")).toBe(false);
+        expect(allowed('run', 'Bash', "rg -n '^' -- model.dt; echo unsafe")).toBe(false);
         expect(allowed('run', 'Bash', 'dt check')).toBe(true);
         expect(allowed('run', 'Bash', 'echo unsafe')).toBe(false);
         expect(allowed('run', 'apply_patch', '*** Begin Patch\n*** Update File: model.dt\n@@\n-old\n+new\n*** End Patch')).toBe(true);
