@@ -47,11 +47,13 @@ export const PROGRESS_MARK: Record<RequestProgress, string> = { Done: '✓', Par
 export function RunCard({
     unit,
     visibleRuns,
+    reference,
     compact = false,
     actions,
 }: {
     unit: ChangeUnit;
     visibleRuns?: readonly UnitRun[];
+    reference?: ReactNode;
     compact?: boolean;
     actions?: ReactNode;
 }) {
@@ -109,6 +111,7 @@ export function RunCard({
                         </span>
                     )}
                 </div>
+                {reference}
                 {!compact && (
                     <RowActions>
                         {control && <CardMenu last={last.run} about={about} name={title.text} />}
