@@ -11,7 +11,7 @@
 // - where a decided triage goes: an answer, a proposal (a participant's change request), the queue (the facilitator's,
 //   a Solo session's, or a message the facilitator addressed), or nowhere;
 // - the commands of the `Triage` aggregate.
-import { Collaboration, decide, err, ok, parseDecimal } from '../generated/index.js';
+import { Collaboration, decide, decideNamed, err, ok, parseDecimal } from '../generated/index.js';
 import { isAi } from './ai.js';
 import { parseBody } from './body.js';
 
@@ -219,8 +219,8 @@ export const triageCommands: Collaboration.TriageCommands = {
     }),
 
     // a cascade stage's answer: decided when it knows (or after the last stage), still pending otherwise
-    record: decide<Collaboration.RecordTriageDecision>(Collaboration.TriageShape, {
-        Pending: (triage, params) => {
+    record: decideNamed<Collaboration.RecordTriageDecision>()(Collaboration.TriageShape, { Pending: 'Pending', Decided: 'Decided' },
+        (triage, params) => {
             const check = Collaboration.checkRecordTriageRequiresWith({ inOrder: (t, p) => inCascadeOrder(t.steps, p.step.stage) });
             switch (check(triage, params)) {
                 case 'cascadeStage':
@@ -243,8 +243,7 @@ export const triageCommands: Collaboration.TriageCommands = {
                     },
                 },
             });
-        },
-    }),
+        }),
 
     override: decide<Collaboration.OverrideTriageDecision>(Collaboration.TriageShape, {
         Decided: (triage, params) => {
