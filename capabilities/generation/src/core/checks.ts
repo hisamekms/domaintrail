@@ -14,6 +14,7 @@ import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, sharedContexts } f
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import { RUNTIME_NAMES, TS_RESERVED, commonTypeName, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
+import { choiceCheckName, choiceChecksTypeName, commandTypeName, paramsTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
@@ -496,6 +497,82 @@ export class CheckWriter {
 
     constructor(private readonly env: CheckEnv) {
         this.compiler = new ExprCompiler(env);
+    }
+
+    /** Predicate values for every named outcome; external choices have mandatory typed slots. */
+    choices(agg: AggregateModel, c: CommandModel): string[] {
+        const outcomes = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
+        if (!outcomes.length) return [];
+        const external = outcomes.filter((o) => o.select?.kind === 'external');
+        const subject = agg.name.charAt(0).toLowerCase() + agg.name.slice(1);
+        const args = [
+            ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
+            ...(c.params.length ? [{ name: 'params', type: paramsTypeName(agg, c) }] : []),
+        ];
+        const signature = args.map((a) => `${a.name}: ${a.type}`).join(', ');
+        const lines = [
+            `export type ${choiceChecksTypeName(agg, c)} = { ${external.map((o) => `readonly ${o.name}: (${signature}) => boolean`).join('; ')} };`,
+            '',
+        ];
+        const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
+        for (const p of c.params) scope.set(p.name, { js: `params.${p.name}`, ty: fieldTy(this.env.model, p) });
+        const choices = outcomes.map((o) => {
+            const choice = o.select;
+            const code = choice?.kind === 'expression' ? this.compiler.compile(choice.expr, scope).js : choice?.kind === 'external' ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})` : 'true';
+            return `${o.name}: ${code}`;
+        });
+        const body = `return { ${choices.join(', ')} };`;
+        lines.push(`export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`);
+        lines.push(`    return (${params(args, body)}) => { ${body} };`);
+        lines.push('}');
+        return lines;
+    }
+
+    /** Common requirements followed by matching `on` requirements in source order. */
+    namedRequirements(agg: AggregateModel, c: CommandModel): string[] {
+        const groups = agg.groups.flatMap((g, i) => g.cases.filter((x) => x.command === c.name).map((x) => ({ group: g, index: i, case: x })));
+        if (!c.requires.length && !groups.some((g) => g.case.requires.length)) return [];
+        const type = commandTypeName(agg, c);
+        const subject = agg.name.charAt(0).toLowerCase() + agg.name.slice(1);
+        const args = [
+            ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
+            ...(c.params.length ? [{ name: 'params', type: paramsTypeName(agg, c) }] : []),
+        ];
+        const sig = args.map((a) => `${a.name}: ${a.type}`).join(', ');
+        const names = args.map((a) => a.name).join(', ');
+        const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
+        for (const p of c.params) scope.set(p.name, { js: `params.${p.name}`, ty: fieldTy(this.env.model, p) });
+        const entries = [
+            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as typeof groups[number] | undefined })),
+            ...groups.flatMap((g) => g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g }))),
+        ];
+        const external = entries.filter(({ requirement }) => !requirement.expr);
+        const union = [...new Set(entries.map((e) => e.key))].map((x) => `'${x}'`).join(' | ');
+        const lines: string[] = [];
+        if (external.length) {
+            lines.push(`export type ${declaredRequiresName(type)} = { ${external.map((x) => `readonly ${x.key}: (${sig}) => boolean`).join('; ')} };`, '');
+        }
+        const body = entries.map(({ requirement, key, group }) => {
+            const holds = requirement.expr ? this.compiler.compile(requirement.expr, scope).js : `checks.${key}(${names})`;
+            const check = `if (!(${holds})) return '${key}';`;
+            if (!group) return check;
+            if (c.factory || !agg.lifecycleField) return check;
+            return `if (([${group.group.values.map((v) => `'${v}'`).join(', ')}] as readonly string[]).includes(${subject}.${agg.lifecycleField})) { ${check} }`;
+        });
+        body.push('return undefined;');
+        const name = external.length ? requiresWithName(type) : requiresName(type);
+        const returns = `${union} | undefined`;
+        if (external.length) {
+            lines.push(`export function ${name}(checks: ${declaredRequiresName(type)}): (${sig}) => ${returns} {`);
+            lines.push(`    return (${params(args, body.join(' '))}) => {`);
+            lines.push(...body.map((line) => `        ${line}`));
+            lines.push('    };', '}');
+        } else {
+            lines.push(`export function ${name}(${params(args, body.join(' '))}): ${returns} {`);
+            lines.push(...body.map((line) => `    ${line}`));
+            lines.push('}');
+        }
+        return lines;
     }
 
     /**
