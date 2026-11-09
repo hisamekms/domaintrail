@@ -141,4 +141,10 @@ describe('kind-specific lifecycle', () => {
         const a = await checkSales(text);
         expect(a.diagnostics.some((d) => d.code === 'M010' && d.message.includes("'ready'"))).toBe(false);
     });
+
+    test('create cases cannot have kind-dependent requirements', async () => {
+        const text = BASE.replace('on complete { outcome collected:', 'on open { requires allowed { true } else Invalid outcome alternate: -> Unassigned }\n      on complete { outcome collected:');
+        const a = await checkSales(text);
+        expect(a.diagnostics.some((d) => d.code === 'M028' && d.message.includes('group-specific requirements'))).toBe(true);
+    });
 });
