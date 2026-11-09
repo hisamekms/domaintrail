@@ -86,4 +86,16 @@ describe('generation gate CLI', () => {
         expect(report.written).toBeUndefined();
         expect(await readdir(dir)).toEqual(['model.dt']);
     });
+
+    test('a target capability error blocks generation before writing', async () => {
+        const dir = await project('context X { primitive Code: String { matches(value, "^(?=a)a$") } }');
+        expect((await run(dir, 'check', '--for-generation')).code).toBe(0);
+
+        const result = await run(dir, 'generate', 'ts', '--format', 'json');
+        expect(result.code).toBe(1);
+        const report = JSON.parse(result.out.join('\n'));
+        expect(report.diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ code: 'G001', severity: 'error' })]));
+        expect(report.written).toBeUndefined();
+        expect(await readdir(dir)).toEqual(['model.dt']);
+    });
 });
