@@ -2,6 +2,9 @@ import { AstUtils, type AstNode } from 'langium';
 import type { Location } from '@domaintrail/kernel';
 import {
     isAggregate,
+    isInitial,
+    isTransitionGroup,
+    isCommandCase,
     isBinaryExpr,
     isBoolLiteral,
     isContainsExpr,
@@ -32,6 +35,8 @@ import {
     isValueObject,
     isVerifiedDecl,
     type Command,
+    type Outcome,
+    type TransitionGroup,
     type ContextElement,
     type Expression,
     type Invariant,
@@ -154,6 +159,10 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                     invariants: invariantsOf(el.members).map(invariant),
                     states: statesOf(el).map((s) => state(id, s, loc, field)),
                     commands: commandsOf(el).map((c) => command(id, c, loc, field)),
+                    initials: el.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: [] })),
+                    groups: el.members.filter(isTransitionGroup).map(group),
+                    ...lifecycleOf(el),
+                    validStates: validStatesOf(el),
                 };
             }
             if (isPolicy(el)) {
@@ -242,11 +251,18 @@ function fieldModel(f: FieldLike | Parameter, labels: LabelResolver): FieldModel
         ...(target !== undefined && { target }),
         ...(label && { label: label.label, labelSource: label.source }),
         ...(doc && { doc }),
+        readonly: 'readonly' in f && f.readonly === true,
     };
 }
 
 function invariant(inv: Invariant): InvariantModel {
-    return { name: inv.name, ...optional('source', inv.expr && sourceText(inv.expr)), ...(inv.expr && { expr: exprModel(inv.expr) }), ...described(inv) };
+    return {
+        name: inv.name,
+        ...optional('source', inv.expr && sourceText(inv.expr)),
+        ...(inv.expr && { expr: exprModel(inv.expr) }),
+        ...optional('externalReason', inv.external?.reason),
+        ...described(inv),
+    };
 }
 
 function requirement(r: Requirement): RequirementModel {
@@ -255,6 +271,7 @@ function requirement(r: Requirement): RequirementModel {
         ...optional('source', r.expr && sourceText(r.expr)),
         ...(r.expr && { expr: exprModel(r.expr) }),
         error: refName(r.error),
+        ...optional('externalReason', r.external?.reason),
         ...described(r),
     };
 }
@@ -315,6 +332,8 @@ function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, fi
         factory: c.factory,
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
+        outcomes: c.outcomes.map(outcome),
+        legacy: c.transitions.length > 0 || c.changes.length > 0 || c.emits.length > 0,
         requires: c.requirements.map(requirement),
         changes: [...c.changes],
         emits: c.emits.map((e) => ({
@@ -327,4 +346,88 @@ function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, fi
         errors: [...new Set([...c.errors, ...c.requirements.map((r) => r.error)].map(refName))],
         location: loc(c),
     };
+}
+
+function outcome(o: Outcome): import('../../domain/model.js').OutcomeModel {
+    return {
+        name: o.name,
+        from: o.from.map((r) => r.$refText),
+        to: o.to.$refText,
+        changes: [...o.changes],
+        emits: o.emits.map((e) => ({
+            event: refName(e.event),
+            cardinality: cardinality(e.multiplicity),
+            multiplicity: multiplicityText(e.multiplicity),
+            ...bounds(e.multiplicity),
+            ...(e.when && { when: { from: e.when.from.map((r) => r.$refText), to: e.when.to.map((r) => r.$refText) } }),
+        })),
+        ...(o.selectExpr
+            ? { select: { kind: 'expression' as const, source: sourceText(o.selectExpr), expr: exprModel(o.selectExpr) } }
+            : o.selectText !== undefined
+              ? {
+                    select: o.external
+                        ? { kind: 'external' as const, text: o.selectText, reason: o.external.reason }
+                        : { kind: 'declared' as const, text: o.selectText },
+                }
+              : {}),
+    };
+}
+
+function group(g: TransitionGroup): import('../../domain/model.js').TransitionGroupModel {
+    return {
+        field: g.field,
+        enum: g.values[0]?.enum.ref ? qname(g.values[0].enum.ref) : qualifiedName(g.values[0]?.enum.$refText ?? ''),
+        values: g.values.map((v) => v.value),
+        initials: g.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: g.values.map((v) => v.value) })),
+        cases: g.members
+            .filter(isCommandCase)
+            .map((c) => ({ command: c.command.$refText, requires: c.requirements.map(requirement), outcomes: c.outcomes.map(outcome) })),
+    };
+}
+
+function lifecycleOf(agg: import('./generated/ast.js').Aggregate): { lifecycleField?: string; lifecycleEnum?: QualifiedName } {
+    const first = agg.members.find(isTransitionGroup);
+    return first
+        ? {
+              lifecycleField: first.field,
+              lifecycleEnum: first.values[0]?.enum.ref ? qname(first.values[0].enum.ref) : qualifiedName(first.values[0]?.enum.$refText ?? ''),
+          }
+        : {};
+}
+
+function validStatesOf(agg: import('./generated/ast.js').Aggregate): import('../../domain/model.js').ValidKindStatesModel[] {
+    const groups = agg.members.filter(isTransitionGroup);
+    if (!groups.length) return [];
+    const values = groups.flatMap((g) => g.values.map((v) => v.value));
+    const enumDecl = groups[0]?.values[0]?.enum.ref;
+    const kinds = enumDecl?.values.map((v) => v.name) ?? [...new Set(values)];
+    const common = agg.members.filter(isInitial).map((i) => i.state.$refText);
+    return kinds.map((kind) => {
+        const selected = groups.filter((g) => g.values.some((v) => v.value === kind));
+        const seen = new Set([...common, ...selected.flatMap((g) => g.members.filter(isInitial).map((i) => i.state.$refText))]);
+        let changed = true;
+        while (changed) {
+            changed = false;
+            for (const c of agg.members.filter((m): m is Command => m.$type === 'Command')) {
+                for (const t of c.factory ? [] : c.transitions)
+                    if (t.to.length === 1 && t.from.some((f) => seen.has(f.$refText))) {
+                        const target = t.to[0]!.$refText;
+                        if (!seen.has(target)) {
+                            seen.add(target);
+                            changed = true;
+                        }
+                    }
+                const cases = selected.flatMap((g) => g.members.filter(isCommandCase).filter((x) => x.command.$refText === c.name));
+                for (const o of [...c.outcomes, ...cases.flatMap((x) => x.outcomes)]) {
+                    if (!c.factory && o.from.some((f) => seen.has(f.$refText))) {
+                        if (!seen.has(o.to.$refText)) {
+                            seen.add(o.to.$refText);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
+        return { kind, states: [...seen] };
+    });
 }

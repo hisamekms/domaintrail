@@ -123,7 +123,42 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
     }
     for (const cmd of commandsOf(agg)) {
         if (cmd.requirements.length) checkRequirements(agg, cmd, common, ctx, model, rules);
+        for (const outcome of cmd.outcomes) checkChoice(outcome, cmd, common, ctx, model, rules);
+        for (const group of agg.members.filter((m) => m.kind === 'transitionGroup')) {
+            for (const c of group.cases.filter((c) => c.command.text === cmd.name)) {
+                for (const r of c.requirements) checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, common, ctx, model, rules);
+                for (const outcome of c.outcomes) checkChoice(outcome, cmd, common, ctx, model, rules);
+            }
+        }
     }
+}
+
+function checkChoice(
+    outcome: import('../source-model.js').OutcomeDecl,
+    cmd: CommandDecl,
+    common: Map<string, FieldDecl | ParamDecl>,
+    ctx: string,
+    model: SourceModel,
+    rules: RuleSink,
+): void {
+    checkDecisionExpr(outcome.select?.expr, `Choice rule of outcome '${outcome.name}'`, outcome.select?.at ?? outcome.at, cmd, common, ctx, model, rules);
+}
+
+function checkDecisionExpr(
+    expr: Expr | undefined,
+    label: string,
+    at: import('../source-model.js').Site,
+    cmd: CommandDecl,
+    common: Map<string, FieldDecl | ParamDecl>,
+    ctx: string,
+    model: SourceModel,
+    rules: RuleSink,
+): void {
+    if (!expr) return;
+    const fields = new Map(cmd.factory ? [] : common);
+    for (const p of cmd.params) fields.set(p.name, p);
+    const t = new ExprChecker(model, rules).check(expr, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() });
+    if (t.k !== 'error' && !isBool(t)) rules.error('M008', `${label} must be a Bool expression, but has type '${showType(t)}'.`, at);
 }
 
 /** Fields of the states (other than `except`) that are not common fields, with the states that have each. */

@@ -10,7 +10,7 @@ function membersOf(m: SourceModel): (FieldDecl | ParamDecl)[] {
             if (el.kind === 'union') return el.variants.flatMap((v) => v.members);
             if (!('members' in el)) return [];
             return (el.members as AggregateMember[]).flatMap((x): (DataMember | ParamDecl)[] =>
-                x.kind === 'state' ? x.members : x.kind === 'command' ? x.params : [x],
+                x.kind === 'state' ? x.members : x.kind === 'command' ? x.params : x.kind === 'initial' || x.kind === 'transitionGroup' ? [] : [x],
             );
         })
         .filter((x): x is FieldDecl | ParamDecl => x.kind !== 'invariant');

@@ -73,7 +73,23 @@ Aggregate:
     'aggregate' name=ID label=STRING? WithFieldSets? '{' members+=AggregateMember* '}';
 
 AggregateMember:
-    DataMember | State | Command;
+    DataMember | State | Command | Initial | TransitionGroup;
+
+Initial:
+    'initial' state=[State:ID];
+
+TransitionGroup:
+    'transitions' 'for' field=FeatureName (('==' values+=EnumValueSelector) | ('in' values+=EnumValueSelector ('|' values+=EnumValueSelector)*))
+    '{' members+=TransitionGroupMember* '}';
+
+EnumValueSelector:
+    (enum=[EnumDecl:QualifiedName] '::' | enum=[EnumDecl:ID] '.') value=ValueName;
+
+TransitionGroupMember:
+    Initial | CommandCase;
+
+CommandCase:
+    'on' command=[Command:FeatureName] '{' (requirements+=Requirement | outcomes+=Outcome)* '}';
 
 DataMember:
     Field | OwnsField | ReferenceField | Invariant;
@@ -82,7 +98,7 @@ State:
     'state' name=ID label=STRING? ('{' members+=DataMember* '}')?;
 
 Field:
-    name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;
+    (readonly?='readonly')? name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;
 
 OwnsField:
     'owns' name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;
@@ -95,11 +111,22 @@ ReferenceField:
 // checked by M021.
 Command:
     (factory?='create')? 'command' name=FeatureName '(' (params+=Parameter (',' params+=Parameter)*)? ')' label=STRING?
+    ('{' (requirements+=Requirement | outcomes+=Outcome)* ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)? '}'
+    |
     (transitions+=Transition (','? transitions+=Transition)*)?
     requirements+=Requirement*
     ('changes' changes+=FeatureName (',' changes+=FeatureName)*)?
     ('emits' emits+=Emit (',' emits+=Emit)*)?
-    ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?;
+    ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?);
+
+Outcome:
+    'outcome' name=FeatureName ':' (from+=[State:ID] ('|' from+=[State:ID])*)? '->' to=[State:ID]
+    ('select' (('{' selectExpr=Expression '}') | selectText=STRING) external=ExternalCheck?)?
+    ('changes' changes+=FeatureName (',' changes+=FeatureName)*)?
+    ('emits' emits+=Emit (',' emits+=Emit)*)?;
+
+ExternalCheck:
+    '@externalCheck' '(' reason=STRING ')';
 
 // `A | B -> C | D`: a command in one of the source states ends in one of the target states. A factory
 // (`create command`) has a single transition without sources: `-> Draft`.
@@ -119,7 +146,7 @@ OutcomePattern:
 // parameters and the aggregate's current data; otherwise it returns the error, which joins its `errors`. Like an
 // invariant, a requirement without an expression needs a label or a `///` description (M018).
 Requirement:
-    'requires' name=ID label=STRING? ('{' expr=Expression '}')? 'else' error=[ErrorDecl:QualifiedName];
+    'requires' name=ID label=STRING? ('{' expr=Expression '}')? external=ExternalCheck? 'else' error=[ErrorDecl:QualifiedName];
 
 Parameter:
     name=FeatureName ':' type=TypeRef multiplicity=Multiplicity? label=STRING?;
@@ -148,7 +175,7 @@ Multiplicity:
 
 // Without an expression, an invariant is declared for documentation only: it needs a label or a `///` description (M018).
 Invariant:
-    'invariant' name=ID label=STRING? ('{' expr=Expression '}')?;
+    'invariant' name=ID label=STRING? ('{' expr=Expression '}')? external=ExternalCheck?;
 
 // ---- Invariant expressions ----
 
@@ -202,6 +229,7 @@ FeatureName returns string:
     ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes' | 'verified' | 'of' | 'for' | 'policy'
     | 'context' | 'shared' | 'terms' | 'primitive' | 'enum' | 'union' | 'entity' | 'aggregate' | 'state' | 'owns' | 'references' | 'create'
     | 'command' | 'emits' | 'errors' | 'event' | 'error' | 'invariant'
+    | 'readonly' | 'initial' | 'transitions' | 'on' | 'outcome' | 'select'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never

@@ -193,7 +193,7 @@ export type ShowJson =
     | { show: 'command'; aggregate: string; command: CommandJson };
 
 /** A command with its outcomes, and the policies that run it (`triggeredBy`, their IDs). */
-export type CommandJson = CommandModel & { outcomes: Outcome[]; triggeredBy: string[] };
+export type CommandJson = Omit<CommandModel, 'outcomes'> & { outcomes: Outcome[]; namedOutcomes: CommandModel['outcomes']; triggeredBy: string[] };
 /** An element; an aggregate with its commands as `CommandJson`. */
 export type ElementJson = Exclude<ElementModel, AggregateModel> | (Omit<AggregateModel, 'commands'> & { commands: CommandJson[] });
 
@@ -219,6 +219,7 @@ function contextSummary(model: DomainModel, name: string): ContextSummary {
 const commandJson = (model: DomainModel, agg: AggregateModel, c: CommandModel): CommandJson => ({
     ...c,
     outcomes: outcomesOf(agg, c),
+    namedOutcomes: c.outcomes,
     triggeredBy: policiesRunning(model, agg.id, c.name).map((p) => p.id),
 });
 
