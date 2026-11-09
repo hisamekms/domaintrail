@@ -10,6 +10,7 @@
 // (its types are described in model/*.dt and generated into src/generated; the helpers are written in domain/)
 export {
     allFieldsOf,
+    applicableOutcomes,
     BINARY_OP_TEXT,
     commandsOf,
     contextNames,
@@ -33,11 +34,14 @@ export {
     sharedContexts,
     statesOf,
     valuesOf,
+    validStatesFor,
     variantsOf,
     type AggregateModel,
     type BinaryOp,
     type Cardinality,
     type CommandModel,
+    type CommandCaseModel,
+    type ChoiceRuleModel,
     type ContextModel,
     type ContextName,
     type Described,
@@ -54,8 +58,10 @@ export {
     type FieldModel,
     type FieldsElement,
     type InvariantModel,
+    type InitialModel,
     type LabelSource,
     type OutcomePatternModel,
+    type OutcomeModel,
     type PolicyElement,
     type PolicyModel,
     type PrimitiveName,
@@ -65,11 +71,13 @@ export {
     type StateModel,
     type TermModel,
     type TransitionModel,
+    type TransitionGroupModel,
     type TypeExpr,
     type UnionModel,
     type VariantModel,
     type VerifiedFor,
     type VerifiedModel,
+    type ValidKindStatesModel,
 } from './domain/model.js';
 export {
     contextDependencies,
@@ -133,6 +141,7 @@ export type {
 } from './domain/source-model.js';
 export * as written from './domain/source-model.js';
 export { RuleSink } from './domain/diagnostics.js';
+export { generationGateDiagnostics } from './domain/rules/generation-gate.js';
 
 // ---- use cases: Modeling's analysis of the `.dt` sources -------------------------------------------------------
 export { analyzeDomain, type DomainAnalysis } from './application/analyze.js';

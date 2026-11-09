@@ -186,7 +186,10 @@ describe('invariants without an expression', () => {
     invariant described`,
             'invariant both "確定時に通知済み" { total > 0 }',
         );
-        expect(a.diagnostics).toEqual([]);
+        expect(a.diagnostics.map((d) => [d.code, d.severity])).toEqual([
+            ['M029', 'warning'],
+            ['M029', 'warning'],
+        ]);
         const order = element(a.model, 'Sales.Order');
         expect(order.invariants).toEqual([
             { name: 'labelled', label: '明細の在庫が引当済み' },

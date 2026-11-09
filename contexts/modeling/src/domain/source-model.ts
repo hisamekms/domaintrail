@@ -67,6 +67,7 @@ export interface FieldDecl extends Declared {
     /** The aggregate a `references` field points at (`-> Aggregate`; the syntax's `target`). */
     aggregate?: Ref<AggregateDecl>;
     typeAt: Site;
+    readonly: boolean;
 }
 
 /** A parameter of a command. */
@@ -82,6 +83,7 @@ export interface InvariantDecl extends Declared {
     expr?: Expr;
     /** The expression; the whole invariant without one. */
     exprAt: Site;
+    externalReason?: string;
 }
 
 export type DataMember = FieldDecl | InvariantDecl;
@@ -121,6 +123,42 @@ export interface RequirementDecl extends Declared {
     error: Ref<ErrorDecl>;
     /** The expression; the whole requirement without one. */
     exprAt: Site;
+    externalReason?: string;
+}
+
+export interface InitialDecl {
+    state: Ref<StateDecl>;
+    at: Site;
+}
+
+export interface OutcomeDecl extends Declared {
+    from: Ref<StateDecl>[];
+    to: Ref<StateDecl>;
+    changes: { name: string; at: Site }[];
+    emits: EmitDecl[];
+    select?: { expr?: Expr; text?: string; externalReason?: string; at: Site };
+}
+
+export interface CommandCaseDecl {
+    command: Ref<CommandDecl>;
+    requirements: RequirementDecl[];
+    outcomes: OutcomeDecl[];
+    at: Site;
+}
+
+export interface TransitionGroupDecl {
+    kind: 'transitionGroup';
+    name: string;
+    field: string;
+    values: { enum: Ref<EnumDecl>; value: string; at: Site }[];
+    initials: InitialDecl[];
+    cases: CommandCaseDecl[];
+    at: Site;
+}
+
+export interface InitialMemberDecl extends InitialDecl {
+    kind: 'initial';
+    name: string;
 }
 
 export interface CommandDecl extends Declared {
@@ -137,9 +175,10 @@ export interface CommandDecl extends Declared {
     changes: { name: string; at: Site }[];
     emits: EmitDecl[];
     errors: Ref<ErrorDecl>[];
+    outcomes: OutcomeDecl[];
 }
 
-export type AggregateMember = DataMember | StateDecl | CommandDecl;
+export type AggregateMember = DataMember | StateDecl | CommandDecl | InitialMemberDecl | TransitionGroupDecl;
 
 export type EnumValueDecl = Declared;
 

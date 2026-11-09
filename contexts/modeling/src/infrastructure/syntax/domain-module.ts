@@ -14,7 +14,7 @@ import {
     type ReferenceInfo,
     type Scope,
 } from 'langium';
-import { Command, Context, State, isContext, isPolicy, type Model } from './generated/ast.js';
+import { Command, Context, State, isAggregate, isCommandCase, isContext, isPolicy, type Model } from './generated/ast.js';
 import { DomainGeneratedModule, DomainGeneratedSharedModule } from './generated/module.js';
 import { DomainParserErrorMessageProvider, nameKeywords } from './parser-messages.js';
 
@@ -58,7 +58,7 @@ export class DomainScopeProvider extends DefaultScopeProvider {
         if (referenceType === Command.$type) {
             // `Aggregate.command` of a policy: the commands of the aggregate named before the dot
             const policy = context.container;
-            const agg = isPolicy(policy) ? policy.aggregate?.ref : undefined;
+            const agg = isPolicy(policy) ? policy.aggregate?.ref : isCommandCase(policy) ? AstUtils.getContainerOfType(policy, isAggregate) : undefined;
             const commands = agg ? agg.members.filter((m): m is Command => m.$type === Command.$type) : [];
             return this.createScopeForNodes(commands);
         }
