@@ -261,7 +261,6 @@ context Collaboration {
     queuedAt: Timestamp "登録日時"
 
     /// セッションの実行は1つずつ順に行う。実行キューのリース（ストア）が守る。
-    invariant serial "セッションで実行中の実行は1つ"
 
     state Queued "待機中" {
       /// 打ち消しの実行で、サーバーが機械的に打ち消せず、エージェントに任せたわけ。打ち消しの実行でこれがないものは、
@@ -438,8 +437,7 @@ context Collaboration {
     /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。成功の条件は変更の有無による（変えなかった実行は
     /// dt fmt / dt check を省いてよい）。
     /// 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
-    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, review: RunReview?, finishedAt: Timestamp) "実行を終える"
-      Running -> Completed | Failed
+    command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, review: RunReview?, finishedAt: Timestamp) "実行を終える" {
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
         (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
       } else ChangedMismatch
@@ -449,8 +447,13 @@ context Collaboration {
       requires replyAboutInput "返答の依頼は実行の依頼" {
         exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       } else InvalidReply
-      emits RunCompleted when -> Completed,
-            RunFailed when -> Failed
+      outcome Completed: Running -> Completed
+        select { report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran)) }
+        emits RunCompleted
+      outcome Failed: Running -> Failed
+        select { not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))) }
+        emits RunFailed
+    }
 
     command askClarification(question: Text, reply: AgentReply?, resultRevision: RevisionId, finishedAt: Timestamp) "確認を求める"
       Running -> NeedsClarification

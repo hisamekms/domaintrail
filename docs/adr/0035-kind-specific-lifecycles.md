@@ -106,6 +106,8 @@ command inspect(result: InspectionResult) {
 
 `@externalCheck("reason")` is an annotation on a particular decision rule, not a general warning suppression. The reason explains why it cannot be expressed in the DSL. Existing `requires name "label" { expression } else Error` and `invariant name "label" { expression }` remain; their expression-free forms accept this same annotation. Labels and comments are descriptive, not decision rules.
 
+An aggregate invariant or external check can inspect only the aggregate and its explicit command inputs. A constraint over other aggregates or concurrent transactions belongs at the storage/application boundary; an `@externalCheck` on one aggregate cannot establish it. The existing `Triage.onePerRequest` and `AgentRun.serial` declarations are therefore removed from the aggregate model during migration; the store's unique indexes and transaction tests remain responsible for them. A future storage-level DSL contract would need its own scope and semantics.
+
 ### Validation and generation
 
 `dt check` reports expression-free decision rules without the annotation while allowing an incomplete model during editing. `dt check --for-generation` makes them errors. The gate applies to `select`, `requires`, and `invariant`. Empty reasons, annotations without a natural-language rule, or invalid attachments are errors. Annotated rules are reported as external obligations, distinct from expressed rules.

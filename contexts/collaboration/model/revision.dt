@@ -62,7 +62,7 @@ context Collaboration {
 
     invariant distinctPaths "パスは1ファイル1回" { unique(files, f => f.path) }
     /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
-    invariant hashOfFiles "内容ハッシュはファイルから決まる"
+    invariant hashOfFiles "内容ハッシュはファイルから決まる" @externalCheck("内容ハッシュをファイル内容から再計算する")
 
     state Recorded "記録済み"
 
@@ -70,7 +70,7 @@ context Collaboration {
       -> Recorded
       requires notRestored "復元でない" { origin.kind != RevisionOrigin.Restored } else RestoreNeedsCheck
       /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
-      requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
+      requires hashMatchesFiles "内容ハッシュがファイルと合う" @externalCheck("内容ハッシュをファイル内容から再計算して照合する") else ContentHashMismatch
       emits RevisionRecorded
 
     /// 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
@@ -81,7 +81,7 @@ context Collaboration {
         restoredByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
       /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
-      requires hashMatchesFiles "内容ハッシュがファイルと合う" else ContentHashMismatch
+      requires hashMatchesFiles "内容ハッシュがファイルと合う" @externalCheck("内容ハッシュをファイル内容から再計算して照合する") else ContentHashMismatch
       emits RevisionRestored
   }
 
