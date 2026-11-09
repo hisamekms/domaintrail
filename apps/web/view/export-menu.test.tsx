@@ -72,21 +72,22 @@ describe("the view toolbar's right end", () => {
 describe("the canvas's controls", () => {
     const canvas = { getZoom: () => 1, selectedIds: () => [] } as unknown as DiagramCanvas;
 
-    test('the main canvas: the camera, 詰めて表示, the legend and «, without 印刷 or 書き出し', () => {
-        const html = render(<CanvasControls id="main" canvas={canvas} fitAll={() => {}} legend={null} compact={{ on: false, onToggle: () => {} }} keys />);
-        for (const label of ['縮小', '拡大', '全体を表示（Shift+1）', '詰めて表示', 'キャンバスの操作を畳む（U）'])
-            expect(html).toContain(`aria-label="${label}"`);
+    test('the main canvas: the camera and 詰めて表示, without 印刷 or 書き出し', () => {
+        const html = render(<CanvasControls canvas={canvas} fitAll={() => {}} legend={null} compact={{ on: false, onToggle: () => {} }} keys />);
+        for (const label of ['縮小', '拡大', '全体を表示（Shift+1）', '詰めて表示']) expect(html).toContain(`aria-label="${label}"`);
+        expect(html).not.toContain('キャンバスの操作を畳む');
+        expect(html).not.toContain('キャンバスの操作を表示');
         expect(html).not.toContain('印刷');
         expect(html).not.toContain('書き出し');
     });
 
     test('the inspector’s state diagram keeps its 書き出し there', () => {
-        const html = render(<CanvasControls id="states" canvas={canvas} fitAll={() => {}} legend={null} exporting={control()} />);
+        const html = render(<CanvasControls canvas={canvas} fitAll={() => {}} legend={null} exporting={control()} />);
         expect(html).toContain('aria-label="書き出し"');
     });
 
     test('the diagram focus action lives in its canvas toolbar and changes to return when focused', () => {
-        const props = { id: 'states', canvas, fitAll: () => {}, legend: null, focus: { active: false, onToggle: () => {} } };
+        const props = { canvas, fitAll: () => {}, legend: null, focus: { active: false, onToggle: () => {} } };
         expect(render(<CanvasControls {...props} />)).toContain('aria-label="画面いっぱいに表示"');
         expect(render(<CanvasControls {...props} focus={{ ...props.focus, active: true }} />)).toContain('aria-label="元の表示に戻す"');
     });

@@ -141,9 +141,7 @@ See [ADR 0007](adr/0007-pane-roles.md).
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
 nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
-boxes of every diagram, the shapes (凡例,
-named in its tooltip) open the legend upward, and « at the right end collapses the bar toward the corner, leaving only
-», which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. The legend starts hidden, and each view
+boxes of every diagram, and the shapes (凡例, named in its tooltip) open the legend upward. The legend starts hidden, and each view
 remembers its own: opening it on the context map leaves it closed on the structure (its levels and focus share one),
 the 状態遷移 diagram and the Event Storming. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…); a

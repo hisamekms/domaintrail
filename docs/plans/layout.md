@@ -48,7 +48,7 @@ This plan is for a later branch, cut after `feat/modes` is on `main`. It changes
    - The split between them is dragged up and down, and the column's width is dragged too.
    - The sizes are remembered per viewer.
 4. **Right column**: tabs チャット / AI の作業. The detail and the chat are seen at the same time (user requirement).
-5. **Canvas controls** (bottom left): only the viewing tools: zoom, 全体, 選択に合わせる, 詰めて表示, 凡例, 畳む.
+5. **Canvas controls** (bottom left): the viewing tools: zoom, 全体, 選択に合わせる, 詰めて表示, 凡例.
 6. Switching between the worlds returns to the view, storming and conditions last used in each.
 7. The print heading follows the same words: `ws › ドメインモデル › 構造図 · 詳細`.
 

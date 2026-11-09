@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, Maximize, Maximize2, Minimize2, Minus, Plus, Shapes } from 'lucide-react';
+import { Download, Focus, FoldHorizontal, Maximize, Maximize2, Minimize2, Minus, Plus, Shapes } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { useDismiss } from '../shared/layout';
-import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
+import { canvasShortcut, formatZoom, takesText, type CanvasShortcut } from './controls';
 import { useCanvasValue, type DiagramCanvas } from './diagram';
 import { ExportMenu, type ExportControl } from './export-menu';
 import { LineTip } from './lines';
@@ -13,13 +13,11 @@ const ANIMATE = { animate: true };
 /**
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
  * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection), the legend's button,
- * which opens it upward, 「詰めて表示」 (every diagram in its compact layout, remembered), and « , which collapses all of it
- * into a » in the same corner (as `U` does, remembered). How the view is looked at, not what it shows: the view's
- * 印刷 and 書き出し are in its toolbar (`ExportButton`); the inspector's state diagram has its 書き出し here.
+ * which opens it upward, and 「詰めて表示」 (every diagram in its compact layout, remembered). How the view is looked at,
+ * not what it shows: the view's 印刷 and 書き出し are in its toolbar (`ExportButton`); the inspector's state diagram has
+ * its 書き出し here.
  */
 export function CanvasControls(props: {
-    /** Stable identity of this diagram's controls, including across remounts. */
-    id: string;
     canvas: DiagramCanvas | null;
     fitAll: () => void;
     /** The legend of what the canvas shows, if it shows something. */
@@ -35,7 +33,6 @@ export function CanvasControls(props: {
 }) {
     const { canvas, fitAll, legend } = props;
     const t = useT();
-    const { collapsed, toggle } = useCanvasControls(props.id);
     const root = useRef<HTMLDivElement>(null);
     const [exportOpen, setExportOpen] = useState(false);
     const closeExport = useCallback(() => setExportOpen(false), []);
@@ -46,17 +43,16 @@ export function CanvasControls(props: {
     useCanvasKeys(props.keys === true && canvas !== null, (action) => {
         if (!canvas) return;
         if (action === 'fitAll') fitAll();
-        else if (action === 'fitSelection') canvas.fitSelection(ANIMATE);
-        else toggle();
+        else canvas.fitSelection(ANIMATE);
     });
 
     if (!canvas) return null;
     const pct = formatZoom(zoom);
     return (
-        <div className={`canvas-controls${collapsed ? ' collapsed' : ''}`} ref={root}>
-            {legend && !collapsed && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
-            {props.exporting && exportOpen && !collapsed && <ExportMenu control={props.exporting} onDone={closeExport} up />}
-            <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label} aria-hidden={collapsed} inert={collapsed}>
+        <div className="canvas-controls" ref={root}>
+            {legend && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
+            {props.exporting && exportOpen && <ExportMenu control={props.exporting} onDone={closeExport} up />}
+            <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label}>
                 <div className="canvas-controls-group">
                     <ControlButton label={t.canvasControls.zoomOut} onClick={() => canvas.zoomOut(ANIMATE)}>
                         <Minus size={14} aria-hidden />
@@ -129,20 +125,7 @@ export function CanvasControls(props: {
                         {props.focus.active ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
                     </button>
                 )}
-                <ControlButton label={t.canvasControls.collapse} onClick={toggle}>
-                    <ChevronsLeft size={14} aria-hidden />
-                </ControlButton>
             </div>
-            <button
-                className="canvas-control canvas-expand"
-                aria-label={t.canvasControls.expand}
-                data-tooltip={t.canvasControls.expand}
-                aria-hidden={!collapsed}
-                inert={!collapsed}
-                onClick={toggle}
-            >
-                <ChevronsRight size={14} aria-hidden />
-            </button>
         </div>
     );
 }

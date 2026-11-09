@@ -1321,7 +1321,7 @@ told the view was); the canvas's controls, how it is looked at.
   `ExportButton`): one menu, opening below, right-aligned: 印刷, PDF（印刷画面から保存）, PNG, SVG, then 見出しを含める and
   凡例を含める. The catalog has 「印刷」 there instead (`PrintButton`: the page, as Ctrl+P); an empty view, nothing
   (`toolbarOutput`).
-- **The canvas's controls**: zoom − % +, 全体, 選択に合わせる, 詰めて表示, 凡例, 畳む; the keys unchanged. The inspector's
+- **The canvas's controls**: zoom − % +, 全体, 選択に合わせる, 詰めて表示, 凡例. The inspector's
   state diagram keeps its 書き出し there (PNG, SVG, opening upward).
 - **「例外を表示」** moved from the storming's subject to its 絞り込み (`StormingFilter`, section 表示), on the same
   conditions (a storming with exceptions, not one timeline); hidden exceptions count one, and すべて解除 shows them.

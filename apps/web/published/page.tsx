@@ -207,7 +207,6 @@ function Page({ theme, mode }: { theme: 'light' | 'dark'; mode: ReturnType<typeo
                                     <KnowledgeMarks canvas={canvas} />
                                     {graph && (
                                         <CanvasControls
-                                            id="published"
                                             canvas={canvas}
                                             fitAll={() => canvas && fitAll(canvas, graph, true)}
                                             legend={null}

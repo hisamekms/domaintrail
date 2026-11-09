@@ -8059,60 +8059,6 @@ button.add-to-request.added:hover {
     color: var(--text-secondary);
 }
 /*
- * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
- * It opens and closes at the panes' paces (the motion tokens).
- */
-.canvas-controls-bar {
-    clip-path: inset(0 0 0 0 round 8px);
-    transition:
-        clip-path var(--motion-enter) var(--motion-ease-enter),
-        opacity var(--motion-enter) var(--motion-ease-enter),
-        visibility 0s;
-}
-.canvas-controls.collapsed .canvas-controls-bar {
-    clip-path: inset(0 calc(100% - 1.875rem) 0 0 round 8px);
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        clip-path var(--motion-exit) var(--motion-ease-exit),
-        opacity var(--motion-exit) var(--motion-ease-exit),
-        visibility 0s linear var(--motion-exit);
-}
-.canvas-controls .canvas-expand {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    height: calc(1.625rem + 6px);
-    min-width: calc(1.625rem + 6px);
-    background: var(--legend-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px var(--shadow);
-    pointer-events: auto;
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        opacity var(--motion-exit) var(--motion-ease-exit),
-        visibility 0s linear var(--motion-exit);
-}
-.canvas-controls.collapsed .canvas-expand {
-    opacity: 1;
-    visibility: visible;
-    /* after the bar has started folding */
-    transition:
-        opacity var(--motion-enter) var(--motion-ease-enter) calc(var(--motion-enter) * 0.25),
-        visibility 0s;
-}
-@media (prefers-reduced-motion: reduce) {
-    .canvas-controls-bar,
-    .canvas-controls .canvas-expand,
-    .canvas-controls.collapsed .canvas-controls-bar,
-    .canvas-controls.collapsed .canvas-expand {
-        transition: none;
-    }
-}
-
-/*
  * one hover for the toolbars' buttons (the view toolbar, its levels, 絞り込み, and the canvas's bottom-left bar):
  * a grey that shows, the text's colour; a pressed button keeps its colour, a little darker; a disabled one none
  */
