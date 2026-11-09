@@ -806,19 +806,27 @@ class ContextEmitter {
             this.result(') => ', outcomes, errors, '', ';');
         } else {
             const input = inputs.map((x) => x.type).join(' | ') || 'never';
-            this.line(`export type ${commandTypeName(agg, c)} = <S extends ${input}>(`);
-            this.line(`    ${self}: S,`);
-            for (const p of params) this.line(`    ${p},`);
-            this.line(') =>');
-            for (const [i, x] of inputs.entries()) {
-                this.line(`    S extends ${x.type} ?`);
-                this.result('        ', x.applicable.map((o): Outcome => ({
+            const resultOf = (x: typeof inputs[number]): Outcome[] => x.applicable.map((o): Outcome => ({
                     key: o.name,
                     first: `aggregate: ${agg.lifecycleField ? this.pairType(agg, x.kind, o.to) : agg.states.length ? stateTypeName(agg, o.to) : agg.name}`,
                     emits: [...o.emits],
-                })), errors, '        ', i === inputs.length - 1 ? ' : never;' : ' :');
+                }));
+            if (inputs.length === 1) {
+                this.line(`export type ${commandTypeName(agg, c)} = (`);
+                this.line(`    ${self}: ${input},`);
+                for (const p of params) this.line(`    ${p},`);
+                this.result(') => ', resultOf(inputs[0]), errors, '', ';');
+            } else {
+                this.line(`export type ${commandTypeName(agg, c)} = <S extends ${input}>(`);
+                this.line(`    ${self}: S,`);
+                for (const p of params) this.line(`    ${p},`);
+                this.line(') =>');
+                for (const [i, x] of inputs.entries()) {
+                    this.line(`    S extends ${x.type} ?`);
+                    this.result('        ', resultOf(x), errors, '        ', i === inputs.length - 1 ? ' : never;' : ' :');
+                }
+                if (!inputs.length) this.line('    never;');
             }
-            if (!inputs.length) this.line('    never;');
         }
         this.out.push('');
         this.jsdoc([
@@ -843,19 +851,27 @@ class ContextEmitter {
             this.result(') => ', decisionOutcomes, errors, '', ';');
         } else {
             const input = inputs.map((x) => x.type).join(' | ') || 'never';
-            this.line(`export type ${decisionTypeName(agg, c)} = <S extends ${input}>(`);
-            this.line(`    ${self}: S,`);
-            for (const p of params) this.line(`    ${p},`);
-            this.line(') =>');
-            for (const [i, x] of inputs.entries()) {
-                this.line(`    S extends ${x.type} ?`);
-                this.result('        ', x.applicable.map((o): Outcome => ({
+            const resultOf = (x: typeof inputs[number]): Outcome[] => x.applicable.map((o): Outcome => ({
                     key: o.name,
                     first: `set: ${this.setType(outcomeFields(agg, c, x.from || undefined, o.to, o).set)}`,
                     emits: [...o.emits],
-                })), errors, '        ', i === inputs.length - 1 ? ' : never;' : ' :');
+                }));
+            if (inputs.length === 1) {
+                this.line(`export type ${decisionTypeName(agg, c)} = (`);
+                this.line(`    ${self}: ${input},`);
+                for (const p of params) this.line(`    ${p},`);
+                this.result(') => ', resultOf(inputs[0]), errors, '', ';');
+            } else {
+                this.line(`export type ${decisionTypeName(agg, c)} = <S extends ${input}>(`);
+                this.line(`    ${self}: S,`);
+                for (const p of params) this.line(`    ${p},`);
+                this.line(') =>');
+                for (const [i, x] of inputs.entries()) {
+                    this.line(`    S extends ${x.type} ?`);
+                    this.result('        ', resultOf(x), errors, '        ', i === inputs.length - 1 ? ' : never;' : ' :');
+                }
+                if (!inputs.length) this.line('    never;');
             }
-            if (!inputs.length) this.line('    never;');
         }
     }
 

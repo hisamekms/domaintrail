@@ -259,8 +259,18 @@ test('named requirement and choice expressions resolve fields of their source st
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-state-expression-'));
     try {
         for (const file of files) await Bun.write(path.join(dir, file.path), file.content);
+        await writeFile(path.join(dir, 'implementation.ts'), `import * as X from './X.js';
+import { decideNamed, ok } from './_runtime.js';
+export const finish: X.FinishRun = decideNamed<X.FinishRunDecision>()(
+    X.RunShape,
+    { finished: 'Done', unchanged: 'Running' },
+    (run, params) => params.resultRevision === run.baseRevision
+        ? ok({ unchanged: { set: {}, events: {} } })
+        : ok({ finished: { set: { resultRevision: params.resultRevision }, events: {} } }),
+);
+`);
         const tsc = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
-        const compiled = Bun.spawnSync([process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'index.ts'], { cwd: dir });
+        const compiled = Bun.spawnSync([process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'index.ts', 'implementation.ts'], { cwd: dir });
         expect(compiled.stdout.toString() + compiled.stderr.toString()).toBe('');
         expect(compiled.exitCode).toBe(0);
     } finally {
