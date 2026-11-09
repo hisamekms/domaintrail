@@ -1,5 +1,7 @@
 # Plan: implement ADR 0035
 
+Status: completed on integration branch `feat/kind-lifecycles`. The branch remains separate from `main`.
+
 This plan lands [ADR 0035](../adr/0035-kind-specific-lifecycles.md) on integration branch `feat/kind-lifecycles`, based on `origin/main` at `3e56cd52`. The supervisor (SV) owns the integration branch. Each worker starts a branch and worktree from it; the SV reviews and merges the worker branch into the integration branch. This task does not merge into `main`.
 
 ## Scope and acceptance

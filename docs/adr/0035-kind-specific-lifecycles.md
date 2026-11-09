@@ -1,6 +1,6 @@
 # ADR 0035: Kind-specific lifecycles and named outcomes
 
-- Status: accepted, not implemented
+- Status: accepted, implemented
 - Date: 2026-11-09
 - Amends: [ADR 0014](0014-command-transitions.md), [ADR 0016](0016-collection-constraints-and-declared-invariants.md), [ADR 0017](0017-command-requirements.md), [ADR 0018](0018-command-events-contract.md), [ADR 0019](0019-command-changes-and-decisions.md), [ADR 0020](0020-generated-checks-and-contract-tests.md)
 
