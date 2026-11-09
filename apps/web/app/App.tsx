@@ -54,9 +54,14 @@ function aggregateNames(model: DomainModel | null, id: string): { name: string; 
     return r?.kind === 'element' ? { name: r.el.name, label: r.el.label } : { name: id };
 }
 
-function aggregateKinds(model: DomainModel | null, id: string): string[] {
+function aggregateKinds(model: DomainModel | null, id: string): { name: string; label?: string }[] {
     const aggregate = model?.elements.find((element) => element.id === id);
-    return aggregate?.kind === 'aggregate' ? aggregate.validStates.map((entry) => entry.kind) : [];
+    if (aggregate?.kind !== 'aggregate') return [];
+    const enumElement = model?.elements.find((element) => String(element.id) === aggregate.lifecycleEnum);
+    return aggregate.validStates.map((entry) => ({
+        name: entry.kind,
+        label: enumElement?.kind === 'enum' ? enumElement.values.find((value) => value.name === entry.kind)?.label : undefined,
+    }));
 }
 
 /** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */

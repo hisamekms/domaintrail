@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Maximize2 } from 'lucide-react';
 import type { ModelDiff } from '@domaintrail/modeling';
 import type { Diagnostic } from '@domaintrail/kernel';
-import { type DisplayMode, type LaidOutGraph, type Lang, TRANSITION_LABELS, type TransitionLabels } from '@domaintrail/visualization';
+import { nameIn, type DisplayMode, type LaidOutGraph, type Lang, TRANSITION_LABELS, type TransitionLabels } from '@domaintrail/visualization';
 import { fitAll, highlightElement } from './view/canvas';
 import { useT } from './i18n';
 import { usePersistentState } from './shared/layout';
@@ -15,6 +16,7 @@ import { exportFileName, sheetHeading, type SheetSubject } from './view/sheet';
 import { useCanvasValue, type Camera, type DiagramCanvas } from './view/diagram';
 import { FlowCanvas } from './view/flow-canvas';
 import { selectedElement } from './view/navigation';
+import { DiagramFocus } from './view/diagram-focus';
 
 /**
  * Camera of each aggregate's diagram (and of its compact layout, `<aggregate>:compact`), kept while the page is open
@@ -32,7 +34,7 @@ export function StatesCanvas(props: {
     graphs: Record<TransitionLabels, LaidOutGraph> | undefined;
     /** The previously shown version of the same graphs, for ghosts of removed states. */
     previous: Record<TransitionLabels, LaidOutGraph> | undefined;
-    kinds: string[];
+    kinds: { name: string; label?: string }[];
     statesByKind: Record<string, Record<TransitionLabels, LaidOutGraph>> | undefined;
     previousByKind: Record<string, Record<TransitionLabels, LaidOutGraph>> | undefined;
     diff: ModelDiff;
@@ -54,16 +56,21 @@ export function StatesCanvas(props: {
 }) {
     const { aggregateId } = props;
     const t = useT();
-    const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
+    // A presentation switch remounts FlowCanvas. Ignore the outgoing canvas until the new one reports its port.
+    const [mounted, setMounted] = useState<{ canvas: DiagramCanvas; focused: boolean } | null>(null);
     const [savedLabels, setLabels] = usePersistentState<TransitionLabels>('domaintrail.states.transitionLabels', 'both');
     const [selectedKind, setSelectedKind] = useState<string | undefined>();
+    const [focused, setFocused] = useState(false);
+    const canvas = mounted?.focused === focused ? mounted.canvas : null;
+    const focusButton = useRef<HTMLButtonElement>(null);
     const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
-    const kind = selectedKind && props.kinds.includes(selectedKind) ? selectedKind : props.kinds[0];
+    const kind = selectedKind && props.kinds.some((value) => value.name === selectedKind) ? selectedKind : props.kinds[0]?.name;
+    const kindName = props.kinds.find((value) => value.name === kind);
     const key = kind ? `${aggregateId}::${kind}` : aggregateId;
     const graph = useCompactGraph((kind ? props.statesByKind?.[key] : props.graphs)?.[labels], props.compact);
     const previous = graph?.spacing === 'compact' ? undefined : (kind ? props.previousByKind?.[key] : props.previous)?.[labels];
     /** The aggregate's camera key: its compact layout has a camera of its own. */
-    const cameraKey = graph?.spacing === 'compact' ? `${key}:compact` : key;
+    const cameraKey = `${graph?.spacing === 'compact' ? `${key}:compact` : key}${focused ? ':focus' : ''}`;
     /** The camera key shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
 
@@ -74,10 +81,14 @@ export function StatesCanvas(props: {
 
     useEffect(() => {
         if (!canvas) return;
-        return canvas.watch(() => {
+        const unwatch = canvas.watch(() => {
             const camera = canvas.getCamera();
             if (shown.current === cameraKey) cameras.set(cameraKey, camera);
         });
+        return () => {
+            if (shown.current === cameraKey) cameras.set(cameraKey, canvas.getCamera());
+            unwatch();
+        };
     }, [canvas, cameraKey]);
 
     // Draw the graph; restore the aggregate's camera, or fit the first time it is shown.
@@ -98,13 +109,21 @@ export function StatesCanvas(props: {
                 transitionLabels: labels,
             }),
         );
+        let frame: number | undefined;
         if (shown.current !== cameraKey) {
             const saved = cameras.get(cameraKey);
-            if (saved) canvas.setCamera(saved);
-            else fitAll(canvas, graph);
+            // A diagram moved between the detail and the dialog gets its size after the new canvas mounts.
+            frame = requestAnimationFrame(() => {
+                canvas.measure();
+                if (saved) canvas.setCamera(saved);
+                else fitAll(canvas, graph);
+            });
             shown.current = cameraKey;
             if (props.selected) highlightElement(canvas, props.selected);
         }
+        return () => {
+            if (frame !== undefined) cancelAnimationFrame(frame);
+        };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, graph, previous, props.diff, props.diagnostics, props.mode, props.lang, labels, cameraKey]);
 
@@ -120,10 +139,14 @@ export function StatesCanvas(props: {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [selectedOnCanvas]);
 
-    const onMount = useCallback((c: DiagramCanvas) => setCanvas(c), []);
+    const onMount = useCallback((c: DiagramCanvas) => setMounted({ canvas: c, focused }), [focused]);
     const exportTarget = (): ExportTarget | null => {
         if (!graph) return null;
-        const subject: SheetSubject = { view: 'states', aggregate: { id: aggregateId, ...props.aggregate } };
+        const subject: SheetSubject = {
+            view: 'states',
+            aggregate: { id: aggregateId, ...props.aggregate },
+            ...(kindName && { kind: { id: kindName.name, label: kindName.label } }),
+        };
         return {
             graph,
             // as drawn, without the ghosts of removed states
@@ -135,41 +158,66 @@ export function StatesCanvas(props: {
     };
 
     return (
-        <div className="states-canvas">
-            <FlowCanvas onMount={onMount} />
-            {graph ? (
-                <>
-                    <div className="canvas-toolbar">
-                        {props.kinds.length > 1 && (
-                            <select aria-label={t.lifecycleKind} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
-                                {props.kinds.map((value) => <option key={value} value={value}>{value}</option>)}
-                            </select>
-                        )}
-                        <div className="segmented small" role="group" aria-label={t.transitionLabels}>
-                            {TRANSITION_LABELS.map((l) => (
+        <DiagramFocus
+            open={focused}
+            title={`${nameIn(props.mode, props.aggregate.name, props.aggregate.label)} · ${t.tabs.states}${kindName ? ` · ${nameIn(props.mode, kindName.name, kindName.label)}` : ''}`}
+            onClose={() => {
+                setFocused(false);
+                requestAnimationFrame(() => focusButton.current?.focus());
+            }}
+        >
+            <div className="states-canvas">
+                <FlowCanvas onMount={onMount} />
+                {graph ? (
+                    <>
+                        <div className="canvas-toolbar">
+                            {props.kinds.length > 1 && (
+                                <select aria-label={t.lifecycleKind} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
+                                    {props.kinds.map((value) => (
+                                        <option key={value.name} value={value.name}>
+                                            {nameIn(props.mode, value.name, value.label)}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
+                            <div className="segmented small" role="group" aria-label={t.transitionLabels}>
+                                {TRANSITION_LABELS.map((l) => (
+                                    <button
+                                        key={l}
+                                        className={labels === l ? 'active' : ''}
+                                        aria-pressed={labels === l}
+                                        onClick={() => setLabels(l)}
+                                        data-tooltip={t.transitionLabelModes[l].hint}
+                                    >
+                                        {t.transitionLabelModes[l].label}
+                                    </button>
+                                ))}
+                            </div>
+                            {!focused && (
                                 <button
-                                    key={l}
-                                    className={labels === l ? 'active' : ''}
-                                    aria-pressed={labels === l}
-                                    onClick={() => setLabels(l)}
-                                    data-tooltip={t.transitionLabelModes[l].hint}
+                                    ref={focusButton}
+                                    type="button"
+                                    className="icon-button diagram-focus-trigger"
+                                    aria-label={t.expandDiagram}
+                                    data-tooltip={t.expandDiagram}
+                                    onClick={() => setFocused(true)}
                                 >
-                                    {t.transitionLabelModes[l].label}
+                                    <Maximize2 size={14} aria-hidden />
                                 </button>
-                            ))}
+                            )}
                         </div>
-                    </div>
-                    <CanvasControls
-                        canvas={canvas}
-                        fitAll={() => canvas && fitAll(canvas, graph, true)}
-                        legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
-                        exporting={{ target: exportTarget, ...props.exportOptions }}
-                    />
-                    <EdgeHint canvas={canvas} view="states" />
-                </>
-            ) : (
-                <div className="empty">{t.noDiagram}</div>
-            )}
-        </div>
+                        <CanvasControls
+                            canvas={canvas}
+                            fitAll={() => canvas && fitAll(canvas, graph, true)}
+                            legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
+                            exporting={{ target: exportTarget, ...props.exportOptions }}
+                        />
+                        <EdgeHint canvas={canvas} view="states" />
+                    </>
+                ) : (
+                    <div className="empty">{t.noDiagram}</div>
+                )}
+            </div>
+        </DiagramFocus>
     );
 }

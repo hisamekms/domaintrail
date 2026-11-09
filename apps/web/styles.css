@@ -4158,6 +4158,45 @@ svg.chat-launcher-mark {
     position: relative;
     height: 100%;
 }
+.diagram-focus {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+}
+.diagram-focus::backdrop {
+    background: var(--bg);
+}
+.diagram-focus-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+.diagram-focus-body {
+    flex: 1;
+    min-height: 0;
+}
+.diagram-focus-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    height: 30px;
+}
 .canvas-toolbar {
     position: absolute;
     top: 8px;

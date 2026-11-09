@@ -138,6 +138,8 @@ const ja = {
     sheet: DIAGRAM_TEXTS.ja.sheet,
     transitionLabels: '遷移のラベル',
     lifecycleKind: '種類',
+    expandDiagram: '画面いっぱいに表示',
+    closeDiagram: '元の表示に戻す',
     transitionLabelModes: {
         command: { label: 'コマンド', hint: 'コマンドだけを表示' },
         event: { label: 'イベント', hint: '発生させるドメインイベントだけを表示（イベントのない遷移はコマンドを薄く表示）' },
@@ -1456,6 +1458,8 @@ const en: Messages = {
     sheet: DIAGRAM_TEXTS.en.sheet,
     transitionLabels: 'Transition labels',
     lifecycleKind: 'Kind',
+    expandDiagram: 'Fill browser tab',
+    closeDiagram: 'Return to detail',
     transitionLabelModes: {
         command: { label: 'Command', hint: 'Show the commands only' },
         event: { label: 'Events', hint: 'Show the domain events raised only (a transition without events shows its command, faded)' },

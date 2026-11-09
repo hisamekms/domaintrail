@@ -37,7 +37,7 @@ export type SheetSubject =
           /** Whether the exceptions' layer is included, when the storming has exceptions. */
           exceptions?: boolean | undefined;
       }
-    | { view: 'states'; /** The aggregate: its ID (`Context.Name`), name and label. */ aggregate: Named & { name: string } };
+    | { view: 'states'; /** The aggregate: its ID (`Context.Name`), name and label. */ aggregate: Named & { name: string }; kind?: Named };
 
 const CRUMB = ' › ';
 const CONDITION = ' · ';
@@ -73,6 +73,7 @@ export function sheetHeading(workspace: string | undefined, subject: SheetSubjec
         }
         case 'states':
             crumbs.push(t.worlds.model, t.tabs.states, nameIn(mode, subject.aggregate.name, subject.aggregate.label));
+            if (subject.kind) conditions.push(name(subject.kind));
             break;
     }
     return [crumbs.join(CRUMB), ...conditions].join(CONDITION);
@@ -106,6 +107,7 @@ export function exportFileName(workspace: string | undefined, subject: SheetSubj
         }
         case 'states':
             parts.push('states', subject.aggregate.id);
+            if (subject.kind) parts.push(subject.kind.id);
             break;
     }
     const stem = parts
