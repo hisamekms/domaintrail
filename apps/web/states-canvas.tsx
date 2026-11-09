@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Maximize2 } from 'lucide-react';
 import type { ModelDiff } from '@domaintrail/modeling';
 import type { Diagnostic } from '@domaintrail/kernel';
 import { nameIn, type DisplayMode, type LaidOutGraph, type Lang, TRANSITION_LABELS, type TransitionLabels } from '@domaintrail/visualization';
@@ -156,15 +155,16 @@ export function StatesCanvas(props: {
             fileName: (ext) => exportFileName(props.workspaceName, subject, ext),
         };
     };
+    const closeFocus = (): void => {
+        setFocused(false);
+        requestAnimationFrame(() => focusButton.current?.focus());
+    };
 
     return (
         <DiagramFocus
             open={focused}
             title={`${nameIn(props.mode, props.aggregate.name, props.aggregate.label)} · ${t.tabs.states}${kindName ? ` · ${nameIn(props.mode, kindName.name, kindName.label)}` : ''}`}
-            onClose={() => {
-                setFocused(false);
-                requestAnimationFrame(() => focusButton.current?.focus());
-            }}
+            onClose={closeFocus}
         >
             <div className="states-canvas">
                 <FlowCanvas onMount={onMount} />
@@ -193,18 +193,6 @@ export function StatesCanvas(props: {
                                     </button>
                                 ))}
                             </div>
-                            {!focused && (
-                                <button
-                                    ref={focusButton}
-                                    type="button"
-                                    className="icon-button diagram-focus-trigger"
-                                    aria-label={t.expandDiagram}
-                                    data-tooltip={t.expandDiagram}
-                                    onClick={() => setFocused(true)}
-                                >
-                                    <Maximize2 size={14} aria-hidden />
-                                </button>
-                            )}
                         </div>
                         <CanvasControls
                             id={`states:${aggregateId}`}
@@ -212,6 +200,7 @@ export function StatesCanvas(props: {
                             fitAll={() => canvas && fitAll(canvas, graph, true)}
                             legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
                             exporting={{ target: exportTarget, ...props.exportOptions }}
+                            focus={{ active: focused, onToggle: focused ? closeFocus : () => setFocused(true), triggerRef: focusButton }}
                         />
                         <EdgeHint canvas={canvas} view="states" />
                     </>

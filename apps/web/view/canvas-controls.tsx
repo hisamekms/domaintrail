@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, Maximize, Minus, Plus, Shapes } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, Maximize, Maximize2, Minimize2, Minus, Plus, Shapes } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { useDismiss } from '../shared/layout';
@@ -30,6 +30,8 @@ export function CanvasControls(props: {
     compact?: { on: boolean; onToggle: () => void };
     /** 書き出し, if the canvas offers it here (the inspector's state diagram), as a menu opening upward. */
     exporting?: ExportControl;
+    /** Fill the browser tab with this diagram, if it supports that view. */
+    focus?: { active: boolean; onToggle: () => void; triggerRef?: Ref<HTMLButtonElement> };
 }) {
     const { canvas, fitAll, legend } = props;
     const t = useT();
@@ -114,6 +116,17 @@ export function CanvasControls(props: {
                         data-tooltip={legend.open ? t.closeLegend : t.openLegend}
                     >
                         <Shapes size={14} aria-hidden />
+                    </button>
+                )}
+                {props.focus && (
+                    <button
+                        ref={props.focus.triggerRef}
+                        className="canvas-control"
+                        aria-label={props.focus.active ? t.closeDiagram : t.expandDiagram}
+                        data-tooltip={props.focus.active ? t.closeDiagram : t.expandDiagram}
+                        onClick={props.focus.onToggle}
+                    >
+                        {props.focus.active ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
                     </button>
                 )}
                 <ControlButton label={t.canvasControls.collapse} onClick={toggle}>

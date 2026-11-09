@@ -84,4 +84,10 @@ describe("the canvas's controls", () => {
         const html = render(<CanvasControls id="states" canvas={canvas} fitAll={() => {}} legend={null} exporting={control()} />);
         expect(html).toContain('aria-label="書き出し"');
     });
+
+    test('the diagram focus action lives in its canvas toolbar and changes to return when focused', () => {
+        const props = { id: 'states', canvas, fitAll: () => {}, legend: null, focus: { active: false, onToggle: () => {} } };
+        expect(render(<CanvasControls {...props} />)).toContain('aria-label="画面いっぱいに表示"');
+        expect(render(<CanvasControls {...props} focus={{ ...props.focus, active: true }} />)).toContain('aria-label="元の表示に戻す"');
+    });
 });

@@ -4190,13 +4190,6 @@ svg.chat-launcher-mark {
     flex: 1;
     min-height: 0;
 }
-.diagram-focus-trigger {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-}
 .canvas-toolbar {
     position: absolute;
     top: 8px;
