@@ -88,6 +88,7 @@ context Collaboration {
     /// メッセージ1件に仕分けは1つ（ストアの一意索引）。
 
     state Pending "仕分け中"
+    initial Pending
     state Decided "仕分け済み" {
       kind: TriageVerdict "結論"
       decidedBy: TriageStage "決めた段"
