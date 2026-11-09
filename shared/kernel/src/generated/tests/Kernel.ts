@@ -41,7 +41,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Kernel, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Options = {}): Arbitraries {
+export function arbitraries(options: Partial<Options> = {}): Arbitraries {
     const given: Partial<Arbitraries> = options.arbitraries?.Kernel ?? {};
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);
     const a: Arbitraries = testing.lazy<Arbitraries>({
