@@ -626,6 +626,56 @@ context Billing { // other files open the context without a name
   English.
 
 <!-- topic: expressions -->
+### Kind-specific lifecycles and named outcomes
+
+Use a required `readonly` enum field when one aggregate has several lifecycles. `initial` names the starting state;
+each `transitions for` group adds outcomes only for its selected enum value. Commands outside the groups are shared.
+
+```dt
+context Delivery {
+  id RequestId: UUID
+  enum Kind { COLLECT DROP_OFF }
+  event Collected
+  event Received
+  aggregate Request {
+    id: RequestId
+    readonly kind: Kind
+    state Unassigned
+    state Assigned
+    state Collected
+    state Holding
+    initial Unassigned
+    create command open(id: RequestId, kind: Kind) {
+      outcome opened: -> Unassigned
+    }
+    command assign() {
+      outcome assigned: Unassigned -> Assigned
+    }
+    command finish()
+    transitions for kind == Kind.COLLECT {
+      on finish { outcome collected: Assigned -> Collected emits Collected }
+    }
+    transitions for kind == Kind.DROP_OFF {
+      on finish { outcome received: Assigned -> Holding emits Received }
+    }
+  }
+}
+```
+
+`Kind.COLLECT` is a local enum value. Use `OtherContext.Kind::COLLECT` for a qualified enum, since `.` already
+separates context and type names. A group may select several values with `kind in Kind.COLLECT | Kind.DROP_OFF`.
+The kind is fixed at creation. For each kind, DomainTrail derives valid states from its initial states and outcomes;
+restored data and migrations remain the application's responsibility.
+
+Each `outcome` has a stable name, source states, one target state, and its own `changes` and `emits`. If a command has
+multiple outcomes from the same source, each needs `select { Boolean expression }`. A decision that depends on an
+external system can use `select "decision" @externalCheck("why it is external")`; the application must supply that
+check. An unexpressed `select`, `requires`, or `invariant` appears as a warning in `dt check` and blocks
+`dt check --for-generation` unless annotated with `@externalCheck`. The annotation records an obligation; it is not
+proof that a check ran. The State View can filter by kind and marks each outcome's selection status. `dt show` lists
+the valid states and named outcomes per kind.
+
+<!-- topic: expressions -->
 ### Invariant expressions
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.

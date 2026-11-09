@@ -65,6 +65,29 @@ describe('tree-sitter grammar', () => {
         expect(problems('context A { aggregate G { command c() -> } }')).not.toEqual([]);
     });
 
+    test('parses lifecycle groups, named outcomes, readonly fields and external checks', () => {
+        const source = `context Delivery {
+          enum Kind { COLLECT DROP_OFF }
+          error Unavailable
+          aggregate Request {
+            readonly kind: Kind
+            state Open
+            state Done
+            initial Open
+            command finish() {
+              requires available "available" @externalCheck("inventory service") else Unavailable
+              outcome done: Open -> Done select { kind == Kind.COLLECT }
+              errors Unavailable
+            }
+            transitions for kind in Kind.COLLECT | Kind.DROP_OFF {
+              initial Open
+              on finish { outcome held: Open -> Done select "carrier confirmed" @externalCheck("carrier service") }
+            }
+          }
+        }`;
+        expect(problems(source)).toEqual([]);
+    });
+
     test('takes the keywords that may be names from the Langium grammar', async () => {
         const langium = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
         const grammar = await readFile(path.join(GRAMMAR_DIR, 'grammar.js'), 'utf8');

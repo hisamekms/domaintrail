@@ -157,6 +157,10 @@ export interface GraphEdge {
     label?: Texts;
     /** Events a transition raises, shown with or instead of its command (see `TransitionLabels`). */
     events?: Texts;
+    /** Named success result and strength of its selection contract. */
+    outcome?: string;
+    choiceStatus?: 'expression' | 'external' | 'declared' | 'single';
+    choiceText?: string;
     /**
      * What an Event Storming line means (ADR 0032): the Live View says it in plain words when it is hovered or pressed,
      * from the relation and the labels of its two ends (`apps/web/i18n.tsx`, `lines`).
@@ -226,6 +230,9 @@ export interface InternalTransition {
     elementId: string;
     label: Texts;
     events?: Texts;
+    outcome?: string;
+    choiceStatus?: 'expression' | 'external' | 'declared' | 'single';
+    choiceText?: string;
 }
 
 /** What the State View writes on a transition: the command, the events it raises, or both (the events under the command). */

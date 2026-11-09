@@ -54,6 +54,11 @@ function aggregateNames(model: DomainModel | null, id: string): { name: string; 
     return r?.kind === 'element' ? { name: r.el.name, label: r.el.label } : { name: id };
 }
 
+function aggregateKinds(model: DomainModel | null, id: string): string[] {
+    const aggregate = model?.elements.find((element) => element.id === id);
+    return aggregate?.kind === 'aggregate' ? aggregate.validStates.map((entry) => entry.kind) : [];
+}
+
 /** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */
 export function App() {
     // what the server wrote into the page for its first frame (none: the page waits for the payload, as before)
@@ -509,6 +514,9 @@ export function App() {
                                     aggregateId={aggregateId}
                                     graphs={current?.states[aggregateId]}
                                     previous={base?.states[aggregateId]}
+                                    kinds={aggregateKinds(model, aggregateId)}
+                                    statesByKind={current?.states}
+                                    previousByKind={base?.states}
                                     diff={current?.diff ?? empty}
                                     diagnostics={current?.diagnostics ?? []}
                                     mode={mode}

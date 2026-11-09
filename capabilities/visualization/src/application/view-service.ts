@@ -183,16 +183,18 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
     /** Every aggregate's State View for each way of labeling transitions, with rows marked against `base`. */
     const stateGraphs = async (
         model: DomainModel,
-        base: (aggregateId: string, labels: TransitionLabels) => Graph | undefined,
+        base: (aggregateId: string, labels: TransitionLabels, kind?: string) => Graph | undefined,
         layoutGraph: (g: Graph) => Promise<LaidOutGraph>,
     ): Promise<ViewPayload['states']> => {
         const states: ViewPayload['states'] = {};
         for (const el of model.elements) {
             if (el.kind !== 'aggregate') continue;
-            const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
-            for (const l of TRANSITION_LABELS) byLabels[l] = await layoutGraph(markLineChanges(buildStateGraph(el, model, l), base(el.id, l)));
-            // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the loop above sets every label
-            states[el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
+            for (const kind of [undefined, ...el.validStates.map((v) => v.kind)]) {
+                const byLabels: Partial<Record<TransitionLabels, LaidOutGraph>> = {};
+                for (const l of TRANSITION_LABELS) byLabels[l] = await layoutGraph(markLineChanges(buildStateGraph(el, model, l, kind), base(el.id, l, kind)));
+                // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the loop above sets every label
+                states[kind ? `${el.id}::${kind}` : el.id] = byLabels as Record<TransitionLabels, LaidOutGraph>;
+            }
         }
         return states;
     };
@@ -465,9 +467,9 @@ export function createViewService(deps: ViewServiceDeps): ViewService {
         };
         const states = await stateGraphs(
             model,
-            (id, l) => {
+            (id, l, kind) => {
                 const agg = baseAggregate(id);
-                return agg && baseModel && buildStateGraph(agg, baseModel, l);
+                return agg && baseModel && buildStateGraph(agg, baseModel, l, kind);
             },
             layoutCurrent,
         );

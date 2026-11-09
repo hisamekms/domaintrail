@@ -1,6 +1,7 @@
 import {
     aggregateDependencies,
     type CommandModel,
+    type OutcomeModel,
     commandsOf,
     contextDependencies,
     type DomainModel,
@@ -48,7 +49,8 @@ import {
 
 export const STRUCTURE_GRAPH_ID = 'structure';
 /** Each way of labeling transitions has a layout of its own (both: the plain ID). */
-export const stateGraphId = (aggregateId: string, labels: TransitionLabels = 'both'): string => `states:${aggregateId}${labels === 'both' ? '' : `:${labels}`}`;
+export const stateGraphId = (aggregateId: string, labels: TransitionLabels = 'both', kind?: string): string =>
+    `states:${aggregateId}${kind ? `:${kind}` : ''}${labels === 'both' ? '' : `:${labels}`}`;
 export const boundaryId = (aggregateId: string): string => `${aggregateId}@boundary`;
 export const initialNodeId = (aggregateId: string): string => `${aggregateId}@new`;
 
@@ -485,10 +487,11 @@ function fieldEdge(el: ElementModel, f: FieldModel, byId: Map<string, ElementMod
  * that leaves a state as it is is listed in the state's box instead of drawn as a loop. Nodes and edge labels are sized
  * for the transition texts `labels`.
  */
-export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: TransitionLabels = 'both'): Graph {
+export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: TransitionLabels = 'both', kind?: string): Graph {
     const nodes: Omit<GraphNode, 'width' | 'height'>[] = [];
     const edges: GraphEdge[] = [];
-    const states = statesOf(agg);
+    const valid = agg.kind === 'aggregate' && kind ? new Set(agg.validStates.find((v) => v.kind === kind)?.states ?? []) : undefined;
+    const states = statesOf(agg).filter((s) => !valid || valid.has(s.name));
     const commands = commandsOf(agg);
     const stateful = states.length > 0;
 
@@ -519,33 +522,41 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
 
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);
     for (const c of commands) {
-        // each transition joins its own sources and targets; a factory starts from the initial node
-        // [source node, target node, source state, target state]; a factory has no source state
-        const pairs = stateful
-            ? c.transitions.flatMap((t) => {
-                  const sources = c.factory ? [[initialNodeId(agg.id), undefined] as const] : t.from.map((f) => [stateNode(f), f] as const);
-                  return sources.flatMap(([source, from]) => t.to.map((to) => [source, stateNode(to), from, to] as const));
-              })
-            : [[c.factory ? initialNodeId(agg.id) : agg.id, agg.id, undefined, undefined] as const];
-        const label = commandLabel(c);
+        const groups = agg.kind === 'aggregate' ? agg.groups.filter((g) => !kind || g.values.includes(kind)) : [];
+        const named = [...c.outcomes, ...groups.flatMap((g) => g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes))];
+        const pairs: Array<{ source: string | undefined; target: string | undefined; from?: string; to?: string; outcome?: OutcomeModel }> = stateful
+            ? [
+                  ...c.transitions.flatMap((t) => {
+                      const sources = c.factory ? [[initialNodeId(agg.id), undefined] as const] : t.from.map((f) => [stateNode(f), f] as const);
+                      return sources.flatMap(([source, from]) => t.to.map((to) => ({ source, target: stateNode(to), from, to })));
+                  }),
+                  ...named.flatMap((o) => {
+                      const sources = c.factory ? [[initialNodeId(agg.id), undefined] as const] : o.from.map((f) => [stateNode(f), f] as const);
+                      return sources.map(([source, from]) => ({ source, target: stateNode(o.to), from, to: o.to, outcome: o }));
+                  }),
+              ]
+            : [{ source: c.factory ? initialNodeId(agg.id) : agg.id, target: agg.id, from: undefined, to: undefined }];
         const seen = new Set<string>();
-        for (const [source, target, from, to] of pairs) {
-            // the events of this outcome only (`emits X when A ->`)
-            const events = eventsLabel(c, model, from, to);
+        for (const { source, target, from, to, outcome } of pairs) {
+            if (kind && valid && ((!c.factory && from && !valid.has(from)) || (to && !valid.has(to)))) continue;
+            const events = outcome ? namedEventsLabel(outcome, model) : eventsLabel(c, model, from, to);
+            const label = commandLabel(c, outcome);
             if (!source || !target) continue; // unresolved state, reported as M006
-            const id = `${c.id}|${source}->${target}`;
+            const id = `${c.id}${outcome ? `:${outcome.name}` : ''}|${source}->${target}`;
             if (seen.has(id)) continue;
             seen.add(id);
+            const detail = outcome ? { outcome: outcome.name, choiceStatus: outcome.select?.kind ?? 'single' as const,
+                ...(outcome.select && { choiceText: outcome.select.kind === 'expression' ? outcome.select.source : outcome.select.text }) } : {};
             const node = source === target ? nodes.find((n) => n.id === source) : undefined;
-            if (node) (node.internal ??= []).push({ id, elementId: c.id, label, ...(events && { events }) });
-            else edges.push({ id, kind: 'transition', source, target, label, ...(events && { events }) });
+            if (node) (node.internal ??= []).push({ id, elementId: c.id, label, ...(events && { events }), ...detail });
+            else edges.push({ id, kind: 'transition', source, target, label, ...(events && { events }), ...detail });
         }
     }
     const sizedNodes = nodes.map((n) => sizedState(n, labels));
     if (commands.some((c) => c.factory)) {
         sizedNodes.unshift({ id: initialNodeId(agg.id), kind: 'initial', label: sameText('new'), lines: [], elementId: agg.id, width: 64, height: 64 });
     }
-    return { id: stateGraphId(agg.id, labels), nodes: sizedNodes, edges, transitionLabels: labels };
+    return { id: stateGraphId(agg.id, labels, kind), nodes: sizedNodes, edges, transitionLabels: labels };
 }
 
 /** A state's box, with room for its internal transitions' compartment. */
@@ -563,10 +574,21 @@ function sizedState(n: Omit<GraphNode, 'width' | 'height'>, labels: TransitionLa
     };
 }
 
-function commandLabel(c: CommandModel): Texts {
+function commandLabel(c: CommandModel, outcome?: OutcomeModel): Texts {
     const signature = `${c.name}(${c.params.map((p) => p.name).join(', ')})`;
     const label = shownLabel(c.label);
-    return anyLang({ name: signature, label: label ?? signature, both: `${label ? `${label} ` : ''}${signature}` });
+    const result = outcome ? ` / ${outcome.name}` : '';
+    const choice = outcome?.select?.kind;
+    const statusJa = choice === 'expression' ? ' [式]' : choice === 'external' ? ' [外部検査が必要]' : choice === 'declared' ? ' [自然文のみ]' : '';
+    const statusEn = choice === 'expression' ? ' [expression]' : choice === 'external' ? ' [external check required]' : choice === 'declared' ? ' [declared only]' : '';
+    return anyLang({ name: `${signature}${result}${statusEn}`, label: `${label ?? signature}${result}${statusJa}`, both: `${label ? `${label} ` : ''}${signature}${result}${statusEn}` });
+}
+
+function namedEventsLabel(outcome: OutcomeModel, model: DomainModel): Texts | undefined {
+    if (!outcome.emits.length) return undefined;
+    const short = (q: string): string => q.slice(q.lastIndexOf('.') + 1);
+    const each = outcome.emits.map((e) => named(short(e.event), lookupLabel(model, e.event), (l, n) => `${l} ${n}`, e.multiplicity));
+    return anyLang({ name: each.map((t) => t.en.name).join(', '), label: each.map((t) => t.en.label).join(', '), both: each.map((t) => t.en.both).join(', ') });
 }
 
 /**

@@ -31,12 +31,18 @@
 (enum_value name: (identifier) @constant)
 (variant name: (identifier) @constant)
 (state name: (identifier) @constant)
+(initial state: (identifier) @constant)
+(enum_value_selector value: (identifier) @constant)
 (transition from: (identifier) @constant)
 (transition to: (identifier) @constant)
+(outcome name: (identifier) @label)
+(outcome from: (identifier) @constant)
+(outcome to: (identifier) @constant)
 (outcome_pattern from: (identifier) @constant)
 (outcome_pattern to: (identifier) @constant)
 
 (command name: (identifier) @function)
+(command_case command: (identifier) @function)
 (policy_declaration command: (identifier) @function)
 (invariant name: (identifier) @label)
 (requirement name: (identifier) @label)
@@ -44,6 +50,7 @@
 ; Fields and parameters
 
 (field name: (identifier) @property)
+(transition_group field: (identifier) @property)
 (owns_field name: (identifier) @property)
 (reference_field name: (identifier) @property)
 (term_entry name: (identifier) @property)
@@ -82,6 +89,13 @@
   "entity"
   "aggregate"
   "state"
+  "initial"
+  "transitions"
+  "on"
+  "outcome"
+  "select"
+  "readonly"
+  "@externalCheck"
   "owns"
   "references"
   "invariant"
@@ -117,6 +131,7 @@
   "<"
   ">"
   "->"
+  "::"
   "=>"
   "|"
   "-"

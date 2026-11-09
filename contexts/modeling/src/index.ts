@@ -20,6 +20,7 @@ export {
     emitApplies,
     emitSuffix,
     emittedEvents,
+    emittedEventsInAggregate,
     fieldSetsOf,
     fieldsOf,
     hasElement,
