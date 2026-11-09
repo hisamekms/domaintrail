@@ -105,7 +105,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Knowledge, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Options = {}): Arbitraries {
+export function arbitraries(options: Partial<Options> = {}): Arbitraries {
     const seed = options.seed ?? testing.DEFAULT_SEED;
     const given: Partial<Arbitraries> = options.arbitraries?.Knowledge ?? {};
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);

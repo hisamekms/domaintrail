@@ -69,15 +69,16 @@ type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A
 /** The aggregate an outcome makes: the input's fields that `set` does not give, the target state, and `set`. */
 type Made<From, To, Set> = (From extends object ? Omit<From, 'state' | keyof Set> : {}) & { readonly state: To } & Set;
 /** A decision's result as the command's: each outcome's `set` replaced by the aggregate it makes. */
-type Decided<R, From> = R extends Ok<infer V>
-    ? Ok<V extends unknown ? { readonly [K in keyof V]: [V[K]] extends [never] ? never : V[K] extends { readonly set: infer S; readonly events: infer E } ? { readonly aggregate: Made<From, K, S>; readonly events: E } : V[K] } : never>
+type TargetOf<K, Targets> = K extends keyof Targets ? Targets[K] : K;
+type Decided<R, From, Targets = {}> = R extends Ok<infer V>
+    ? Ok<V extends unknown ? { readonly [K in keyof V]: [V[K]] extends [never] ? never : V[K] extends { readonly set: infer S; readonly events: infer E } ? { readonly aggregate: Made<From, TargetOf<K, Targets>, S>; readonly events: E } : V[K] } : never>
     : R;
-type DecidedBy<F> = F extends (...args: infer A) => infer R ? Decided<R, A[0]> : never;
+type DecidedBy<F, Targets = {}> = F extends (...args: infer A) => infer R ? Decided<R, A[0], Targets> : never;
 
 /** The command `decide` makes of a decision: assignable to the command's contract. */
-export type Decide<D> = D extends (...args: any[]) => unknown
-    ? (...args: Parameters<D>) => DecidedBy<D>
-    : <S extends { readonly state: keyof D }>(subject: S, ...args: ArgsAfterFirst<D[keyof D]>) => { [K in keyof D]: DecidedBy<D[K]> }[S['state']];
+export type Decide<D, Targets = {}> = D extends (...args: any[]) => unknown
+    ? (...args: Parameters<D>) => DecidedBy<D, Targets>
+    : <S extends { readonly state: keyof D }>(subject: S, ...args: ArgsAfterFirst<D[keyof D]>) => { [K in keyof D]: DecidedBy<D[K], Targets> }[S['state']];
 
 /**
  * Implements a command from its decision (a generated `<Command><Aggregate>Decision`): one handler per source state,
@@ -89,24 +90,46 @@ export type Decide<D> = D extends (...args: any[]) => unknown
  *
  *     confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, { Draft: (order, at) => ok({ Confirmed: { set: …, events: … } }) })
  */
-export const decide = <D>(shape: Shape, decision: D): Decide<D> =>
+export interface ChoiceVerifier {
+    readonly applicable: (...args: readonly unknown[]) => readonly string[];
+    readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
+}
+
+export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
     ((...args: any[]) => {
         const subject = args[0];
         const handler = (typeof decision === 'function' ? decision : (decision as any)[subject.state]) as (...args: any[]) => Result<object, unknown>;
         const r = handler(...args);
         if (!r.ok) return r;
+        if (verify) {
+            const names = verify.applicable(...args);
+            const choices = verify.choices(...args);
+            const selected = Object.keys(r.value as object).filter((name) => (r.value as Record<string, unknown>)[name] !== undefined);
+            const trueNames = names.filter((name) => choices[name]);
+            if (selected.length !== 1 || !names.includes(selected[0]) || trueNames.length !== 1 || trueNames[0] !== selected[0])
+                throw new Error('DomainTrail choice contract violated: expected exactly one applicable selected outcome.');
+        }
         const value: Record<string, unknown> = {};
-        for (const [to, o] of Object.entries(r.value as Record<string, { set: Record<string, unknown>; events: unknown } | undefined>)) {
+        for (const [name, o] of Object.entries(r.value as Record<string, { set: Record<string, unknown>; events: unknown } | undefined>)) {
             if (o === undefined) continue;
+            const to = targets[name] ?? name;
             const aggregate: Record<string, unknown> = shape.states ? { state: to } : {};
             for (const f of [...shape.fields, ...(shape.states?.[to] ?? [])]) {
                 const v = f in o.set ? o.set[f] : subject?.[f];
                 if (v !== undefined) aggregate[f] = v;
             }
-            value[to] = { aggregate, events: o.events };
+            value[name] = { aggregate, events: o.events };
         }
         return { ok: true, value };
     }) as Decide<D>;
+
+/** Construct a named-outcome command from a decision and its outcome-to-state map. */
+export const decideNamed = <D>() => <const Targets extends Readonly<Record<string, string>>>(
+    shape: Shape,
+    targets: Targets,
+    decision: D,
+    verify?: ChoiceVerifier,
+): Decide<D, Targets> => decide(shape, decision, targets, verify) as Decide<D, Targets>;
 
 /** Whether two optional values are equal: both absent, or both present and equal by `same` (for generated checks). */
 export const sameOptional = <T>(a: T | undefined, b: T | undefined, same: (x: T, y: T) => boolean): boolean =>
@@ -132,6 +155,28 @@ export type Decimal = string & { readonly __brand: 'Decimal' };
  * The text is kept as it is (`"12.50"` stays `"12.50"`). The one place that makes a `Decimal` from a string.
  */
 export const parseDecimal = (text: string): Decimal | undefined => (/^-?\d+(\.\d+)?$/.test(text) ? (text as Decimal) : undefined);
+
+/** Exact comparison of two decimal strings, without conversion to IEEE-754 numbers. */
+export function decimalCompare(a: string, b: string): -1 | 0 | 1 {
+    const parts = (v: string) => {
+        const negative = v.startsWith('-');
+        const [whole, fraction = ''] = (negative ? v.slice(1) : v).split('.');
+        return { negative, whole: whole.replace(/^0+/, '') || '0', fraction: fraction.replace(/0+$/, '') };
+    };
+    const x = parts(a), y = parts(b);
+    const zero = (v: typeof x) => v.whole === '0' && v.fraction === '';
+    if (zero(x) && zero(y)) return 0;
+    if (x.negative !== y.negative) return x.negative ? -1 : 1;
+    const fractionLength = Math.max(x.fraction.length, y.fraction.length);
+    const xf = x.fraction.padEnd(fractionLength, '0');
+    const yf = y.fraction.padEnd(fractionLength, '0');
+    const magnitude = x.whole.length === y.whole.length
+        ? x.whole === y.whole
+            ? (xf < yf ? -1 : xf > yf ? 1 : 0)
+            : x.whole < y.whole ? -1 : 1
+        : x.whole.length < y.whole.length ? -1 : 1;
+    return (x.negative ? -magnitude : magnitude) as -1 | 0 | 1;
+}
 
 /** Point in time. */
 export type Timestamp = Date;
