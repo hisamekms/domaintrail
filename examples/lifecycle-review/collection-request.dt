@@ -1,0 +1,87 @@
+context Collection {
+  id CollectionRequestId: UUID
+
+  enum CollectionKind "回収の種類" { COLLECT "回収のみ" DROP_OFF "納入あり" }
+
+  event CollectionRequested "回収依頼受付" {
+    collectionRequestId: CollectionRequestId
+  }
+  event CollectionAssigned "担当割当" {
+    collectionRequestId: CollectionRequestId
+  }
+  event CollectionCancelled "回収依頼取消" {
+    collectionRequestId: CollectionRequestId
+  }
+  event CollectionPostponed "日程繰越" {
+    collectionRequestId: CollectionRequestId
+  }
+  event Collected "回収完了" {
+    collectionRequestId: CollectionRequestId
+  }
+  event ReceivedForDropOff "荷物預かり" {
+    collectionRequestId: CollectionRequestId
+  }
+  event DroppedOff "配達完了" {
+    collectionRequestId: CollectionRequestId
+  }
+
+  aggregate CollectionRequest "回収依頼" {
+    id: CollectionRequestId
+    readonly kind: CollectionKind "回収の種類"
+
+    state Unassigned "未割当"
+    state Assigned "割当済み"
+    state CollectDone "回収完了"
+    state Holding "保管中"
+    state Delivered "配達済み"
+    state Cancelled "取消済み"
+
+    initial Unassigned
+
+    create command request(id: CollectionRequestId, kind: CollectionKind) "依頼する" {
+      outcome requested: -> Unassigned
+        emits CollectionRequested
+    }
+
+    command assign() "担当を割り当てる" {
+      outcome assigned: Unassigned -> Assigned
+        emits CollectionAssigned
+    }
+
+    command cancel() "取り消す" {
+      outcome cancelledBeforeAssignment: Unassigned -> Cancelled
+        emits CollectionCancelled
+      outcome cancelledAfterAssignment: Assigned -> Cancelled
+        emits CollectionCancelled
+    }
+
+    command postpone() "日程を繰り越す" {
+      outcome postponedUnassigned: Unassigned -> Unassigned
+        emits CollectionPostponed
+      outcome postponedAssigned: Assigned -> Assigned
+        emits CollectionPostponed
+    }
+
+    command complete() "回収または配達を完了する"
+    command receiveForDropOff() "荷物を預かる"
+
+    transitions for kind == CollectionKind.COLLECT {
+      on complete {
+        outcome collected: Assigned -> CollectDone
+          emits Collected
+      }
+    }
+
+    transitions for kind == CollectionKind.DROP_OFF {
+      on receiveForDropOff {
+        outcome received: Assigned -> Holding
+          emits ReceivedForDropOff
+      }
+
+      on complete {
+        outcome delivered: Holding -> Delivered
+          emits DroppedOff
+      }
+    }
+  }
+}
