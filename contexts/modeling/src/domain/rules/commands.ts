@@ -31,6 +31,7 @@ export function checkCommands(model: SourceModel, rules: RuleSink): void {
     for (const agg of aggregatesOf(model)) {
         const stateful = statesOf(agg).length > 0;
         for (const cmd of commandsOf(agg)) {
+            if (cmd.outcomes.length || agg.members.some((m) => m.kind === 'transitionGroup' && m.cases.some((c) => c.command.text === cmd.name))) continue;
             const label = `${cmd.factory ? 'Factory command' : 'Command'} '${cmd.name}'`;
             if (!stateful) {
                 if (cmd.transitions.length > 0) {

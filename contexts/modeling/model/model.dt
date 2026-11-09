@@ -119,6 +119,13 @@ context Modeling {
       invariants: InvariantModel[0..*]
       states: StateModel[0..*]
       commands: CommandModel[0..*]
+      /// Lifecycle declarations; empty for aggregates using the legacy transition form.
+      initials: InitialModel[0..*]
+      groups: TransitionGroupModel[0..*]
+      /// The one readonly enum discriminator, when groups are present.
+      lifecycleField: String?
+      lifecycleEnum: QualifiedName?
+      validStates: ValidKindStatesModel[0..*]
     }
     event {
       id: ElementId
@@ -206,6 +213,7 @@ context Modeling {
     labelSource: LabelSource?
     /// Qualified name of the field set the field comes from (`with`); absent for the element's own fields.
     fieldSet: QualifiedName?
+    readonly: Bool?
   }
 
   /// `invariant name "label" { expr }`.
@@ -215,6 +223,7 @@ context Modeling {
     source: String?
     /// The expression as a tree, for generated checks; absent with `source`.
     expr: ExprModel?
+    externalReason: String?
   }
 
   /// A state of an aggregate, with its own fields and invariants.
@@ -242,6 +251,55 @@ context Modeling {
     expr: ExprModel?
     /// Qualified name of the error returned when the requirement does not hold.
     error: QualifiedName
+    externalReason: String?
+  }
+
+  value InitialModel {
+    state: String
+    /// Empty means all kinds.
+    kinds: String[0..*]
+  }
+
+  value ValidKindStatesModel {
+    kind: String
+    states: String[0..*]
+  }
+
+  value TransitionGroupModel {
+    field: String
+    enum: QualifiedName
+    values: String[0..*]
+    initials: InitialModel[0..*]
+    cases: CommandCaseModel[0..*]
+  }
+
+  value CommandCaseModel {
+    command: String
+    requires: RequirementModel[0..*]
+    outcomes: OutcomeModel[0..*]
+  }
+
+  value OutcomeModel {
+    name: String
+    from: String[0..*]
+    to: String
+    changes: String[0..*]
+    emits: EmitModel[0..*]
+    select: ChoiceRuleModel?
+  }
+
+  union ChoiceRuleModel {
+    expression {
+      source: String
+      expr: ExprModel
+    }
+    external {
+      text: String
+      reason: String
+    }
+    declared {
+      text: String
+    }
   }
 
   /// `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory.
@@ -281,6 +339,9 @@ context Modeling {
     params: FieldModel[0..*]
     /// State transitions; a factory has one without source states, an aggregate without states none.
     transitions: TransitionModel[0..*]
+    outcomes: OutcomeModel[0..*]
+    /// True when the command uses the pre-ADR transition/changes/emits form.
+    legacy: Bool
     /// Preconditions over the parameters and the aggregate's current data (`requires`).
     requires: RequirementModel[0..*]
     /// `changes`: the fields the command may change, as written — common fields, and state-specific fields it would
