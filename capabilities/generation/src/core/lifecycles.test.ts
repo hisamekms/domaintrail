@@ -181,6 +181,32 @@ test('an annotated invariant makes its external check mandatory in contract opti
     const tests = files.find((f) => f.path === 'tests/X.ts')!.content;
     expect(tests).toContain("readonly declared: { readonly X: { readonly Code: Pick<X.CodeDeclaredChecks, 'registered'> } };");
     expect(tests).toContain('export function contract(impl: Implementation, options: Options): testing.Suite');
+    expect(tests).toContain("throw new Error('Missing external check X.Code.registered')");
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-external-invariant-'));
+    try {
+        for (const file of files) await Bun.write(path.join(dir, file.path), file.content);
+        await symlink(path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules'), path.join(dir, 'node_modules'));
+        await writeFile(path.join(dir, 'tsconfig.json'), JSON.stringify({
+            compilerOptions: {
+                strict: true, noEmit: true, target: 'ES2023', module: 'preserve', moduleResolution: 'bundler',
+                paths: { 'domaintrail/testing': [path.join(import.meta.dir, '..', '..', '..', '..', 'testing', 'index.ts')] },
+            },
+            include: ['X.ts', '_runtime.ts', 'tests/X.ts', 'usage.ts'],
+        }));
+        await writeFile(path.join(dir, 'usage.ts'), `import * as Tests from './tests/X.js';
+// @ts-expect-error the annotated invariant requires contract options
+Tests.contract({});
+// @ts-expect-error the external invariant check must be supplied
+Tests.contract({}, { declared: { X: { Code: {} } } });
+Tests.contract({}, { declared: { X: { Code: { registered: () => true } } } });
+`);
+        const tsc = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
+        const compiled = Bun.spawnSync([process.execPath, tsc, '-p', 'tsconfig.json'], { cwd: dir });
+        expect(compiled.stdout.toString() + compiled.stderr.toString()).toBe('');
+        expect(compiled.exitCode).toBe(0);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });
 
 test('contract tests reject a named outcome whose choice rule is false', () => {
