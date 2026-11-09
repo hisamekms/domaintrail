@@ -27,6 +27,7 @@ import {
     isEventDecl,
     isFieldSet,
     isIdType,
+    isInvariant,
     isOwnsField,
     isPolicy,
     isPrimitiveDecl,
@@ -113,6 +114,7 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                     name: i.name,
                     ...optional('source', i.expr && sourceText(i.expr)),
                     ...(i.expr && { expr: exprModel(i.expr) }),
+                    ...(isInvariant(i.node) && i.node.external && { externalReason: i.node.external.reason }),
                     ...optional('label', i.label),
                     ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
                 }));
