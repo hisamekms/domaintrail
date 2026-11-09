@@ -10,7 +10,7 @@ import type {
     PrimitiveName,
     UnionModel,
 } from '@domaintrail/modeling';
-import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, sharedContexts } from '@domaintrail/modeling';
+import { BINARY_OP_TEXT, applicableOutcomes, contextNames, elementOf, elementsIn, sharedContexts } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import { RUNTIME_NAMES, TS_RESERVED, commonTypeName, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
@@ -485,6 +485,23 @@ interface Param {
     type: string;
 }
 
+/** The states a named command can actually receive, preserving kind–state restrictions in generated checks. */
+function namedSubjectType(agg: AggregateModel, c: CommandModel): string {
+    if (!agg.states.length) return agg.name;
+    if (!agg.lifecycleField) {
+        const sources = [...new Set([...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))].flatMap((o) => o.from))];
+        return sources.map((from) => stateTypeName(agg, from)).join(' | ') || 'never';
+    }
+    const pairs = agg.validStates.flatMap(({ kind }) => applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => `${kind}${stateTypeName(agg, from)}`)));
+    return [...new Set(pairs)].join(' | ') || 'never';
+}
+
+/** Equality guards preserve TypeScript's discriminant narrowing, unlike Array.includes. */
+function matchesAny(subject: string, field: string, values: readonly string[]): string | undefined {
+    if (!values.length) return undefined;
+    return values.map((value) => `${subject}.${field} === '${value}'`).join(' || ');
+}
+
 /** A type as the element type of an array (`(A | B)[]`). */
 const list = (t: string): string => (/[ |]/.test(t) ? `(${t})` : t);
 
@@ -507,7 +524,7 @@ export class CheckWriter {
         const subject = aggregateParamName(agg);
         const parameters = paramsArgName(agg);
         const args = [
-            ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
+            ...(c.factory ? [] : [{ name: subject, type: namedSubjectType(agg, c) }]),
             ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
         ];
         const signature = args.map((a) => `${a.name}: ${a.type}`).join(', ');
@@ -515,16 +532,17 @@ export class CheckWriter {
             `export type ${choiceChecksTypeName(agg, c)} = { ${external.map((o) => `readonly ${o.name}: (${signature}) => boolean`).join('; ')} };`,
             '',
         ];
-        const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
-        for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
         const choices = outcomes.map((o) => {
             const choice = o.select;
+            const first = agg.states.find((state) => state.name === o.from[0]);
+            const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, [...agg.fields, ...(first?.fields ?? [])]);
+            for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
             const code = choice?.kind === 'expression' ? this.compiler.compile(choice.expr, scope).js : choice?.kind === 'external' ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})` : 'true';
             const group = agg.groups.find((g) => g.cases.some((x) => x.command === c.name && x.outcomes.includes(o)));
             const guards = c.factory ? [] : [
-                ...(agg.states.length && o.from.length ? [`[${o.from.map((from) => `'${from}'`).join(', ')}].includes(${subject}.state)`] : []),
-                ...(group && agg.lifecycleField ? [`[${group.values.map((value) => `'${value}'`).join(', ')}].includes(${subject}.${agg.lifecycleField})`] : []),
-            ];
+                ...(agg.states.length ? [matchesAny(subject, 'state', o.from)] : []),
+                ...(group && agg.lifecycleField ? [matchesAny(subject, agg.lifecycleField, group.values)] : []),
+            ].filter((guard): guard is string => guard !== undefined);
             return `${o.name}: ${guards.length ? `(${guards.join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
         });
         const body = `return { ${choices.join(', ')} };`;
@@ -542,16 +560,15 @@ export class CheckWriter {
         const subject = aggregateParamName(agg);
         const parameters = paramsArgName(agg);
         const args = [
-            ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
+            ...(c.factory ? [] : [{ name: subject, type: namedSubjectType(agg, c) }]),
             ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
         ];
         const sig = args.map((a) => `${a.name}: ${a.type}`).join(', ');
         const names = args.map((a) => a.name).join(', ');
-        const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
-        for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
+        const allSources = [...c.outcomes, ...groups.flatMap((g) => g.case.outcomes)].flatMap((o) => o.from);
         const entries = [
-            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as typeof groups[number] | undefined })),
-            ...groups.flatMap((g) => g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g }))),
+            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as typeof groups[number] | undefined, sources: allSources })),
+            ...groups.flatMap((g) => g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g, sources: g.case.outcomes.flatMap((o) => o.from) }))),
         ];
         const external = entries.filter(({ requirement }) => !requirement.expr);
         const union = [...new Set(entries.map((e) => e.key))].map((x) => `'${x}'`).join(' | ');
@@ -559,12 +576,16 @@ export class CheckWriter {
         if (external.length) {
             lines.push(`export type ${declaredRequiresName(type)} = { ${external.map((x) => `readonly ${x.key}: (${sig}) => boolean`).join('; ')} };`, '');
         }
-        const body = entries.map(({ requirement, key, group }) => {
+        const body = entries.map(({ requirement, key, group, sources }) => {
+            const first = agg.states.find((state) => state.name === sources[0]);
+            const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, [...agg.fields, ...(first?.fields ?? [])]);
+            for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
             const holds = requirement.expr ? this.compiler.compile(requirement.expr, scope).js : `checks.${key}(${names})`;
             const check = `if (!(${holds})) return '${key}';`;
             if (!group) return check;
             if (c.factory || !agg.lifecycleField) return check;
-            return `if (([${group.group.values.map((v) => `'${v}'`).join(', ')}] as readonly string[]).includes(${subject}.${agg.lifecycleField})) { ${check} }`;
+            const guards = [matchesAny(subject, agg.lifecycleField, group.group.values), matchesAny(subject, 'state', sources)].filter((guard): guard is string => guard !== undefined);
+            return `if (${guards.map((guard) => `(${guard})`).join(' && ')}) { ${check} }`;
         });
         body.push('return undefined;');
         const name = external.length ? requiresWithName(type) : requiresName(type);

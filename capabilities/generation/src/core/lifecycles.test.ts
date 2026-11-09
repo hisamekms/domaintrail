@@ -115,7 +115,7 @@ test('external choice obligations require a typed check and mandatory contract o
     const files = generateTypeScript(result.model!, {}, { dir: 'tests' });
     const sales = files.find((f) => f.path === 'Sales.ts')!.content;
     const tests = files.find((f) => f.path === 'tests/Sales.ts')!.content;
-    expect(sales).toContain('readonly accepted: (request: Request, params: InspectRequestParams) => boolean');
+    expect(sales).toContain('readonly accepted: (request: COLLECTAssignedRequest | DROP_OFFAssignedRequest, params: InspectRequestParams) => boolean');
     expect(tests).toContain('readonly external: { readonly Request: { readonly inspect: Sales.InspectRequestChoiceChecks } };');
     expect(tests).toContain('export function contract(impl: Implementation, options: Options): testing.Suite');
     expect(tests).toContain('choices: Sales.checkInspectRequestChoice(options.external.Request.inspect)');
@@ -231,4 +231,39 @@ test('contract tests reject a named outcome whose choice rule is false', () => {
     }, { runs: 1 });
     const selection = cases.find((c) => c.name.includes('selects one applicable named outcome'))!;
     expect(() => selection.run()).toThrow("returned outcome 'denied' although its choice rule is false");
+});
+
+test('named requirement and choice expressions resolve fields of their source state', async () => {
+    const result = await check({ 'run.dt': `context X {
+      id RunId: UUID
+      error Invalid
+      aggregate Run {
+        id: RunId
+        state Running { baseRevision: String }
+        state Done { baseRevision: String resultRevision: String }
+        initial Running
+        create command open(id: RunId, revision: String) { outcome opened: -> Running }
+        command finish(resultRevision: String) "Complete run" {
+          requires changed { resultRevision != baseRevision } else Invalid
+          outcome finished: Running -> Done select { resultRevision != baseRevision } changes resultRevision
+          outcome unchanged: Running -> Running select { resultRevision == baseRevision }
+        }
+      }
+    }` });
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const files = generateTypeScript(result.model!);
+    const code = files.find((f) => f.path === 'X.ts')!.content;
+    expect(code).toContain('checkFinishRunRequires(run: RunningRun, params: FinishRunParams)');
+    expect(code).toContain('checkFinishRunChoice(checks: FinishRunChoiceChecks): (run: RunningRun, params: FinishRunParams)');
+    expect(code).toContain('params.resultRevision === run.baseRevision');
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-state-expression-'));
+    try {
+        for (const file of files) await Bun.write(path.join(dir, file.path), file.content);
+        const tsc = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
+        const compiled = Bun.spawnSync([process.execPath, tsc, '--noEmit', '--strict', '--target', 'ES2023', '--module', 'preserve', '--moduleResolution', 'bundler', 'index.ts'], { cwd: dir });
+        expect(compiled.stdout.toString() + compiled.stderr.toString()).toBe('');
+        expect(compiled.exitCode).toBe(0);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });
