@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
-import { Download, Focus, FoldHorizontal, Maximize, Maximize2, Minimize2, Minus, Plus, Shapes } from 'lucide-react';
+import { Download, Focus, FoldHorizontal, LoaderCircle, Maximize, Maximize2, Minimize2, Minus, Plus, Shapes } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { useDismiss } from '../shared/layout';
@@ -14,8 +14,7 @@ const ANIMATE = { animate: true };
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
  * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection), the legend's button,
  * which opens it upward, and 「詰めて表示」 (every diagram in its compact layout, remembered). How the view is looked at,
- * not what it shows: the view's 印刷 and 書き出し are in its toolbar (`ExportButton`); the inspector's state diagram has
- * its 書き出し here.
+ * not what it shows: both the main and inspector diagrams have their 書き出し here.
  */
 export function CanvasControls(props: {
     canvas: DiagramCanvas | null;
@@ -26,7 +25,7 @@ export function CanvasControls(props: {
     keys?: boolean;
     /** 「詰めて表示」, if the canvas offers it (the main canvas). */
     compact?: { on: boolean; onToggle: () => void };
-    /** 書き出し, if the canvas offers it here (the inspector's state diagram), as a menu opening upward. */
+    /** 書き出し, if the canvas offers it, as a menu opening above its button. */
     exporting?: ExportControl;
     /** Fill the browser tab with this diagram, if it supports that view. */
     focus?: { active: boolean; onToggle: () => void; triggerRef?: Ref<HTMLButtonElement> };
@@ -51,7 +50,6 @@ export function CanvasControls(props: {
     return (
         <div className="canvas-controls" ref={root}>
             {legend && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
-            {props.exporting && exportOpen && <ExportMenu control={props.exporting} onDone={closeExport} up />}
             <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label}>
                 <div className="canvas-controls-group">
                     <ControlButton label={t.canvasControls.zoomOut} onClick={() => canvas.zoomOut(ANIMATE)}>
@@ -90,18 +88,6 @@ export function CanvasControls(props: {
                         <FoldHorizontal size={14} aria-hidden />
                     </button>
                 )}
-                {props.exporting && (
-                    <button
-                        className={`canvas-control${exportOpen ? ' active' : ''}`}
-                        aria-haspopup="menu"
-                        aria-expanded={exportOpen}
-                        aria-label={t.exportMenu.label}
-                        data-tooltip={exportOpen ? undefined : t.exportMenu.label}
-                        onClick={() => setExportOpen(!exportOpen)}
-                    >
-                        <Download size={14} aria-hidden />
-                    </button>
-                )}
                 {legend && (
                     <button
                         className={`canvas-control canvas-legend-button${legend.open ? ' active' : ''}`}
@@ -124,6 +110,21 @@ export function CanvasControls(props: {
                     >
                         {props.focus.active ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
                     </button>
+                )}
+                {props.exporting && (
+                    <div className="canvas-export">
+                        <button
+                            className={`canvas-control${exportOpen ? ' active' : ''}`}
+                            aria-haspopup="menu"
+                            aria-expanded={exportOpen}
+                            aria-label={props.exporting.print?.preparing ? t.exportMenu.printing : t.exportMenu.label}
+                            data-tooltip={exportOpen ? undefined : t.exportMenu.label}
+                            onClick={() => setExportOpen(!exportOpen)}
+                        >
+                            {props.exporting.print?.preparing ? <LoaderCircle size={14} className="spin" aria-hidden /> : <Download size={14} aria-hidden />}
+                        </button>
+                        {exportOpen && <ExportMenu control={props.exporting} onDone={closeExport} up />}
+                    </div>
                 )}
             </div>
         </div>

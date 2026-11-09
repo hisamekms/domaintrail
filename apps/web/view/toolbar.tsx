@@ -75,7 +75,7 @@ export function ToolbarSubject({ children }: { children: ReactNode }) {
     return <div className="toolbar-subject">{children}</div>;
 }
 
-/** The toolbar's right part: the 絞り込み button and 書き出し (or 印刷), never shrunk. */
+/** The toolbar's right part: the 絞り込み button and catalog's 印刷, never shrunk. */
 export function ToolbarEnd({ children }: { children: ReactNode }) {
     return <div className="toolbar-end">{children}</div>;
 }

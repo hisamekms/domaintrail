@@ -121,7 +121,7 @@ const ja = {
         compact: '詰めて表示',
         compactOff: '詰めて表示をやめる',
     },
-    /** The view toolbar's 書き出し menu (and the inspector's state diagram's), and the catalog's 印刷. */
+    /** The diagram toolbars' 書き出し menu and the catalog's 印刷. */
     exportMenu: {
         label: '書き出し',
         print: '印刷',

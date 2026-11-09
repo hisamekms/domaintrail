@@ -3341,7 +3341,7 @@ svg.chat-launcher-mark {
 
 /*
  * the view bar, one row at the top of the canvas column and the same in every view: the domain model's view switch,
- * the subject and the level at the left, the 絞り込み button and 書き出し (the catalog: 印刷) at the right end. As the
+ * the subject and the level at the left, the 絞り込み button (and the catalog's 印刷) at the right end. As the
  * bar narrows, the right end's buttons become icons first, then the view switch, then the levels; the subject's names
  * are cut short last. An empty view has no controls: the row keeps the height of one (a .toolbar-button and the
  * padding: the box is border-box).
@@ -8018,16 +8018,11 @@ button.add-to-request.added:hover {
     background: var(--selected-bg);
     color: var(--action);
 }
-/* the 書き出し menu: below the view toolbar's button, at its right; the inspector's, above its canvas controls */
-.export-popover {
-    position: relative;
-}
-.export-popover .export-menu {
+/* The same export action ends both diagram toolbars; its menu opens above that button. */
+.canvas-export .export-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
     right: 0;
-    min-width: 12rem;
-}
-.canvas-controls .export-menu {
-    position: static;
     min-width: 12rem;
     pointer-events: auto;
 }

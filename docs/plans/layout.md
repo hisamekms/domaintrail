@@ -18,11 +18,11 @@ This plan is for a later branch, cut after `feat/modes` is on `main`. It changes
 ┌ app bar (whole width) ─────────────────────────────────────────────────────────┐
 │ ◆ DomainTrail ws │ [Blocks ドメインモデル | StickyNote イベントストーミング] … ⚠ 👥 AI ⋯ │
 ├──────────────┬───────────────────────────────────────────┬─────────────────────┤
-│ navigator    │ view bar: views · conditions … 絞り込み 書き出し │ チャット | AI の作業 │
+│ navigator    │ view bar: views · conditions … 絞り込み       │ チャット | AI の作業 │
 │ (per world)  ├───────────────────────────────────────────┤                     │
 ├══ drag ══════┤                                           │                     │
 │ detail       │ canvas                                    │                     │
-│ (selected)   │ [− % +][全体][選択][詰める][凡例][«]       │ [composer]          │
+│ (selected)   │ [− % +][全体][選択][詰める][凡例][全画面][書き出し] │ [composer] │
 └──────────────┴───────────────────────────────────────────┴─────────────────────┘
 ```
 
@@ -38,7 +38,7 @@ This plan is for a later branch, cut after `feat/modes` is on `main`. It changes
      - the structure's contexts and its level (詳細 / 概観 / 集約);
      - the catalog's search.
    - Event storming: the storming › stage or timeline crumbs, then the level (BP / DL).
-   - Right end: 絞り込み and 書き出し (印刷 on the catalog).
+   - Right end: 絞り込み (and 印刷 on the catalog).
    - Being one row inside one column, it has no line to align with.
 3. **Left column**, split top and bottom:
    - top, the **navigator**, which follows the world:
@@ -48,7 +48,7 @@ This plan is for a later branch, cut after `feat/modes` is on `main`. It changes
    - The split between them is dragged up and down, and the column's width is dragged too.
    - The sizes are remembered per viewer.
 4. **Right column**: tabs チャット / AI の作業. The detail and the chat are seen at the same time (user requirement).
-5. **Canvas controls** (bottom left): the viewing tools: zoom, 全体, 選択に合わせる, 詰めて表示, 凡例.
+5. **Canvas controls** (bottom left): zoom, 全体, 選択に合わせる, 詰めて表示, 凡例, 全画面, 書き出し.
 6. Switching between the worlds returns to the view, storming and conditions last used in each.
 7. The print heading follows the same words: `ws › ドメインモデル › 構造図 · 詳細`.
 
@@ -57,7 +57,7 @@ This plan is for a later branch, cut after `feat/modes` is on `main`. It changes
 - **When wide**, the world and view switches show an icon and text; **when narrow**, the icon only, with the name as
   a tooltip and `aria-label`. Each bar decides by its own width (container queries), as the toolbar already does.
 - **Order of shrinking in the view bar:**
-  1. 絞り込み / 書き出し become icons;
+  1. 絞り込み / 印刷 become icons;
   2. the view switch becomes icons;
   3. the levels become icons;
   4. the crumbs are cut with 「…」, and the pickers keep the full names.

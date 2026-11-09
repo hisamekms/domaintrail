@@ -1,17 +1,8 @@
-import { useCallback, useRef, useState, type ReactNode } from 'react';
-import { Download, LoaderCircle, Printer } from 'lucide-react';
+import { useRef, useState, type ReactNode } from 'react';
+import { Printer } from 'lucide-react';
 import { useT } from '../i18n';
-import { useDismiss } from '../shared/layout';
 import { exportDiagram, type ExportOptions, type ExportTarget } from './export';
-import type { View } from './navigation';
 import { useLabelHidden, useMenuInside } from './toolbar';
-
-/**
- * What the view toolbar offers to take the view out of the page, at its right end: a canvas view, the 書き出し menu (印刷,
- * PDF, PNG, SVG); the catalog, 印刷 (the page as it is); an empty view (no tab: `undefined`), nothing.
- */
-export const toolbarOutput = (view: View['kind'] | undefined): 'export' | 'print' | null =>
-    view === undefined ? null : view === 'catalog' ? 'print' : 'export';
 
 /** What the 書き出し menu acts on: the canvas's diagram now, the viewer's options, and the print path. */
 export interface ExportControl {
@@ -26,7 +17,7 @@ export interface ExportControl {
 /**
  * The 書き出し menu: 印刷 and PDF by the print dialog (if the canvas prints), PNG, SVG, then whether they include the
  * heading line (PNG and SVG; a printed sheet always has it) and the legend (printed too). The options are remembered.
- * It opens below the view toolbar's button, or above the inspector's canvas controls.
+ * It opens above the diagram's canvas controls.
  */
 export function ExportMenu({ control, onDone, up }: { control: ExportControl; onDone: () => void; up?: boolean }): ReactNode {
     const t = useT();
@@ -83,40 +74,6 @@ export function ExportMenu({ control, onDone, up }: { control: ExportControl; on
                     {t.exportMenu.withLegend}
                 </label>
             </div>
-        </div>
-    );
-}
-
-/** The view toolbar's 書き出し button and its menu, opening below it at the right. */
-export function ExportButton({ control }: { control: ExportControl }): ReactNode {
-    const t = useT();
-    const [open, setOpen] = useState(false);
-    const root = useRef<HTMLDivElement>(null);
-    const close = useCallback(() => setOpen(false), []);
-    useDismiss(open, root, close);
-    const text = useRef<HTMLSpanElement>(null);
-    const iconOnly = useLabelHidden(text);
-    const preparing = control.print?.preparing === true;
-    const label = preparing ? t.exportMenu.printing : t.exportMenu.label;
-    return (
-        <div className="export-popover" ref={root}>
-            <button
-                className="toolbar-button export-button"
-                aria-haspopup="menu"
-                aria-expanded={open}
-                aria-label={label}
-                data-tooltip={iconOnly && !open ? label : undefined}
-                onClick={() => setOpen(!open)}
-            >
-                {preparing ? <LoaderCircle size={13} className="spin" aria-hidden /> : <Download size={13} aria-hidden />}
-                <span ref={text} className="toolbar-button-text toolbar-end-label">
-                    {t.exportMenu.label}
-                </span>
-                <span className="toolbar-caret" aria-hidden>
-                    ▾
-                </span>
-            </button>
-            {open && <ExportMenu control={control} onDone={close} />}
         </div>
     );
 }

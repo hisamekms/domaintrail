@@ -28,7 +28,7 @@ import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
 import { useExportOptions, type ExportOptions, type ExportTarget } from './export';
-import { ExportButton, PrintButton, toolbarOutput } from './export-menu';
+import { PrintButton } from './export-menu';
 import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
 import { canvasSubject, exportFileName, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation, type View } from './navigation';
@@ -272,7 +272,7 @@ export function ViewWorkspace(props: {
 
     return (
         <section className="center">
-            <ViewBar workspace={workspace} current={current} mode={mode} bar={bar} exportTarget={exportTarget} />
+            <ViewBar workspace={workspace} current={current} mode={mode} bar={bar} />
             <DiagramFocus open={focused} title={heading} origin={focusOrigin} onClose={closeFocus}>
                 {(requestClose) => (
                     <div className={`view-area${current ? ' drawn' : ''}`} ref={originElement}>
@@ -285,6 +285,11 @@ export function ViewWorkspace(props: {
                                 legend={legendView && { view: legendView, open: legends.isOpen(legendView), onToggle: () => legends.toggle(legendView) }}
                                 compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
                                 focus={{ active: focused, onToggle: focused ? requestClose : openFocus, triggerRef: focusButton }}
+                                exporting={{
+                                    target: exportTarget,
+                                    ...workspace.exportOptions,
+                                    print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
+                                }}
                                 keys
                             />
                         )}
@@ -337,17 +342,11 @@ export function ViewWorkspace(props: {
 /**
  * The view bar: in the domain model, the view switch (マップ / 構造 / カタログ); then the view's conditions (the
  * structure's focused contexts and level, the catalog's search, the storming › stage or timeline and the level), and at
- * the right end 絞り込み and 書き出し (the catalog: 印刷). `bar` is the view whose controls it shows (none for an empty
+ * the right end 絞り込み (the catalog also has 印刷). `bar` is the view whose controls it shows (none for an empty
  * view).
  */
-export function ViewBar(props: {
-    workspace: Workspace;
-    current: ViewPayload | null;
-    mode: DisplayMode;
-    bar: View['kind'] | undefined;
-    exportTarget: () => ExportTarget | null;
-}) {
-    const { workspace, current, mode, bar, exportTarget } = props;
+export function ViewBar(props: { workspace: Workspace; current: ViewPayload | null; mode: DisplayMode; bar: View['kind'] | undefined }) {
+    const { workspace, current, mode, bar } = props;
     const { stormings, nav, worlds, settings, viewGraph, printer } = workspace;
     const { view, setView } = nav;
     const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
@@ -356,8 +355,6 @@ export function ViewBar(props: {
     const focusContexts = current?.focusContexts ?? [];
     const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
     const t = useT();
-    /** What the bar offers to take the view out of the page (printing, exporting): what it shows, as it is shown. */
-    const output = toolbarOutput(bar);
     /** The focused contexts, as the bar names them. */
     const contextNamesOf = (ids: readonly string[]): string => {
         const labels = model ? contextLabels(model) : {};
@@ -443,16 +440,7 @@ export function ViewBar(props: {
                     </FilterPopover>
                 )}
                 {bar === 'storming' && <StormingFilter stormings={stormings} choice={stormingChoice} onChange={setStormingChoice} />}
-                {output === 'print' && <PrintButton onPrint={printer.print} />}
-                {output === 'export' && (
-                    <ExportButton
-                        control={{
-                            target: exportTarget,
-                            ...workspace.exportOptions,
-                            print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
-                        }}
-                    />
-                )}
+                {bar === 'catalog' && <PrintButton onPrint={printer.print} />}
             </ToolbarEnd>
         </div>
     );
