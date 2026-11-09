@@ -59,13 +59,15 @@ const readFileName = (command) => {
   return unquote(arg) ?? (/^[A-Za-z0-9_./-]+$/.test(arg) ? arg : null);
 };
 const workspaceDsl = (name) => local(name, true, true) && fs.existsSync(path.resolve(root, name)) && fs.statSync(path.resolve(root, name)).isFile();
+const listsExtra = (command) => extraDirs.some((dir) => [dir.shown, dir.real].some((base) =>
+  command === 'rg --files --hidden ' + quote(base) || command === 'rg --files --hidden ' + quote(base + path.sep)));
 const read = (command) => {
   if (role === 'none') return false;
   if (role === 'run' && (command === "rg --files -g '*.dt' -g '*.dtes'" || command === "rg -n '^' -g '*.dt' -g '*.dtes' .")) return true;
-  if (role === 'run' && extraDirs.some((dir) => command === 'rg --files --hidden ' + quote(dir.shown) || command === 'rg --files --hidden ' + quote(dir.real))) return true;
+  if (role === 'run' && listsExtra(command)) return true;
   if (role === 'run') { const name = readFileName(command); return name !== null && (workspaceDsl(name) || extraFile(name)); }
   if (command === 'rg --files' || command === "rg -n '^' .") return true;
-  if (extraDirs.some((dir) => command === 'rg --files --hidden ' + quote(dir.shown) || command === 'rg --files --hidden ' + quote(dir.real))) return true;
+  if (listsExtra(command)) return true;
   const name = readFileName(command);
   return name !== null && ((local(name, false) && fs.existsSync(path.resolve(root, name)) && fs.statSync(path.resolve(root, name)).isFile()) || extraFile(name));
 };

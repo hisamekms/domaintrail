@@ -47,6 +47,9 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
         expect(allowed('read', 'Bash', "rg -n '^' -- 'model.dt'")).toBe(true);
         expect(allowed('read', 'apply_patch', '*** Begin Patch\n*** Update File: model.dt\n@@\n-old\n+new\n*** End Patch')).toBe(false);
         expect(allowed('run', 'Bash', `rg --files --hidden '${outside}'`, [outside])).toBe(true);
+        expect(allowed('run', 'Bash', `rg --files --hidden '${outside}/'`, [outside])).toBe(true);
+        expect(allowed('read', 'Bash', `rg --files --hidden '${outside}/'`, [outside])).toBe(true);
+        expect(allowed('run', 'Bash', `rg --files --hidden '${root}/'`, [outside])).toBe(false);
         expect(allowed('read', 'Bash', `rg -n '^' -- '${path.join(outside, 'reference.txt')}'`, [outside])).toBe(true);
         expect(allowed('read', 'Bash', `rg -n '^' -- '${path.join(outside, 'reader')}'\\''s-notes.txt'`, [outside])).toBe(true);
         expect(allowed('run', 'Bash', `rg -n '^' -- '${path.join(outside, 'reference.txt')}'`, [outside])).toBe(true);
