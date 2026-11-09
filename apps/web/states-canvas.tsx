@@ -141,7 +141,7 @@ export function StatesCanvas(props: {
                 <>
                     <div className="canvas-toolbar">
                         {props.kinds.length > 1 && (
-                            <select aria-label={props.lang === 'ja' ? '種類' : 'Kind'} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
+                            <select aria-label={t.lifecycleKind} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
                                 {props.kinds.map((value) => <option key={value} value={value}>{value}</option>)}
                             </select>
                         )}

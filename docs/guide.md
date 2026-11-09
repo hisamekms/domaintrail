@@ -346,7 +346,7 @@ context Sales {
     invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
 
     /// No other customer has the same email address: checked when one is given (AvailableEmail), kept by the store.
-    invariant uniqueEmail "メールアドレスは顧客ごとに一意"
+    invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体の照会が必要")
 
     command changeEmail(email: AvailableEmail) // the check was made before: its error is the factory's
       changes email
@@ -625,18 +625,23 @@ context Billing { // other files open the context without a name
 - Labels appear in the Live View and as JSDoc in the generated TypeScript; identifiers and generated type names stay
   English.
 
-<!-- topic: expressions -->
+<!-- topic: kind-lifecycles -->
 ### Kind-specific lifecycles and named outcomes
 
 Use a required `readonly` enum field when one aggregate has several lifecycles. `initial` names the starting state;
 each `transitions for` group adds outcomes only for its selected enum value. Commands outside the groups are shared.
 
 ```dt
+// delivery/request.dt
 context Delivery {
   id RequestId: UUID
   enum Kind { COLLECT DROP_OFF }
-  event Collected
-  event Received
+  event Collected {
+    requestId: RequestId
+  }
+  event Received {
+    requestId: RequestId
+  }
   aggregate Request {
     id: RequestId
     readonly kind: Kind
@@ -653,10 +658,17 @@ context Delivery {
     }
     command finish()
     transitions for kind == Kind.COLLECT {
-      on finish { outcome collected: Assigned -> Collected emits Collected }
+      on finish {
+        outcome collected: Assigned -> Collected
+          emits Collected
+      }
     }
     transitions for kind == Kind.DROP_OFF {
-      on finish { outcome received: Assigned -> Holding emits Received }
+      on finish {
+        outcome received: Assigned -> Holding
+          select "運送会社が受領を確認した" @externalCheck("運送会社のシステムに照会する")
+          emits Received
+      }
     }
   }
 }
@@ -697,11 +709,11 @@ the valid states and named outcomes per kind.
 - An invariant must be a Bool expression. `dt check` checks only its type; whether a value holds it is checked by the
   generated check functions (`checkConfirmedOrder`, see [Generated checks](#generated-checks)), with exactly these
   semantics.
-- A constraint the DSL cannot express is declared without an expression, with a label or a `///` description that
-  states it (M018): `invariant uniqueEmail "メールアドレスは顧客ごとに一意"`. It is documented like any invariant (in
-  the Live View and as `@invariant uniqueEmail (…): not expressed in the DSL` in the generated TypeScript) and is
-  checked by your code only: the generated checks take it as a function you pass in (a slot). In a domain primitive,
-  its name joins the invariants of `Invalid<Name>`.
+- A constraint the DSL cannot express needs a label or `///` description (M018) and an explicit reason for an external
+  check before generation: `invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体を照会する")`.
+  `dt check` warns about an unannotated natural-language rule; `dt check --for-generation` rejects it. The annotation
+  records the obligation, and generated contract tests require the supplied check. In a domain primitive, the
+  invariant's name joins the invariants of `Invalid<Name>`.
 - `count`, `exists`, `length`, `matches`, `all`, `any`, `unique` and `contains` are also usable as field and parameter
   names; followed by `(` they are the functions.
 
@@ -732,7 +744,7 @@ context Review {
     state Accepted {
       acceptedBy: PersonId
       /// All the scenarios the policy requires are confirmed.
-      invariant fullyConfirmed "必要な確認がそろっている" // holds whenever the review is Accepted
+      invariant fullyConfirmed "必要な確認がそろっている" @externalCheck("レビュー全体の確認記録が必要") // holds whenever the review is Accepted
     }
 
     command accept(person: PersonId) "受入"
