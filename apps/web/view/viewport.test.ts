@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { sameValue } from './diagram';
+import { centeredCamera } from './center';
 import {
     cameraToTransform,
     centerCamera,
@@ -121,6 +122,17 @@ describe('centring', () => {
         const c = centerCamera({ x: 300, y: -40 }, { w: 800, h: 500 }, 0.5);
         expect(c.z).toBe(0.5);
         expect(onCanvas(c, { x: 300, y: -40 })).toEqual({ x: 400, y: 250 });
+    });
+
+    test('keeps the same page point in the middle when a diagram fills the tab and returns', () => {
+        const initial = { x: -125, y: 38, z: 1.5 };
+        const small = { w: 800, h: 500 };
+        const large = { w: 1400, h: 900 };
+        const point = { x: small.w / 2 / initial.z - initial.x, y: small.h / 2 / initial.z - initial.y };
+        const expanded = centeredCamera(initial, small, large);
+        const restored = centeredCamera(expanded, large, small);
+        expect(onCanvas(expanded, point)).toEqual({ x: large.w / 2, y: large.h / 2 });
+        expect(restored).toEqual(initial);
     });
 });
 

@@ -6,6 +6,7 @@ import { MESSAGES } from '../i18n';
 import { buildScene } from '../render';
 import { motionMs } from '../shared/motion';
 import { cameraMove, fitAll, fitReadable } from './canvas';
+import { centeredCamera, isLaidOut, type Size } from './center';
 import { ghostGraph, markedRects, marksAppearMove, sceneWithMarks, type CanvasMarks } from './change-marks';
 import { canvasShows } from './empty';
 import type { Camera, DiagramCanvas } from './diagram';
@@ -42,6 +43,7 @@ export function useViewCamera(
     const cameras = useRef(new Map<string, Camera>());
     const shownView = useRef<string | null>(null);
     const shownCanvas = useRef<DiagramCanvas | null>(null);
+    const moving = useRef<{ key: string; size: Size } | null>(null);
     /** The key of the marks last drawn on a storming view: new ones may move the camera. */
     const marksDrawn = useRef<string | null>(null);
     const { shown: turn, snapshots } = marks;
@@ -76,10 +78,16 @@ export function useViewCamera(
         canvas.show(scene);
         const saved = cameras.current.get(key);
         const move = replacedCanvas && saved ? 'restore' : cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
-        if (move === 'restore' && saved) canvas.setCamera(saved);
-        else if (move === 'fitAll') fitAll(canvas, graph);
+        if (move === 'restore' && saved) {
+            const from = replacedCanvas && moving.current?.key === key ? moving.current.size : null;
+            const element = canvas.container();
+            const to = { w: element.clientWidth, h: element.clientHeight };
+            canvas.measure();
+            canvas.setCamera(from && isLaidOut(to) ? centeredCamera(saved, from, to) : saved);
+        } else if (move === 'fitAll') fitAll(canvas, graph);
         // larger text (overview) allows zooming further out while staying readable
         else if (move === 'fitReadable') fitReadable(canvas, graph.textScale ?? 1);
+        if (replacedCanvas) moving.current = null;
         shownView.current = key;
         if (marked && marked.key !== marksDrawn.current) {
             marksDrawn.current = marked.key;
@@ -100,6 +108,9 @@ export function useViewCamera(
 
     /** Save before moving the canvas into or out of the full-tab dialog, which recreates its React Flow store. */
     return useCallback(() => {
-        if (canvas && shownView.current) cameras.current.set(shownView.current, canvas.getCamera());
+        if (!canvas || !shownView.current) return;
+        cameras.current.set(shownView.current, canvas.getCamera());
+        const element = canvas.container();
+        moving.current = { key: shownView.current, size: { w: element.clientWidth, h: element.clientHeight } };
     }, [canvas]);
 }
