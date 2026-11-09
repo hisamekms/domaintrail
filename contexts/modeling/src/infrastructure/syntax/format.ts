@@ -56,9 +56,10 @@ const FUNCTIONS = new Set(['count', 'exists', 'length', 'matches', 'unique', 'co
 
 /** The whitespace between two tokens on one line. */
 function inlineSep(a: Token, b: Token): 'none' | 'space' {
-    if ([')', ',', ']', '?', '.', '..', ':', '['].includes(b.text)) return 'none';
-    if (['(', '[', '.', '..'].includes(a.text)) return 'none';
-    if (b.text === '(' && a.leaf.astNode === b.leaf.astNode && (ast.isCommand(a.leaf.astNode) || FUNCTIONS.has(a.text))) return 'none';
+    if ([')', ',', ']', '?', '.', '..', ':', '::', '['].includes(b.text)) return 'none';
+    if (['(', '[', '.', '..', '::'].includes(a.text)) return 'none';
+    if (b.text === '(' && a.leaf.astNode === b.leaf.astNode && (ast.isCommand(a.leaf.astNode) || ast.isExternalCheck(a.leaf.astNode) || FUNCTIONS.has(a.text)))
+        return 'none';
     if (a.text === '-' && (ast.isIntLiteral(a.leaf.astNode) || ast.isDecimalLiteral(a.leaf.astNode))) return 'none';
     return 'space';
 }
@@ -249,6 +250,14 @@ class Layout {
             this.block(node, node.members, indent);
             for (const m of node.members) if (ast.isInvariant(m)) this.expressionBody(m, inner);
         } else if (ast.isEventDecl(node) || ast.isErrorDecl(node)) this.block(node, node.members, indent);
+        else if (ast.isTransitionGroup(node)) {
+            this.block(node, node.members, indent);
+            for (const m of node.members) this.element(m, inner);
+        } else if (ast.isCommandCase(node)) {
+            this.block(node, sorted([...node.requirements, ...node.outcomes]), indent);
+            for (const r of node.requirements) this.expressionBody(r, inner);
+            for (const o of node.outcomes) this.element(o, inner);
+        } else if (ast.isOutcome(node)) this.outcome(node, indent);
         else if (ast.isInvariant(node)) this.expressionBody(node, indent);
         else if (ast.isCommand(node)) this.command(node, indent);
         else if (ast.isPolicy(node)) this.policy(node, indent);
@@ -273,7 +282,7 @@ class Layout {
     }
 
     /** `{ expr }` of an invariant, a requirement or a domain primitive: inline when its line fits, else a block. */
-    private expressionBody(node: ast.Invariant | ast.Requirement | ast.IdType | ast.PrimitiveDecl, indent: number): void {
+    private expressionBody(node: ast.Invariant | ast.Requirement | ast.Outcome | ast.IdType | ast.PrimitiveDecl, indent: number): void {
         const open = this.keywords(node, '{')[0];
         const close = this.keywords(node, '}')[0];
         if (open === undefined || close === undefined) return;
@@ -284,6 +293,17 @@ class Layout {
     }
 
     private command(cmd: ast.Command, indent: number): void {
+        if (this.keywords(cmd, '{').length) {
+            this.block(cmd, sorted([...cmd.requirements, ...cmd.outcomes]), indent);
+            for (const r of cmd.requirements) this.expressionBody(r, indent + INDENT);
+            for (const o of cmd.outcomes) this.outcome(o, indent + INDENT);
+            const errors = this.keywords(cmd, 'errors')[0];
+            if (errors !== undefined) {
+                this.set(errors, 'line', indent + INDENT);
+                this.set(this.keywords(cmd, '}').at(-1)!, 'line', indent);
+            }
+            return;
+        }
         const clauses = [
             ...cmd.transitions.map((t) => this.first(t)),
             ...cmd.requirements.map((r) => this.first(r)),
@@ -300,6 +320,17 @@ class Layout {
             if (i > 0) this.set(this.first(e), 'line', indent + INDENT + 'emits '.length);
         });
         for (const r of cmd.requirements) this.expressionBody(r, indent + INDENT);
+    }
+
+    private outcome(o: ast.Outcome, indent: number): void {
+        for (const k of ['select', 'changes', 'emits'] as const) {
+            const at = this.keywords(o, k)[0];
+            if (at !== undefined) this.set(at, 'line', indent + INDENT);
+        }
+        o.emits.forEach((e, i) => {
+            if (i > 0) this.set(this.first(e), 'line', indent + INDENT + 'emits '.length);
+        });
+        if (o.selectExpr) this.expressionBody(o, indent + INDENT);
     }
 
     /** `[0..1]` → `?`, `[1..1]` → nothing. */

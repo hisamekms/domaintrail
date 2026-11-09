@@ -8,7 +8,7 @@ context Collaboration {
   primitive Emoji "絵文字": String {
     invariant bounded "長すぎない" { length(value) >= 1 and length(value) <= 64 }
     /// 書記素1つの絵文字で、正規化した形（`@domaintrail/modeling/core/emoji`）。
-    invariant singleEmoji "正規化した絵文字1つ"
+    invariant singleEmoji "正規化した絵文字1つ" @externalCheck("Unicode の絵文字グラフェム判定と正規化をアプリケーションで行う")
   }
 
   /// 印の種類。票（♡）は問いの選択肢と前提の選び方に参加者が付け、反応（絵文字）はメッセージと AI のターンに誰でも付け、

@@ -30,7 +30,7 @@ context Collaboration {
     options: ProposalOption[0..3] "選択肢"
 
     invariant choiceOfTwoOrMore "選択肢はないか、2つ以上" { count(options) == 0 or count(options) >= 2 }
-    invariant oneRecommended "選択肢があれば、AI の勧めはちょうど1つ"
+    invariant oneRecommended "選択肢があれば、AI の勧めはちょうど1つ" @externalCheck("選択肢のうち推奨された件数の集計をアプリケーションで行う")
   }
 
   /// 承認した変更案が実行に求めること: 選んだ選択肢の見出し（選択肢があれば）、対象、どう（ファシリテーターが編集したなら

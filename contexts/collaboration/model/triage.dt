@@ -86,7 +86,6 @@ context Collaboration {
     openedAt: Timestamp "開始日時"
 
     /// メッセージ1件に仕分けは1つ（ストアの一意索引）。
-    invariant onePerRequest "メッセージ1件に仕分け1つ"
 
     state Pending "仕分け中"
     state Decided "仕分け済み" {
@@ -111,8 +110,7 @@ context Collaboration {
 
     /// カスケードの段（機械的な判定・Clef・軽いモデル）の答えを記録する。答えが決まれば仕分け済み、わからなければ仕分け中のまま
     /// （軽いモデルのあとは相談として仕分け済み）。
-    command record(step: TriageStep, recordedAt: Timestamp) "段の答えを記録する"
-      Pending -> Pending | Decided
+    command record(step: TriageStep, recordedAt: Timestamp) "段の答えを記録する" {
       requires cascadeStage "カスケードの段" {
         step.stage == TriageStage.Mechanical or step.stage == TriageStage.Clef or step.stage == TriageStage.Model
       } else InvalidTriageStep
@@ -121,10 +119,16 @@ context Collaboration {
         step.stage == TriageStage.Mechanical implies (step.verdict == TriageVerdict.NotForAi or step.verdict == TriageVerdict.Unknown)
       } else InvalidTriageStep
       /// 段は前の段より後（機械的な判定 → Clef → 軽いモデル）で、同じ段は1回。
-      requires inOrder "段の順" else TriageStepOutOfOrder
-      changes steps
-      emits TriageStepRecorded,
-            TriageDecided when -> Decided
+      requires inOrder "段の順" @externalCheck("段の順序と重複を、既存の段の記録を参照して判定する") else TriageStepOutOfOrder
+      outcome Pending: Pending -> Pending
+        select { step.verdict == TriageVerdict.Unknown and step.stage != TriageStage.Model }
+        changes steps
+        emits TriageStepRecorded
+      outcome Decided: Pending -> Decided
+        select { step.verdict != TriageVerdict.Unknown or step.stage == TriageStage.Model }
+        changes steps
+        emits TriageStepRecorded, TriageDecided
+    }
 
     /// 回答役（まだ答えていない相談を変更依頼か AI 宛てでないに）や実行役（変更依頼を相談に）が結論を訂正する。
     command override(step: TriageStep, overriddenAt: Timestamp) "結論を訂正する"

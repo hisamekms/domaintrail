@@ -10,6 +10,8 @@ export type {
     BinaryOp,
     Cardinality,
     CommandModel,
+    CommandCaseModel,
+    ChoiceRuleModel,
     ContextModel,
     ContextName,
     Described,
@@ -23,8 +25,10 @@ export type {
     FieldKind,
     FieldModel,
     InvariantModel,
+    InitialModel,
     LabelSource,
     OutcomePatternModel,
+    OutcomeModel,
     PolicyModel,
     PrimitiveName,
     QualifiedName,
@@ -33,10 +37,12 @@ export type {
     StateModel,
     TermModel,
     TransitionModel,
+    TransitionGroupModel,
     TypeExpr,
     VariantModel,
     VerifiedFor,
     VerifiedModel,
+    ValidKindStatesModel,
 } from '../generated/Modeling.js';
 
 type ElementModel = M.ElementModel;
@@ -93,6 +99,30 @@ export const statesOf = (el: ElementModel): readonly M.StateModel[] => (el.kind 
 
 /** The commands of an aggregate; none for the other kinds. */
 export const commandsOf = (el: ElementModel): readonly M.CommandModel[] => (el.kind === 'aggregate' ? el.commands : []);
+
+/** Outcomes applicable to a kind, preserving common outcomes before matching group outcomes. */
+export const applicableOutcomes = (agg: AggregateModel, command: M.CommandModel, kind: string): M.OutcomeModel[] => [
+    ...command.outcomes,
+    ...agg.groups.filter((g) => g.values.includes(kind)).flatMap((g) => g.cases.filter((c) => c.command === command.name).flatMap((c) => c.outcomes)),
+];
+
+/** Initial and reached states for a kind; empty when the aggregate has no lifecycle selector. */
+export const validStatesFor = (agg: AggregateModel, kind: string): readonly string[] => agg.validStates.find((v) => v.kind === kind)?.states ?? [];
+
+/** Whether generation needs a user-supplied check and mandatory contract tests. */
+export function hasExternalObligations(model: M.DomainModel): boolean {
+    const invariant = (items: readonly M.InvariantModel[]): boolean => items.some((i) => !i.expr && !!i.externalReason);
+    const requirement = (items: readonly M.RequirementModel[]): boolean => items.some((r) => !r.expr && !!r.externalReason);
+    const outcome = (items: readonly M.OutcomeModel[]): boolean => items.some((o) => o.select?.kind === 'external');
+    return model.elements.some((el) => {
+        if ('invariants' in el && invariant(el.invariants)) return true;
+        if (el.kind === 'union' && el.variants.some((v) => invariant(v.invariants))) return true;
+        if (el.kind !== 'aggregate') return false;
+        if (el.states.some((s) => invariant(s.invariants))) return true;
+        if (el.commands.some((c) => requirement(c.requires) || outcome(c.outcomes))) return true;
+        return el.groups.some((g) => g.cases.some((c) => requirement(c.requires) || outcome(c.outcomes)));
+    });
+}
 
 /** The variants of a union; none for the other kinds. */
 export const variantsOf = (el: ElementModel): readonly M.VariantModel[] => (el.kind === 'union' ? el.variants : []);
@@ -173,12 +203,13 @@ export function outcomeFields(
     c: M.CommandModel,
     from: string | undefined,
     to: string | undefined,
+    outcome?: M.OutcomeModel,
 ): { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } {
     const own = (state: string | undefined): readonly FieldModel[] => agg.states.find((s) => s.name === state)?.fields ?? [];
     const target = own(to);
     if (c.factory) return { set: [...agg.fields, ...target], carried: [], dropped: [] };
     const source = own(from);
-    const changes = new Set(c.changes);
+    const changes = new Set(outcome?.changes ?? c.changes);
     const keeps = (f: FieldModel): boolean => source.some((g) => g.name === f.name && sameFieldType(f, g));
     return {
         set: [...agg.fields.filter((f) => changes.has(f.name)), ...target.filter((f) => !keeps(f) || changes.has(f.name))],
