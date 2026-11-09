@@ -74,6 +74,9 @@ function checkAggregate(agg: AggregateDecl, rules: RuleSink): void {
     for (const c of commands) {
         unique(c.params, (p) => `Parameter '${p.name}' is declared more than once in command '${c.name}'.`, rules);
         unique(c.requirements, (r) => `Requirement '${r.name}' is declared more than once in command '${c.name}'.`, rules);
+        for (const g of agg.members.filter((m) => m.kind === 'transitionGroup'))
+            for (const section of g.cases.filter((x) => x.command.text === c.name))
+                unique(section.requirements, (r) => `Requirement '${r.name}' is declared more than once in 'on ${c.name}'.`, rules);
         const names = c.changes.map((ch) => ch.name);
         c.changes.forEach((ch, i) => {
             if (names.indexOf(ch.name) < i) rules.error('M002', `Field '${ch.name}' is listed more than once in 'changes' of command '${c.name}'.`, ch.at);
