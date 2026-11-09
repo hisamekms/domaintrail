@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { check, checkSales, codes } from '../../test-helpers.js';
 import { generationGateDiagnostics } from './generation-gate.js';
-import { applicableOutcomes, validStatesFor } from '../model.js';
+import { applicableOutcomes, hasExternalObligations, validStatesFor } from '../model.js';
 import { formatDomain } from '../../infrastructure/syntax/format.js';
 
 const BASE = `
@@ -75,6 +75,8 @@ describe('kind-specific lifecycle', () => {
         const annotated = await checkSales(text.replace('select "approved"', 'select "approved" @externalCheck("requires human review")'));
         expect(annotated.syntaxOk).toBe(true);
         expect(generationGateDiagnostics(annotated.sourceModel!).some((d) => d.code === 'M029' && d.severity === 'info')).toBe(true);
+        expect(hasExternalObligations(annotated.model!)).toBe(true);
+        expect(hasExternalObligations(a.model!)).toBe(false);
     });
 
     test('rejects missing kind initial state and readonly changes', async () => {

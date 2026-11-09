@@ -109,6 +109,21 @@ export const applicableOutcomes = (agg: AggregateModel, command: M.CommandModel,
 /** Initial and reached states for a kind; empty when the aggregate has no lifecycle selector. */
 export const validStatesFor = (agg: AggregateModel, kind: string): readonly string[] => agg.validStates.find((v) => v.kind === kind)?.states ?? [];
 
+/** Whether generation needs a user-supplied check and mandatory contract tests. */
+export function hasExternalObligations(model: M.DomainModel): boolean {
+    const invariant = (items: readonly M.InvariantModel[]): boolean => items.some((i) => !i.expr && !!i.externalReason);
+    const requirement = (items: readonly M.RequirementModel[]): boolean => items.some((r) => !r.expr && !!r.externalReason);
+    const outcome = (items: readonly M.OutcomeModel[]): boolean => items.some((o) => o.select?.kind === 'external');
+    return model.elements.some((el) => {
+        if ('invariants' in el && invariant(el.invariants)) return true;
+        if (el.kind === 'union' && el.variants.some((v) => invariant(v.invariants))) return true;
+        if (el.kind !== 'aggregate') return false;
+        if (el.states.some((s) => invariant(s.invariants))) return true;
+        if (el.commands.some((c) => requirement(c.requires) || outcome(c.outcomes))) return true;
+        return el.groups.some((g) => g.cases.some((c) => requirement(c.requires) || outcome(c.outcomes)));
+    });
+}
+
 /** The variants of a union; none for the other kinds. */
 export const variantsOf = (el: ElementModel): readonly M.VariantModel[] => (el.kind === 'union' ? el.variants : []);
 

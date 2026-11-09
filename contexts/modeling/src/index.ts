@@ -23,6 +23,7 @@ export {
     fieldSetsOf,
     fieldsOf,
     hasElement,
+    hasExternalObligations,
     invariantsOf,
     outcomeFields,
     outcomePatternText,
