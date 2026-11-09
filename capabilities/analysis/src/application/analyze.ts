@@ -26,6 +26,8 @@ export interface Analysis {
     ok: boolean;
     /** Typed Model; present whenever the `.dt` sources parse (semantic errors are tolerated). */
     model?: DomainModel;
+    /** Declarations with source sites, used by the stricter generation gate. */
+    sourceModel?: DomainAnalysis['sourceModel'];
     /** The `.dtes` sources (ADR 0024), checked against `model`. */
     stormings: StormingAnalysis;
 }
@@ -49,6 +51,7 @@ export async function analyze(allSources: readonly SourceFile[]): Promise<Analys
         syntaxOk: domain.syntaxOk,
         ok: domain.syntaxOk && !hasErrors(diagnostics),
         model: domain.model,
+        sourceModel: domain.sourceModel,
         stormings,
     };
 }
