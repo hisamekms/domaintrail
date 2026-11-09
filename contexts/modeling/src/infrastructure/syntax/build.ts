@@ -27,6 +27,7 @@ import {
     isEventDecl,
     isFieldSet,
     isIdType,
+    isInvariant,
     isOwnsField,
     isPolicy,
     isPrimitiveDecl,
@@ -113,6 +114,7 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                     name: i.name,
                     ...optional('source', i.expr && sourceText(i.expr)),
                     ...(i.expr && { expr: exprModel(i.expr) }),
+                    ...(isInvariant(i.node) && i.node.external && { externalReason: i.node.external.reason }),
                     ...optional('label', i.label),
                     ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
                 }));
@@ -333,7 +335,8 @@ function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, fi
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
         outcomes: c.outcomes.map(outcome),
-        legacy: c.transitions.length > 0 || c.changes.length > 0 || c.emits.length > 0,
+        legacy: c.transitions.length > 0 || c.changes.length > 0 || c.emits.length > 0 ||
+            (c.outcomes.length === 0 && !c.$container.members.filter(isTransitionGroup).some((g) => g.members.filter(isCommandCase).some((section) => section.command.$refText === c.name))),
         requires: c.requirements.map(requirement),
         changes: [...c.changes],
         emits: c.emits.map((e) => ({

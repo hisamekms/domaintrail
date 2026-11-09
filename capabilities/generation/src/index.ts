@@ -9,6 +9,7 @@ export { aggregateParamName } from './core/naming.js';
 export { testsWarnings, type TypeTestsOptions } from './core/tests.js';
 // its check of the `.dt` sources (M011), which the project analysis runs
 export { checkGeneratedNames } from './core/tsnames.js';
+export { targetCapabilityDiagnostics } from './core/capabilities.js';
 
 // ---- its sections of domaintrail.jsonc, `generate` and `lintHint` (T6), composed by the app --------------------
 export {
