@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { check } from '../test-helpers.js';
+import { targetCapabilityDiagnostics } from './capabilities.js';
 import { portableRegexPattern } from './checks.js';
 
 test('portable regex expands shorthands correctly inside a character class', () => {
@@ -16,4 +18,10 @@ test('portable regex leaves escaped backslashes before d unchanged', () => {
 
 test('portable regex rejects a negative shorthand inside a character class', () => {
     expect(() => portableRegexPattern('[\\S]')).toThrow('not portable inside a character class');
+});
+
+test('target capability gate rejects a regex outside the portable subset', async () => {
+    const result = await check({ 'bad.dt': 'context X { primitive Code: String { matches(value, "^(?=a)a$") } }' });
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    expect(targetCapabilityDiagnostics(result.model!, 'ts').map((d) => d.code)).toEqual(['G001']);
 });
