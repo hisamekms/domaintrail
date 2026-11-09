@@ -14,7 +14,7 @@ import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, sharedContexts } f
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import { RUNTIME_NAMES, TS_RESERVED, commonTypeName, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
-import { choiceCheckName, choiceChecksTypeName, commandTypeName, paramsTypeName } from './naming.js';
+import { aggregateParamName, choiceCheckName, choiceChecksTypeName, commandTypeName, paramsArgName, paramsTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
@@ -504,10 +504,11 @@ export class CheckWriter {
         const outcomes = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
         if (!outcomes.length) return [];
         const external = outcomes.filter((o) => o.select?.kind === 'external');
-        const subject = agg.name.charAt(0).toLowerCase() + agg.name.slice(1);
+        const subject = aggregateParamName(agg);
+        const parameters = paramsArgName(agg);
         const args = [
             ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
-            ...(c.params.length ? [{ name: 'params', type: paramsTypeName(agg, c) }] : []),
+            ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
         ];
         const signature = args.map((a) => `${a.name}: ${a.type}`).join(', ');
         const lines = [
@@ -515,11 +516,16 @@ export class CheckWriter {
             '',
         ];
         const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
-        for (const p of c.params) scope.set(p.name, { js: `params.${p.name}`, ty: fieldTy(this.env.model, p) });
+        for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
         const choices = outcomes.map((o) => {
             const choice = o.select;
             const code = choice?.kind === 'expression' ? this.compiler.compile(choice.expr, scope).js : choice?.kind === 'external' ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})` : 'true';
-            return `${o.name}: ${code}`;
+            const group = agg.groups.find((g) => g.cases.some((x) => x.command === c.name && x.outcomes.includes(o)));
+            const guards = c.factory ? [] : [
+                ...(agg.states.length && o.from.length ? [`[${o.from.map((from) => `'${from}'`).join(', ')}].includes(${subject}.state)`] : []),
+                ...(group && agg.lifecycleField ? [`[${group.values.map((value) => `'${value}'`).join(', ')}].includes(${subject}.${agg.lifecycleField})`] : []),
+            ];
+            return `${o.name}: ${guards.length ? `(${guards.join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
         });
         const body = `return { ${choices.join(', ')} };`;
         lines.push(`export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`);
@@ -533,15 +539,16 @@ export class CheckWriter {
         const groups = agg.groups.flatMap((g, i) => g.cases.filter((x) => x.command === c.name).map((x) => ({ group: g, index: i, case: x })));
         if (!c.requires.length && !groups.some((g) => g.case.requires.length)) return [];
         const type = commandTypeName(agg, c);
-        const subject = agg.name.charAt(0).toLowerCase() + agg.name.slice(1);
+        const subject = aggregateParamName(agg);
+        const parameters = paramsArgName(agg);
         const args = [
             ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
-            ...(c.params.length ? [{ name: 'params', type: paramsTypeName(agg, c) }] : []),
+            ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
         ];
         const sig = args.map((a) => `${a.name}: ${a.type}`).join(', ');
         const names = args.map((a) => a.name).join(', ');
         const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
-        for (const p of c.params) scope.set(p.name, { js: `params.${p.name}`, ty: fieldTy(this.env.model, p) });
+        for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
         const entries = [
             ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as typeof groups[number] | undefined })),
             ...groups.flatMap((g) => g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g }))),

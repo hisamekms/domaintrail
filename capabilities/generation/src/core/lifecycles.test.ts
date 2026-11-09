@@ -92,8 +92,17 @@ commands.complete(invalid);
         const runtime = await import(path.join(dir, 'Sales.ts'));
         const selected = runtime.checkInspectRequestChoice({})({ kind: 'COLLECT', state: 'Assigned' }, { passed: true });
         expect(selected).toEqual({ accepted: true, rejected: false });
+        expect(runtime.checkCompleteRequestChoice({})({ kind: 'COLLECT', state: 'Assigned' })).toEqual({ collected: true, received: false });
         expect(runtime.checkCompleteRequestRequires({ kind: 'COLLECT', state: 'Assigned', ready: false })).toBe('group0_canCollect');
         expect(runtime.checkCompleteRequestRequires({ kind: 'DROP_OFF', state: 'Assigned', ready: false })).toBeUndefined();
+        const helper = await import(path.join(dir, '_runtime.ts'));
+        const decide = helper.decideNamed()(
+            { fields: ['kind', 'ready'], states: { Assigned: [], Accepted: [], Rejected: [] } },
+            { accepted: 'Accepted', rejected: 'Rejected' },
+            () => ({ ok: true, value: { accepted: { set: {}, events: {} } } }),
+            { applicable: () => ['accepted', 'rejected'], choices: () => ({ accepted: false, rejected: true }) },
+        );
+        expect(() => decide({ kind: 'COLLECT', ready: true, state: 'Assigned' })).toThrow('DomainTrail choice contract violated');
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
@@ -138,6 +147,29 @@ Tests.contract({}, { external: { Request: { inspect: { accepted: () => true } } 
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
+});
+
+test('a grouped factory outcome fixes the produced kind without relying on parameter names', async () => {
+    const result = await check({ 'factory.dt': `context X {
+      id TaskId: UUID
+      enum Kind { A B }
+      aggregate Task {
+        id: TaskId
+        readonly kind: Kind
+        state Start
+        initial Start
+        create command open(id: TaskId)
+        transitions for kind == Kind.A { on open { outcome openedA: -> Start } }
+        transitions for kind == Kind.B { on open { outcome openedB: -> Start } }
+      }
+    }` });
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const code = generateTypeScript(result.model!).find((f) => f.path === 'X.ts')!.content;
+    expect(code).toContain("readonly openedA: {");
+    expect(code).toContain("aggregate: AStartTask");
+    expect(code).toContain("aggregate: BStartTask");
+    expect(code).toContain("readonly kind: 'A'");
+    expect(code).toContain("readonly kind: 'B'");
 });
 
 test('an annotated invariant makes its external check mandatory in contract options', async () => {
