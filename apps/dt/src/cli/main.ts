@@ -2,7 +2,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { contextNames, formatDomain, generationGateDiagnostics } from '@domaintrail/modeling';
+import { contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
@@ -295,6 +295,10 @@ Examples:
             const modelErrors = a.diagnostics.some((d) => d.severity === 'error' && !isStormingFile(d.file) && d.file !== JOURNEY_FILE);
             if (modelErrors || !a.model) {
                 fail('Generation skipped because the model has errors.', 1);
+                return;
+            }
+            if (hasExternalObligations(a.model) && !cfg.tsTests) {
+                fail('Generation skipped: external checks require generate.ts.tests so contract tests are emitted.', 1);
                 return;
             }
             checkTsContexts(cfg, contextNames(a.model));

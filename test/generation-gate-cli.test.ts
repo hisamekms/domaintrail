@@ -67,4 +67,23 @@ describe('generation gate CLI', () => {
         expect(result.code).toBe(0);
         expect(JSON.parse(result.out.join('\n')).summary.errors).toBe(0);
     });
+
+    test('an external obligation requires contract tests when generating', async () => {
+        const dir = await project(
+            DECLARED.replace(
+                'invariant decidedElsewhere "The caller must check the business rule."',
+                'invariant decidedElsewhere "The caller must check the business rule." @externalCheck("The rule is maintained outside this model.")',
+            ),
+        );
+        const ready = await run(dir, 'check', '--for-generation', '--format', 'json');
+        expect(ready.code).toBe(0);
+        expect(JSON.parse(ready.out.join('\n')).diagnostics).toEqual(expect.arrayContaining([expect.objectContaining({ severity: 'info' })]));
+
+        const result = await run(dir, 'generate', 'ts', '--format', 'json');
+        expect(result.code).toBe(1);
+        const report = JSON.parse(result.out.join('\n'));
+        expect(report.error).toContain('external checks require generate.ts.tests');
+        expect(report.written).toBeUndefined();
+        expect(await readdir(dir)).toEqual(['model.dt']);
+    });
 });
