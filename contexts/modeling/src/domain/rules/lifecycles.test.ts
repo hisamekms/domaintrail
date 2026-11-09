@@ -147,4 +147,10 @@ describe('kind-specific lifecycle', () => {
         const a = await checkSales(text);
         expect(a.diagnostics.some((d) => d.code === 'M028' && d.message.includes('group-specific requirements'))).toBe(true);
     });
+
+    test('primitive external obligations survive in the typed model', async () => {
+        const a = await checkSales('primitive P: Int { invariant approved "approved externally" @externalCheck("policy service") }');
+        expect(codes(a)).toEqual([]);
+        expect(hasExternalObligations(a.model!)).toBe(true);
+    });
 });
