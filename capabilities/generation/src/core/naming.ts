@@ -11,7 +11,9 @@ export const RUNTIME_NAMES = [
     'ok',
     'err',
     'decide',
+    'decideNamed',
     'Decide',
+    'ChoiceVerifier',
     'Shape',
     'NoChanges',
     'outcome',
@@ -23,6 +25,7 @@ export const RUNTIME_NAMES = [
     'sameList',
     'distinct',
     'parseDecimal',
+    'decimalCompare',
 ] as const;
 
 /** Discriminant property of generated event / error types. */
@@ -47,10 +50,13 @@ export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
 /** What a command decides, e.g. `ConfirmOrderDecision`: implemented by the user, turned into the command by `decide`. */
 export const decisionTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Decision`;
+export const choiceChecksTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}ChoiceChecks`;
+export const choiceCheckName = (agg: Named, cmd: Named): string => `check${commandTypeName(agg, cmd)}Choice`;
 /** The parameters of a command as one object, e.g. `CancelOrderParams`; a command without parameters has none. */
 export const paramsTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Params`;
 /** The fields of an aggregate as data for `decide`, e.g. `OrderShape`. */
 export const shapeName = (agg: Named): string => `${agg.name}Shape`;
+export const restoreName = (agg: Named): string => `restore${agg.name}`;
 /**
  * Whether the outputs of a command depend on its source state, which makes its contract generic over the input state:
  * the targets differ by transition (`A -> A, B -> B`), or the events do (`emits X when A ->`). State names only, as in
@@ -164,12 +170,16 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         const states = firstByName(written.statesOf(el));
         out.push({ name: el.name, origin: `aggregate '${el.name}'`, at });
         out.push({ name: shapeName(el), origin: `the shape of '${el.name}'`, at });
+        out.push({ name: restoreName(el), origin: `the trusted restore function of '${el.name}'`, at });
+        const lifecycleKinds = [...new Set(el.members.filter((m) => m.kind === 'transitionGroup').flatMap((g) => g.values.map((v) => v.value)))];
         if (states.length > 0) {
             out.push({ name: commonTypeName(el), origin: `common fields of '${el.name}'`, at });
             const commonDeclared = written.invariantsOf(el.members).some((i) => !i.expr);
             out.push({ name: `check${commonTypeName(el)}${commonDeclared ? 'With' : ''}`, origin: `the check of the invariants of '${el.name}'`, at });
             for (const s of states) {
                 out.push({ name: stateTypeName(el, s), origin: `state '${el.name}.${s.name}'`, at: s.nameAt });
+                for (const kind of lifecycleKinds)
+                    out.push({ name: `${kind}${stateTypeName(el, s)}`, origin: `kind–state '${el.name}.${kind}.${s.name}'`, at: s.nameAt });
             }
         }
         const commands = firstByName(written.commandsOf(el));
@@ -187,16 +197,22 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, at: cat });
             if (c.params.length) out.push({ name: paramsTypeName(el, c), origin: `the parameters of '${el.name}.${c.name}'`, at: cat });
             out.push({ name: decisionTypeName(el, c), origin: `the decision of '${el.name}.${c.name}'`, at: cat });
-            if (!c.requirements.length) continue;
+            const groupCases = el.members.filter((m) => m.kind === 'transitionGroup').flatMap((g) => g.cases.filter((x) => x.command.text === c.name));
+            if (c.outcomes.length || groupCases.length) {
+                out.push({ name: choiceChecksTypeName(el, c), origin: `choice checks of '${el.name}.${c.name}'`, at: cat });
+                out.push({ name: choiceCheckName(el, c), origin: `choice checker of '${el.name}.${c.name}'`, at: cat });
+            }
+            const requirements = [...c.requirements, ...groupCases.flatMap((x) => x.requirements)];
+            if (!requirements.length) continue;
             const t = commandTypeName(el, c);
             const origin = `the check of the requirements of '${el.name}.${c.name}'`;
-            if (c.requirements.some((r) => !r.expr)) {
+            if (requirements.some((r) => !r.expr)) {
                 out.push({ name: `check${t}RequiresWith`, origin, at: cat }, { name: `${t}DeclaredRequires`, origin, at: cat });
             } else {
                 out.push({ name: `check${t}Requires`, origin, at: cat });
             }
         }
-        if (commands.some((c) => c.emits.length > 0)) {
+        if (commands.some((c) => c.emits.length > 0 || c.outcomes.some((o) => o.emits.length > 0)) || el.members.some((m) => m.kind === 'transitionGroup' && m.cases.some((x) => x.outcomes.some((o) => o.emits.length > 0)))) {
             out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, at });
         }
     }

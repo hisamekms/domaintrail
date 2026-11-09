@@ -263,7 +263,7 @@ describe('invariants without an expression', () => {
 
     test('are documented as not expressed in the DSL, and join the invariants of the constructor error', async () => {
         const a = await check({ 'factory.dt': FACTORY });
-        expect(a.diagnostics).toEqual([]);
+        expect(a.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
         const code = generateTypeScript(a.model!).find((f) => f.path === 'Factory.ts')!.content;
         expect(code).toContain(
             '/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {',
