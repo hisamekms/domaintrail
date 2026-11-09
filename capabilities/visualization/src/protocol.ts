@@ -74,6 +74,7 @@ export interface ViewPayload {
     /** Structure View at the aggregates level: aggregates and the dependencies between them only. */
     aggregates: LaidOutGraph | null;
     /** State View graphs keyed by aggregate ID, laid out for each way of labeling transitions. */
+    /** Aggregate ID, or `<aggregate ID>::<enum value>` for a kind-filtered State View. */
     states: Record<string, Record<TransitionLabels, LaidOutGraph>>;
     /** Contexts that can be focused in the Structure View (the graphs are served on request at /api/focus). */
     focusContexts: string[];

@@ -32,6 +32,9 @@ export function StatesCanvas(props: {
     graphs: Record<TransitionLabels, LaidOutGraph> | undefined;
     /** The previously shown version of the same graphs, for ghosts of removed states. */
     previous: Record<TransitionLabels, LaidOutGraph> | undefined;
+    kinds: string[];
+    statesByKind: Record<string, Record<TransitionLabels, LaidOutGraph>> | undefined;
+    previousByKind: Record<string, Record<TransitionLabels, LaidOutGraph>> | undefined;
     diff: ModelDiff;
     diagnostics: Diagnostic[];
     mode: DisplayMode;
@@ -53,11 +56,14 @@ export function StatesCanvas(props: {
     const t = useT();
     const [canvas, setCanvas] = useState<DiagramCanvas | null>(null);
     const [savedLabels, setLabels] = usePersistentState<TransitionLabels>('domaintrail.states.transitionLabels', 'both');
+    const [selectedKind, setSelectedKind] = useState<string | undefined>();
     const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
-    const graph = useCompactGraph(props.graphs?.[labels], props.compact);
-    const previous = graph?.spacing === 'compact' ? undefined : props.previous?.[labels];
+    const kind = selectedKind && props.kinds.includes(selectedKind) ? selectedKind : props.kinds[0];
+    const key = kind ? `${aggregateId}::${kind}` : aggregateId;
+    const graph = useCompactGraph((kind ? props.statesByKind?.[key] : props.graphs)?.[labels], props.compact);
+    const previous = graph?.spacing === 'compact' ? undefined : (kind ? props.previousByKind?.[key] : props.previous)?.[labels];
     /** The aggregate's camera key: its compact layout has a camera of its own. */
-    const cameraKey = graph?.spacing === 'compact' ? `${aggregateId}:compact` : aggregateId;
+    const cameraKey = graph?.spacing === 'compact' ? `${key}:compact` : key;
     /** The camera key shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
 
@@ -134,6 +140,11 @@ export function StatesCanvas(props: {
             {graph ? (
                 <>
                     <div className="canvas-toolbar">
+                        {props.kinds.length > 1 && (
+                            <select aria-label={props.lang === 'ja' ? '種類' : 'Kind'} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
+                                {props.kinds.map((value) => <option key={value} value={value}>{value}</option>)}
+                            </select>
+                        )}
                         <div className="segmented small" role="group" aria-label={t.transitionLabels}>
                             {TRANSITION_LABELS.map((l) => (
                                 <button

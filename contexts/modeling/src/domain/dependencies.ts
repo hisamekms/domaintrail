@@ -1,5 +1,5 @@
 import type { ContextDependency, Dependency, DependencyKind } from '../generated/Modeling.js';
-import { commandsOf, contextNames, elementOf, emittedEvents, fieldSetsOf, ownFields, sharedContexts, statesOf, variantsOf } from './model.js';
+import { commandsOf, contextNames, elementOf, emittedEvents, emittedEventsInAggregate, fieldSetsOf, ownFields, sharedContexts, statesOf, variantsOf } from './model.js';
 import type { ContextName, DomainModel, ElementModel, FieldModel, QualifiedName } from './model.js';
 import { contextName } from './ids.js';
 import { identityOf } from './usages.js';
@@ -34,7 +34,7 @@ export function contextDependencies(model: DomainModel): Dependency[] {
         if (el.kind === 'policy') add(el.policy.event, `when ${shortName(el.policy.event)}`, 'event');
         for (const c of commandsOf(el)) {
             for (const p of c.params) field(p, `${c.name}(${p.name})`);
-            for (const e of [...emittedEvents(c), ...c.errors]) add(e, `${c.name} ⇒ ${shortName(e)}`);
+            for (const e of [...(el.kind === 'aggregate' ? emittedEventsInAggregate(el, c) : emittedEvents(c)), ...c.errors]) add(e, `${c.name} ⇒ ${shortName(e)}`);
         }
     }
     return out;

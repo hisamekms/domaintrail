@@ -10,7 +10,7 @@
 import type { Diagnostic } from '@domaintrail/kernel';
 import { didYouMean, type Candidate } from '@domaintrail/kernel';
 import { commandId } from '@domaintrail/modeling';
-import { commandsOf, elementOf, emittedEvents, type CommandModel, type DomainModel, type ElementModel } from '@domaintrail/modeling';
+import { commandsOf, elementOf, emittedEvents, emittedEventsInAggregate, type CommandModel, type DomainModel, type ElementModel } from '@domaintrail/modeling';
 import { esDiagnostic, esElementId, nodeElements, REF_KINDS, type Clause, type NodeElement, type Storming } from './ir.js';
 
 export type DtRefKind = 'event' | 'aggregate' | 'command';
@@ -160,7 +160,7 @@ export function linkStormings(stormings: readonly Storming[], model: DomainModel
             const command = aggregate && commandsOf(aggregate).find((c) => c.name === commandName);
             if (!command) continue;
             // the qualified names of the events, compared with the resolved IDs (the same text)
-            const emitted = new Set<string>(emittedEvents(command));
+            const emitted = new Set<string>(aggregate?.kind === 'aggregate' ? emittedEventsInAggregate(aggregate, command) : emittedEvents(command));
             for (const emits of relations(el, 'emits')) {
                 const event = byId.get(emits.target);
                 const dtEvent = event?.kind === 'event' ? resolved.get(event.id) : undefined;
