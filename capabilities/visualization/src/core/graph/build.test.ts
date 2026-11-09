@@ -53,6 +53,39 @@ describe('Structure overview graph', () => {
 });
 
 describe('State View graph', () => {
+    test('filters each kind to valid states and exposes named outcome choice status', async () => {
+        const source = `context S {
+          id AId: UUID
+          enum Kind { COLLECT DROP_OFF }
+          aggregate A {
+            id: AId
+            readonly kind: Kind
+            state Open
+            state Collected
+            state Holding
+            initial Open
+            create command start(id: AId, kind: Kind) { outcome started: -> Open }
+            command finish()
+            transitions for kind == Kind.COLLECT { on finish { outcome collected: Open -> Collected } }
+            transitions for kind == Kind.DROP_OFF { on finish { outcome holding: Open -> Holding select "confirmed" @externalCheck("carrier") } }
+          }
+        }`;
+        const model = (await check({ 'a.dt': source })).model!;
+        const aggregate = elementOf(model, 'S.A')!;
+        const collect = buildStateGraph(aggregate, model, 'both', 'COLLECT');
+        const dropOff = buildStateGraph(aggregate, model, 'both', 'DROP_OFF');
+        expect(collect.nodes.map((node) => node.id)).toContain('S.A#Collected');
+        expect(collect.nodes.map((node) => node.id)).not.toContain('S.A#Holding');
+        expect(dropOff.nodes.map((node) => node.id)).toContain('S.A#Holding');
+        expect(dropOff.nodes.map((node) => node.id)).not.toContain('S.A#Collected');
+        expect(collect.edges.find((edge) => edge.outcome === 'collected')).toMatchObject({ choiceStatus: 'single' });
+        expect(dropOff.edges.find((edge) => edge.outcome === 'holding')).toMatchObject({
+            choiceStatus: 'external',
+            choiceText: 'confirmed',
+        });
+        expect(dropOff.edges.find((edge) => edge.outcome === 'holding')?.label?.en.name).toContain('external check required');
+    });
+
     test('states, factory start node and one edge per (from, to) pair; self transitions are listed in the state', async () => {
         const model = await exampleModel();
         const g = buildStateGraph(elementOf(model, 'Sales.Order')!, model);

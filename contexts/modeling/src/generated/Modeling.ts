@@ -109,7 +109,7 @@ export function equalAggregateDependency(a: AggregateDependency, b: AggregateDep
  * by the generator's check, which the project analysis runs.
  * @see contexts/modeling/model/analysis.dt:58
  */
-export type ModelingRuleId = 'SYNTAX' | 'M001' | 'M002' | 'M003' | 'M004' | 'M005' | 'M006' | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015' | 'M016' | 'M017' | 'M018' | 'M019' | 'M020' | 'M021' | 'M022' | 'M023' | 'M024' | 'M025' | 'M026' | 'M027' | 'L001' | 'L002' | 'L003';
+export type ModelingRuleId = 'SYNTAX' | 'M001' | 'M002' | 'M003' | 'M004' | 'M005' | 'M006' | 'M007' | 'M008' | 'M009' | 'M010' | 'M011' | 'M012' | 'M013' | 'M014' | 'M015' | 'M016' | 'M017' | 'M018' | 'M019' | 'M020' | 'M021' | 'M022' | 'M023' | 'M024' | 'M025' | 'M026' | 'M027' | 'M028' | 'M029' | 'L001' | 'L002' | 'L003';
 
 /**
  * The stable ID of an element, a state or a command, derived from qualified names so that it survives re-parsing:
@@ -526,6 +526,13 @@ export type ElementModel =
           readonly invariants: readonly InvariantModel[];
           readonly states: readonly StateModel[];
           readonly commands: readonly CommandModel[];
+          /** Lifecycle declarations; empty for aggregates using the legacy transition form. */
+          readonly initials: readonly InitialModel[];
+          readonly groups: readonly TransitionGroupModel[];
+          /** The one readonly enum discriminator, when groups are present. */
+          readonly lifecycleField?: string;
+          readonly lifecycleEnum?: QualifiedName;
+          readonly validStates: readonly ValidKindStatesModel[];
       }
     | {
           readonly kind: 'event';
@@ -610,30 +617,30 @@ export function equalElementModel(a: ElementModel, b: ElementModel): boolean {
     }
     if (a.kind === 'aggregate') {
         const y = b as Extract<ElementModel, { readonly kind: 'aggregate' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($50: string, $51: string) => $50 === $51) && sameOptional(a.doc, y.doc, ($52: string, $53: string) => $52 === $53) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($54: QualifiedName, $55: QualifiedName) => $54 === $55) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel) && sameList(a.states, y.states, equalStateModel) && sameList(a.commands, y.commands, equalCommandModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($50: string, $51: string) => $50 === $51) && sameOptional(a.doc, y.doc, ($52: string, $53: string) => $52 === $53) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($54: QualifiedName, $55: QualifiedName) => $54 === $55) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel) && sameList(a.states, y.states, equalStateModel) && sameList(a.commands, y.commands, equalCommandModel) && sameList(a.initials, y.initials, equalInitialModel) && sameList(a.groups, y.groups, equalTransitionGroupModel) && sameOptional(a.lifecycleField, y.lifecycleField, ($56: string, $57: string) => $56 === $57) && sameOptional(a.lifecycleEnum, y.lifecycleEnum, ($58: QualifiedName, $59: QualifiedName) => $58 === $59) && sameList(a.validStates, y.validStates, equalValidKindStatesModel);
     }
     if (a.kind === 'event') {
         const y = b as Extract<ElementModel, { readonly kind: 'event' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($56: string, $57: string) => $56 === $57) && sameOptional(a.doc, y.doc, ($58: string, $59: string) => $58 === $59) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($60: QualifiedName, $61: QualifiedName) => $60 === $61) && sameList(a.fields, y.fields, equalFieldModel) && a.persistent === y.persistent;
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($60: string, $61: string) => $60 === $61) && sameOptional(a.doc, y.doc, ($62: string, $63: string) => $62 === $63) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($64: QualifiedName, $65: QualifiedName) => $64 === $65) && sameList(a.fields, y.fields, equalFieldModel) && a.persistent === y.persistent;
     }
     if (a.kind === 'error') {
         const y = b as Extract<ElementModel, { readonly kind: 'error' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($62: string, $63: string) => $62 === $63) && sameOptional(a.doc, y.doc, ($64: string, $65: string) => $64 === $65) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($66: QualifiedName, $67: QualifiedName) => $66 === $67) && sameList(a.fields, y.fields, equalFieldModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($66: string, $67: string) => $66 === $67) && sameOptional(a.doc, y.doc, ($68: string, $69: string) => $68 === $69) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($70: QualifiedName, $71: QualifiedName) => $70 === $71) && sameList(a.fields, y.fields, equalFieldModel);
     }
     if (a.kind === 'fieldSet') {
         const y = b as Extract<ElementModel, { readonly kind: 'fieldSet' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($68: string, $69: string) => $68 === $69) && sameOptional(a.doc, y.doc, ($70: string, $71: string) => $70 === $71) && Kernel.equalLocation(a.location, y.location) && sameList(a.fields, y.fields, equalFieldModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($72: string, $73: string) => $72 === $73) && sameOptional(a.doc, y.doc, ($74: string, $75: string) => $74 === $75) && Kernel.equalLocation(a.location, y.location) && sameList(a.fields, y.fields, equalFieldModel);
     }
     if (a.kind === 'policy') {
         const y = b as Extract<ElementModel, { readonly kind: 'policy' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($72: string, $73: string) => $72 === $73) && sameOptional(a.doc, y.doc, ($74: string, $75: string) => $74 === $75) && Kernel.equalLocation(a.location, y.location) && equalPolicyModel(a.policy, y.policy);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($76: string, $77: string) => $76 === $77) && sameOptional(a.doc, y.doc, ($78: string, $79: string) => $78 === $79) && Kernel.equalLocation(a.location, y.location) && equalPolicyModel(a.policy, y.policy);
     }
     return true;
 }
 
 /**
  * A value of an enum, with its Japanese name.
- * @see contexts/modeling/model/model.dt:168
+ * @see contexts/modeling/model/model.dt:175
  */
 export interface EnumValueModel {
     readonly name: string;
@@ -642,15 +649,15 @@ export interface EnumValueModel {
 
 /**
  * Whether two EnumValueModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:168
+ * @see contexts/modeling/model/model.dt:175
  */
 export function equalEnumValueModel(a: EnumValueModel, b: EnumValueModel): boolean {
-    return a.name === b.name && sameOptional(a.label, b.label, ($76: string, $77: string) => $76 === $77);
+    return a.name === b.name && sameOptional(a.label, b.label, ($80: string, $81: string) => $80 === $81);
 }
 
 /**
  * The type of a field, a parameter or a verified type.
- * @see contexts/modeling/model/model.dt:174
+ * @see contexts/modeling/model/model.dt:181
  */
 export type TypeExpr =
     | {
@@ -670,7 +677,7 @@ export type TypeExpr =
 
 /**
  * Whether two TypeExpr values are equal: by `kind` and the fields of the variant (ADR 0016).
- * @see contexts/modeling/model/model.dt:174
+ * @see contexts/modeling/model/model.dt:181
  */
 export function equalTypeExpr(a: TypeExpr, b: TypeExpr): boolean {
     if (a.kind !== b.kind) return false;
@@ -680,32 +687,32 @@ export function equalTypeExpr(a: TypeExpr, b: TypeExpr): boolean {
     }
     if (a.kind === 'ref') {
         const y = b as Extract<TypeExpr, { readonly kind: 'ref' }>;
-        return a.ref === y.ref && a.text === y.text && sameOptional(a.target, y.target, ($78: string, $79: string) => $78 === $79);
+        return a.ref === y.ref && a.text === y.text && sameOptional(a.target, y.target, ($82: string, $83: string) => $82 === $83);
     }
     return true;
 }
 
 /**
  * How many values a field holds: exactly one, at most one (`?`), any number (`[0..*]`, `[0..n]`), at least one.
- * @see contexts/modeling/model/model.dt:188
+ * @see contexts/modeling/model/model.dt:195
  */
 export type Cardinality = 'one' | 'optional' | 'many' | 'nonEmpty';
 
 /**
  * What a field is: a plain field, `owns`, `references`, or a command's parameter.
- * @see contexts/modeling/model/model.dt:191
+ * @see contexts/modeling/model/model.dt:198
  */
 export type FieldKind = 'field' | 'owns' | 'references' | 'param';
 
 /**
  * Where the Japanese name of a field comes from: written on it, its term, its type.
- * @see contexts/modeling/model/model.dt:194
+ * @see contexts/modeling/model/model.dt:201
  */
 export type LabelSource = 'inline' | 'term' | 'type';
 
 /**
  * A field of an element, state or variant, or a parameter of a command.
- * @see contexts/modeling/model/model.dt:197
+ * @see contexts/modeling/model/model.dt:204
  */
 export interface FieldModel extends Described {
     readonly name: string;
@@ -719,19 +726,20 @@ export interface FieldModel extends Described {
     readonly labelSource?: LabelSource;
     /** Qualified name of the field set the field comes from (`with`); absent for the element's own fields. */
     readonly fieldSet?: QualifiedName;
+    readonly readonly?: boolean;
 }
 
 /**
  * Whether two FieldModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:197
+ * @see contexts/modeling/model/model.dt:204
  */
 export function equalFieldModel(a: FieldModel, b: FieldModel): boolean {
-    return sameOptional(a.label, b.label, ($80: string, $81: string) => $80 === $81) && sameOptional(a.doc, b.doc, ($82: string, $83: string) => $82 === $83) && a.name === b.name && a.kind === b.kind && equalTypeExpr(a.type, b.type) && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && sameOptional(a.target, b.target, ($84: QualifiedName, $85: QualifiedName) => $84 === $85) && sameOptional(a.labelSource, b.labelSource, ($86: string, $87: string) => $86 === $87) && sameOptional(a.fieldSet, b.fieldSet, ($88: QualifiedName, $89: QualifiedName) => $88 === $89);
+    return sameOptional(a.label, b.label, ($84: string, $85: string) => $84 === $85) && sameOptional(a.doc, b.doc, ($86: string, $87: string) => $86 === $87) && a.name === b.name && a.kind === b.kind && equalTypeExpr(a.type, b.type) && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && sameOptional(a.target, b.target, ($88: QualifiedName, $89: QualifiedName) => $88 === $89) && sameOptional(a.labelSource, b.labelSource, ($90: string, $91: string) => $90 === $91) && sameOptional(a.fieldSet, b.fieldSet, ($92: QualifiedName, $93: QualifiedName) => $92 === $93) && sameOptional(a.readonly, b.readonly, ($94: boolean, $95: boolean) => $94 === $95);
 }
 
 /**
  * `invariant name "label" { expr }`.
- * @see contexts/modeling/model/model.dt:212
+ * @see contexts/modeling/model/model.dt:220
  */
 export interface InvariantModel extends Described {
     readonly name: string;
@@ -739,19 +747,20 @@ export interface InvariantModel extends Described {
     readonly source?: string;
     /** The expression as a tree, for generated checks; absent with `source`. */
     readonly expr?: ExprModel;
+    readonly externalReason?: string;
 }
 
 /**
  * Whether two InvariantModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:212
+ * @see contexts/modeling/model/model.dt:220
  */
 export function equalInvariantModel(a: InvariantModel, b: InvariantModel): boolean {
-    return sameOptional(a.label, b.label, ($90: string, $91: string) => $90 === $91) && sameOptional(a.doc, b.doc, ($92: string, $93: string) => $92 === $93) && a.name === b.name && sameOptional(a.source, b.source, ($94: string, $95: string) => $94 === $95) && sameOptional(a.expr, b.expr, equalExprModel);
+    return sameOptional(a.label, b.label, ($96: string, $97: string) => $96 === $97) && sameOptional(a.doc, b.doc, ($98: string, $99: string) => $98 === $99) && a.name === b.name && sameOptional(a.source, b.source, ($100: string, $101: string) => $100 === $101) && sameOptional(a.expr, b.expr, equalExprModel) && sameOptional(a.externalReason, b.externalReason, ($102: string, $103: string) => $102 === $103);
 }
 
 /**
  * A state of an aggregate, with its own fields and invariants.
- * @see contexts/modeling/model/model.dt:221
+ * @see contexts/modeling/model/model.dt:230
  */
 export interface StateModel extends Described {
     readonly id: ElementId;
@@ -763,15 +772,15 @@ export interface StateModel extends Described {
 
 /**
  * Whether two StateModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:221
+ * @see contexts/modeling/model/model.dt:230
  */
 export function equalStateModel(a: StateModel, b: StateModel): boolean {
-    return sameOptional(a.label, b.label, ($96: string, $97: string) => $96 === $97) && sameOptional(a.doc, b.doc, ($98: string, $99: string) => $98 === $99) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($104: string, $105: string) => $104 === $105) && sameOptional(a.doc, b.doc, ($106: string, $107: string) => $106 === $107) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && Kernel.equalLocation(a.location, b.location);
 }
 
 /**
  * A variant of a union: its name is the discriminator value.
- * @see contexts/modeling/model/model.dt:230
+ * @see contexts/modeling/model/model.dt:239
  */
 export interface VariantModel extends Described {
     readonly name: string;
@@ -781,15 +790,15 @@ export interface VariantModel extends Described {
 
 /**
  * Whether two VariantModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:230
+ * @see contexts/modeling/model/model.dt:239
  */
 export function equalVariantModel(a: VariantModel, b: VariantModel): boolean {
-    return sameOptional(a.label, b.label, ($100: string, $101: string) => $100 === $101) && sameOptional(a.doc, b.doc, ($102: string, $103: string) => $102 === $103) && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel);
+    return sameOptional(a.label, b.label, ($108: string, $109: string) => $108 === $109) && sameOptional(a.doc, b.doc, ($110: string, $111: string) => $110 === $111) && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel);
 }
 
 /**
  * `requires name "label" { expr } else Error`: the command is accepted only if the requirement holds.
- * @see contexts/modeling/model/model.dt:237
+ * @see contexts/modeling/model/model.dt:246
  */
 export interface RequirementModel extends Described {
     readonly name: string;
@@ -799,19 +808,137 @@ export interface RequirementModel extends Described {
     readonly expr?: ExprModel;
     /** Qualified name of the error returned when the requirement does not hold. */
     readonly error: QualifiedName;
+    readonly externalReason?: string;
 }
 
 /**
  * Whether two RequirementModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:237
+ * @see contexts/modeling/model/model.dt:246
  */
 export function equalRequirementModel(a: RequirementModel, b: RequirementModel): boolean {
-    return sameOptional(a.label, b.label, ($104: string, $105: string) => $104 === $105) && sameOptional(a.doc, b.doc, ($106: string, $107: string) => $106 === $107) && a.name === b.name && sameOptional(a.source, b.source, ($108: string, $109: string) => $108 === $109) && sameOptional(a.expr, b.expr, equalExprModel) && a.error === b.error;
+    return sameOptional(a.label, b.label, ($112: string, $113: string) => $112 === $113) && sameOptional(a.doc, b.doc, ($114: string, $115: string) => $114 === $115) && a.name === b.name && sameOptional(a.source, b.source, ($116: string, $117: string) => $116 === $117) && sameOptional(a.expr, b.expr, equalExprModel) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($118: string, $119: string) => $118 === $119);
+}
+
+/** @see contexts/modeling/model/model.dt:257 */
+export interface InitialModel {
+    readonly state: string;
+    /** Empty means all kinds. */
+    readonly kinds: readonly string[];
+}
+
+/**
+ * Whether two InitialModel values are equal: by all their fields (ADR 0016).
+ * @see contexts/modeling/model/model.dt:257
+ */
+export function equalInitialModel(a: InitialModel, b: InitialModel): boolean {
+    return a.state === b.state && sameList(a.kinds, b.kinds, ($120: string, $121: string) => $120 === $121);
+}
+
+/** @see contexts/modeling/model/model.dt:263 */
+export interface ValidKindStatesModel {
+    readonly kind: string;
+    readonly states: readonly string[];
+}
+
+/**
+ * Whether two ValidKindStatesModel values are equal: by all their fields (ADR 0016).
+ * @see contexts/modeling/model/model.dt:263
+ */
+export function equalValidKindStatesModel(a: ValidKindStatesModel, b: ValidKindStatesModel): boolean {
+    return a.kind === b.kind && sameList(a.states, b.states, ($122: string, $123: string) => $122 === $123);
+}
+
+/** @see contexts/modeling/model/model.dt:268 */
+export interface TransitionGroupModel {
+    readonly field: string;
+    readonly enum: QualifiedName;
+    readonly values: readonly string[];
+    readonly initials: readonly InitialModel[];
+    readonly cases: readonly CommandCaseModel[];
+}
+
+/**
+ * Whether two TransitionGroupModel values are equal: by all their fields (ADR 0016).
+ * @see contexts/modeling/model/model.dt:268
+ */
+export function equalTransitionGroupModel(a: TransitionGroupModel, b: TransitionGroupModel): boolean {
+    return a.field === b.field && a.enum === b.enum && sameList(a.values, b.values, ($124: string, $125: string) => $124 === $125) && sameList(a.initials, b.initials, equalInitialModel) && sameList(a.cases, b.cases, equalCommandCaseModel);
+}
+
+/** @see contexts/modeling/model/model.dt:276 */
+export interface CommandCaseModel {
+    readonly command: string;
+    readonly requires: readonly RequirementModel[];
+    readonly outcomes: readonly OutcomeModel[];
+}
+
+/**
+ * Whether two CommandCaseModel values are equal: by all their fields (ADR 0016).
+ * @see contexts/modeling/model/model.dt:276
+ */
+export function equalCommandCaseModel(a: CommandCaseModel, b: CommandCaseModel): boolean {
+    return a.command === b.command && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel);
+}
+
+/** @see contexts/modeling/model/model.dt:282 */
+export interface OutcomeModel {
+    readonly name: string;
+    readonly from: readonly string[];
+    readonly to: string;
+    readonly changes: readonly string[];
+    readonly emits: readonly EmitModel[];
+    readonly select?: ChoiceRuleModel;
+}
+
+/**
+ * Whether two OutcomeModel values are equal: by all their fields (ADR 0016).
+ * @see contexts/modeling/model/model.dt:282
+ */
+export function equalOutcomeModel(a: OutcomeModel, b: OutcomeModel): boolean {
+    return a.name === b.name && sameList(a.from, b.from, ($126: string, $127: string) => $126 === $127) && a.to === b.to && sameList(a.changes, b.changes, ($128: string, $129: string) => $128 === $129) && sameList(a.emits, b.emits, equalEmitModel) && sameOptional(a.select, b.select, equalChoiceRuleModel);
+}
+
+/** @see contexts/modeling/model/model.dt:291 */
+export type ChoiceRuleModel =
+    | {
+          readonly kind: 'expression';
+          readonly source: string;
+          readonly expr: ExprModel;
+      }
+    | {
+          readonly kind: 'external';
+          readonly text: string;
+          readonly reason: string;
+      }
+    | {
+          readonly kind: 'declared';
+          readonly text: string;
+      };
+
+/**
+ * Whether two ChoiceRuleModel values are equal: by `kind` and the fields of the variant (ADR 0016).
+ * @see contexts/modeling/model/model.dt:291
+ */
+export function equalChoiceRuleModel(a: ChoiceRuleModel, b: ChoiceRuleModel): boolean {
+    if (a.kind !== b.kind) return false;
+    if (a.kind === 'expression') {
+        const y = b as Extract<ChoiceRuleModel, { readonly kind: 'expression' }>;
+        return a.source === y.source && equalExprModel(a.expr, y.expr);
+    }
+    if (a.kind === 'external') {
+        const y = b as Extract<ChoiceRuleModel, { readonly kind: 'external' }>;
+        return a.text === y.text && a.reason === y.reason;
+    }
+    if (a.kind === 'declared') {
+        const y = b as Extract<ChoiceRuleModel, { readonly kind: 'declared' }>;
+        return a.text === y.text;
+    }
+    return true;
 }
 
 /**
  * `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory.
- * @see contexts/modeling/model/model.dt:248
+ * @see contexts/modeling/model/model.dt:306
  */
 export interface TransitionModel {
     readonly from: readonly string[];
@@ -820,16 +947,16 @@ export interface TransitionModel {
 
 /**
  * Whether two TransitionModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:248
+ * @see contexts/modeling/model/model.dt:306
  */
 export function equalTransitionModel(a: TransitionModel, b: TransitionModel): boolean {
-    return sameList(a.from, b.from, ($110: string, $111: string) => $110 === $111) && sameList(a.to, b.to, ($112: string, $113: string) => $112 === $113);
+    return sameList(a.from, b.from, ($130: string, $131: string) => $130 === $131) && sameList(a.to, b.to, ($132: string, $133: string) => $132 === $133);
 }
 
 /**
  * `when A | B -> C`: the outcomes an `emits` entry applies to. An empty side matches any state (a factory has no
  * source).
- * @see contexts/modeling/model/model.dt:255
+ * @see contexts/modeling/model/model.dt:313
  */
 export interface OutcomePatternModel {
     readonly from: readonly string[];
@@ -838,16 +965,16 @@ export interface OutcomePatternModel {
 
 /**
  * Whether two OutcomePatternModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:255
+ * @see contexts/modeling/model/model.dt:313
  */
 export function equalOutcomePatternModel(a: OutcomePatternModel, b: OutcomePatternModel): boolean {
-    return sameList(a.from, b.from, ($114: string, $115: string) => $114 === $115) && sameList(a.to, b.to, ($116: string, $117: string) => $116 === $117);
+    return sameList(a.from, b.from, ($134: string, $135: string) => $134 === $135) && sameList(a.to, b.to, ($136: string, $137: string) => $136 === $137);
 }
 
 /**
  * An entry of `emits`: the command emits `event` as often as its multiplicity says (once without one), for the
  * outcomes that match `when` (every outcome without it). On failure it emits nothing.
- * @see contexts/modeling/model/model.dt:262
+ * @see contexts/modeling/model/model.dt:320
  */
 export interface EmitModel {
     /** Qualified event name. */
@@ -864,15 +991,15 @@ export interface EmitModel {
 
 /**
  * Whether two EmitModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:262
+ * @see contexts/modeling/model/model.dt:320
  */
 export function equalEmitModel(a: EmitModel, b: EmitModel): boolean {
-    return a.event === b.event && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && a.lower === b.lower && sameOptional(a.upper, b.upper, ($118: number, $119: number) => $118 === $119) && sameOptional(a.when, b.when, equalOutcomePatternModel);
+    return a.event === b.event && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && a.lower === b.lower && sameOptional(a.upper, b.upper, ($138: number, $139: number) => $138 === $139) && sameOptional(a.when, b.when, equalOutcomePatternModel);
 }
 
 /**
  * A command of an aggregate.
- * @see contexts/modeling/model/model.dt:276
+ * @see contexts/modeling/model/model.dt:334
  */
 export interface CommandModel extends Described {
     readonly id: ElementId;
@@ -882,6 +1009,9 @@ export interface CommandModel extends Described {
     readonly params: readonly FieldModel[];
     /** State transitions; a factory has one without source states, an aggregate without states none. */
     readonly transitions: readonly TransitionModel[];
+    readonly outcomes: readonly OutcomeModel[];
+    /** True when the command uses the pre-ADR transition/changes/emits form. */
+    readonly legacy: boolean;
     /** Preconditions over the parameters and the aggregate's current data (`requires`). */
     readonly requires: readonly RequirementModel[];
     /** `changes`: the fields the command may change, as written — common fields, and state-specific fields it would otherwise carry over. Empty: it changes no common field (a factory sets every field). */
@@ -895,16 +1025,16 @@ export interface CommandModel extends Described {
 
 /**
  * Whether two CommandModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:276
+ * @see contexts/modeling/model/model.dt:334
  */
 export function equalCommandModel(a: CommandModel, b: CommandModel): boolean {
-    return sameOptional(a.label, b.label, ($120: string, $121: string) => $120 === $121) && sameOptional(a.doc, b.doc, ($122: string, $123: string) => $122 === $123) && a.id === b.id && a.name === b.name && a.factory === b.factory && sameList(a.params, b.params, equalFieldModel) && sameList(a.transitions, b.transitions, equalTransitionModel) && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.changes, b.changes, ($124: string, $125: string) => $124 === $125) && sameList(a.emits, b.emits, equalEmitModel) && sameList(a.errors, b.errors, ($126: QualifiedName, $127: QualifiedName) => $126 === $127) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($140: string, $141: string) => $140 === $141) && sameOptional(a.doc, b.doc, ($142: string, $143: string) => $142 === $143) && a.id === b.id && a.name === b.name && a.factory === b.factory && sameList(a.params, b.params, equalFieldModel) && sameList(a.transitions, b.transitions, equalTransitionModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel) && a.legacy === b.legacy && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.changes, b.changes, ($144: string, $145: string) => $144 === $145) && sameList(a.emits, b.emits, equalEmitModel) && sameList(a.errors, b.errors, ($146: QualifiedName, $147: QualifiedName) => $146 === $147) && Kernel.equalLocation(a.location, b.location);
 }
 
 /**
  * `policy Name when Event -> Aggregate.command`: when the event happens, the command is eventually run, by whatever
  * mechanism (the same use case, an event bus, a batch). The aggregate belongs to the policy's context.
- * @see contexts/modeling/model/model.dt:299
+ * @see contexts/modeling/model/model.dt:360
  */
 export interface PolicyModel {
     /** Qualified event name (as written when unresolved). */
@@ -917,7 +1047,7 @@ export interface PolicyModel {
 
 /**
  * Whether two PolicyModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:299
+ * @see contexts/modeling/model/model.dt:360
  */
 export function equalPolicyModel(a: PolicyModel, b: PolicyModel): boolean {
     return a.event === b.event && a.aggregate === b.aggregate && a.command === b.command;
@@ -926,7 +1056,7 @@ export function equalPolicyModel(a: PolicyModel, b: PolicyModel): boolean {
 /**
  * `verified X of T for C? errors E`: evidence that a check outside the aggregate was made — a value of `of` that
  * only its factory makes, from the value and the context of `for`, failing with one of `errors`.
- * @see contexts/modeling/model/model.dt:310
+ * @see contexts/modeling/model/model.dt:371
  */
 export interface VerifiedModel {
     readonly of: TypeExpr;
@@ -938,15 +1068,15 @@ export interface VerifiedModel {
 
 /**
  * Whether two VerifiedModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:310
+ * @see contexts/modeling/model/model.dt:371
  */
 export function equalVerifiedModel(a: VerifiedModel, b: VerifiedModel): boolean {
-    return equalTypeExpr(a.of, b.of) && sameOptional(a.for, b.for, equalVerifiedFor) && sameList(a.errors, b.errors, ($128: QualifiedName, $129: QualifiedName) => $128 === $129);
+    return equalTypeExpr(a.of, b.of) && sameOptional(a.for, b.for, equalVerifiedFor) && sameList(a.errors, b.errors, ($148: QualifiedName, $149: QualifiedName) => $148 === $149);
 }
 
 /**
  * `for C?` of a verified type.
- * @see contexts/modeling/model/model.dt:319
+ * @see contexts/modeling/model/model.dt:380
  */
 export interface VerifiedFor {
     readonly type: TypeExpr;
@@ -955,7 +1085,7 @@ export interface VerifiedFor {
 
 /**
  * Whether two VerifiedFor values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:319
+ * @see contexts/modeling/model/model.dt:380
  */
 export function equalVerifiedFor(a: VerifiedFor, b: VerifiedFor): boolean {
     return equalTypeExpr(a.type, b.type) && a.optional === b.optional;

@@ -3341,7 +3341,7 @@ svg.chat-launcher-mark {
 
 /*
  * the view bar, one row at the top of the canvas column and the same in every view: the domain model's view switch,
- * the subject and the level at the left, the 絞り込み button and 書き出し (the catalog: 印刷) at the right end. As the
+ * the subject and the level at the left, the 絞り込み button (and the catalog's 印刷) at the right end. As the
  * bar narrows, the right end's buttons become icons first, then the view switch, then the levels; the subject's names
  * are cut short last. An empty view has no controls: the row keeps the height of one (a .toolbar-button and the
  * padding: the box is border-box).
@@ -4158,6 +4158,71 @@ svg.chat-launcher-mark {
     position: relative;
     height: 100%;
 }
+.diagram-focus {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    transform-origin: top left;
+    transition:
+        transform var(--motion-diagram-focus) var(--motion-ease-standard),
+        opacity var(--motion-diagram-focus) var(--motion-ease-standard);
+}
+.diagram-focus::backdrop {
+    background: var(--bg);
+    opacity: 1;
+    transition: opacity var(--motion-diagram-focus) var(--motion-ease-standard);
+}
+.diagram-focus.closing {
+    transform: translate(var(--diagram-origin-x, 0px), var(--diagram-origin-y, 0px))
+        scale(var(--diagram-origin-scale-x, 0.98), var(--diagram-origin-scale-y, 0.98));
+    opacity: 0;
+}
+.diagram-focus.closing::backdrop {
+    opacity: 0;
+}
+@starting-style {
+    .diagram-focus[open] {
+        transform: translate(var(--diagram-origin-x, 0px), var(--diagram-origin-y, 0px))
+            scale(var(--diagram-origin-scale-x, 0.98), var(--diagram-origin-scale-y, 0.98));
+        opacity: 0;
+    }
+    .diagram-focus[open]::backdrop {
+        opacity: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .diagram-focus,
+    .diagram-focus::backdrop {
+        transition: none;
+    }
+}
+.diagram-focus-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    min-height: 44px;
+    padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--border);
+}
+.diagram-focus-body {
+    flex: 1;
+    min-height: 0;
+}
+.diagram-focus-body > .view-area {
+    height: 100%;
+}
 .canvas-toolbar {
     position: absolute;
     top: 8px;
@@ -4246,6 +4311,8 @@ svg.chat-launcher-mark {
     /* a dialog appearing / closing */
     --motion-dialog-in: 160ms;
     --motion-dialog-out: 100ms;
+    /* a diagram growing to fill the browser tab and returning to its place */
+    --motion-diagram-focus: 220ms;
     /* small changes in place: the legend folding, the tree's branches */
     --motion-medium: 180ms;
     /* a chat row growing to its new content (the AI's card turning into its answer), the content fading in */
@@ -4264,6 +4331,7 @@ svg.chat-launcher-mark {
         --motion-pop: 0ms;
         --motion-dialog-in: 0ms;
         --motion-dialog-out: 0ms;
+        --motion-diagram-focus: 0ms;
         --motion-medium: 0ms;
         --motion-grow: 0ms;
         --motion-canvas-in: 0ms;
@@ -7950,16 +8018,11 @@ button.add-to-request.added:hover {
     background: var(--selected-bg);
     color: var(--action);
 }
-/* the 書き出し menu: below the view toolbar's button, at its right; the inspector's, above its canvas controls */
-.export-popover {
-    position: relative;
-}
-.export-popover .export-menu {
+/* The same export action ends both diagram toolbars; its menu opens above that button. */
+.canvas-export .export-menu {
+    top: auto;
+    bottom: calc(100% + 6px);
     right: 0;
-    min-width: 12rem;
-}
-.canvas-controls .export-menu {
-    position: static;
     min-width: 12rem;
     pointer-events: auto;
 }
@@ -7990,60 +8053,6 @@ button.add-to-request.added:hover {
     border-top: 1px solid var(--border);
     color: var(--text-secondary);
 }
-/*
- * « collapses the bar toward the bottom-left corner, leaving a » there (the legend's panel goes with it).
- * It opens and closes at the panes' paces (the motion tokens).
- */
-.canvas-controls-bar {
-    clip-path: inset(0 0 0 0 round 8px);
-    transition:
-        clip-path var(--motion-enter) var(--motion-ease-enter),
-        opacity var(--motion-enter) var(--motion-ease-enter),
-        visibility 0s;
-}
-.canvas-controls.collapsed .canvas-controls-bar {
-    clip-path: inset(0 calc(100% - 1.875rem) 0 0 round 8px);
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        clip-path var(--motion-exit) var(--motion-ease-exit),
-        opacity var(--motion-exit) var(--motion-ease-exit),
-        visibility 0s linear var(--motion-exit);
-}
-.canvas-controls .canvas-expand {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    height: calc(1.625rem + 6px);
-    min-width: calc(1.625rem + 6px);
-    background: var(--legend-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    box-shadow: 0 2px 8px var(--shadow);
-    pointer-events: auto;
-    opacity: 0;
-    visibility: hidden;
-    transition:
-        opacity var(--motion-exit) var(--motion-ease-exit),
-        visibility 0s linear var(--motion-exit);
-}
-.canvas-controls.collapsed .canvas-expand {
-    opacity: 1;
-    visibility: visible;
-    /* after the bar has started folding */
-    transition:
-        opacity var(--motion-enter) var(--motion-ease-enter) calc(var(--motion-enter) * 0.25),
-        visibility 0s;
-}
-@media (prefers-reduced-motion: reduce) {
-    .canvas-controls-bar,
-    .canvas-controls .canvas-expand,
-    .canvas-controls.collapsed .canvas-controls-bar,
-    .canvas-controls.collapsed .canvas-expand {
-        transition: none;
-    }
-}
-
 /*
  * one hover for the toolbars' buttons (the view toolbar, its levels, 絞り込み, and the canvas's bottom-left bar):
  * a grey that shows, the text's colour; a pressed button keeps its colour, a little darker; a disabled one none

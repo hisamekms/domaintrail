@@ -130,8 +130,7 @@ focused contexts, the catalog's search, the storming and its timeline, with the 
 structure's 詳細 / 概観 / 集約 with their names, the storming's two levels as icons named in their tooltips); at the right
 「⏷ 絞り込み」 (what is hidden: the BCs, the kinds, a storming's resolved hotspots…, in a popover, absent with nothing to hide; while anything is narrowed
 the button shows how many narrowings are active, e.g. 「絞り込み 2」, and the popover clears them all with すべて解除),
-then 「⤓ 書き出し」 (a menu: 印刷, PDF, PNG, SVG; see [Printing and exporting](#printing-and-exporting)) — the
-catalog has 「印刷」 there instead. The view bar says what is shown (what an AI is told the view was); the canvas's
+the catalog has 「印刷」 there. The view bar says what is shown (what an AI is told the view was); the canvas's
 controls, how it is looked at. As the canvas narrows, the bar gives up words in turn, each control keeping its name in
 a tooltip: first the right end's buttons become icons (the count stays), then the view switch, then the structure's
 levels; last, the subject's names are cut short with … (the whole name in a tooltip). Notices — the connection lost, a syntax error that keeps the last diagram, a revision that cannot be compared,
@@ -141,15 +140,14 @@ See [ADR 0007](adr/0007-pane-roles.md).
 The canvas's controls sit at its bottom-left: `− 85% +` zooms out and in around the middle (the level shows live;
 a click on it goes back to 100%), ⤢ fits everything (`Shift+1`), ◎ fits the selection (`Shift+2`; disabled while
 nothing is selected), 詰めて表示 (two inward arrows, named in its tooltip) closes up the gaps between the notes and
-boxes of every diagram, the shapes (凡例,
-named in its tooltip) open the legend upward, and « at the right end collapses the bar toward the corner, leaving only
-», which brings it back (the legend's panel is hidden while collapsed and keeps its own open or closed state). `U` does the same as « and », and the choice is remembered per browser. The legend starts hidden, and each view
+boxes of every diagram, the shapes (凡例, named in its tooltip) open the legend upward, the full-screen button fills
+the browser tab, and 書き出し opens the export menu above its button. The legend starts hidden, and each view
 remembers its own: opening it on the context map leaves it closed on the structure (its levels and focus share one),
 the 状態遷移 diagram and the Event Storming. Hovering an
 edge (its line or arrowhead) tells what it means, in the legend's words for that view (「参照（ID で別の集約へ）」…); a
 storming's line says its two ends and its relation instead (see Selection and lines below).
-The keys do nothing while typing. The inspector's 状態遷移 diagram has the same controls, without 詰めて表示, and
-with its own 書き出し (the download arrow: PNG and SVG, opening upward).
+The keys do nothing while typing. The inspector's 状態遷移 diagram uses the same order, without 詰めて表示. Its
+書き出し offers PNG and SVG; the main canvas's also offers 印刷 and PDF.
 
 詰めて表示 is off by default and remembered per browser. While it is on, every diagram — the Event Storming views (the
 stages' grid included), the Context Map, the Structure View (focused views included) and the inspector's 状態遷移 —
@@ -352,7 +350,7 @@ timeline when it has several main flows — すべて or the main flow —, the 
 exceptions; never the emphasis; the Structure View: the focused contexts, if any, and the level; the Context Map: すべてのコンテキスト when
 shared and external BCs are shown). Nothing else is printed (no date, no version).
 
-書き出し at the right end of the view bar opens a menu below it. Its **印刷** is the surer way to print: it gets
+書き出し at the right end of each canvas toolbar opens a menu above it. Its **印刷** is the surer way to print: it gets
 the compact layout first (the button spins meanwhile), then opens the print dialog. The catalog has 「印刷」 there
 instead: it prints as a page, its list without the panes around it (it has no export). The menu:
 

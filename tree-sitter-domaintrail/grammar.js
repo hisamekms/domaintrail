@@ -26,6 +26,7 @@ const FEATURE_KEYWORDS = [
   'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes', 'verified', 'of', 'for', 'policy',
   'context', 'shared', 'terms', 'primitive', 'enum', 'union', 'entity', 'aggregate', 'state', 'owns', 'references', 'create',
   'command', 'emits', 'errors', 'event', 'error', 'invariant',
+  'readonly', 'initial', 'transitions', 'on', 'outcome', 'select',
   'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains',
 ];
 
@@ -175,7 +176,22 @@ module.exports = grammar({
       field('body', $.aggregate_body),
     ),
 
-    aggregate_body: ($) => seq('{', repeat(choice($._data_member, $.state, $.command)), '}'),
+    aggregate_body: ($) => seq('{', repeat(choice($._data_member, $.state, $.command, $.initial, $.transition_group)), '}'),
+
+    initial: ($) => seq('initial', field('state', $.identifier)),
+
+    transition_group: ($) => seq(
+      'transitions', 'for', field('field', $._feature_name),
+      choice(seq('==', $.enum_value_selector), seq('in', pipeSep1($.enum_value_selector))),
+      '{', repeat(choice($.initial, $.command_case)), '}',
+    ),
+
+    enum_value_selector: ($) => choice(
+      seq(field('enum', $.identifier), '.', field('value', $._value_name)),
+      seq(field('enum', $.qualified_name), '::', field('value', $._value_name)),
+    ),
+
+    command_case: ($) => seq('on', field('command', $._feature_name), '{', repeat(choice($.requirement, $.outcome)), '}'),
 
     member_block: ($) => seq('{', repeat($._data_member), '}'),
 
@@ -190,7 +206,7 @@ module.exports = grammar({
 
     // ---- Fields ----
 
-    field: ($) => seq($._field_head, optional(field('label', $.string))),
+    field: ($) => seq(optional('readonly'), $._field_head, optional(field('label', $.string))),
 
     owns_field: ($) => seq('owns', $._field_head, optional(field('label', $.string))),
 
@@ -226,11 +242,16 @@ module.exports = grammar({
       field('name', $._feature_name),
       $.parameters,
       optional(field('label', $.string)),
-      optional(seq($.transition, repeat(seq(optional(','), $.transition)))),
-      repeat($.requirement),
-      optional($.changes_clause),
-      optional($.emits_clause),
-      optional($.errors_clause),
+      choice(
+        seq('{', repeat(choice($.requirement, $.outcome)), optional($.errors_clause), '}'),
+        seq(
+          optional(seq($.transition, repeat(seq(optional(','), $.transition)))),
+          repeat($.requirement),
+          optional($.changes_clause),
+          optional($.emits_clause),
+          optional($.errors_clause),
+        ),
+      ),
     ),
 
     parameters: ($) => seq('(', optional(commaSep1($.parameter)), ')'),
@@ -244,11 +265,21 @@ module.exports = grammar({
       pipeSep1(field('to', $.identifier)),
     ),
 
+    outcome: ($) => seq(
+      'outcome', field('name', $._feature_name), ':',
+      optional(pipeSep1(field('from', $.identifier))), '->', field('to', $.identifier),
+      optional(seq('select', choice(seq('{', field('condition', $._expression), '}'), field('declaration', $.string)), optional($.external_check))),
+      optional($.changes_clause), optional($.emits_clause),
+    ),
+
+    external_check: ($) => seq('@externalCheck', '(', field('reason', $.string), ')'),
+
     requirement: ($) => seq(
       'requires',
       field('name', $.identifier),
       optional(field('label', $.string)),
       optional(seq('{', field('condition', $._expression), '}')),
+      optional($.external_check),
       'else',
       field('error', $.qualified_name),
     ),
@@ -312,6 +343,7 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('label', $.string)),
       optional(seq('{', field('condition', $._expression), '}')),
+      optional($.external_check),
     ),
 
     // ---- Expressions ----

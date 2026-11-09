@@ -4,6 +4,50 @@ import { type AggregateModel, elementOf } from '@domaintrail/modeling';
 import { lookup, showJson, showText } from './show.js';
 import { check } from '../test-helpers.js';
 
+test('dt show exposes kind-specific named outcomes and selection obligations', async () => {
+    const source = `context Delivery {
+      id RequestId: UUID
+      enum Kind { COLLECT DROP_OFF }
+      event Collected
+      event Delivered
+      aggregate Request {
+        id: RequestId
+        readonly kind: Kind
+        state Unassigned
+        state Done
+        initial Unassigned
+        create command open(id: RequestId, kind: Kind) { outcome opened: -> Unassigned }
+        command finish()
+        transitions for kind == Kind.COLLECT {
+          on finish { outcome collected: Unassigned -> Done emits Collected }
+        }
+        transitions for kind == Kind.DROP_OFF {
+          on finish { outcome delivered: Unassigned -> Done select "carrier confirmed" @externalCheck("carrier service") emits Delivered }
+        }
+      }
+    }`;
+    const result = await check({ 'delivery.dt': source });
+    expect(result.model).toBeDefined();
+    const aggregate = elementOf(result.model!, 'Delivery.Request') as AggregateModel;
+    const finish = aggregate.commands.find((command) => command.name === 'finish')!;
+    const json = showJson(result.model!, { kind: 'command', agg: aggregate, command: finish });
+    expect(json).toMatchObject({
+        show: 'command',
+        command: {
+            outcomes: [
+                { name: 'collected', kinds: ['COLLECT'], from: 'Unassigned', to: 'Done', selection: 'single' },
+                { name: 'delivered', kinds: ['DROP_OFF'], from: 'Unassigned', to: 'Done', selection: 'external', selectionText: 'carrier confirmed' },
+            ],
+        },
+    });
+    const lines = showText(result.model!, { kind: 'command', agg: aggregate, command: finish });
+    expect(lines.some((line) => line.includes('delivered') && line.includes('for DROP_OFF') && line.includes('select external'))).toBe(true);
+    expect(showText(result.model!, { kind: 'element', el: aggregate }).some((line) => line.includes('kind COLLECT: valid states Unassigned, Done'))).toBe(true);
+    const delivered = lookup(result.model!, 'Delivered');
+    if (!('found' in delivered)) throw new Error('event missing');
+    expect(showJson(result.model!, delivered.found)).toMatchObject({ usedBy: { emittedBy: ['Delivery.Request.finish'] } });
+});
+
 describe('policy declarations', () => {
     const SALES = `context Sales {
       id OrderId: UUID

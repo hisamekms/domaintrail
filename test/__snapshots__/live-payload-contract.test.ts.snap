@@ -8,7 +8,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "f947190a5392e65b",
+  "all": "9bd1db12b29a0063",
   "base": null,
   "baseline": {
     "kind": "previous",
@@ -46,7 +46,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "Sales",
   ],
   "layoutEngine": "elk",
-  "model": "f18aff1cae39385e",
+  "model": "e25712a5e46f2eef",
   "modelVersion": 1,
   "overview": {
     "edges": 5,
@@ -230,7 +230,7 @@ exports[`the Live View payload of examples/shop without stormings 1`] = `
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "2d2be043fcde8dcf",
+  "all": "a34b8efa30363d6d",
   "base": null,
   "baseline": {
     "kind": "previous",
@@ -266,7 +266,7 @@ exports[`the Live View payload of examples/shop without stormings 1`] = `
     "Sales",
   ],
   "layoutEngine": "elk",
-  "model": "f18aff1cae39385e",
+  "model": "e25712a5e46f2eef",
   "modelVersion": 1,
   "overview": {
     "edges": 5,
@@ -357,7 +357,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "4e3cb18e499da653",
+  "all": "5a3c22a750888721",
   "base": {
     "aggregates": {
       "edges": 2,
@@ -377,7 +377,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
       "nodes": 3,
       "sha": "68e0e43fcee4e1ed",
     },
-    "model": "f18aff1cae39385e",
+    "model": "e25712a5e46f2eef",
     "overview": {
       "edges": 5,
       "id": "structure-overview",
@@ -430,7 +430,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "Sales",
   ],
   "layoutEngine": "elk",
-  "model": "120c43eac31cd3fc",
+  "model": "dcc584dd8c50b94d",
   "modelVersion": 2,
   "overview": {
     "edges": 5,

@@ -1312,17 +1312,15 @@ Decided by the user (2026-11-03), after printing:
 - **File names**: `<workspace>-<view>-<storming | contexts>-<stage | timeline>-<level>`, from IDs, slugged
   (`exportFileName`).
 
-### As built: printing and exporting in the view toolbar
+### As built: printing and exporting
 
 Decided by the user (2026-11-03): the view toolbar says what is shown (the subject and its conditions, what an AI is
 told the view was); the canvas's controls, how it is looked at.
 
-- **書き出し** moved from the canvas's controls to the toolbar's right end, after 絞り込み (`view/export-menu.tsx`,
-  `ExportButton`): one menu, opening below, right-aligned: 印刷, PDF（印刷画面から保存）, PNG, SVG, then 見出しを含める and
-  凡例を含める. The catalog has 「印刷」 there instead (`PrintButton`: the page, as Ctrl+P); an empty view, nothing
-  (`toolbarOutput`).
-- **The canvas's controls**: zoom − % +, 全体, 選択に合わせる, 詰めて表示, 凡例, 畳む; the keys unchanged. The inspector's
-  state diagram keeps its 書き出し there (PNG, SVG, opening upward).
+- **書き出し** is at the right end of both canvas toolbars (`view/export-menu.tsx`), opening upward above its button:
+  印刷, PDF（印刷画面から保存）, PNG, SVG, then 見出しを含める and 凡例を含める. The state diagram offers PNG and SVG only.
+  The catalog has 「印刷」 in the view bar (`PrintButton`: the page, as Ctrl+P); an empty view has neither.
+- **The canvas's controls**: zoom − % +, 全体, 選択に合わせる, 詰めて表示 (main only), 凡例, 全画面, 書き出し.
 - **「例外を表示」** moved from the storming's subject to its 絞り込み (`StormingFilter`, section 表示), on the same
   conditions (a storming with exceptions, not one timeline); hidden exceptions count one, and すべて解除 shows them.
 

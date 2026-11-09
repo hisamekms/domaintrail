@@ -29,10 +29,7 @@ export function useCenterOnResize(canvas: DiagramCanvas | null): void {
     useEffect(() => {
         if (!canvas) return;
         const container = canvas.container();
-        const measure = (): Size => {
-            const r = container.getBoundingClientRect();
-            return { w: r.width, h: r.height };
-        };
+        const measure = (): Size => ({ w: container.clientWidth, h: container.clientHeight });
         let last = measure();
         const observer = new ResizeObserver(() => {
             const size = measure();

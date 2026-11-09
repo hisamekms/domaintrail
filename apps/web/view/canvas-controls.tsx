@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ChevronsLeft, ChevronsRight, Download, Focus, FoldHorizontal, Maximize, Minus, Plus, Shapes } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
+import { Download, Focus, FoldHorizontal, LoaderCircle, Maximize, Maximize2, Minimize2, Minus, Plus, Shapes } from 'lucide-react';
 import { useT } from '../i18n';
 import { Legend, legendRows, type LegendView } from '../legend';
 import { useDismiss } from '../shared/layout';
-import { canvasShortcut, formatZoom, takesText, useCanvasControls, type CanvasShortcut } from './controls';
+import { canvasShortcut, formatZoom, takesText, type CanvasShortcut } from './controls';
 import { useCanvasValue, type DiagramCanvas } from './diagram';
 import { ExportMenu, type ExportControl } from './export-menu';
 import { LineTip } from './lines';
@@ -13,9 +13,8 @@ const ANIMATE = { animate: true };
 /**
  * The canvas's camera controls and legend, at its bottom-left: `− 85% +` (zoom around the middle; the level resets to
  * 100% on a click), ⤢ (fit everything, as `fitAll` does for this canvas), ◎ (fit the selection), the legend's button,
- * which opens it upward, 「詰めて表示」 (every diagram in its compact layout, remembered), and « , which collapses all of it
- * into a » in the same corner (as `U` does, remembered). How the view is looked at, not what it shows: the view's
- * 印刷 and 書き出し are in its toolbar (`ExportButton`); the inspector's state diagram has its 書き出し here.
+ * which opens it upward, and 「詰めて表示」 (every diagram in its compact layout, remembered). How the view is looked at,
+ * not what it shows: both the main and inspector diagrams have their 書き出し here.
  */
 export function CanvasControls(props: {
     canvas: DiagramCanvas | null;
@@ -26,12 +25,13 @@ export function CanvasControls(props: {
     keys?: boolean;
     /** 「詰めて表示」, if the canvas offers it (the main canvas). */
     compact?: { on: boolean; onToggle: () => void };
-    /** 書き出し, if the canvas offers it here (the inspector's state diagram), as a menu opening upward. */
+    /** 書き出し, if the canvas offers it, as a menu opening above its button. */
     exporting?: ExportControl;
+    /** Fill the browser tab with this diagram, if it supports that view. */
+    focus?: { active: boolean; onToggle: () => void; triggerRef?: Ref<HTMLButtonElement> };
 }) {
     const { canvas, fitAll, legend } = props;
     const t = useT();
-    const { collapsed, toggle } = useCanvasControls();
     const root = useRef<HTMLDivElement>(null);
     const [exportOpen, setExportOpen] = useState(false);
     const closeExport = useCallback(() => setExportOpen(false), []);
@@ -42,17 +42,15 @@ export function CanvasControls(props: {
     useCanvasKeys(props.keys === true && canvas !== null, (action) => {
         if (!canvas) return;
         if (action === 'fitAll') fitAll();
-        else if (action === 'fitSelection') canvas.fitSelection(ANIMATE);
-        else toggle();
+        else canvas.fitSelection(ANIMATE);
     });
 
     if (!canvas) return null;
     const pct = formatZoom(zoom);
     return (
-        <div className={`canvas-controls${collapsed ? ' collapsed' : ''}`} ref={root}>
-            {legend && !collapsed && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
-            {props.exporting && exportOpen && !collapsed && <ExportMenu control={props.exporting} onDone={closeExport} up />}
-            <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label} aria-hidden={collapsed} inert={collapsed}>
+        <div className="canvas-controls" ref={root}>
+            {legend && <Legend view={legend.view} open={legend.open} onToggle={legend.onToggle} />}
+            <div className="canvas-controls-bar" role="toolbar" aria-label={t.canvasControls.label}>
                 <div className="canvas-controls-group">
                     <ControlButton label={t.canvasControls.zoomOut} onClick={() => canvas.zoomOut(ANIMATE)}>
                         <Minus size={14} aria-hidden />
@@ -90,18 +88,6 @@ export function CanvasControls(props: {
                         <FoldHorizontal size={14} aria-hidden />
                     </button>
                 )}
-                {props.exporting && (
-                    <button
-                        className={`canvas-control${exportOpen ? ' active' : ''}`}
-                        aria-haspopup="menu"
-                        aria-expanded={exportOpen}
-                        aria-label={t.exportMenu.label}
-                        data-tooltip={exportOpen ? undefined : t.exportMenu.label}
-                        onClick={() => setExportOpen(!exportOpen)}
-                    >
-                        <Download size={14} aria-hidden />
-                    </button>
-                )}
                 {legend && (
                     <button
                         className={`canvas-control canvas-legend-button${legend.open ? ' active' : ''}`}
@@ -114,20 +100,33 @@ export function CanvasControls(props: {
                         <Shapes size={14} aria-hidden />
                     </button>
                 )}
-                <ControlButton label={t.canvasControls.collapse} onClick={toggle}>
-                    <ChevronsLeft size={14} aria-hidden />
-                </ControlButton>
+                {props.focus && (
+                    <button
+                        ref={props.focus.triggerRef}
+                        className="canvas-control"
+                        aria-label={props.focus.active ? t.closeDiagram : t.expandDiagram}
+                        data-tooltip={props.focus.active ? t.closeDiagram : t.expandDiagram}
+                        onClick={props.focus.onToggle}
+                    >
+                        {props.focus.active ? <Minimize2 size={14} aria-hidden /> : <Maximize2 size={14} aria-hidden />}
+                    </button>
+                )}
+                {props.exporting && (
+                    <div className="canvas-export">
+                        <button
+                            className={`canvas-control${exportOpen ? ' active' : ''}`}
+                            aria-haspopup="menu"
+                            aria-expanded={exportOpen}
+                            aria-label={props.exporting.print?.preparing ? t.exportMenu.printing : t.exportMenu.label}
+                            data-tooltip={exportOpen ? undefined : t.exportMenu.label}
+                            onClick={() => setExportOpen(!exportOpen)}
+                        >
+                            {props.exporting.print?.preparing ? <LoaderCircle size={14} className="spin" aria-hidden /> : <Download size={14} aria-hidden />}
+                        </button>
+                        {exportOpen && <ExportMenu control={props.exporting} onDone={closeExport} up />}
+                    </div>
+                )}
             </div>
-            <button
-                className="canvas-control canvas-expand"
-                aria-label={t.canvasControls.expand}
-                data-tooltip={t.canvasControls.expand}
-                aria-hidden={!collapsed}
-                inert={!collapsed}
-                onClick={toggle}
-            >
-                <ChevronsRight size={14} aria-hidden />
-            </button>
         </div>
     );
 }
@@ -160,7 +159,7 @@ function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): 
         if (!active) return;
         const onKey = (e: KeyboardEvent): void => {
             const focused = document.activeElement;
-            if (focused?.closest('.states-canvas, dialog')) return;
+            if (focused?.closest('.states-canvas, dialog:not(.diagram-focus)')) return;
             const action = canvasShortcut(e, takesText(focused));
             if (!action) return;
             e.preventDefault();

@@ -5,7 +5,7 @@
 // what each outcome sets. Who may act is a rule of the work (ADR 0027): the commands reserved to the facilitator take
 // the role of who acts as a parameter, from the use case's `Actor`. A command takes its parameters as one object
 // (ADR 0028), which it passes on as it is to its check of requirements.
-import { Collaboration, decide, err, ok } from '../generated/index.js';
+import { Collaboration, decide, decideNamed, err, ok } from '../generated/index.js';
 import { AI_PARTICIPANT_ID } from './ai.js';
 import { holdsHashOfFiles } from './snapshot.js';
 import { succeeded } from './validation.js';
@@ -367,32 +367,30 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     }),
 
     // Completed when the report meets the run success rule, Failed (RuleNotMet) with the report otherwise
-    finish: decide<Collaboration.FinishAgentRunDecision>(Collaboration.AgentRunShape, {
-        Running: (run, params) => {
-            switch (Collaboration.checkFinishAgentRunRequires(run, params)) {
-                case 'changedMatchesResult':
-                    return err({ type: 'ChangedMismatch' });
-                case 'replyAsksNothing':
-                case 'replyAboutInput':
-                    return err({ type: 'InvalidReply' });
-            }
-            const { report, resultRevision, changed, reply, review, finishedAt } = params;
-            if (succeeded(report, changed)) {
-                return ok({
-                    Completed: {
-                        // the reply and the review are kept with a completed run only: a failure is the facts'
-                        set: { report, resultRevision, changed, reply, review, finishedAt },
-                        events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
-                    },
-                });
-            }
+    finish: decideNamed<Collaboration.FinishAgentRunDecision>()(Collaboration.AgentRunShape, { Completed: 'Completed', Failed: 'Failed' }, (run, params) => {
+        switch (Collaboration.checkFinishAgentRunRequires(run, params)) {
+            case 'changedMatchesResult':
+                return err({ type: 'ChangedMismatch' });
+            case 'replyAsksNothing':
+            case 'replyAboutInput':
+                return err({ type: 'InvalidReply' });
+        }
+        const { report, resultRevision, changed, reply, review, finishedAt } = params;
+        if (succeeded(report, changed)) {
             return ok({
-                Failed: {
-                    set: { reason: 'RuleNotMet', report, resultRevision, finishedAt },
-                    events: { RunFailed: { type: 'RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
+                Completed: {
+                    // the reply and the review are kept with a completed run only: a failure is the facts'
+                    set: { report, resultRevision, changed, reply, review, finishedAt },
+                    events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
                 },
             });
-        },
+        }
+        return ok({
+            Failed: {
+                set: { reason: 'RuleNotMet', report, resultRevision, finishedAt },
+                events: { RunFailed: { type: 'RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
+            },
+        });
     }),
 
     askClarification: decide<Collaboration.AskClarificationAgentRunDecision>(Collaboration.AgentRunShape, {

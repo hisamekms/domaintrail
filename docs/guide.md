@@ -346,7 +346,7 @@ context Sales {
     invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
 
     /// No other customer has the same email address: checked when one is given (AvailableEmail), kept by the store.
-    invariant uniqueEmail "メールアドレスは顧客ごとに一意"
+    invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体の照会が必要")
 
     command changeEmail(email: AvailableEmail) // the check was made before: its error is the factory's
       changes email
@@ -625,6 +625,68 @@ context Billing { // other files open the context without a name
 - Labels appear in the Live View and as JSDoc in the generated TypeScript; identifiers and generated type names stay
   English.
 
+<!-- topic: kind-lifecycles -->
+### Kind-specific lifecycles and named outcomes
+
+Use a required `readonly` enum field when one aggregate has several lifecycles. `initial` names the starting state;
+each `transitions for` group adds outcomes only for its selected enum value. Commands outside the groups are shared.
+
+```dt
+// delivery/request.dt
+context Delivery {
+  id RequestId: UUID
+  enum Kind { COLLECT DROP_OFF }
+  event Collected {
+    requestId: RequestId
+  }
+  event Received {
+    requestId: RequestId
+  }
+  aggregate Request {
+    id: RequestId
+    readonly kind: Kind
+    state Unassigned
+    state Assigned
+    state Collected
+    state Holding
+    initial Unassigned
+    create command open(id: RequestId, kind: Kind) {
+      outcome opened: -> Unassigned
+    }
+    command assign() {
+      outcome assigned: Unassigned -> Assigned
+    }
+    command finish()
+    transitions for kind == Kind.COLLECT {
+      on finish {
+        outcome collected: Assigned -> Collected
+          emits Collected
+      }
+    }
+    transitions for kind == Kind.DROP_OFF {
+      on finish {
+        outcome received: Assigned -> Holding
+          select "運送会社が受領を確認した" @externalCheck("運送会社のシステムに照会する")
+          emits Received
+      }
+    }
+  }
+}
+```
+
+`Kind.COLLECT` is a local enum value. Use `OtherContext.Kind::COLLECT` for a qualified enum, since `.` already
+separates context and type names. A group may select several values with `kind in Kind.COLLECT | Kind.DROP_OFF`.
+The kind is fixed at creation. For each kind, DomainTrail derives valid states from its initial states and outcomes;
+restored data and migrations remain the application's responsibility.
+
+Each `outcome` has a stable name, source states, one target state, and its own `changes` and `emits`. If a command has
+multiple outcomes from the same source, each needs `select { Boolean expression }`. A decision that depends on an
+external system can use `select "decision" @externalCheck("why it is external")`; the application must supply that
+check. An unexpressed `select`, `requires`, or `invariant` appears as a warning in `dt check` and blocks
+`dt check --for-generation` unless annotated with `@externalCheck`. The annotation records an obligation; it is not
+proof that a check ran. The State View can filter by kind and marks each outcome's selection status. `dt show` lists
+the valid states and named outcomes per kind.
+
 <!-- topic: expressions -->
 ### Invariant expressions
 
@@ -647,11 +709,11 @@ context Billing { // other files open the context without a name
 - An invariant must be a Bool expression. `dt check` checks only its type; whether a value holds it is checked by the
   generated check functions (`checkConfirmedOrder`, see [Generated checks](#generated-checks)), with exactly these
   semantics.
-- A constraint the DSL cannot express is declared without an expression, with a label or a `///` description that
-  states it (M018): `invariant uniqueEmail "メールアドレスは顧客ごとに一意"`. It is documented like any invariant (in
-  the Live View and as `@invariant uniqueEmail (…): not expressed in the DSL` in the generated TypeScript) and is
-  checked by your code only: the generated checks take it as a function you pass in (a slot). In a domain primitive,
-  its name joins the invariants of `Invalid<Name>`.
+- A constraint the DSL cannot express needs a label or `///` description (M018) and an explicit reason for an external
+  check before generation: `invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体を照会する")`.
+  `dt check` warns about an unannotated natural-language rule; `dt check --for-generation` rejects it. The annotation
+  records the obligation, and generated contract tests require the supplied check. In a domain primitive, the
+  invariant's name joins the invariants of `Invalid<Name>`.
 - `count`, `exists`, `length`, `matches`, `all`, `any`, `unique` and `contains` are also usable as field and parameter
   names; followed by `(` they are the functions.
 
@@ -682,7 +744,7 @@ context Review {
     state Accepted {
       acceptedBy: PersonId
       /// All the scenarios the policy requires are confirmed.
-      invariant fullyConfirmed "必要な確認がそろっている" // holds whenever the review is Accepted
+      invariant fullyConfirmed "必要な確認がそろっている" @externalCheck("レビュー全体の確認記録が必要") // holds whenever the review is Accepted
     }
 
     command accept(person: PersonId) "受入"
@@ -3246,6 +3308,9 @@ storming](#diagnostics-of-a-storming).
 | M025 | a context's description (`///` above `context X`) is written once across the files of the context; each later one names the first |
 | M026 | (warning) a union has a variant with fields; one whose variants have none is an `enum` |
 | M027 | (warning) a field or parameter named `<stem>Id` (`ID`; `Ids` / `IDs` for several) is not typed `String`, `UUID` or the base of the ID type when `<Stem>Id` (`<Stem>ID`) is an ID type or `<Stem>` an aggregate or entity: of its context or a shared one, else of exactly one other context (none for a field of a shared context); it takes the ID type |
+| M028 | lifecycle declarations: a selector uses one required readonly enum field, each kind has an initial state, outcomes have valid sources and targets, outcome names are unique, and choice and external-check annotations are well formed |
+| M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
+| G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |

@@ -250,13 +250,11 @@ export interface Arbitraries {
 
 /** Checks of the invariants and requirements of Collaboration that the DSL does not express, as your code implements them. */
 export interface DeclaredChecks {
-    readonly AgentRun?: Partial<Collaboration.AgentRunDeclaredChecks>;
     readonly Emoji?: Partial<Collaboration.EmojiDeclaredChecks>;
     readonly ProposalContent?: Partial<Collaboration.ProposalContentDeclaredChecks>;
     readonly Revision?: Partial<Collaboration.RevisionDeclaredChecks>;
     readonly TakeRevision?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
     readonly RestoreRevision?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
-    readonly Triage?: Partial<Collaboration.TriageDeclaredChecks>;
     readonly RecordTriage?: Partial<Collaboration.RecordTriageDeclaredRequires>;
 }
 
@@ -318,6 +316,7 @@ export interface Generation extends testing.RunOptions {
 
 export interface Options extends Generation {
     readonly examples?: Examples;
+    readonly declared: { readonly Collaboration: { readonly Emoji: Pick<Collaboration.EmojiDeclaredChecks, 'singleEmoji'>; readonly ProposalContent: Pick<Collaboration.ProposalContentDeclaredChecks, 'oneRecommended'>; readonly Revision: Pick<Collaboration.RevisionDeclaredChecks, 'hashOfFiles'>; readonly TakeRevision: Pick<Collaboration.TakeRevisionDeclaredRequires, 'hashMatchesFiles'>; readonly RestoreRevision: Pick<Collaboration.RestoreRevisionDeclaredRequires, 'hashMatchesFiles'>; readonly RecordTriage: Pick<Collaboration.RecordTriageDeclaredRequires, 'inOrder'> } };
 }
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
@@ -337,7 +336,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Collaboration, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Options = {}): Arbitraries {
+export function arbitraries(options: Partial<Options> = {}): Arbitraries {
     const seed = options.seed ?? testing.DEFAULT_SEED;
     const given: Partial<Arbitraries> = options.arbitraries?.Collaboration ?? {};
     const declared: DeclaredChecks = options.declared?.Collaboration ?? {};
@@ -368,15 +367,15 @@ export function arbitraries(options: Options = {}): Arbitraries {
         KeptFinding: () => given.KeptFinding ?? testing.cast<Collaboration.KeptFinding>(fc.record({ what: a.Text, why: a.Text })),
         RunReview: () => given.RunReview ?? testing.cast<Collaboration.RunReview>(fc.record({ found: testing.many(a.ReviewFinding, 0, 50), left: testing.many(a.ReviewFinding, 0, 50), fixed: testing.many(a.Text, 0, 10), kept: testing.many(a.KeptFinding, 0, 10), asked: testing.cast<boolean>(scalar.Bool) })),
         EditConflict: () => given.EditConflict ?? testing.cast<Collaboration.EditConflict>(fc.record({ run: a.AgentRunId, runName: a.StormingLocalName, runLabel: a.Text, settled: testing.cast<boolean>(scalar.Bool) }, { requiredKeys: ['run', 'settled'] })),
-        QueuedAgentRun: () => testing.withExamples(testing.valid(given.QueuedAgentRun ?? testing.cast<Collaboration.QueuedAgentRun>(fc.record({ state: fc.constant('Queued' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), revertObstacle: a.RevertObstacle }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt'] })), (v) => Collaboration.checkQueuedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.QueuedAgentRun'), options.examples?.AgentRun?.states?.Queued, Collaboration.checkQueuedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.QueuedAgentRun'),
-        RunningAgentRun: () => testing.withExamples(testing.valid(given.RunningAgentRun ?? testing.cast<Collaboration.RunningAgentRun>(fc.record({ state: fc.constant('Running' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRunningAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.RunningAgentRun'), options.examples?.AgentRun?.states?.Running, Collaboration.checkRunningAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.RunningAgentRun'),
-        CompletedAgentRun: () => testing.withExamples(testing.valid(given.CompletedAgentRun ?? testing.cast<Collaboration.CompletedAgentRun>(fc.record({ state: fc.constant('Completed' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), report: a.RunReport, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), reply: a.AgentReply, review: a.RunReview, finishedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'startedAt', 'report', 'resultRevision', 'changed', 'finishedAt'] })), (v) => Collaboration.checkCompletedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.CompletedAgentRun'), options.examples?.AgentRun?.states?.Completed, Collaboration.checkCompletedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.CompletedAgentRun'),
-        NeedsClarificationAgentRun: () => testing.withExamples(testing.valid(given.NeedsClarificationAgentRun ?? testing.cast<Collaboration.NeedsClarificationAgentRun>(fc.record({ state: fc.constant('NeedsClarification' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), question: a.Text, reply: a.AgentReply, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'startedAt', 'question', 'resultRevision', 'finishedAt'] })), (v) => Collaboration.checkNeedsClarificationAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.NeedsClarificationAgentRun'), options.examples?.AgentRun?.states?.NeedsClarification, Collaboration.checkNeedsClarificationAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.NeedsClarificationAgentRun'),
-        DeclinedAgentRun: () => testing.withExamples(testing.valid(given.DeclinedAgentRun ?? testing.cast<Collaboration.DeclinedAgentRun>(fc.record({ state: fc.constant('Declined' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), reply: a.AgentReply, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkDeclinedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.DeclinedAgentRun'), options.examples?.AgentRun?.states?.Declined, Collaboration.checkDeclinedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.DeclinedAgentRun'),
-        FailedAgentRun: () => testing.withExamples(testing.valid(given.FailedAgentRun ?? testing.cast<Collaboration.FailedAgentRun>(fc.record({ state: fc.constant('Failed' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), reason: a.FailureReason, report: a.RunReport, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'startedAt', 'reason', 'finishedAt'] })), (v) => Collaboration.checkFailedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.FailedAgentRun'), options.examples?.AgentRun?.states?.Failed, Collaboration.checkFailedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.FailedAgentRun'),
-        CancelledAgentRun: () => testing.withExamples(testing.valid(given.CancelledAgentRun ?? testing.cast<Collaboration.CancelledAgentRun>(fc.record({ state: fc.constant('Cancelled' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, cancelledBy: a.ParticipantId, cancelledAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'cancelledBy', 'cancelledAt'] })), (v) => Collaboration.checkCancelledAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.CancelledAgentRun'), options.examples?.AgentRun?.states?.Cancelled, Collaboration.checkCancelledAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.CancelledAgentRun'),
-        RevertedAgentRun: () => testing.withExamples(testing.valid(given.RevertedAgentRun ?? testing.cast<Collaboration.RevertedAgentRun>(fc.record({ state: fc.constant('Reverted' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), finishedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRevertedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.RevertedAgentRun'), options.examples?.AgentRun?.states?.Reverted, Collaboration.checkRevertedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.RevertedAgentRun'),
-        EditedAgentRun: () => testing.withExamples(testing.valid(given.EditedAgentRun ?? testing.cast<Collaboration.EditedAgentRun>(fc.record({ state: fc.constant('Edited' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp), reapplies: a.AgentRunId, conflict: a.EditConflict, hotspotName: a.StormingLocalName }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'resultRevision', 'finishedAt'] })), (v) => Collaboration.checkEditedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun))(v).length === 0, 'Collaboration.EditedAgentRun'), options.examples?.AgentRun?.states?.Edited, Collaboration.checkEditedAgentRunWith(testing.declared<Collaboration.AgentRunDeclaredChecks>(['serial'], declared.AgentRun)), 'Collaboration.EditedAgentRun'),
+        QueuedAgentRun: () => testing.withExamples(testing.valid(given.QueuedAgentRun ?? testing.cast<Collaboration.QueuedAgentRun>(fc.record({ state: fc.constant('Queued' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), revertObstacle: a.RevertObstacle }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt'] })), (v) => Collaboration.checkQueuedAgentRun(v).length === 0, 'Collaboration.QueuedAgentRun'), options.examples?.AgentRun?.states?.Queued, Collaboration.checkQueuedAgentRun, 'Collaboration.QueuedAgentRun'),
+        RunningAgentRun: () => testing.withExamples(testing.valid(given.RunningAgentRun ?? testing.cast<Collaboration.RunningAgentRun>(fc.record({ state: fc.constant('Running' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRunningAgentRun(v).length === 0, 'Collaboration.RunningAgentRun'), options.examples?.AgentRun?.states?.Running, Collaboration.checkRunningAgentRun, 'Collaboration.RunningAgentRun'),
+        CompletedAgentRun: () => testing.withExamples(testing.valid(given.CompletedAgentRun ?? testing.cast<Collaboration.CompletedAgentRun>(fc.record({ state: fc.constant('Completed' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), report: a.RunReport, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), reply: a.AgentReply, review: a.RunReview, finishedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'startedAt', 'report', 'resultRevision', 'changed', 'finishedAt'] })), (v) => Collaboration.checkCompletedAgentRun(v).length === 0, 'Collaboration.CompletedAgentRun'), options.examples?.AgentRun?.states?.Completed, Collaboration.checkCompletedAgentRun, 'Collaboration.CompletedAgentRun'),
+        NeedsClarificationAgentRun: () => testing.withExamples(testing.valid(given.NeedsClarificationAgentRun ?? testing.cast<Collaboration.NeedsClarificationAgentRun>(fc.record({ state: fc.constant('NeedsClarification' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), question: a.Text, reply: a.AgentReply, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'startedAt', 'question', 'resultRevision', 'finishedAt'] })), (v) => Collaboration.checkNeedsClarificationAgentRun(v).length === 0, 'Collaboration.NeedsClarificationAgentRun'), options.examples?.AgentRun?.states?.NeedsClarification, Collaboration.checkNeedsClarificationAgentRun, 'Collaboration.NeedsClarificationAgentRun'),
+        DeclinedAgentRun: () => testing.withExamples(testing.valid(given.DeclinedAgentRun ?? testing.cast<Collaboration.DeclinedAgentRun>(fc.record({ state: fc.constant('Declined' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), reply: a.AgentReply, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkDeclinedAgentRun(v).length === 0, 'Collaboration.DeclinedAgentRun'), options.examples?.AgentRun?.states?.Declined, Collaboration.checkDeclinedAgentRun, 'Collaboration.DeclinedAgentRun'),
+        FailedAgentRun: () => testing.withExamples(testing.valid(given.FailedAgentRun ?? testing.cast<Collaboration.FailedAgentRun>(fc.record({ state: fc.constant('Failed' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, startedAt: testing.cast<Date>(scalar.Timestamp), reason: a.FailureReason, report: a.RunReport, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'startedAt', 'reason', 'finishedAt'] })), (v) => Collaboration.checkFailedAgentRun(v).length === 0, 'Collaboration.FailedAgentRun'), options.examples?.AgentRun?.states?.Failed, Collaboration.checkFailedAgentRun, 'Collaboration.FailedAgentRun'),
+        CancelledAgentRun: () => testing.withExamples(testing.valid(given.CancelledAgentRun ?? testing.cast<Collaboration.CancelledAgentRun>(fc.record({ state: fc.constant('Cancelled' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, cancelledBy: a.ParticipantId, cancelledAt: testing.cast<Date>(scalar.Timestamp) }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'cancelledBy', 'cancelledAt'] })), (v) => Collaboration.checkCancelledAgentRun(v).length === 0, 'Collaboration.CancelledAgentRun'), options.examples?.AgentRun?.states?.Cancelled, Collaboration.checkCancelledAgentRun, 'Collaboration.CancelledAgentRun'),
+        RevertedAgentRun: () => testing.withExamples(testing.valid(given.RevertedAgentRun ?? testing.cast<Collaboration.RevertedAgentRun>(fc.record({ state: fc.constant('Reverted' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), finishedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkRevertedAgentRun(v).length === 0, 'Collaboration.RevertedAgentRun'), options.examples?.AgentRun?.states?.Reverted, Collaboration.checkRevertedAgentRun, 'Collaboration.RevertedAgentRun'),
+        EditedAgentRun: () => testing.withExamples(testing.valid(given.EditedAgentRun ?? testing.cast<Collaboration.EditedAgentRun>(fc.record({ state: fc.constant('Edited' as const), id: a.AgentRunId, session: a.SessionId, input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp), baseRevision: a.RevisionId, resultRevision: a.RevisionId, finishedAt: testing.cast<Date>(scalar.Timestamp), reapplies: a.AgentRunId, conflict: a.EditConflict, hotspotName: a.StormingLocalName }, { requiredKeys: ['state', 'id', 'session', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'resultRevision', 'finishedAt'] })), (v) => Collaboration.checkEditedAgentRun(v).length === 0, 'Collaboration.EditedAgentRun'), options.examples?.AgentRun?.states?.Edited, Collaboration.checkEditedAgentRun, 'Collaboration.EditedAgentRun'),
         AgentRun: () => given.AgentRun ?? fc.oneof(a.QueuedAgentRun, a.RunningAgentRun, a.CompletedAgentRun, a.NeedsClarificationAgentRun, a.DeclinedAgentRun, a.FailedAgentRun, a.CancelledAgentRun, a.RevertedAgentRun, a.EditedAgentRun),
         RunQueued: () => given.RunQueued ?? testing.cast<Collaboration.RunQueued>(fc.record({ type: fc.constant('RunQueued' as const), runId: a.AgentRunId, session: a.SessionId, requests: testing.many(a.RequestId, 1), queuedBy: a.ParticipantId, queuedAt: testing.cast<Date>(scalar.Timestamp) })),
         RunReverted: () => given.RunReverted ?? testing.cast<Collaboration.RunReverted>(fc.record({ type: fc.constant('RunReverted' as const), runId: a.AgentRunId, baseRevision: a.RevisionId, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), finishedAt: testing.cast<Date>(scalar.Timestamp) })),
@@ -563,8 +562,8 @@ export function arbitraries(options: Options = {}): Arbitraries {
         TriageOutcome: () => given.TriageOutcome ?? testing.cast<Collaboration.TriageOutcome>(fc.oneof(fc.record({ kind: fc.constant('Answer' as const), answer: a.RequestId, readRevision: a.RevisionId }, { requiredKeys: ['kind', 'answer'] }), fc.record({ kind: fc.constant('Proposal' as const), proposal: a.ChangeProposalId }), fc.record({ kind: fc.constant('Run' as const), run: a.AgentRunId }))),
         AddressableRequest: () => given.AddressableRequest ?? testing.cast<Collaboration.AddressableRequest>(a.RequestId),
         ProposableTriage: () => given.ProposableTriage ?? testing.cast<Collaboration.ProposableTriage>(a.TriageId),
-        PendingTriage: () => testing.withExamples(testing.valid(given.PendingTriage ?? testing.cast<Collaboration.PendingTriage>(fc.record({ state: fc.constant('Pending' as const), id: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, steps: testing.many(a.TriageStep, 0), openedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkPendingTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage))(v).length === 0, 'Collaboration.PendingTriage'), options.examples?.Triage?.states?.Pending, Collaboration.checkPendingTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage)), 'Collaboration.PendingTriage'),
-        DecidedTriage: () => testing.withExamples(testing.valid(given.DecidedTriage ?? testing.cast<Collaboration.DecidedTriage>(fc.record({ state: fc.constant('Decided' as const), id: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, steps: testing.many(a.TriageStep, 0), openedAt: testing.cast<Date>(scalar.Timestamp), kind: a.TriageVerdict, decidedBy: a.TriageStage, decidedAt: testing.cast<Date>(scalar.Timestamp), outcome: a.TriageOutcome }, { requiredKeys: ['state', 'id', 'session', 'request', 'addressedBy', 'addressedByParticipant', 'steps', 'openedAt', 'kind', 'decidedBy', 'decidedAt'] })), (v) => Collaboration.checkDecidedTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage))(v).length === 0, 'Collaboration.DecidedTriage'), options.examples?.Triage?.states?.Decided, Collaboration.checkDecidedTriageWith(testing.declared<Collaboration.TriageDeclaredChecks>(['onePerRequest'], declared.Triage)), 'Collaboration.DecidedTriage'),
+        PendingTriage: () => testing.withExamples(testing.valid(given.PendingTriage ?? testing.cast<Collaboration.PendingTriage>(fc.record({ state: fc.constant('Pending' as const), id: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, steps: testing.many(a.TriageStep, 0), openedAt: testing.cast<Date>(scalar.Timestamp) })), (v) => Collaboration.checkPendingTriage(v).length === 0, 'Collaboration.PendingTriage'), options.examples?.Triage?.states?.Pending, Collaboration.checkPendingTriage, 'Collaboration.PendingTriage'),
+        DecidedTriage: () => testing.withExamples(testing.valid(given.DecidedTriage ?? testing.cast<Collaboration.DecidedTriage>(fc.record({ state: fc.constant('Decided' as const), id: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, steps: testing.many(a.TriageStep, 0), openedAt: testing.cast<Date>(scalar.Timestamp), kind: a.TriageVerdict, decidedBy: a.TriageStage, decidedAt: testing.cast<Date>(scalar.Timestamp), outcome: a.TriageOutcome }, { requiredKeys: ['state', 'id', 'session', 'request', 'addressedBy', 'addressedByParticipant', 'steps', 'openedAt', 'kind', 'decidedBy', 'decidedAt'] })), (v) => Collaboration.checkDecidedTriage(v).length === 0, 'Collaboration.DecidedTriage'), options.examples?.Triage?.states?.Decided, Collaboration.checkDecidedTriage, 'Collaboration.DecidedTriage'),
         Triage: () => given.Triage ?? fc.oneof(a.PendingTriage, a.DecidedTriage),
         TriageOpened: () => given.TriageOpened ?? testing.cast<Collaboration.TriageOpened>(fc.record({ type: fc.constant('TriageOpened' as const), triageId: a.TriageId, session: a.SessionId, request: a.RequestId, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, openedAt: testing.cast<Date>(scalar.Timestamp) })),
         TriageStepRecorded: () => given.TriageStepRecorded ?? testing.cast<Collaboration.TriageStepRecorded>(fc.record({ type: fc.constant('TriageStepRecorded' as const), triageId: a.TriageId, step: a.TriageStep })),
@@ -591,7 +590,13 @@ export function arbitraries(options: Options = {}): Arbitraries {
  * and purity.
  * Inputs are generated from the types (deterministic: a fixed seed unless one is passed).
  */
-export function contract(impl: Implementation, options: Options = {}): testing.Suite {
+export function contract(impl: Implementation, options: Options): testing.Suite {
+    if (typeof options?.declared?.Collaboration?.Emoji?.singleEmoji !== 'function') throw new Error('Missing external check Collaboration.Emoji.singleEmoji');
+    if (typeof options?.declared?.Collaboration?.ProposalContent?.oneRecommended !== 'function') throw new Error('Missing external check Collaboration.ProposalContent.oneRecommended');
+    if (typeof options?.declared?.Collaboration?.Revision?.hashOfFiles !== 'function') throw new Error('Missing external check Collaboration.Revision.hashOfFiles');
+    if (typeof options?.declared?.Collaboration?.TakeRevision?.hashMatchesFiles !== 'function') throw new Error('Missing external check Collaboration.TakeRevision.hashMatchesFiles');
+    if (typeof options?.declared?.Collaboration?.RestoreRevision?.hashMatchesFiles !== 'function') throw new Error('Missing external check Collaboration.RestoreRevision.hashMatchesFiles');
+    if (typeof options?.declared?.Collaboration?.RecordTriage?.inOrder !== 'function') throw new Error('Missing external check Collaboration.RecordTriage.inOrder');
     const a = arbitraries(options);
     const declared: DeclaredChecks = options.declared?.Collaboration ?? {};
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);
@@ -1059,9 +1064,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'facilitatorQueues', error: 'FacilitatorOnly' }, { name: 'distinctRequests', error: 'DuplicateRequest' }, { name: 'inputCoversRequests', error: 'InputMismatch' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkQueueAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1074,9 +1078,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'inputEdits', error: 'InputMismatch' }, { name: 'editInputCoversRequests', error: 'InputMismatch' }, { name: 'editChanges', error: 'ChangedMismatch' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkRecordEditAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1089,9 +1092,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'renamedChanges', error: 'ChangedMismatch' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkNameHotspotAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1103,9 +1105,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 factory: false,
                 requires: [],
                 declaredRequires: [],
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1118,9 +1119,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'inputReverts', error: 'InputMismatch' }, { name: 'changedMatchesResult', error: 'ChangedMismatch' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkRevertAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1133,9 +1133,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'inputReverts', error: 'InputMismatch' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkLeaveToAgentAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1147,9 +1146,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 factory: false,
                 requires: [],
                 declaredRequires: [],
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1162,11 +1160,12 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'changedMatchesResult', error: 'ChangedMismatch' }, { name: 'replyAsksNothing', error: 'InvalidReply' }, { name: 'replyAboutInput', error: 'InvalidReply' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkFinishAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
+                outcomes: [{ name: 'Completed', to: 'Completed', from: ['Running'], kinds: [] }, { name: 'Failed', to: 'Failed', from: ['Running'], kinds: [] }],
+                choices: Collaboration.checkFinishAgentRunChoice({}),
             }, options),
             ...testing.commandCases({
                 name: 'AgentRun.askClarification',
@@ -1177,9 +1176,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'replyAsks', error: 'InvalidReply' }, { name: 'replyAboutInput', error: 'InvalidReply' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkAskClarificationAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1192,9 +1190,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'replyAsksNothing', error: 'InvalidReply' }, { name: 'replyAboutInput', error: 'InvalidReply' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkDeclineAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1207,9 +1204,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'abnormal', error: 'ReportRequired' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkFailAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1222,9 +1218,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'facilitatorCancels', error: 'FacilitatorOnly' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkCancelAgentRunRequires,
-                invariants: Collaboration.checkAgentRunWith,
-                declaredInvariants: ['serial'],
-                givenInvariants: declared.AgentRun,
+                invariants: () => Collaboration.checkAgentRun,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1690,9 +1685,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 factory: true,
                 requires: [],
                 declaredRequires: [],
-                invariants: Collaboration.checkTriageWith,
-                declaredInvariants: ['onePerRequest'],
-                givenInvariants: declared.Triage,
+                invariants: () => Collaboration.checkTriage,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1706,11 +1700,12 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 declaredRequires: ['inOrder'],
                 firstFailing: Collaboration.checkRecordTriageRequiresWith,
                 givenRequires: declared.RecordTriage,
-                invariants: Collaboration.checkTriageWith,
-                declaredInvariants: ['onePerRequest'],
-                givenInvariants: declared.Triage,
+                invariants: () => Collaboration.checkTriage,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
+                outcomes: [{ name: 'Pending', to: 'Pending', from: ['Pending'], kinds: [] }, { name: 'Decided', to: 'Decided', from: ['Pending'], kinds: [] }],
+                choices: Collaboration.checkRecordTriageChoice({}),
             }, options),
             ...testing.commandCases({
                 name: 'Triage.override',
@@ -1721,9 +1716,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'overridable', error: 'TriageNotOverridable' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkOverrideTriageRequires,
-                invariants: Collaboration.checkTriageWith,
-                declaredInvariants: ['onePerRequest'],
-                givenInvariants: declared.Triage,
+                invariants: () => Collaboration.checkTriage,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1736,9 +1730,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'facilitatorReaddresses', error: 'FacilitatorOnly' }, { name: 'decidedNotForAi', error: 'RequestAlreadyAddressed' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkReaddressTriageRequires,
-                invariants: Collaboration.checkTriageWith,
-                declaredInvariants: ['onePerRequest'],
-                givenInvariants: declared.Triage,
+                invariants: () => Collaboration.checkTriage,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),
@@ -1751,9 +1744,8 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 requires: [{ name: 'noOutcomeYet', error: 'TriageAlreadyConcluded' }, { name: 'outcomeFits', error: 'TriageNotConcludable' }],
                 declaredRequires: [],
                 firstFailing: () => Collaboration.checkConcludeTriageRequires,
-                invariants: Collaboration.checkTriageWith,
-                declaredInvariants: ['onePerRequest'],
-                givenInvariants: declared.Triage,
+                invariants: () => Collaboration.checkTriage,
+                declaredInvariants: [],
                 stateful: true,
                 counted: [],
             }, options),

@@ -76,6 +76,9 @@ describe('the heading of a printed diagram', () => {
         const states: SheetSubject = { view: 'states', aggregate: { id: 'Sales.Order', name: 'Order', label: '注文' } };
         expect(sheetHeading('shop', states, ja, 'label')).toBe('shop › ドメインモデル › 状態遷移 › 注文');
         expect(sheetHeading('shop', states, en, 'name')).toBe('shop › Domain model › States › Order');
+        const byKind: SheetSubject = { ...states, kind: { id: 'COLLECT', label: '回収のみ' } };
+        expect(sheetHeading('shop', byKind, ja, 'label')).toBe('shop › ドメインモデル › 状態遷移 › 注文 · 回収のみ');
+        expect(sheetHeading('shop', byKind, en, 'both')).toBe('shop › Domain model › States › 注文 (Order) · 回収のみ (COLLECT)');
         expect(canvasSubject('catalog', { structureLevel: 'detail', mapAll: false, stormingChoice: choice() }, [], null, [])).toBeUndefined();
     });
 });
@@ -94,6 +97,9 @@ describe('the name of an exported file', () => {
             'shop-structure-Sales-Billing-aggregates.svg',
         );
         expect(exportFileName('shop', { view: 'states', aggregate: { id: 'Sales.Order', name: 'Order' } }, 'png')).toBe('shop-states-Sales.Order.png');
+        expect(exportFileName('shop', { view: 'states', aggregate: { id: 'Sales.Order', name: 'Order' }, kind: { id: 'COLLECT' } }, 'png')).toBe(
+            'shop-states-Sales.Order-COLLECT.png',
+        );
         expect(exportFileName(undefined, { view: 'contextMap', all: false }, 'png')).toBe('context-map.png');
     });
 

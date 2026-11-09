@@ -454,8 +454,9 @@ function toAnchor(edge: SceneEdge, end: 'source' | 'target'): AnchorNode {
 /** The port over the state and a mounted React Flow (its store), drawn in `container`. */
 function createFlowCanvas(state: CanvasState, store: ReturnType<typeof useStoreApi>, container: HTMLElement): DiagramCanvas {
     const size = (): Size => {
-        const r = container.getBoundingClientRect();
-        return { w: r.width, h: r.height };
+        // The full-tab dialog scales visually while it opens and closes. Its layout size is the camera's viewport;
+        // getBoundingClientRect would report the temporary, transformed size and make React Flow cull visible items.
+        return { w: container.clientWidth, h: container.clientHeight };
     };
     const transform = (): { x: number; y: number; zoom: number } => {
         const [x, y, zoom] = store.getState().transform;

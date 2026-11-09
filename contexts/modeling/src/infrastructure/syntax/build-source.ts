@@ -4,6 +4,9 @@
 import type { AstNode, Reference } from 'langium';
 import {
     isAggregate,
+    isInitial,
+    isTransitionGroup,
+    isCommandCase,
     isBinaryExpr,
     isBoolLiteral,
     isCommand,
@@ -37,6 +40,8 @@ import {
     isValueObject,
     isVerifiedDecl,
     type Command,
+    type Outcome,
+    type TransitionGroup,
     type Context,
     type ContextElement,
     type DataMember,
@@ -44,6 +49,7 @@ import {
     type Expression,
     type Field,
     type Invariant,
+    type Initial,
     type Multiplicity,
     type OutcomePattern,
     type Parameter,
@@ -147,6 +153,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         ...withType(f),
         ...(isReferenceField(f) && f.target && { aggregate: ref<src.AggregateDecl>(f, 'target', f.target) }),
         typeAt: site(f, 'type'),
+        readonly: 'readonly' in f && f.readonly === true,
     });
     const withType = (f: FieldLike | Parameter): { type?: src.TypeRef; multiplicity?: src.Multiplicity } => {
         const type = typeRef(f.type);
@@ -158,6 +165,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         kind: 'invariant',
         ...(i.expr && { expr: expr(i.expr) }),
         exprAt: site(i, 'expr'),
+        ...(i.external && { externalReason: i.external.reason }),
     });
     const dataMember = (m: DataMember): src.DataMember => (isInvariant(m) ? invariant(m) : field(m));
 
@@ -183,6 +191,40 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         ...(r.expr && { expr: expr(r.expr) }),
         error: ref<src.ErrorDecl>(r, 'error', r.error),
         exprAt: site(r, 'expr'),
+        ...(r.external && { externalReason: r.external.reason }),
+    });
+    const outcome = (o: Outcome): src.OutcomeDecl => ({
+        ...declared(o),
+        from: refs<src.StateDecl>(o, 'from', o.from),
+        to: ref<src.StateDecl>(o, 'to', o.to),
+        changes: o.changes.map((name, i) => ({ name, at: site(o, 'changes', i) })),
+        emits: o.emits.map(emit),
+        ...((o.selectExpr || o.selectText !== undefined) && {
+            select: {
+                ...(o.selectExpr && { expr: expr(o.selectExpr) }),
+                ...(o.selectText !== undefined && { text: o.selectText }),
+                ...(o.external && { externalReason: o.external.reason }),
+                at: site(o, 'selectExpr'),
+            },
+        }),
+    });
+    const initial = (i: Initial): src.InitialDecl => ({
+        state: ref<src.StateDecl>(i, 'state', i.state),
+        at: site(i),
+    });
+    const group = (g: TransitionGroup): src.TransitionGroupDecl => ({
+        kind: 'transitionGroup',
+        name: g.field,
+        field: g.field,
+        values: g.values.map((v) => ({ enum: ref<src.EnumDecl>(v, 'enum', v.enum), value: v.value, at: site(v) })),
+        initials: g.members.filter(isInitial).map(initial),
+        cases: g.members.filter(isCommandCase).map((c) => ({
+            command: ref<src.CommandDecl>(c, 'command', c.command),
+            requirements: c.requirements.map(requirement),
+            outcomes: c.outcomes.map(outcome),
+            at: site(c),
+        })),
+        at: site(g),
     });
     const command = (aggId: string, c: Command): src.CommandDecl => {
         const out: src.CommandDecl = {
@@ -197,6 +239,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
             changes: c.changes.map((name, i) => ({ name, at: site(c, 'changes', i) })),
             emits: c.emits.map(emit),
             errors: refs<src.ErrorDecl>(c, 'errors', c.errors),
+            outcomes: c.outcomes.map(outcome),
         };
         decls.set(c, out);
         return out;
@@ -244,7 +287,17 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 ...base,
                 kind: 'aggregate',
                 ...fieldSets(),
-                members: el.members.map((m) => (isState(m) ? state(id, m) : isCommand(m) ? command(id, m) : dataMember(m))),
+                members: el.members.map((m) =>
+                    isState(m)
+                        ? state(id, m)
+                        : isCommand(m)
+                          ? command(id, m)
+                          : isInitial(m)
+                            ? { ...initial(m), kind: 'initial', name: m.state.$refText }
+                            : isTransitionGroup(m)
+                              ? group(m)
+                              : dataMember(m),
+                ),
             };
         if (isPolicy(el))
             return {

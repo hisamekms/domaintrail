@@ -118,9 +118,9 @@ describe('the view bar', () => {
         } as unknown as Workspace;
     };
     const bar = (view: View, checked?: string[], empty = false): string =>
-        render(<ViewBar workspace={workspace(view, checked)} current={current} mode="label" bar={empty ? undefined : view.kind} exportTarget={() => null} />);
+        render(<ViewBar workspace={workspace(view, checked)} current={current} mode="label" bar={empty ? undefined : view.kind} />);
 
-    test('the structure: the views, the focused contexts, the levels with their short names, 絞り込み and 書き出し', () => {
+    test('the structure: the views, the focused contexts, the levels with their short names and 絞り込み', () => {
         const html = bar({ kind: 'structure' }, ['Sales', 'Billing']);
         expect(labels(html).slice(0, 3)).toEqual(['マップ', '構造', 'カタログ']);
         expect(html).toContain('lucide-network');
@@ -129,7 +129,7 @@ describe('the view bar', () => {
         expect(html).toMatch(/aria-pressed="true" aria-label="構造"/);
         expect(html).toMatch(/class="subject-picker subject-name" aria-label="表示する BC">[^<]+, [^<]+</);
         for (const level of ['詳細', '概観', '集約']) expect(html).toContain(`<span class="level-label">${level}</span>`);
-        expect(html).toContain('aria-label="書き出し"');
+        expect(html).not.toContain('aria-label="書き出し"');
         expect(html).toContain('filter-button');
         // every context shown: no crumb
         expect(bar({ kind: 'structure' })).not.toContain('subject-name');
@@ -143,20 +143,20 @@ describe('the view bar', () => {
         expect(html).not.toContain('aria-label="書き出し"');
     });
 
-    test('the context map: the views, 絞り込み and 書き出し', () => {
+    test('the context map: the views and 絞り込み', () => {
         const html = bar({ kind: 'contextMap' });
         expect(html).toMatch(/aria-pressed="true" aria-label="マップ"/);
         expect(html).not.toContain('level-switch');
-        expect(html).toContain('aria-label="書き出し"');
+        expect(html).not.toContain('aria-label="書き出し"');
     });
 
-    test('event storming: no view switch; the storming › its timelines, the level, 絞り込み and 書き出し', () => {
+    test('event storming: no view switch; the storming › its timelines, the level and 絞り込み', () => {
         const html = bar({ kind: 'storming' });
         expect(html).not.toContain('view-switch');
         expect(html).toContain('subject-crumbs');
         expect(html).toContain('lucide-telescope');
         expect(html).toContain('lucide-microscope');
-        expect(html).toContain('aria-label="書き出し"');
+        expect(html).not.toContain('aria-label="書き出し"');
     });
 
     test('an empty view: the domain model keeps its view switch, the storming world shows nothing', () => {

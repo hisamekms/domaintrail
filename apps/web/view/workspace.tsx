@@ -19,6 +19,7 @@ import { useViewCamera } from './camera';
 import type { CanvasMarks } from './change-marks';
 import { useCenterOnResize } from './center';
 import { CanvasControls, EdgeHint } from './canvas-controls';
+import { DiagramFocus } from './diagram-focus';
 import { emptyLine, isEmptyView } from './empty';
 import { FlowCanvas } from './flow-canvas';
 import { LinePopover, OffscreenPointers } from './lines';
@@ -27,7 +28,7 @@ import type { DiagramCanvas } from './diagram';
 import { activeFilterCount } from './filters';
 import { useViewGraph, type ViewGraph } from './graph';
 import { useExportOptions, type ExportOptions, type ExportTarget } from './export';
-import { ExportButton, PrintButton, toolbarOutput } from './export-menu';
+import { PrintButton } from './export-menu';
 import { PrintSheet, printKind, usePrint, usePrintWhenReady, type Printer } from './print';
 import { canvasSubject, exportFileName, sheetHeading } from './sheet';
 import { isCanvas, useNavigation, useOpenOnStormings, useSelectOnCanvas, type Navigation, type View } from './navigation';
@@ -47,6 +48,8 @@ export interface Workspace {
     /** The reader's canvas: a camera move or a selection asked through it stops following (`view/follow.ts`). */
     canvas: DiagramCanvas | null;
     onMount: (canvas: DiagramCanvas) => void;
+    /** Remember the current camera before the canvas moves into or out of its full-tab dialog. */
+    saveCamera: () => void;
     stormings: readonly StormingView[];
     /** The reader's navigation: showing a view or selecting through it stops following. */
     nav: Navigation;
@@ -112,7 +115,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     useOpenOnStormings(current, bareNav.setView);
     const [marks, setMarks] = useState<CanvasMarks | null>(null);
     const snapshots = useStormingSnapshots(stormings);
-    useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current), {
+    const saveCamera = useViewCamera(canvas, current, nav.view, settings, viewGraph, { mode, lang }, current !== null && isEmptyView(nav.view.kind, current), {
         shown: marks,
         snapshots,
     });
@@ -178,6 +181,7 @@ export function useViewWorkspace(current: ViewPayload | null, display: { mode: D
     return {
         canvas: readerCanvas,
         onMount,
+        saveCamera,
         stormings,
         nav,
         worlds,
@@ -213,6 +217,10 @@ export function ViewWorkspace(props: {
     const { filter: catalogFilter } = workspace.catalog;
     const t = useT();
     const lang = useLang();
+    const [focused, setFocused] = useState(false);
+    const [focusOrigin, setFocusOrigin] = useState<DOMRect>();
+    const originElement = useRef<HTMLDivElement>(null);
+    const focusButton = useRef<HTMLButtonElement>(null);
     const empty = { added: [], changed: [], removed: [] };
     /** The view has nothing yet: it shows one line, and no control that would have nothing to act on. */
     const nothing = current !== null && isEmptyView(view.kind, current);
@@ -247,62 +255,86 @@ export function ViewWorkspace(props: {
         if (view.kind === 'storming' && graph) fitAll(canvas, graph, true);
         else canvas.fitContent({ animate: true });
     };
+    const openFocus = (): void => {
+        workspace.saveCamera();
+        setFocusOrigin(originElement.current?.getBoundingClientRect());
+        setFocused(true);
+    };
+    const closeFocus = (): void => {
+        workspace.saveCamera();
+        setFocused(false);
+        requestAnimationFrame(() => focusButton.current?.focus());
+    };
+
+    useEffect(() => {
+        if (!isCanvas(view)) setFocused(false);
+    }, [view.kind]);
 
     return (
         <section className="center">
-            <ViewBar workspace={workspace} current={current} mode={mode} bar={bar} exportTarget={exportTarget} />
-            <div className={`view-area${current ? ' drawn' : ''}`}>
-                <FlowCanvas onMount={onMount} />
-                {isCanvas(view) && props.overlay}
-                {isCanvas(view) && !nothing && (
-                    <CanvasControls
-                        canvas={canvas}
-                        fitAll={fitView}
-                        legend={legendView && { view: legendView, open: legends.isOpen(legendView), onToggle: () => legends.toggle(legendView) }}
-                        compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
-                        keys
-                    />
+            <ViewBar workspace={workspace} current={current} mode={mode} bar={bar} />
+            <DiagramFocus open={focused} title={heading} origin={focusOrigin} onClose={closeFocus}>
+                {(requestClose) => (
+                    <div className={`view-area${current ? ' drawn' : ''}`} ref={originElement}>
+                        <FlowCanvas onMount={onMount} />
+                        {isCanvas(view) && props.overlay}
+                        {isCanvas(view) && !nothing && (
+                            <CanvasControls
+                                canvas={canvas}
+                                fitAll={fitView}
+                                legend={legendView && { view: legendView, open: legends.isOpen(legendView), onToggle: () => legends.toggle(legendView) }}
+                                compact={{ on: settings.compact, onToggle: () => settings.setCompact(!settings.compact) }}
+                                focus={{ active: focused, onToggle: focused ? requestClose : openFocus, triggerRef: focusButton }}
+                                exporting={{
+                                    target: exportTarget,
+                                    ...workspace.exportOptions,
+                                    print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
+                                }}
+                                keys
+                            />
+                        )}
+                        {printer.phase === 'printing' && printKind(isCanvas(view)) === 'diagram' && current && graph && (
+                            <PrintSheet graph={graph} current={current} mode={mode} heading={heading} legend={exportOptions.legend ? legendView : null} />
+                        )}
+                        <EdgeHint canvas={canvas} view={legendView} />
+                        {view.kind === 'storming' && (
+                            <>
+                                <StormingLanes workspace={workspace} mode={mode} />
+                                <LinePopover canvas={canvas} />
+                                <OffscreenPointers canvas={canvas} />
+                            </>
+                        )}
+                        {nothing ? (
+                            <div className="empty">{emptyLine(t, view.kind, props.aiReady === true)}</div>
+                        ) : (
+                            current &&
+                            !graph &&
+                            isCanvas(view) && (
+                                <div className="empty">
+                                    {view.kind === 'storming'
+                                        ? t.noStormings
+                                        : noneChecked && view.kind === 'structure'
+                                          ? t.pickContexts
+                                          : focusKey && view.kind === 'structure'
+                                            ? t.loading
+                                            : t.noDiagram}
+                                </div>
+                            )
+                        )}
+                        {view.kind === 'catalog' && model && !nothing && (
+                            <Catalog
+                                model={model}
+                                mode={mode}
+                                diff={current?.diff ?? empty}
+                                diagnostics={current?.diagnostics ?? []}
+                                selected={selected}
+                                onSelect={(id) => select(id)}
+                                filter={catalogFilter}
+                            />
+                        )}
+                    </div>
                 )}
-                {printer.phase === 'printing' && printKind(isCanvas(view)) === 'diagram' && current && graph && (
-                    <PrintSheet graph={graph} current={current} mode={mode} heading={heading} legend={exportOptions.legend ? legendView : null} />
-                )}
-                <EdgeHint canvas={canvas} view={legendView} />
-                {view.kind === 'storming' && (
-                    <>
-                        <StormingLanes workspace={workspace} mode={mode} />
-                        <LinePopover canvas={canvas} />
-                        <OffscreenPointers canvas={canvas} />
-                    </>
-                )}
-                {nothing ? (
-                    <div className="empty">{emptyLine(t, view.kind, props.aiReady === true)}</div>
-                ) : (
-                    current &&
-                    !graph &&
-                    isCanvas(view) && (
-                        <div className="empty">
-                            {view.kind === 'storming'
-                                ? t.noStormings
-                                : noneChecked && view.kind === 'structure'
-                                  ? t.pickContexts
-                                  : focusKey && view.kind === 'structure'
-                                    ? t.loading
-                                    : t.noDiagram}
-                        </div>
-                    )
-                )}
-                {view.kind === 'catalog' && model && !nothing && (
-                    <Catalog
-                        model={model}
-                        mode={mode}
-                        diff={current?.diff ?? empty}
-                        diagnostics={current?.diagnostics ?? []}
-                        selected={selected}
-                        onSelect={(id) => select(id)}
-                        filter={catalogFilter}
-                    />
-                )}
-            </div>
+            </DiagramFocus>
         </section>
     );
 }
@@ -310,17 +342,11 @@ export function ViewWorkspace(props: {
 /**
  * The view bar: in the domain model, the view switch (マップ / 構造 / カタログ); then the view's conditions (the
  * structure's focused contexts and level, the catalog's search, the storming › stage or timeline and the level), and at
- * the right end 絞り込み and 書き出し (the catalog: 印刷). `bar` is the view whose controls it shows (none for an empty
+ * the right end 絞り込み (the catalog also has 印刷). `bar` is the view whose controls it shows (none for an empty
  * view).
  */
-export function ViewBar(props: {
-    workspace: Workspace;
-    current: ViewPayload | null;
-    mode: DisplayMode;
-    bar: View['kind'] | undefined;
-    exportTarget: () => ExportTarget | null;
-}) {
-    const { workspace, current, mode, bar, exportTarget } = props;
+export function ViewBar(props: { workspace: Workspace; current: ViewPayload | null; mode: DisplayMode; bar: View['kind'] | undefined }) {
+    const { workspace, current, mode, bar } = props;
     const { stormings, nav, worlds, settings, viewGraph, printer } = workspace;
     const { view, setView } = nav;
     const { structureLevel, setStructureLevel, setStructureContexts, setHiddenContexts, mapAll, setMapAll, stormingChoice, setStormingChoice } = settings;
@@ -329,8 +355,6 @@ export function ViewBar(props: {
     const focusContexts = current?.focusContexts ?? [];
     const { filter: catalogFilter, setFilter: setCatalogFilter } = workspace.catalog;
     const t = useT();
-    /** What the bar offers to take the view out of the page (printing, exporting): what it shows, as it is shown. */
-    const output = toolbarOutput(bar);
     /** The focused contexts, as the bar names them. */
     const contextNamesOf = (ids: readonly string[]): string => {
         const labels = model ? contextLabels(model) : {};
@@ -416,16 +440,7 @@ export function ViewBar(props: {
                     </FilterPopover>
                 )}
                 {bar === 'storming' && <StormingFilter stormings={stormings} choice={stormingChoice} onChange={setStormingChoice} />}
-                {output === 'print' && <PrintButton onPrint={printer.print} />}
-                {output === 'export' && (
-                    <ExportButton
-                        control={{
-                            target: exportTarget,
-                            ...workspace.exportOptions,
-                            print: { preparing: printer.phase === 'preparing', onPrint: printer.print },
-                        }}
-                    />
-                )}
+                {bar === 'catalog' && <PrintButton onPrint={printer.print} />}
             </ToolbarEnd>
         </div>
     );

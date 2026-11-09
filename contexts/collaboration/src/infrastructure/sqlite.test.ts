@@ -518,7 +518,7 @@ describe("rows written before the agent's reply was structured", () => {
             expect('reply' in r).toBe(false);
             expect(r.input.answer).toBeUndefined();
             expect(C.checkRunInput(r.input)).toEqual([]);
-            expect(C.checkAgentRunWith({ serial: () => true })(r)).toEqual([]);
+            expect(C.checkAgentRun(r)).toEqual([]);
         }
         expect(done?.state === 'Completed' && done.changed).toBe(true);
         expect(events.map((e) => e.event.type)).toEqual(['RunNeedsClarification', 'RunCompleted']);

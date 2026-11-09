@@ -1,6 +1,6 @@
 import * as posix from 'node:path/posix';
 import type { AggregateModel, CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PolicyElement } from '@domaintrail/modeling';
-import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, fieldsOf, invariantsOf, statesOf, variantsOf } from '@domaintrail/modeling';
+import { applicableOutcomes, BINARY_OP_TEXT, contextNames, elementOf, elementsIn, fieldsOf, invariantsOf, statesOf, variantsOf } from '@domaintrail/modeling';
 import type { DomainPrimitive } from './checks.js';
 import {
     aggregateInvariants,
@@ -15,7 +15,7 @@ import {
     requiresWithName,
     unionInvariants,
 } from './checks.js';
-import { aggregateParamName, commandTypeName, commandsInterfaceName, makeTypeName, policyHandlersName, stateTypeName } from './naming.js';
+import { aggregateParamName, choiceCheckName, commandTypeName, commandsInterfaceName, makeTypeName, policyHandlersName, stateTypeName } from './naming.js';
 import type { PolicyMode } from './typescript.js';
 // the version of domaintrail, which the generated tests state (outside the package: the root package is domaintrail)
 import { version as VERSION } from '../../../../package.json' with { type: 'json' };
@@ -509,7 +509,11 @@ class TestsEmitter {
                     for (const s of states) {
                         const type = stateTypeName(el, s);
                         const check = invs.length ? this.violated(type, el.name, invs) : '() => []';
-                        const raw = `testing.cast<${this.type(type)}>(${this.record([`state: fc.constant('${s.name}' as const)`], [...el.fields, ...s.fields])})`;
+                        const allKinds = el.lifecycleField ? el.validStates.filter((v) => v.states.includes(s.name)).map((v) => v.kind) : [];
+                        const base = `testing.cast<${this.type(type)}>(${this.record([`state: fc.constant('${s.name}' as const)`], [...el.fields, ...s.fields])})`;
+                        const raw = el.lifecycleField
+                            ? `${base}.filter((value) => ([${allKinds.map((k) => `'${k}'`).join(', ')}] as readonly string[]).includes(value.${el.lifecycleField}))`
+                            : base;
                         add(
                             type,
                             `testing.withExamples(${valid(type, raw, invs.length ? this.holds(type, el.name, invs) : undefined)}, ${examples(`states?.${s.name}`)}, ${check}, '${ctx}.${type}')`,
@@ -538,7 +542,8 @@ class TestsEmitter {
             if (el.kind !== 'aggregate') continue;
             for (const c of el.commands) {
                 const t = commandTypeName(el, c);
-                if (hasDeclared(c.requires)) out.push(`readonly ${t}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
+                const requirements = [...c.requires, ...el.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires))];
+                if (hasDeclared(requirements)) out.push(`readonly ${t}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
             }
         }
         return out;
@@ -578,6 +583,7 @@ class TestsEmitter {
     }
 
     private commandCase(agg: AggregateModel, c: CommandModel): string {
+        if (!c.legacy) return this.namedCommandCase(agg, c);
         const states = agg.states;
         const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
         const subject = c.factory ? [] : [states.length ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})` : `a.${agg.name}`];
@@ -618,6 +624,66 @@ class TestsEmitter {
             ...(declaredInvs.length ? [`    givenInvariants: declared.${agg.name},`] : []),
             `    stateful: ${states.length > 0},`,
             `    counted: [${emits.join(', ')}],`,
+            `}, options),`,
+        ].join('\n');
+    }
+
+    private namedCommandCase(agg: AggregateModel, c: CommandModel): string {
+        const kinds = agg.lifecycleField ? agg.validStates.map((v) => v.kind) : ['*'];
+        const all = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
+        const sources = [...new Set(all.flatMap((o) => o.from))];
+        const subject = c.factory ? [] : [agg.states.length ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})` : `a.${agg.name}`];
+        const tuple = `fc.tuple(${[...subject, ...(c.params.length ? [this.record([], c.params)] : [])].join(', ')})`;
+        const allowed = kinds.flatMap((kind) => applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => `${kind}:${from}`)));
+        const input =
+            c.factory || !agg.lifecycleField
+                ? tuple
+                : `${tuple}.filter(([subject]) => [${allowed.map((x) => `'${x}'`).join(', ')}].includes(String((subject as ${this.ctx}.${agg.name}).${agg.lifecycleField}) + ':' + String((subject as ${this.ctx}.${agg.name}).state)))`;
+        const invs = aggregateInvariants(agg);
+        const declaredInvs = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
+        const requirements = [
+            ...c.requires.map((r) => ({ key: r.name, requirement: r })),
+            ...agg.groups.flatMap((g, i) =>
+                g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires.map((r) => ({ key: `group${i}_${r.name}`, requirement: r }))),
+            ),
+        ];
+        const declaredReqs = requirements.filter((x) => !x.requirement.expr).map((x) => `'${x.key}'`);
+        const t = commandTypeName(agg, c);
+        const outcomes = all.map((o) => {
+            const applies = agg.lifecycleField ? kinds.filter((kind) => applicableOutcomes(agg, c, kind).includes(o)) : [];
+            return `{ name: '${o.name}', to: '${o.to}', from: [${o.from.map((s) => `'${s}'`).join(', ')}], kinds: [${applies.map((k) => `'${k}'`).join(', ')}] }`;
+        });
+        const counts = all.flatMap((o) =>
+            o.emits
+                .filter(counted)
+                .map(
+                    (e) =>
+                        `{ key: '${e.event.slice(e.event.indexOf('.') + 1)}', lower: ${e.lower}, ${e.upper !== undefined ? `upper: ${e.upper}, ` : ''}from: [${o.from.map((s) => `'${s}'`).join(', ')}], to: ['${o.name}'] }`,
+                ),
+        );
+        return [
+            `...testing.commandCases({`,
+            `    name: '${agg.name}.${c.name}',`,
+            `    run: impl.${agg.name}.${c.name},`,
+            `    input: () => ${input},`,
+            `    examples: options.examples?.${agg.name}?.commands?.${c.name} ?? [],`,
+            `    factory: ${c.factory},`,
+            `    requires: [${requirements.map((x) => `{ name: '${x.key}', error: '${x.requirement.error.slice(x.requirement.error.indexOf('.') + 1)}' }`).join(', ')}],`,
+            `    declaredRequires: [${declaredReqs.join(', ')}],`,
+            ...(requirements.length
+                ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`]
+                : []),
+            ...(declaredReqs.length ? [`    givenRequires: declared.${t},`] : []),
+            ...(invs.length
+                ? [`    invariants: ${declaredInvs.length ? `${this.ctx}.${checkWithName(agg.name)}` : `() => ${this.ctx}.${checkName(agg.name)}`},`]
+                : []),
+            `    declaredInvariants: [${declaredInvs.join(', ')}],`,
+            ...(declaredInvs.length ? [`    givenInvariants: declared.${agg.name},`] : []),
+            `    stateful: ${agg.states.length > 0},`,
+            `    counted: [${counts.join(', ')}],`,
+            `    outcomes: [${outcomes.join(', ')}],`,
+            ...(agg.lifecycleField ? [`    kindField: '${agg.lifecycleField}',`, `    validStates: ${JSON.stringify(agg.validStates)},`] : []),
+            `    choices: ${this.ctx}.${choiceCheckName(agg, c)}(${all.some((o) => o.select?.kind === 'external') ? `options.external.${agg.name}.${c.name}` : '{}'}),`,
             `}, options),`,
         ].join('\n');
     }
@@ -733,6 +799,38 @@ class TestsEmitter {
         };
         const declared = this.declaredMembers();
         const examples = this.examplesMembers();
+        const externalChoices = aggregates.flatMap((agg) =>
+            agg.commands
+                .filter(
+                    (c) =>
+                        !c.legacy &&
+                        [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))].some(
+                            (o) => o.select?.kind === 'external',
+                        ),
+                )
+                .map((c) => ({ agg, c })),
+        );
+        const externalDeclared = this.els.flatMap((el) => {
+            const invs =
+                el.kind === 'aggregate' ? aggregateInvariants(el) : el.kind === 'union' ? unionInvariants(el) : 'invariants' in el ? el.invariants : [];
+            const names = invs.filter((i) => !i.expr && i.externalReason).map((i) => i.name);
+            const entries = names.length ? [{ key: el.name, type: `${ctx}.${declaredChecksName(el.name)}`, names }] : [];
+            if (el.kind === 'aggregate')
+                for (const c of el.commands) {
+                    const required = [
+                        ...c.requires.filter((r) => !r.expr && r.externalReason).map((r) => r.name),
+                        ...el.groups.flatMap((g, i) =>
+                            g.cases
+                                .filter((x) => x.command === c.name)
+                                .flatMap((x) => x.requires.filter((r) => !r.expr && r.externalReason).map((r) => `group${i}_${r.name}`)),
+                        ),
+                    ];
+                    if (required.length)
+                        entries.push({ key: commandTypeName(el, c), type: `${ctx}.${declaredRequiresName(commandTypeName(el, c))}`, names: required });
+                }
+            return entries;
+        });
+        const needsExternal = externalChoices.length > 0 || externalDeclared.length > 0;
         const usesDecimal = /<Decimal>/.test(defsText + groupsText);
         const body = [
             `// generated by domaintrail ${VERSION}: loading these tests with an incompatible domaintrail/testing fails`,
@@ -759,6 +857,24 @@ class TestsEmitter {
             '',
             `export interface Options extends Generation {`,
             `    readonly examples?: Examples;`,
+            ...(externalChoices.length
+                ? [
+                      `    readonly external: { ${[...new Set(externalChoices.map(({ agg }) => agg.name))]
+                          .map(
+                              (name) =>
+                                  `readonly ${name}: { ${externalChoices
+                                      .filter(({ agg }) => agg.name === name)
+                                      .map(({ c, agg }) => `readonly ${c.name}: ${ctx}.${commandTypeName(agg, c)}ChoiceChecks`)
+                                      .join('; ')} }`,
+                          )
+                          .join('; ')} };`,
+                  ]
+                : []),
+            ...(externalDeclared.length
+                ? [
+                      `    readonly declared: { readonly ${ctx}: { ${externalDeclared.map((entry) => `readonly ${entry.key}: Pick<${entry.type}, ${entry.names.map((n) => `'${n}'`).join(' | ')}>`).join('; ')} } };`,
+                  ]
+                : []),
             `}`,
             '',
             policies.length
@@ -771,7 +887,7 @@ class TestsEmitter {
             `}`,
             '',
             `/** The arbitraries of ${ctx}, with the overrides, declared checks and examples of the options. */`,
-            `export function arbitraries(options: Options = {}): Arbitraries {`,
+            `export function arbitraries(options: Partial<Options> = {}): Arbitraries {`,
             ...locals(defsText, true),
             ...cycles.map((c) => indent(c, '    ')),
             `    const a: Arbitraries = testing.lazy<Arbitraries>({`,
@@ -788,7 +904,21 @@ class TestsEmitter {
             ...(policies.length ? [` * handlers as your code wired them).`] : []),
             ` * Inputs are generated from the types (deterministic: a fixed seed unless one is passed).`,
             ` */`,
-            `export function contract(impl: Implementation, options: Options = {}): testing.Suite {`,
+            `export function contract(impl: Implementation, options: Options${needsExternal ? '' : ' = {}'}): testing.Suite {`,
+            ...externalDeclared.flatMap((entry) =>
+                entry.names.map(
+                    (name) =>
+                        `    if (typeof options?.declared?.${ctx}?.${entry.key}?.${name} !== 'function') throw new Error('Missing external check ${ctx}.${entry.key}.${name}');`,
+                ),
+            ),
+            ...externalChoices.flatMap(({ agg, c }) =>
+                [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))]
+                    .filter((o) => o.select?.kind === 'external')
+                    .map(
+                        (o) =>
+                            `    if (typeof options?.external?.${agg.name}?.${c.name}?.${o.name} !== 'function') throw new Error('Missing external choice check ${agg.name}.${c.name}.${o.name}');`,
+                    ),
+            ),
             ...(aggregates.length || /\ba\./.test(groupsText) ? [`    const a = arbitraries(options);`] : []),
             ...locals(groupsText, true),
             `    return testing.suite('${ctx}', [`,

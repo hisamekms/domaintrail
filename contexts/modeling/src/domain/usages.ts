@@ -1,4 +1,4 @@
-import { commandsOf, emittedEvents, fieldSetsOf, fieldsOf, ownFields, statesOf, variantsOf } from './model.js';
+import { commandsOf, emittedEventsInAggregate, fieldSetsOf, fieldsOf, ownFields, statesOf, variantsOf } from './model.js';
 import type { AggregateModel, CommandModel, ContextName, DomainModel, ElementModel, FieldModel, QualifiedName } from './model.js';
 
 /** Something with a name and a Japanese name: an element, state, variant, command or field. */
@@ -43,7 +43,9 @@ export function fieldUseText(u: FieldUse, name: (x: Named) => string): string {
 export function commandsWithOutcome(model: DomainModel, id: string): { agg: AggregateModel; command: CommandModel }[] {
     return model.elements.flatMap((agg) =>
         agg.kind === 'aggregate'
-            ? agg.commands.filter((c) => emittedEvents(c).some((e) => e === id) || c.errors.some((e) => e === id)).map((command) => ({ agg, command }))
+            ? agg.commands
+                  .filter((c) => emittedEventsInAggregate(agg, c).some((e) => e === id) || c.errors.some((e) => e === id))
+                  .map((command) => ({ agg, command }))
             : [],
     );
 }

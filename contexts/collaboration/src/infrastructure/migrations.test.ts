@@ -616,7 +616,7 @@ describe('triages and change proposals (migration 11)', () => {
             formatted: 'Ran',
             checked: 'Failed',
         });
-        expect(read.run && C.checkAgentRunWith({ serial: () => true })(read.run)).toEqual([]);
+        expect(read.run && C.checkAgentRun(read.run)).toEqual([]);
         expect(read.events.map((e) => e.event.type === 'SessionStarted' && e.event.mode)).toEqual(['Collab']);
         expect([read.triages, read.proposals]).toEqual([[], []]);
         // nothing is rewritten: the rows keep their former shape until saved again

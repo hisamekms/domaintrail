@@ -2,9 +2,9 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { contextNames, formatDomain } from '@domaintrail/modeling';
+import { contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
-import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
+import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
@@ -140,15 +140,27 @@ async function runCheck(
     io: CliIO,
     deps: CliDeps,
     report?: JsonReport,
-    advice?: { storming?: string; timeline?: string },
+    options: { forGeneration?: boolean; target?: 'ts'; advice?: { storming?: string; timeline?: string } } = {},
 ): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const checked = await journeyCheck(root, await analyze(sources));
+    const analyzed = await analyze(sources);
+    const gateDiagnostics = [
+        ...(options.forGeneration && analyzed.sourceModel ? generationGateDiagnostics(analyzed.sourceModel) : []),
+        ...(options.target && analyzed.model ? targetCapabilityDiagnostics(analyzed.model, options.target) : []),
+    ];
+    const gated = gateDiagnostics.length
+        ? {
+              ...analyzed,
+              diagnostics: [...analyzed.diagnostics, ...gateDiagnostics].sort(compareDiagnostics),
+              ok: analyzed.ok && !gateDiagnostics.some((d) => d.severity === 'error'),
+          }
+        : analyzed;
+    const checked = await journeyCheck(root, gated);
     // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
     const base = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
-    const analysis = advice
-        ? { ...base, diagnostics: [...base.diagnostics, ...designLevelAdvice(base.stormings.stormings, advice)].sort(compareDiagnostics) }
+    const analysis = options.advice
+        ? { ...base, diagnostics: [...base.diagnostics, ...designLevelAdvice(base.stormings.stormings, options.advice)].sort(compareDiagnostics) }
         : base;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
@@ -214,6 +226,7 @@ of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when yo
     program
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
+        .option('--for-generation', 'also reject decisions that code generation cannot enforce')
         .addHelpText(
             'after',
             `
@@ -229,6 +242,7 @@ Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is fo
 Examples:
   dt check
   dt check --format json
+  dt check --for-generation
   dt check --storming-level design-level --storming OrderToCash --timeline Normal
   dt -r domain check
   dt -c config/domaintrail.jsonc check`,
@@ -237,12 +251,15 @@ Examples:
         .addOption(new Option('--storming-level <level>', 'include explicit storming-level exploration advice').choices(['design-level']))
         .option('--storming <id>', 'limit Design Level advice to one storming ID')
         .option('--timeline <id>', 'limit Design Level advice to one timeline ID (use with --storming)')
-        .action(async (opts: { format: Format; stormingLevel?: 'design-level'; storming?: string; timeline?: string }) => {
+        .action(async (opts: { format: Format; forGeneration?: boolean; stormingLevel?: 'design-level'; storming?: string; timeline?: string }) => {
             if ((opts.storming || opts.timeline) && !opts.stormingLevel)
                 throw new CliError('--storming and --timeline require --storming-level design-level.', 2);
             if (opts.timeline && !opts.storming) throw new CliError('--timeline requires --storming <id>.', 2);
             if (opts.format === 'json') report = {};
-            const a = await runCheck(await config(), io, deps, report, opts.stormingLevel ? { storming: opts.storming, timeline: opts.timeline } : undefined);
+            const a = await runCheck(await config(), io, deps, report, {
+                forGeneration: opts.forGeneration,
+                advice: opts.stormingLevel ? { storming: opts.storming, timeline: opts.timeline } : undefined,
+            });
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
         });
 
@@ -255,7 +272,7 @@ Examples:
         .addHelpText(
             'after',
             `
-Runs check first and writes nothing if the model has errors (exit 1). Errors in .dtes files are reported but do not
+Runs check --for-generation first and writes nothing if the model has errors (exit 1). Errors in .dtes files are reported but do not
 block generation, which reads the .dt files only. Files generated before are replaced, and those
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
@@ -284,7 +301,7 @@ Examples:
             if (opts.out !== undefined && !staysInside(opts.out)) {
                 throw new ConfigError(`--out must stay inside ${cfg.root} (the directory of the config file, else the root): '${opts.out}'`);
             }
-            const a = await runCheck(cfg, io, deps, report);
+            const a = await runCheck(cfg, io, deps, report, { forGeneration: true, target: 'ts' });
             if (a.files.length === 0) {
                 exitCode = 1; // reported by runCheck
                 return;
@@ -298,6 +315,10 @@ Examples:
             const modelErrors = a.diagnostics.some((d) => d.severity === 'error' && !isStormingFile(d.file) && d.file !== JOURNEY_FILE);
             if (modelErrors || !a.model) {
                 fail('Generation skipped because the model has errors.', 1);
+                return;
+            }
+            if (hasExternalObligations(a.model) && !cfg.tsTests) {
+                fail('Generation skipped: external checks require generate.ts.tests so contract tests are emitted.', 1);
                 return;
             }
             checkTsContexts(cfg, contextNames(a.model));

@@ -118,12 +118,10 @@ const ja = {
         fitAll: '全体を表示（Shift+1）',
         fitSelection: '選択した要素に合わせる（Shift+2）',
         fitSelectionNone: '選択した要素に合わせる（何も選択していません）',
-        collapse: 'キャンバスの操作を畳む（U）',
-        expand: 'キャンバスの操作を表示（U）',
         compact: '詰めて表示',
         compactOff: '詰めて表示をやめる',
     },
-    /** The view toolbar's 書き出し menu (and the inspector's state diagram's), and the catalog's 印刷. */
+    /** The diagram toolbars' 書き出し menu and the catalog's 印刷. */
     exportMenu: {
         label: '書き出し',
         print: '印刷',
@@ -137,6 +135,9 @@ const ja = {
     /** The line above a printed or exported diagram: what it is and how it is shown. */
     sheet: DIAGRAM_TEXTS.ja.sheet,
     transitionLabels: '遷移のラベル',
+    lifecycleKind: '種類',
+    expandDiagram: '画面いっぱいに表示',
+    closeDiagram: '元の表示に戻す',
     transitionLabelModes: {
         command: { label: 'コマンド', hint: 'コマンドだけを表示' },
         event: { label: 'イベント', hint: '発生させるドメインイベントだけを表示（イベントのない遷移はコマンドを薄く表示）' },
@@ -1437,8 +1438,6 @@ const en: Messages = {
         fitAll: 'Fit everything (Shift+1)',
         fitSelection: 'Fit the selection (Shift+2)',
         fitSelectionNone: 'Fit the selection (nothing selected)',
-        collapse: 'Collapse the canvas controls (U)',
-        expand: 'Show the canvas controls (U)',
         compact: 'Close up the gaps',
         compactOff: 'Back to normal spacing',
     },
@@ -1454,6 +1453,9 @@ const en: Messages = {
     },
     sheet: DIAGRAM_TEXTS.en.sheet,
     transitionLabels: 'Transition labels',
+    lifecycleKind: 'Kind',
+    expandDiagram: 'Fill browser tab',
+    closeDiagram: 'Return to detail',
     transitionLabelModes: {
         command: { label: 'Command', hint: 'Show the commands only' },
         event: { label: 'Events', hint: 'Show the domain events raised only (a transition without events shows its command, faded)' },

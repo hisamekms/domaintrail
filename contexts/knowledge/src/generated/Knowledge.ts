@@ -35,7 +35,7 @@ export type MakeKnowledgeItemId = (value: string) => Result<KnowledgeItemId, Inv
  */
 export function checkKnowledgeItemId(value: string): readonly InvalidKnowledgeItemId['invariant'][] {
     const violated: InvalidKnowledgeItemId['invariant'][] = [];
-    if (!(/^kn_[0-9a-z]{8,32}$/.test(value))) violated.push('valid');
+    if (!(new RegExp('^kn_[0-9a-z]{8,32}$', 'u').test(value))) violated.push('valid');
     return violated;
 }
 
@@ -81,7 +81,7 @@ export type MakeImageId = (value: string) => Result<ImageId, InvalidImageId>;
  */
 export function checkImageId(value: string): readonly InvalidImageId['invariant'][] {
     const violated: InvalidImageId['invariant'][] = [];
-    if (!(/^img_[0-9a-z]{8,32}$/.test(value))) violated.push('valid');
+    if (!(new RegExp('^img_[0-9a-z]{8,32}$', 'u').test(value))) violated.push('valid');
     return violated;
 }
 
@@ -127,7 +127,7 @@ export type MakeProjectName = (value: string) => Result<ProjectName, InvalidProj
  */
 export function checkProjectName(value: string): readonly InvalidProjectName['invariant'][] {
     const violated: InvalidProjectName['invariant'][] = [];
-    if (!(/^[a-z0-9][a-z0-9-]{0,62}$/.test(value))) violated.push('valid');
+    if (!(new RegExp('^[a-z0-9][a-z0-9-]{0,62}$', 'u').test(value))) violated.push('valid');
     return violated;
 }
 
@@ -173,7 +173,7 @@ export type MakeItemTitle = (value: string) => Result<ItemTitle, InvalidItemTitl
  */
 export function checkItemTitle(value: string): readonly InvalidItemTitle['invariant'][] {
     const violated: InvalidItemTitle['invariant'][] = [];
-    if (!((value.length <= 40) && /^\S(.*\S)?$/.test(value))) violated.push('valid');
+    if (!((Array.from(value).length <= 40) && new RegExp('^[^ \\t\\n\\r\\f\\v](.*[^ \\t\\n\\r\\f\\v])?$', 'u').test(value))) violated.push('valid');
     return violated;
 }
 
@@ -219,7 +219,7 @@ export type MakeItemText = (value: string) => Result<ItemText, InvalidItemText>;
  */
 export function checkItemText(value: string): readonly InvalidItemText['invariant'][] {
     const violated: InvalidItemText['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 20000))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 20000))) violated.push('valid');
     return violated;
 }
 
@@ -265,7 +265,7 @@ export type MakeQuote = (value: string) => Result<Quote, InvalidQuote>;
  */
 export function checkQuote(value: string): readonly InvalidQuote['invariant'][] {
     const violated: InvalidQuote['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 500))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 500))) violated.push('valid');
     return violated;
 }
 
@@ -311,7 +311,7 @@ export type MakePerspective = (value: string) => Result<Perspective, InvalidPers
  */
 export function checkPerspective(value: string): readonly InvalidPerspective['invariant'][] {
     const violated: InvalidPerspective['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 100))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 100))) violated.push('valid');
     return violated;
 }
 
@@ -357,7 +357,7 @@ export type MakeReason = (value: string) => Result<Reason, InvalidReason>;
  */
 export function checkReason(value: string): readonly InvalidReason['invariant'][] {
     const violated: InvalidReason['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 2000))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 2000))) violated.push('valid');
     return violated;
 }
 
@@ -403,7 +403,7 @@ export type MakeStickyRef = (value: string) => Result<StickyRef, InvalidStickyRe
  */
 export function checkStickyRef(value: string): readonly InvalidStickyRef['invariant'][] {
     const violated: InvalidStickyRef['invariant'][] = [];
-    if (!(/^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$/.test(value))) violated.push('valid');
+    if (!(new RegExp('^[_a-zA-Z][_a-zA-Z0-9]*\\.[_a-zA-Z][_a-zA-Z0-9]*$', 'u').test(value))) violated.push('valid');
     return violated;
 }
 
@@ -449,7 +449,7 @@ export type MakeSessionRef = (value: string) => Result<SessionRef, InvalidSessio
  */
 export function checkSessionRef(value: string): readonly InvalidSessionRef['invariant'][] {
     const violated: InvalidSessionRef['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 100))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 100))) violated.push('valid');
     return violated;
 }
 
@@ -495,7 +495,7 @@ export type MakeMessageRef = (value: string) => Result<MessageRef, InvalidMessag
  */
 export function checkMessageRef(value: string): readonly InvalidMessageRef['invariant'][] {
     const violated: InvalidMessageRef['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 100))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 100))) violated.push('valid');
     return violated;
 }
 
@@ -541,7 +541,7 @@ export type MakeUserName = (value: string) => Result<UserName, InvalidUserName>;
  */
 export function checkUserName(value: string): readonly InvalidUserName['invariant'][] {
     const violated: InvalidUserName['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 320))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 320))) violated.push('valid');
     return violated;
 }
 
@@ -1142,6 +1142,13 @@ export interface DeletedKnowledgeItem extends KnowledgeItemCommon {
  * @see contexts/knowledge/model/item.dt:5
  */
 export type KnowledgeItem = LiveKnowledgeItem | DeletedKnowledgeItem;
+
+/**
+ * Restores a trusted KnowledgeItem value after caller-side decoding, validation and migration.
+ * This function does not validate persisted data, invariants or kind–state pairs.
+ * @see contexts/knowledge/model/item.dt:5
+ */
+export const restoreKnowledgeItem = (trusted: KnowledgeItem): KnowledgeItem => trusted;
 
 /**
  * The fields of KnowledgeItem as data for `decide`: the common fields, and the fields of each state on top of them.
@@ -2317,7 +2324,7 @@ export type MakeRetirementProposalId = (value: string) => Result<RetirementPropo
  */
 export function checkRetirementProposalId(value: string): readonly InvalidRetirementProposalId['invariant'][] {
     const violated: InvalidRetirementProposalId['invariant'][] = [];
-    if (!(/^rp_[0-9a-z]{8,32}$/.test(value))) violated.push('valid');
+    if (!(new RegExp('^rp_[0-9a-z]{8,32}$', 'u').test(value))) violated.push('valid');
     return violated;
 }
 
@@ -2363,7 +2370,7 @@ export type MakeReviewRef = (value: string) => Result<ReviewRef, InvalidReviewRe
  */
 export function checkReviewRef(value: string): readonly InvalidReviewRef['invariant'][] {
     const violated: InvalidReviewRef['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 100))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 100))) violated.push('valid');
     return violated;
 }
 
@@ -2409,7 +2416,7 @@ export type MakeEvidenceNote = (value: string) => Result<EvidenceNote, InvalidEv
  */
 export function checkEvidenceNote(value: string): readonly InvalidEvidenceNote['invariant'][] {
     const violated: InvalidEvidenceNote['invariant'][] = [];
-    if (!((value.length >= 1) && (value.length <= 500))) violated.push('valid');
+    if (!((Array.from(value).length >= 1) && (Array.from(value).length <= 500))) violated.push('valid');
     return violated;
 }
 
@@ -2645,6 +2652,13 @@ export interface DismissedRetirementProposal extends RetirementProposalCommon {
  * @see contexts/knowledge/model/retirement.dt:63
  */
 export type RetirementProposal = OpenRetirementProposal | ApprovedRetirementProposal | DismissedRetirementProposal;
+
+/**
+ * Restores a trusted RetirementProposal value after caller-side decoding, validation and migration.
+ * This function does not validate persisted data, invariants or kind–state pairs.
+ * @see contexts/knowledge/model/retirement.dt:63
+ */
+export const restoreRetirementProposal = (trusted: RetirementProposal): RetirementProposal => trusted;
 
 /**
  * The fields of RetirementProposal as data for `decide`: the common fields, and the fields of each state on top of them.

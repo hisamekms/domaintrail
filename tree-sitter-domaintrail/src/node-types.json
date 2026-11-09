@@ -16,6 +16,10 @@
           "named": true
         },
         {
+          "type": "initial",
+          "named": true
+        },
+        {
           "type": "invariant",
           "named": true
         },
@@ -29,6 +33,10 @@
         },
         {
           "type": "state",
+          "named": true
+        },
+        {
+          "type": "transition_group",
           "named": true
         }
       ]
@@ -461,6 +469,10 @@
           "named": true
         },
         {
+          "type": "outcome",
+          "named": true
+        },
+        {
           "type": "parameters",
           "named": true
         },
@@ -470,6 +482,36 @@
         },
         {
           "type": "transition",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "command_case",
+    "named": true,
+    "fields": {
+      "command": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "outcome",
+          "named": true
+        },
+        {
+          "type": "requirement",
           "named": true
         }
       ]
@@ -719,6 +761,36 @@
     }
   },
   {
+    "type": "enum_value_selector",
+    "named": true,
+    "fields": {
+      "enum": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "qualified_name",
+            "named": true
+          }
+        ]
+      },
+      "value": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "error_declaration",
     "named": true,
     "fields": {
@@ -824,6 +896,22 @@
           "named": true
         }
       ]
+    }
+  },
+  {
+    "type": "external_check",
+    "named": true,
+    "fields": {
+      "reason": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      }
     }
   },
   {
@@ -984,6 +1072,22 @@
     }
   },
   {
+    "type": "initial",
+    "named": true,
+    "fields": {
+      "state": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    }
+  },
+  {
     "type": "invariant",
     "named": true,
     "fields": {
@@ -1053,6 +1157,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "external_check",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -1298,6 +1412,116 @@
         },
         {
           "type": "integer",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "outcome",
+    "named": true,
+    "fields": {
+      "condition": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "binary_expression",
+            "named": true
+          },
+          {
+            "type": "boolean",
+            "named": true
+          },
+          {
+            "type": "call_expression",
+            "named": true
+          },
+          {
+            "type": "identifier",
+            "named": true
+          },
+          {
+            "type": "member_expression",
+            "named": true
+          },
+          {
+            "type": "not_expression",
+            "named": true
+          },
+          {
+            "type": "number",
+            "named": true
+          },
+          {
+            "type": "parenthesized_expression",
+            "named": true
+          },
+          {
+            "type": "range_expression",
+            "named": true
+          },
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "declaration": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "from": {
+        "multiple": true,
+        "required": false,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "to": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "changes_clause",
+          "named": true
+        },
+        {
+          "type": "emits_clause",
+          "named": true
+        },
+        {
+          "type": "external_check",
           "named": true
         }
       ]
@@ -1963,6 +2187,16 @@
           }
         ]
       }
+    },
+    "children": {
+      "multiple": false,
+      "required": false,
+      "types": [
+        {
+          "type": "external_check",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -2082,6 +2316,40 @@
           }
         ]
       }
+    }
+  },
+  {
+    "type": "transition_group",
+    "named": true,
+    "fields": {
+      "field": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "command_case",
+          "named": true
+        },
+        {
+          "type": "enum_value_selector",
+          "named": true
+        },
+        {
+          "type": "initial",
+          "named": true
+        }
+      ]
     }
   },
   {
@@ -2343,6 +2611,10 @@
     "named": false
   },
   {
+    "type": "::",
+    "named": false
+  },
+  {
     "type": "<",
     "named": false
   },
@@ -2368,6 +2640,10 @@
   },
   {
     "type": "?",
+    "named": false
+  },
+  {
+    "type": "@externalCheck",
     "named": false
   },
   {
@@ -2505,6 +2781,10 @@
     "named": false
   },
   {
+    "type": "initial",
+    "named": false
+  },
+  {
     "type": "integer",
     "named": true
   },
@@ -2526,7 +2806,15 @@
     "named": false
   },
   {
+    "type": "on",
+    "named": false
+  },
+  {
     "type": "or",
+    "named": false
+  },
+  {
+    "type": "outcome",
     "named": false
   },
   {
@@ -2546,11 +2834,19 @@
     "named": false
   },
   {
+    "type": "readonly",
+    "named": false
+  },
+  {
     "type": "references",
     "named": false
   },
   {
     "type": "requires",
+    "named": false
+  },
+  {
+    "type": "select",
     "named": false
   },
   {
@@ -2567,6 +2863,10 @@
   },
   {
     "type": "terms",
+    "named": false
+  },
+  {
+    "type": "transitions",
     "named": false
   },
   {

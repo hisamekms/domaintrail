@@ -90,9 +90,15 @@ export function checkPayloadNames(model: SourceModel, rules: RuleSink): void {
         const idType = id?.kind === 'id' ? id : undefined;
         for (const cmd of commandsOf(agg)) {
             const params = parameterSources(cmd);
-            const outcomes = cmd.transitions.flatMap((t) =>
+            const legacy = cmd.transitions.flatMap((t) =>
                 (cmd.factory ? [undefined] : t.from.map((r) => r.target)).flatMap((from) => t.to.map((r) => ({ from, to: r.target }))),
             );
+            const cases = agg.members.filter((m) => m.kind === 'transitionGroup').flatMap((g) => g.cases.filter((c) => c.command.text === cmd.name));
+            const named = [...cmd.outcomes, ...cases.flatMap((c) => c.outcomes)];
+            const outcomes = [
+                ...legacy,
+                ...named.flatMap((o) => (cmd.factory ? [undefined] : o.from.map((r) => r.target)).map((from) => ({ from, to: o.to.target }))),
+            ];
             const report = { cmd, idType, rules };
 
             const events = new Map<EventDecl, { at: Site; targets: Set<StateDecl | undefined> }>();
@@ -104,6 +110,14 @@ export function checkPayloadNames(model: SourceModel, rules: RuleSink): void {
                 for (const o of outcomes) if (emitApplies({ when: pattern }, o.from?.name, o.to?.name)) entry.targets.add(o.to);
                 events.set(ev, entry);
             }
+            for (const o of named)
+                for (const e of o.emits) {
+                    const ev = e.event.target;
+                    if (!ev) continue;
+                    const entry = events.get(ev) ?? { at: e.event.at, targets: new Set<StateDecl | undefined>() };
+                    entry.targets.add(o.to.target);
+                    events.set(ev, entry);
+                }
             for (const [ev, { at, targets }] of events) {
                 checkPayload(report, 'event', ev, [...params, ...aggregateSources(agg, targets)], at);
             }
@@ -118,7 +132,7 @@ export function checkPayloadNames(model: SourceModel, rules: RuleSink): void {
                       ),
                   ];
             const errors = new Map<ErrorDecl, Site>();
-            for (const r of cmd.requirements) {
+            for (const r of [...cmd.requirements, ...cases.flatMap((c) => c.requirements)]) {
                 const err = r.error.target;
                 if (err && !errors.has(err)) errors.set(err, r.error.at);
             }

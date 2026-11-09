@@ -20,6 +20,7 @@ import {
     fieldUseText,
     identityOf,
     type InvariantModel,
+    type OutcomeModel,
     invariantsOf,
     outcomeFields,
     outcomePatternText,
@@ -82,6 +83,11 @@ export function lookup(model: DomainModel, name: string): Lookup {
 
 /** One outcome of a command: from a source state to a target state (none for a factory / an aggregate without states). */
 export interface Outcome {
+    name?: string;
+    /** Kinds admitted by a group; absent for a common outcome. */
+    kinds?: readonly string[];
+    selection?: 'expression' | 'external' | 'declared' | 'single';
+    selectionText?: string;
     from?: string;
     to?: string;
     /** The events emitted for this outcome (`when` resolved), with their multiplicity. */
@@ -99,8 +105,8 @@ export function outcomesOf(agg: AggregateModel, c: CommandModel): Outcome[] {
             for (const to of t.to) if (!pairs.some(([f, g]) => f === from && g === to)) pairs.push([from, to]);
         }
     }
-    if (!pairs.length) pairs.push([undefined, undefined]);
-    return pairs.map(([from, to]) => {
+    if (!pairs.length && !c.outcomes.length && !agg.groups.some((g) => g.cases.some((x) => x.command === c.name))) pairs.push([undefined, undefined]);
+    const legacy = pairs.map(([from, to]) => {
         const fields = outcomeFields(agg, c, from, to);
         return {
             ...(from !== undefined && { from }),
@@ -113,6 +119,29 @@ export function outcomesOf(agg: AggregateModel, c: CommandModel): Outcome[] {
             drops: fields.dropped.map((f) => f.name),
         };
     });
+    const named = (outcome: OutcomeModel, kinds?: readonly string[]): Outcome[] =>
+        (c.factory ? [undefined] : outcome.from).map((from) => {
+            const fields = outcomeFields(agg, c, from, outcome.to, outcome);
+            return {
+                name: outcome.name,
+                ...(kinds && { kinds }),
+                selection: outcome.select?.kind ?? 'single',
+                ...(outcome.select && { selectionText: outcome.select.kind === 'expression' ? outcome.select.source : outcome.select.text }),
+                ...(from && { from }),
+                to: outcome.to,
+                emits: outcome.emits.map(({ event, multiplicity, lower, upper }) => ({ event, multiplicity, lower, ...(upper !== undefined && { upper }) })),
+                sets: fields.set.map((f) => f.name),
+                carries: fields.carried.map((f) => f.name),
+                drops: fields.dropped.map((f) => f.name),
+            };
+        });
+    return [
+        ...legacy,
+        ...c.outcomes.flatMap((o) => named(o)),
+        ...agg.groups.flatMap((g) =>
+            g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => named(o, g.values))),
+        ),
+    ];
 }
 
 /** Who uses an element, as dotted paths: `Sales.Order.items`, `Sales.Order.Cancelled.reason`, `Sales.Order.addItem(item)`. */
@@ -157,7 +186,9 @@ export function usedBy(model: DomainModel, el: ElementModel): UsedBy {
         typeOf: uses.filter((u) => u.field.kind !== 'owns').map(path),
         referencedBy: idUses.filter(references).map(path),
         idUsedBy: idUses.filter((u) => !references(u)).map(path),
-        emittedBy: commands.filter(({ command }) => command.emits.some((e) => isEl(e.event))).map(({ command }) => dotted(command.id)),
+        emittedBy: commands
+            .filter(({ agg, command }) => outcomesOf(agg, command).some((o) => o.emits.some((e) => isEl(e.event))))
+            .map(({ command }) => dotted(command.id)),
         returnedBy: [
             ...commands.filter(({ command }) => command.errors.some(isEl)).map(({ command }) => dotted(command.id)),
             ...verifiedTypes.filter((v) => v.verified.errors.some(isEl)).map((v) => v.id),
@@ -193,13 +224,15 @@ export type ShowJson =
     | { show: 'command'; aggregate: string; command: CommandJson };
 
 /** A command with its outcomes, and the policies that run it (`triggeredBy`, their IDs). */
-export type CommandJson = CommandModel & { outcomes: Outcome[]; triggeredBy: string[] };
+export type CommandJson = Omit<CommandModel, 'outcomes'> & { outcomes: Outcome[]; namedOutcomes: CommandModel['outcomes']; triggeredBy: string[] };
 /** An element; an aggregate with its commands as `CommandJson`. */
 export type ElementJson = Exclude<ElementModel, AggregateModel> | (Omit<AggregateModel, 'commands'> & { commands: CommandJson[] });
 
 /** A command's outcome that enters or leaves a state. */
 export interface Move {
     command: string;
+    outcome?: string;
+    kinds?: readonly string[];
     from?: string;
     to?: string;
 }
@@ -219,11 +252,20 @@ function contextSummary(model: DomainModel, name: string): ContextSummary {
 const commandJson = (model: DomainModel, agg: AggregateModel, c: CommandModel): CommandJson => ({
     ...c,
     outcomes: outcomesOf(agg, c),
+    namedOutcomes: c.outcomes,
     triggeredBy: policiesRunning(model, agg.id, c.name).map((p) => p.id),
 });
 
 function moves(agg: AggregateModel, state: string): { enteredBy: Move[]; leftBy: Move[] } {
-    const all = agg.commands.flatMap((c) => outcomesOf(agg, c).map((o) => ({ command: c.name, ...(o.from && { from: o.from }), ...(o.to && { to: o.to }) })));
+    const all = agg.commands.flatMap((c) =>
+        outcomesOf(agg, c).map((o) => ({
+            command: c.name,
+            ...(o.name && { outcome: o.name }),
+            ...(o.kinds && { kinds: o.kinds }),
+            ...(o.from && { from: o.from }),
+            ...(o.to && { to: o.to }),
+        })),
+    );
     return { enteredBy: all.filter((m) => m.to === state), leftBy: all.filter((m) => m.from === state) };
 }
 
@@ -384,7 +426,8 @@ const reactionText = (p: PolicyElement): string =>
 /** `place(id: OrderId, customer: CustomerId)` with the parameters' labels. */
 const signature = (c: CommandModel, ctx: string): string => `${c.name}(${c.params.map((p) => fieldText(p, ctx)).join(', ')})`;
 
-const outcomeName = (o: { from?: string; to?: string }): string => (o.to === undefined ? 'always' : `${o.from ?? ''} -> ${o.to}`.trim());
+const outcomeName = (o: { name?: string; outcome?: string; from?: string; to?: string }): string =>
+    `${(o.name ?? o.outcome) ? `${o.name ?? o.outcome}: ` : ''}${o.to === undefined ? 'always' : `${o.from ?? ''} -> ${o.to}`.trim()}`;
 
 const emitsText = (o: Outcome, ctx: string): string =>
     o.emits.length ? `emits ${o.emits.map((e) => `${nameFrom(ctx, e.event)}${e.multiplicity}`).join(', ')}` : 'emits nothing';
@@ -413,10 +456,12 @@ function commandLines(model: DomainModel, agg: AggregateModel, c: CommandModel, 
             `${i2}emits ${c.emits.map((e) => `${nameFrom(ctx, e.event)}${e.multiplicity}${e.when ? ` when ${outcomePatternText(e.when)}` : ''}`).join(', ')}`,
         );
     const outcomes = outcomesOf(agg, c);
-    if (detail || c.emits.some((e) => e.when)) {
+    if (detail || c.emits.some((e) => e.when) || outcomes.some((o) => o.name)) {
         lines.push(`${i2}outcomes`);
         for (const o of outcomes) {
-            lines.push(`${i2}  ${outcomeName(o)}: ${emitsText(o, ctx)}`);
+            lines.push(
+                `${i2}  ${outcomeName(o)}${o.kinds ? ` for ${o.kinds.join(' | ')}` : ''}: ${emitsText(o, ctx)}${o.selection && o.selection !== 'single' ? `; select ${o.selection}${o.selectionText ? ` (${o.selectionText})` : ''}` : ''}`,
+            );
             if (detail) {
                 const parts = [
                     `sets ${o.sets.join(', ') || '-'}`,
@@ -439,7 +484,15 @@ function commandLines(model: DomainModel, agg: AggregateModel, c: CommandModel, 
             .join(', ');
         return `${nameFrom(ctx, id)}${quoted(el.label)}${fields ? ` { ${fields} }` : ''}${at(el.location)}`;
     };
-    const events = [...new Set(c.emits.map((e) => e.event))];
+    const events = [
+        ...new Set([
+            ...c.emits.map((e) => e.event),
+            ...agg.groups.flatMap((g) =>
+                g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => o.emits.map((e) => e.event))),
+            ),
+            ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event)),
+        ]),
+    ];
     if (events.length) lines.push(`${i2}events`, ...events.map((e) => `${i2}  ${payload(e)}`));
     lines.push(c.errors.length ? `${i2}errors` : `${i2}errors none`, ...c.errors.map((e) => `${i2}  ${payload(e)}`));
     return lines;
@@ -528,6 +581,8 @@ function elementText(model: DomainModel, el: ElementModel): string[] {
         lines.push(...docLines(v.doc, '  '), `  ${v.name}${quoted(v.label)}`, ...fieldLines(v.fields, ctx, '    '), ...invariantLines(v.invariants, '    '));
     }
     if (el.kind === 'aggregate' && el.states.length) lines.push('', ...el.states.flatMap((s) => stateLines(s, ctx, '  ')));
+    if (el.kind === 'aggregate' && el.validStates.length)
+        lines.push('', ...el.validStates.map((v) => `  kind ${v.kind}: valid states ${v.states.join(', ') || 'none'}`));
     if (el.kind === 'aggregate' && el.commands.length) lines.push('', ...el.commands.flatMap((c) => commandLines(model, el, c, '  ', false)));
     lines.push('', ...usedByLines(model, el));
     return lines;

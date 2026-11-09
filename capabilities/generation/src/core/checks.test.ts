@@ -111,6 +111,22 @@ context Sales {
 }`,
 };
 
+test('portable expressions count Unicode scalars, compare Decimal exactly, and preserve regex classes', async () => {
+    const m = await generated({
+        'portable.dt': `context Portable {
+  primitive TwoScalars: String { invariant two { length(value) == 2 } }
+  primitive Big: Decimal { invariant bound { value > 9007199254740992.00 } }
+  primitive Address: String { invariant format { matches(value, "^[^@\\s]+@[^@\\s]+$") } }
+}`,
+    });
+    expect(m.Portable.checkTwoScalars('😀a')).toEqual([]);
+    expect(m.Portable.checkTwoScalars('😀')).toEqual(['two']);
+    expect(m.Portable.checkBig('9007199254740993')).toEqual([]);
+    expect(m.Portable.checkBig('9007199254740992')).toEqual(['bound']);
+    expect(m.Portable.checkAddress('a@b')).toEqual([]);
+    expect(m.Portable.checkAddress('a b@c')).toEqual(['format']);
+});
+
 const g = await generated(MODEL);
 const { Sales, Common } = g;
 const yen = (amount: string) => ({ amount, currency: 'JPY' });
