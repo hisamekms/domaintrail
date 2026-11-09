@@ -3209,6 +3209,9 @@ storming](#diagnostics-of-a-storming).
 | M025 | a context's description (`///` above `context X`) is written once across the files of the context; each later one names the first |
 | M026 | (warning) a union has a variant with fields; one whose variants have none is an `enum` |
 | M027 | (warning) a field or parameter named `<stem>Id` (`ID`; `Ids` / `IDs` for several) is not typed `String`, `UUID` or the base of the ID type when `<Stem>Id` (`<Stem>ID`) is an ID type or `<Stem>` an aggregate or entity: of its context or a shared one, else of exactly one other context (none for a field of a shared context); it takes the ID type |
+| M028 | lifecycle declarations: a selector uses one required readonly enum field, each kind has an initial state, outcomes have valid sources and targets, outcome names are unique, and choice and external-check annotations are well formed |
+| M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
+| G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |
 | L003 | (warning) different things in one scope share a Japanese name |
