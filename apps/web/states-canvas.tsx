@@ -62,6 +62,8 @@ export function StatesCanvas(props: {
     const [focused, setFocused] = useState(false);
     const canvas = mounted?.focused === focused ? mounted.canvas : null;
     const focusButton = useRef<HTMLButtonElement>(null);
+    const focusOrigin = useRef<HTMLDivElement>(null);
+    const [origin, setOrigin] = useState<DOMRect>();
     const labels = TRANSITION_LABELS.includes(savedLabels) ? savedLabels : 'both';
     const kind = selectedKind && props.kinds.some((value) => value.name === selectedKind) ? selectedKind : props.kinds[0]?.name;
     const kindName = props.kinds.find((value) => value.name === kind);
@@ -159,55 +161,62 @@ export function StatesCanvas(props: {
         setFocused(false);
         requestAnimationFrame(() => focusButton.current?.focus());
     };
+    const openFocus = (): void => {
+        setOrigin(focusOrigin.current?.getBoundingClientRect());
+        setFocused(true);
+    };
 
     return (
         <DiagramFocus
             open={focused}
             title={`${nameIn(props.mode, props.aggregate.name, props.aggregate.label)} · ${t.tabs.states}${kindName ? ` · ${nameIn(props.mode, kindName.name, kindName.label)}` : ''}`}
+            origin={origin}
             onClose={closeFocus}
         >
-            <div className="states-canvas">
-                <FlowCanvas onMount={onMount} />
-                {graph ? (
-                    <>
-                        <div className="canvas-toolbar">
-                            {props.kinds.length > 1 && (
-                                <select aria-label={t.lifecycleKind} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
-                                    {props.kinds.map((value) => (
-                                        <option key={value.name} value={value.name}>
-                                            {nameIn(props.mode, value.name, value.label)}
-                                        </option>
+            {(requestClose) => (
+                <div className="states-canvas" ref={focusOrigin}>
+                    <FlowCanvas onMount={onMount} />
+                    {graph ? (
+                        <>
+                            <div className="canvas-toolbar">
+                                {props.kinds.length > 1 && (
+                                    <select aria-label={t.lifecycleKind} value={kind} onChange={(event) => setSelectedKind(event.target.value)}>
+                                        {props.kinds.map((value) => (
+                                            <option key={value.name} value={value.name}>
+                                                {nameIn(props.mode, value.name, value.label)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                                <div className="segmented small" role="group" aria-label={t.transitionLabels}>
+                                    {TRANSITION_LABELS.map((l) => (
+                                        <button
+                                            key={l}
+                                            className={labels === l ? 'active' : ''}
+                                            aria-pressed={labels === l}
+                                            onClick={() => setLabels(l)}
+                                            data-tooltip={t.transitionLabelModes[l].hint}
+                                        >
+                                            {t.transitionLabelModes[l].label}
+                                        </button>
                                     ))}
-                                </select>
-                            )}
-                            <div className="segmented small" role="group" aria-label={t.transitionLabels}>
-                                {TRANSITION_LABELS.map((l) => (
-                                    <button
-                                        key={l}
-                                        className={labels === l ? 'active' : ''}
-                                        aria-pressed={labels === l}
-                                        onClick={() => setLabels(l)}
-                                        data-tooltip={t.transitionLabelModes[l].hint}
-                                    >
-                                        {t.transitionLabelModes[l].label}
-                                    </button>
-                                ))}
+                                </div>
                             </div>
-                        </div>
-                        <CanvasControls
-                            id={`states:${aggregateId}`}
-                            canvas={canvas}
-                            fitAll={() => canvas && fitAll(canvas, graph, true)}
-                            legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
-                            exporting={{ target: exportTarget, ...props.exportOptions }}
-                            focus={{ active: focused, onToggle: focused ? closeFocus : () => setFocused(true), triggerRef: focusButton }}
-                        />
-                        <EdgeHint canvas={canvas} view="states" />
-                    </>
-                ) : (
-                    <div className="empty">{t.noDiagram}</div>
-                )}
-            </div>
+                            <CanvasControls
+                                id={`states:${aggregateId}`}
+                                canvas={canvas}
+                                fitAll={() => canvas && fitAll(canvas, graph, true)}
+                                legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}
+                                exporting={{ target: exportTarget, ...props.exportOptions }}
+                                focus={{ active: focused, onToggle: focused ? requestClose : openFocus, triggerRef: focusButton }}
+                            />
+                            <EdgeHint canvas={canvas} view="states" />
+                        </>
+                    ) : (
+                        <div className="empty">{t.noDiagram}</div>
+                    )}
+                </div>
+            )}
         </DiagramFocus>
     );
 }

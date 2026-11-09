@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { DisplayMode, Lang } from '@domaintrail/visualization';
 import { stormingViewKey } from '@domaintrail/visualization';
 import type { StormingView, ViewPayload } from '@domaintrail/visualization/protocol';
@@ -34,25 +34,28 @@ export function useViewCamera(
     display: { mode: DisplayMode; lang: Lang },
     empty: boolean,
     marks: { readonly shown: CanvasMarks | null; readonly snapshots: readonly (readonly StormingView[])[] } = { shown: null, snapshots: [] },
-): void {
+): () => void {
     const base = current?.base ?? null;
     const { structureLevel, mapAll } = settings;
     const { graph, graphFor, cameraKey, focusKey, noneChecked, stormingShown } = viewGraph;
     const { mode, lang } = display;
     const cameras = useRef(new Map<string, Camera>());
     const shownView = useRef<string | null>(null);
+    const shownCanvas = useRef<DiagramCanvas | null>(null);
     /** The key of the marks last drawn on a storming view: new ones may move the camera. */
     const marksDrawn = useRef<string | null>(null);
     const { shown: turn, snapshots } = marks;
 
     useEffect(() => {
         if (!canvas || !current) return;
+        const replacedCanvas = shownCanvas.current !== null && shownCanvas.current !== canvas;
         const shows = canvasShows(view.kind, empty, !!graph);
         if (shows === 'covered') return;
+        shownCanvas.current = canvas;
         const compact = graph?.spacing === 'compact';
         const key = isCanvas(view) ? `${cameraKey(view)}${compact ? ':compact' : ''}` : null;
-        if (key && shownView.current && shownView.current !== key) cameras.current.set(shownView.current, canvas.getCamera());
-        const switched = shownView.current !== key;
+        if (!replacedCanvas && key && shownView.current && shownView.current !== key) cameras.current.set(shownView.current, canvas.getCamera());
+        const switched = shownView.current !== key || replacedCanvas;
         if (shows === 'nothing' || !key || !graph) {
             // not marked as shown, so that the graph is fitted once it arrives (focused views load on request); an empty
             // view of the canvas forgets the shown one, so that the next view is shown anew (a storming view fitted)
@@ -72,7 +75,7 @@ export function useViewCamera(
             : buildScene(graph, { diff: current.diff, diagnostics: current.diagnostics, previous: before, mode, lang });
         canvas.show(scene);
         const saved = cameras.current.get(key);
-        const move = cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
+        const move = replacedCanvas && saved ? 'restore' : cameraMove({ switched, storming: view.kind === 'storming', saved: !!saved });
         if (move === 'restore' && saved) canvas.setCamera(saved);
         else if (move === 'fitAll') fitAll(canvas, graph);
         // larger text (overview) allows zooming further out while staying readable
@@ -94,4 +97,9 @@ export function useViewCamera(
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, current, base, view, mode, structureLevel, focusKey, graph, mapAll, noneChecked, lang, stormingShown, empty, turn, snapshots]);
+
+    /** Save before moving the canvas into or out of the full-tab dialog, which recreates its React Flow store. */
+    return useCallback(() => {
+        if (canvas && shownView.current) cameras.current.set(shownView.current, canvas.getCamera());
+    }, [canvas]);
 }

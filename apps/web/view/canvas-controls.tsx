@@ -175,7 +175,7 @@ function useCanvasKeys(active: boolean, run: (action: CanvasShortcut) => void): 
         if (!active) return;
         const onKey = (e: KeyboardEvent): void => {
             const focused = document.activeElement;
-            if (focused?.closest('.states-canvas, dialog')) return;
+            if (focused?.closest('.states-canvas, dialog:not(.diagram-focus)')) return;
             const action = canvasShortcut(e, takesText(focused));
             if (!action) return;
             e.preventDefault();

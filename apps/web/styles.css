@@ -4172,9 +4172,39 @@ svg.chat-launcher-mark {
     color: var(--text);
     display: flex;
     flex-direction: column;
+    transform-origin: top left;
+    transition:
+        transform var(--motion-diagram-focus) var(--motion-ease-standard),
+        opacity var(--motion-diagram-focus) var(--motion-ease-standard);
 }
 .diagram-focus::backdrop {
     background: var(--bg);
+    opacity: 1;
+    transition: opacity var(--motion-diagram-focus) var(--motion-ease-standard);
+}
+.diagram-focus.closing {
+    transform: translate(var(--diagram-origin-x, 0px), var(--diagram-origin-y, 0px))
+        scale(var(--diagram-origin-scale-x, 0.98), var(--diagram-origin-scale-y, 0.98));
+    opacity: 0;
+}
+.diagram-focus.closing::backdrop {
+    opacity: 0;
+}
+@starting-style {
+    .diagram-focus[open] {
+        transform: translate(var(--diagram-origin-x, 0px), var(--diagram-origin-y, 0px))
+            scale(var(--diagram-origin-scale-x, 0.98), var(--diagram-origin-scale-y, 0.98));
+        opacity: 0;
+    }
+    .diagram-focus[open]::backdrop {
+        opacity: 0;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .diagram-focus,
+    .diagram-focus::backdrop {
+        transition: none;
+    }
 }
 .diagram-focus-header {
     flex: none;
@@ -4189,6 +4219,9 @@ svg.chat-launcher-mark {
 .diagram-focus-body {
     flex: 1;
     min-height: 0;
+}
+.diagram-focus-body > .view-area {
+    height: 100%;
 }
 .canvas-toolbar {
     position: absolute;
@@ -4278,6 +4311,8 @@ svg.chat-launcher-mark {
     /* a dialog appearing / closing */
     --motion-dialog-in: 160ms;
     --motion-dialog-out: 100ms;
+    /* a diagram growing to fill the browser tab and returning to its place */
+    --motion-diagram-focus: 220ms;
     /* small changes in place: the legend folding, the tree's branches */
     --motion-medium: 180ms;
     /* a chat row growing to its new content (the AI's card turning into its answer), the content fading in */
@@ -4296,6 +4331,7 @@ svg.chat-launcher-mark {
         --motion-pop: 0ms;
         --motion-dialog-in: 0ms;
         --motion-dialog-out: 0ms;
+        --motion-diagram-focus: 0ms;
         --motion-medium: 0ms;
         --motion-grow: 0ms;
         --motion-canvas-in: 0ms;
