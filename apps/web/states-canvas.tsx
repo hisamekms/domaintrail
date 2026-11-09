@@ -8,7 +8,7 @@ import { usePersistentState } from './shared/layout';
 import { buildScene } from './render';
 import { applyTheme, type Theme } from './theme';
 import { CanvasControls, EdgeHint } from './view/canvas-controls';
-import { useCenterOnResize } from './view/center';
+import { centeredCamera, isLaidOut, useCenterOnResize, type Size } from './view/center';
 import { useCompactGraph } from './view/compact';
 import type { ExportOptions, ExportTarget } from './view/export';
 import { exportFileName, sheetHeading, type SheetSubject } from './view/sheet';
@@ -71,9 +71,11 @@ export function StatesCanvas(props: {
     const graph = useCompactGraph((kind ? props.statesByKind?.[key] : props.graphs)?.[labels], props.compact);
     const previous = graph?.spacing === 'compact' ? undefined : (kind ? props.previousByKind?.[key] : props.previous)?.[labels];
     /** The aggregate's camera key: its compact layout has a camera of its own. */
-    const cameraKey = `${graph?.spacing === 'compact' ? `${key}:compact` : key}${focused ? ':focus' : ''}`;
+    const cameraKey = graph?.spacing === 'compact' ? `${key}:compact` : key;
     /** The camera key shown (set once it is restored or fitted). */
     const shown = useRef<string | null>(null);
+    const shownCanvas = useRef<DiagramCanvas | null>(null);
+    const moving = useRef<{ key: string; camera: Camera; size: Size } | null>(null);
 
     useCenterOnResize(canvas);
     useEffect(() => {
@@ -84,10 +86,10 @@ export function StatesCanvas(props: {
         if (!canvas) return;
         const unwatch = canvas.watch(() => {
             const camera = canvas.getCamera();
-            if (shown.current === cameraKey) cameras.set(cameraKey, camera);
+            if (shown.current === cameraKey && moving.current?.key !== cameraKey) cameras.set(cameraKey, camera);
         });
         return () => {
-            if (shown.current === cameraKey) cameras.set(cameraKey, canvas.getCamera());
+            if (shown.current === cameraKey && moving.current?.key !== cameraKey) cameras.set(cameraKey, canvas.getCamera());
             unwatch();
         };
     }, [canvas, cameraKey]);
@@ -95,6 +97,8 @@ export function StatesCanvas(props: {
     // Draw the graph; restore the aggregate's camera, or fit the first time it is shown.
     useEffect(() => {
         if (!canvas) return;
+        const replacedCanvas = shownCanvas.current !== canvas;
+        shownCanvas.current = canvas;
         if (!graph) {
             canvas.clear();
             shown.current = null;
@@ -111,13 +115,17 @@ export function StatesCanvas(props: {
             }),
         );
         let frame: number | undefined;
-        if (shown.current !== cameraKey) {
-            const saved = cameras.get(cameraKey);
+        if (shown.current !== cameraKey || replacedCanvas) {
+            const transfer = moving.current?.key === cameraKey ? moving.current : null;
+            const saved = transfer?.camera ?? cameras.get(cameraKey);
             // A diagram moved between the detail and the dialog gets its size after the new canvas mounts.
             frame = requestAnimationFrame(() => {
                 canvas.measure();
-                if (saved) canvas.setCamera(saved);
+                const element = canvas.container();
+                const size = { w: element.clientWidth, h: element.clientHeight };
+                if (saved) canvas.setCamera(transfer && isLaidOut(size) ? centeredCamera(saved, transfer.size, size) : saved);
                 else fitAll(canvas, graph);
+                if (transfer) moving.current = null;
             });
             shown.current = cameraKey;
             if (props.selected) highlightElement(canvas, props.selected);
@@ -158,13 +166,22 @@ export function StatesCanvas(props: {
         };
     };
     const closeFocus = (): void => {
+        saveFocusCamera();
         setFocused(false);
         requestAnimationFrame(() => focusButton.current?.focus());
     };
     const openFocus = (): void => {
+        saveFocusCamera();
         setOrigin(focusOrigin.current?.getBoundingClientRect());
         setFocused(true);
     };
+    function saveFocusCamera(): void {
+        if (!canvas) return;
+        const element = canvas.container();
+        const camera = canvas.getCamera();
+        cameras.set(cameraKey, camera);
+        moving.current = { key: cameraKey, camera, size: { w: element.clientWidth, h: element.clientHeight } };
+    }
 
     return (
         <DiagramFocus
