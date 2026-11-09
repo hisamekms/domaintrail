@@ -389,22 +389,40 @@ export function quote(text: string): string {
     return `'${JSON.stringify(text).slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
 }
 
-/** A regular expression literal for a pattern written as in JavaScript; `new RegExp(…)` when a literal cannot hold it. */
+/** Translate portable shorthand classes without nesting classes or changing escaped backslashes. */
+export function portableRegexPattern(pattern: string): string {
+    const classes: Record<string, [string, string]> = {
+        d: ['[0-9]', '0-9'],
+        D: ['[^0-9]', ''],
+        s: ['[ \\t\\n\\r\\f\\v]', ' \\t\\n\\r\\f\\v'],
+        S: ['[^ \\t\\n\\r\\f\\v]', ''],
+        w: ['[A-Za-z0-9_]', 'A-Za-z0-9_'],
+        W: ['[^A-Za-z0-9_]', ''],
+    };
+    let inClass = false;
+    let out = '';
+    for (let i = 0; i < pattern.length; i++) {
+        const char = pattern[i];
+        if (char === '\\') {
+            const next = pattern[++i];
+            if (next === undefined) throw new Error('Trailing backslash in regex');
+            const replacement = classes[next];
+            if (replacement) {
+                if (inClass && !replacement[1]) throw new Error(`\\${next} is not portable inside a character class`);
+                out += replacement[inClass ? 1 : 0];
+            } else out += `\\${next}`;
+        } else {
+            if (char === '[' && !inClass) inClass = true;
+            else if (char === ']' && inClass) inClass = false;
+            out += char;
+        }
+    }
+    return out;
+}
+
+/** A Unicode-aware JavaScript regex for the portable subset. */
 function regex(pattern: string): string {
-    // The portable subset uses ASCII whitespace/digit classes, with Unicode scalar values for '.' and quantifiers.
-    const portable = pattern.replace(
-        /\\[dDsSwW]/g,
-        (escape) =>
-            ({
-                '\\d': '[0-9]',
-                '\\D': '[^0-9]',
-                '\\s': '[ \\t\\n\\r\\f\\v]',
-                '\\S': '[^ \\t\\n\\r\\f\\v]',
-                '\\w': '[A-Za-z0-9_]',
-                '\\W': '[^A-Za-z0-9_]',
-            })[escape] ?? escape,
-    );
-    return `new RegExp(${quote(portable)}, 'u')`;
+    return `new RegExp(${quote(portableRegexPattern(pattern))}, 'u')`;
 }
 
 /** A scope with the fields of an element, read from `subject`. */

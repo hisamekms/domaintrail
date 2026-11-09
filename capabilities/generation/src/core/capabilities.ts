@@ -1,5 +1,6 @@
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
+import { portableRegexPattern } from './checks.js';
 
 /** Checks target-specific expression support before any generated file is written. */
 export function targetCapabilityDiagnostics(model: DomainModel, target: 'ts'): Diagnostic[] {
@@ -31,7 +32,7 @@ export function targetCapabilityDiagnostics(model: DomainModel, target: 'ts'): D
                     report(`The regex '${pattern}' uses a construct outside DomainTrail's portable regex subset.`);
                 } else {
                     try {
-                        new RegExp(pattern, 'u');
+                        new RegExp(portableRegexPattern(pattern), 'u');
                     } catch {
                         report(`The regex '${pattern}' cannot be reproduced by the TypeScript target.`);
                     }
