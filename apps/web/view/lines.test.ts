@@ -33,7 +33,7 @@ describe('what a line says (the approved wording)', () => {
     test('問い', () => {
         expect(say('question')).toBe('「B」への問い');
         expect(say('undecidedIssuer')).toBe('「B」を誰が行うかはまだ決まっていない');
-        expect(say('undecidedHandler')).toBe('「B」を誰が処理するかはまだ決まっていない');
+        expect(say('undecidedHandler')).toBe('「B」を何が処理するかはまだ決まっていない');
     });
     test('every relation has its English words', () => {
         for (const kind of Object.keys(ja.lines.relations) as LineRelation[]) expect(lineWords(en, { kind, names: ['N'] }, 'A', 'B')).not.toBe('');
@@ -68,7 +68,7 @@ describe('the lines of a storming, as the canvas says them', () => {
   command Notify "知らせる" { handledBy Bank emits Done }
   policy Settle "精算する" { on Paid reads Board issues Close by Clerk }
   policy Inform "終わったら知らせる" { on Done reads Board issues Notify }
-  hotspot Who "誰が処理する？" { on Ask }
+  hotspot Who "何が処理する？" { on Ask }
   timeline T "通常" { Placed Paid Done }
 }
 `,
@@ -92,7 +92,7 @@ describe('the lines of a storming, as the canvas says them', () => {
             '「係」がポリシー「精算する」に従って動く',
             '「受け付けた」を受けて「係」が動く',
             '「問い合わせる」への問い',
-            '「問い合わせる」を誰が処理するかはまだ決まっていない',
+            '「問い合わせる」を何が処理するかはまだ決まっていない',
         ])
             expect([...said]).toContain(words);
         // a read model goes to whoever decides, never to a command: the issuer, the actor applying a policy by hand, or
