@@ -11,6 +11,7 @@ export const RUNTIME_NAMES = [
     'ok',
     'err',
     'decide',
+    'decideNamed',
     'Decide',
     'Shape',
     'NoChanges',
@@ -23,6 +24,7 @@ export const RUNTIME_NAMES = [
     'sameList',
     'distinct',
     'parseDecimal',
+    'decimalCompare',
 ] as const;
 
 /** Discriminant property of generated event / error types. */

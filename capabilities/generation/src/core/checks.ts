@@ -171,10 +171,13 @@ const strip = (t: Ty): Ty => (t.k === 'opt' ? t.inner : t);
 function scalar(b: Binding): string {
     const t = strip(b.ty); // an optional value is guarded by exists(...) (M009)
     const p = primOf(t);
-    if (p === 'Decimal' && !(t.k === 'prim' && t.literal)) return `Number(${b.js})`;
     if (p === 'Timestamp') return `${b.js}.getTime()`;
     return b.js;
 }
+
+const isDecimal = (b: Binding): boolean => primOf(strip(b.ty)) === 'Decimal';
+const compare = (a: Binding, b: Binding, op: string): string =>
+    isDecimal(a) || isDecimal(b) ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0` : `${scalar(a)} ${op} ${scalar(b)}`;
 
 export class ExprCompiler {
     /** Counter of temporaries (`$0`, `$1`, …), which no DSL name can collide with. */
@@ -229,7 +232,7 @@ export class ExprCompiler {
         if (s.k === 'struct' || s.k === 'union') return `${this.env.valueRef(s.el.id, equalName(s.el))}(${a}, ${b})`;
         const pa = primOf(s);
         const pb = primOf(strip(u));
-        if (pa === 'Decimal' || pb === 'Decimal') return `${scalar({ js: a, ty: t })} === ${scalar({ js: b, ty: u })}`;
+        if (pa === 'Decimal' || pb === 'Decimal') return `decimalCompare(String(${a}), String(${b})) === 0`;
         if (pa === 'Timestamp') return `${a}.getTime() === ${b}.getTime()`;
         return `${a} === ${b}`;
     }
@@ -266,7 +269,7 @@ export class ExprCompiler {
             case 'int':
                 return { js: e.value < 0 ? `(${e.value})` : String(e.value), ty: { k: 'prim', name: 'Int', literal: true } };
             case 'decimal':
-                return { js: e.value.startsWith('-') ? `(${e.value})` : e.value, ty: { k: 'prim', name: 'Decimal', literal: true } };
+                return { js: quote(e.value), ty: { k: 'prim', name: 'Decimal', literal: true } };
             case 'string':
                 return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true } };
             case 'name':
@@ -278,15 +281,17 @@ export class ExprCompiler {
             case 'exists':
                 return wrapped(`${this.compile(e.operand, scope).js} !== undefined`);
             case 'count':
-            case 'length':
-                return { js: `${this.compile(e.k === 'count' ? e.collection : e.operand, scope).js}.length`, ty: { k: 'prim', name: 'Int' } };
+            case 'length': {
+                const value = this.compile(e.k === 'count' ? e.collection : e.operand, scope);
+                return { js: e.k === 'length' ? `Array.from(${value.js}).length` : `${value.js}.length`, ty: { k: 'prim', name: 'Int' } };
+            }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
             case 'range': {
                 const v = this.compile(e.operand, scope);
                 const lo = this.compile(e.lower, scope);
                 const hi = this.compile(e.upper, scope);
-                return wrapped(`${scalar(lo)} <= ${scalar(v)} && ${scalar(v)} <= ${scalar(hi)}`);
+                return wrapped(`${compare(lo, v, '<=')} && ${compare(v, hi, '<=')}`);
             }
             case 'quantifier': {
                 const c = this.compile(e.collection, scope);
@@ -335,7 +340,7 @@ export class ExprCompiler {
                     case 'le':
                     case 'gt':
                     case 'ge':
-                        return wrapped(`${scalar(l)} ${BINARY_OP_TEXT[e.op]} ${scalar(r)}`);
+                        return wrapped(compare(l, r, BINARY_OP_TEXT[e.op]));
                 }
             }
         }
@@ -386,8 +391,20 @@ export function quote(text: string): string {
 
 /** A regular expression literal for a pattern written as in JavaScript; `new RegExp(…)` when a literal cannot hold it. */
 function regex(pattern: string): string {
-    if (pattern === '' || /[\n\r\u2028\u2029]/.test(pattern) || /(^|[^\\])(\\\\)*\//.test(pattern)) return `new RegExp(${quote(pattern)})`;
-    return `/${pattern}/`;
+    // The portable subset uses ASCII whitespace/digit classes, with Unicode scalar values for '.' and quantifiers.
+    const portable = pattern.replace(
+        /\\[dDsSwW]/g,
+        (escape) =>
+            ({
+                '\\d': '[0-9]',
+                '\\D': '[^0-9]',
+                '\\s': '[ \\t\\n\\r\\f\\v]',
+                '\\S': '[^ \\t\\n\\r\\f\\v]',
+                '\\w': '[A-Za-z0-9_]',
+                '\\W': '[^A-Za-z0-9_]',
+            })[escape] ?? escape,
+    );
+    return `new RegExp(${quote(portable)}, 'u')`;
 }
 
 /** A scope with the fields of an element, read from `subject`. */
