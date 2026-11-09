@@ -2,9 +2,9 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { contextNames, formatDomain } from '@domaintrail/modeling';
+import { contextNames, formatDomain, generationGateDiagnostics } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
-import { generateTypeScript, policyModes, staysInside, testsWarnings } from '@domaintrail/generation';
+import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
@@ -134,10 +134,22 @@ async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysi
     };
 }
 
-async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport): Promise<Analysis> {
+async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport, forGeneration = false, target?: 'ts'): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
-    const checked = await journeyCheck(root, await analyze(sources));
+    const analyzed = await analyze(sources);
+    const gateDiagnostics = [
+        ...(forGeneration && analyzed.sourceModel ? generationGateDiagnostics(analyzed.sourceModel) : []),
+        ...(target && analyzed.model ? targetCapabilityDiagnostics(analyzed.model, target) : []),
+    ];
+    const gated = gateDiagnostics.length
+        ? {
+              ...analyzed,
+              diagnostics: [...analyzed.diagnostics, ...gateDiagnostics].sort(compareDiagnostics),
+              ok: analyzed.ok && !gateDiagnostics.some((d) => d.severity === 'error'),
+          }
+        : analyzed;
+    const checked = await journeyCheck(root, gated);
     // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
     const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
@@ -204,6 +216,7 @@ of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when yo
     program
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
+        .option('--for-generation', 'also reject decisions that code generation cannot enforce')
         .addHelpText(
             'after',
             `
@@ -219,13 +232,14 @@ Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is fo
 Examples:
   dt check
   dt check --format json
+  dt check --for-generation
   dt -r domain check
   dt -c config/domaintrail.jsonc check`,
         )
         .addOption(formatOption())
-        .action(async (opts: { format: Format }) => {
+        .action(async (opts: { format: Format; forGeneration?: boolean }) => {
             if (opts.format === 'json') report = {};
-            const a = await runCheck(await config(), io, deps, report);
+            const a = await runCheck(await config(), io, deps, report, opts.forGeneration);
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
         });
 
@@ -238,7 +252,7 @@ Examples:
         .addHelpText(
             'after',
             `
-Runs check first and writes nothing if the model has errors (exit 1). Errors in .dtes files are reported but do not
+Runs check --for-generation first and writes nothing if the model has errors (exit 1). Errors in .dtes files are reported but do not
 block generation, which reads the .dt files only. Files generated before are replaced, and those
 left over from earlier runs (a moved output directory, a removed context) are deleted; other files are never touched.
 --out replaces generate.ts.out only: contexts listed in generate.ts.contexts keep their own directories. Like the
@@ -267,7 +281,7 @@ Examples:
             if (opts.out !== undefined && !staysInside(opts.out)) {
                 throw new ConfigError(`--out must stay inside ${cfg.root} (the directory of the config file, else the root): '${opts.out}'`);
             }
-            const a = await runCheck(cfg, io, deps, report);
+            const a = await runCheck(cfg, io, deps, report, true, 'ts');
             if (a.files.length === 0) {
                 exitCode = 1; // reported by runCheck
                 return;
