@@ -311,7 +311,7 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "an item of a menu (role=menuitem): the menu's own row, named by what it does; the menu is opened by an open button",
     },
     'view/export-menu.tsx toolbar-button': {
-        count: 2,
+        count: 1,
         reason: "the view's chrome (the toolbar, the canvas controls, the app bar): labels collapse to icons by container queries; view settings, not session actions",
     },
     'view/lines.tsx line-end-button': {
