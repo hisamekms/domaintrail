@@ -40,6 +40,14 @@ const BASE = `
 `;
 
 describe('kind-specific lifecycle', () => {
+    test('keeps a stateless create command in the legacy command model', async () => {
+        const a = await checkSales('id TokenId: UUID aggregate Token { id: TokenId create command make(id: TokenId) }');
+        expect(codes(a)).toEqual([]);
+        const aggregate = a.model!.elements.find((e) => e.kind === 'aggregate')!;
+        if (aggregate.kind !== 'aggregate') throw new Error('aggregate missing');
+        expect(aggregate.commands[0]?.legacy).toBe(true);
+    });
+
     test('parses, resolves and derives valid states and applicable outcomes', async () => {
         const a = await checkSales(BASE);
         expect(codes(a)).toEqual([]);
