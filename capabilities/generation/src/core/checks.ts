@@ -543,7 +543,7 @@ export class CheckWriter {
                 ...(agg.states.length ? [matchesAny(subject, 'state', o.from)] : []),
                 ...(group && agg.lifecycleField ? [matchesAny(subject, agg.lifecycleField, group.values)] : []),
             ].filter((guard): guard is string => guard !== undefined);
-            return `${o.name}: ${guards.length ? `(${guards.join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
+            return `${o.name}: ${guards.length ? `(${guards.map((guard) => `(${guard})`).join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
         });
         const body = `return { ${choices.join(', ')} };`;
         lines.push(`export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`);

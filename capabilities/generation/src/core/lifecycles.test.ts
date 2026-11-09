@@ -267,3 +267,21 @@ test('named requirement and choice expressions resolve fields of their source st
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('choice guards preserve grouping when an outcome has several source states', async () => {
+    const source = SOURCE.replace('outcome collected: Assigned -> CollectDone', 'outcome collected: Unassigned | Assigned -> CollectDone');
+    const result = await check({ 'sales.dt': source });
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const files = generateTypeScript(result.model!);
+    const code = files.find((f) => f.path === 'Sales.ts')!.content;
+    expect(code).toContain("((request.state === 'Unassigned' || request.state === 'Assigned') && (request.kind === 'COLLECT'))");
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-choice-guard-'));
+    try {
+        for (const file of files) await Bun.write(path.join(dir, file.path), file.content);
+        const sales = await import(path.join(dir, 'Sales.ts'));
+        expect(sales.checkCompleteRequestChoice({})({ kind: 'DROP_OFF', state: 'Assigned' })).toEqual({ collected: false, received: true });
+        expect(sales.checkCompleteRequestChoice({})({ kind: 'COLLECT', state: 'Unassigned' })).toEqual({ collected: true, received: false });
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
