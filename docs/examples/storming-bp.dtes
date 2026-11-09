@@ -1,0 +1,15 @@
+storming Fulfillment "注文の履行" {
+  event OrderPlaced "注文された"
+  event OrderApproved "注文が承認された"
+  event StockReserved "在庫が確保された"
+  event ParcelDelivered "荷物が届いた"
+  event AuditRecorded "監査が記録された"
+
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderApproved
+    StockReserved
+    ParcelDelivered
+    AuditRecorded
+  }
+}

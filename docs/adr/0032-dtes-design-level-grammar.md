@@ -77,7 +77,7 @@ and six rules are new:
 | S006 | a relation the element kind does not take | per case: a command's `issues` → a policy between; a command's `on` → a policy (amended by §14: a command takes `on` when an actor issues it); a policy's `by`/`emits`/`handledBy`/`reads` → where it belongs; anything on an actor, external, aggregate → write it in the command |
 | S008 | a policy without `on` or `issues` | add it, or (not decided) a hotspot `on` the policy |
 | S023 | `actor X` or `target X` in a body (v0.1) | `write by X` / `write handledBy X` (`dt migrate dtes` rewrites them); outside a command: remove it |
-| S024 | a command without its issuer (`by`, or a policy that `issues` it), without `handledBy`, or without `emits` | add what is decided; *don't guess*: add `hotspot <Id> "誰が処理する？" { on <command> }` |
+| S024 | a command without its issuer (`by`, or a policy that `issues` it), without `handledBy`, or without `emits` | add what is decided; *don't guess*: add `hotspot <Id> "何が処理する？" { on <command> }` |
 | S025 | a command a policy issues that also has `by` | remove `by`; a manual path is another command |
 | S026 | one relation written twice (`emits A` twice, `emits A, A`) | remove the second |
 | S027 | an actor, external system, aggregate or read model that no relation names | name it where it takes part, or remove it, or (not decided) a hotspot `on` it |
@@ -164,12 +164,12 @@ remain (commands without `handledBy`), and no S025, S027 or S028.
 - **Gaps only at Design Level, and what takes part.** S027 runs only when the storming has a command or a policy. An
   element's own relations count as taking part: a read model fed `from` events and read by nobody (one people only
   look at) is valid.
-- **The hotspot S024 suggests** asks everything that is missing (「誰が発行し、誰が処理する？結果は？」) under an ID no
+- **The hotspot S024 suggests** asks everything that is missing (「誰が発行し、何が処理する？結果は？」; 「誰が処理」 until 2026-11-08: a handler is an aggregate or an external system, not a person) under an ID no
   declaration has (`<Command>Open`, else `<Command>Open2`, …), so that following the hint never makes an S001.
 - **A hotspot asks about its first `on` only** (the one that is an edge; a second is S004).
 - **Silenced gaps stay visible** (`designGaps` / `openGaps` in `contexts/storming`): `dt check` prints
   「n element(s) incomplete under open hotspots: …」 before its summary, and the Live View draws, beside each note of
-  the command, the empty slot of an undecided issuer or handler (`RenderGapNode`, a dashed note 「誰が処理する？」 whose
+  the command, the empty slot of an undecided issuer or handler (`RenderGapNode`, a dashed note 「何が処理する？」 whose
   selection selects the hotspot).
 - **A policy may be `by` an actor** (a rule a person applies by hand), drawn as a command's issuer is, above the policy.
   A command a policy issues still has no `by` (S025). (Amended by §12: when the policy has a `reads`, the actor looks at

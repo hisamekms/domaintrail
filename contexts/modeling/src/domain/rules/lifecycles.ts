@@ -81,7 +81,11 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                 if (!c.command.target) continue;
                 if (!commands.includes(c.command.target)) rules.error('M028', `'on ${c.command.text}' must reference a command of '${agg.name}'.`, c.at);
                 if (c.command.target.factory && c.requirements.length)
-                    rules.error('M028', `Create command '${c.command.text}' cannot have group-specific requirements because its kind is known only after creation.`, c.requirements[0]!.at);
+                    rules.error(
+                        'M028',
+                        `Create command '${c.command.text}' cannot have group-specific requirements because its kind is known only after creation.`,
+                        c.requirements[0]!.at,
+                    );
             }
         }
 

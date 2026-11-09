@@ -62,7 +62,9 @@ describe('generation gate CLI', () => {
     });
 
     test('a fully expressed model passes the generation gate', async () => {
-        const dir = await project(DECLARED.replace('invariant decidedElsewhere "The caller must check the business rule."', 'invariant decidedElsewhere { true }'));
+        const dir = await project(
+            DECLARED.replace('invariant decidedElsewhere "The caller must check the business rule."', 'invariant decidedElsewhere { true }'),
+        );
         const result = await run(dir, 'check', '--for-generation', '--format', 'json');
         expect(result.code).toBe(0);
         expect(JSON.parse(result.out.join('\n')).summary.errors).toBe(0);

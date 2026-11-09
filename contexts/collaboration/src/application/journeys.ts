@@ -136,6 +136,17 @@ export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
                     const fact = actFact({ act, before, ...(current !== undefined && { current }), ...(labels && { labels }) });
                     if (!fact) return;
                     recordAct(stores, ids.newId(), { session: active.value, by: actor.participant, fact, at });
+                    if (fact.kind === 'GoalChanged' && fact.from === 'BigPicture' && fact.to === 'DesignLevel') {
+                        // A deterministic dt-authored note under the AI's name: it never calls the answerer or edits
+                        // .dtes. The structured invitation actions in the UI draft an explicit change request.
+                        const invitation =
+                            language === 'En'
+                                ? `Shall we explore ${fact.journey.label} at Design Level by drawing small provisional ideas together? Choose a scope below, then send the draft request. Or choose Later. I will not edit the .dtes until you ask.`
+                                : `「${fact.journey.label}」をデザインレベルに進めますか？ 小さな仮案を .dtes に描き、図を見ながら一緒に直します。下から対象を選び、依頼文を送ってください。「あとで」も選べます。依頼するまでは編集しません。`;
+                        const key = Collaboration.makeGuideJourneyKey(act.journey);
+                        if (key.ok)
+                            postCompletionNote(stores, ids.newId(), active.value, invitation, { journey: key.value, targets: [], invitation: true }, at);
+                    }
                     if (fact.kind === 'StateChanged' && fact.state === 'Done') {
                         const ref = before && journeyOf(before, act.journey);
                         const note = completionNote({

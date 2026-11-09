@@ -472,7 +472,10 @@ type Res =
     | { ok: false; error: { type?: string } };
 
 /** The one outcome of a success value, as `[key, outcome]`. */
-function theOutcome(name: string, value: Res & { ok: true }): [string, { aggregate: { state?: string; [key: string]: unknown }; events: Record<string, unknown> }] {
+function theOutcome(
+    name: string,
+    value: Res & { ok: true },
+): [string, { aggregate: { state?: string; [key: string]: unknown }; events: Record<string, unknown> }] {
     const entries = Object.entries(value.value).filter((e): e is [string, NonNullable<(typeof e)[1]>] => e[1] !== undefined);
     if (entries.length !== 1) fail(`${name} returned ${entries.length} outcomes (${entries.map(([k]) => k).join(', ')}); a success value holds exactly one.`);
     return entries[0];
@@ -509,9 +512,11 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
                 const [name, selected] = theOutcome(s.name, r);
                 const from = s.factory ? undefined : (args[0] as { state?: string }).state;
                 const kind = s.kindField ? (s.factory ? selected.aggregate[s.kindField] : (args[0] as Record<string, unknown>)[s.kindField]) : undefined;
-                const possible = s.outcomes!.filter((o) =>
-                    (!o.from.length || (from !== undefined && o.from.includes(from))) &&
-                    (!o.kinds.length || (typeof kind === 'string' && o.kinds.includes(kind))));
+                const possible = s.outcomes!.filter(
+                    (o) =>
+                        (!o.from.length || (from !== undefined && o.from.includes(from))) &&
+                        (!o.kinds.length || (typeof kind === 'string' && o.kinds.includes(kind))),
+                );
                 const matching = possible.find((o) => o.name === name);
                 if (!matching) fail(`${describe(args)} returned outcome '${name}', which is unavailable for kind ${show(kind)} and source ${show(from)}.`);
                 if (s.stateful && selected.aggregate.state !== matching.to)
@@ -519,8 +524,7 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
                 if (s.kindField && !s.factory && selected.aggregate[s.kindField] !== kind)
                     fail(`${describe(args)} changed readonly kind '${s.kindField}' from ${show(kind)} to ${show(selected.aggregate[s.kindField])}.`);
                 const valid = s.validStates?.find((v) => v.kind === kind);
-                if (valid && !valid.states.includes(matching.to))
-                    fail(`${describe(args)} returned invalid kind–state pair ${show(kind)} / '${matching.to}'.`);
+                if (valid && !valid.states.includes(matching.to)) fail(`${describe(args)} returned invalid kind–state pair ${show(kind)} / '${matching.to}'.`);
                 if (s.choices) {
                     const evaluate = (input: unknown[]) => (s.choices as (...a: unknown[]) => Readonly<Record<string, boolean>>)(...input);
                     const firstInput = structuredClone(args) as unknown[];

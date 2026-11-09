@@ -219,31 +219,30 @@ export const triageCommands: Collaboration.TriageCommands = {
     }),
 
     // a cascade stage's answer: decided when it knows (or after the last stage), still pending otherwise
-    record: decideNamed<Collaboration.RecordTriageDecision>()(Collaboration.TriageShape, { Pending: 'Pending', Decided: 'Decided' },
-        (triage, params) => {
-            const check = Collaboration.checkRecordTriageRequiresWith({ inOrder: (t, p) => inCascadeOrder(t.steps, p.step.stage) });
-            switch (check(triage, params)) {
-                case 'cascadeStage':
-                case 'mechanicalDecidesNeither':
-                    return err({ type: 'InvalidTriageStep' });
-                case 'inOrder':
-                    return err({ type: 'TriageStepOutOfOrder' });
-            }
-            const { step, recordedAt } = params;
-            const steps = [...triage.steps, step];
-            const recorded: Collaboration.TriageStepRecorded = { type: 'TriageStepRecorded', triageId: triage.id, step };
-            const kind = decisionOf(step);
-            if (kind === undefined) return ok({ Pending: { set: { steps }, events: { TriageStepRecorded: recorded } } });
-            return ok({
-                Decided: {
-                    set: { steps, kind, decidedBy: step.stage, decidedAt: recordedAt, outcome: undefined },
-                    events: {
-                        TriageStepRecorded: recorded,
-                        TriageDecided: { type: 'TriageDecided', triageId: triage.id, kind, decidedBy: step.stage, decidedAt: recordedAt },
-                    },
+    record: decideNamed<Collaboration.RecordTriageDecision>()(Collaboration.TriageShape, { Pending: 'Pending', Decided: 'Decided' }, (triage, params) => {
+        const check = Collaboration.checkRecordTriageRequiresWith({ inOrder: (t, p) => inCascadeOrder(t.steps, p.step.stage) });
+        switch (check(triage, params)) {
+            case 'cascadeStage':
+            case 'mechanicalDecidesNeither':
+                return err({ type: 'InvalidTriageStep' });
+            case 'inOrder':
+                return err({ type: 'TriageStepOutOfOrder' });
+        }
+        const { step, recordedAt } = params;
+        const steps = [...triage.steps, step];
+        const recorded: Collaboration.TriageStepRecorded = { type: 'TriageStepRecorded', triageId: triage.id, step };
+        const kind = decisionOf(step);
+        if (kind === undefined) return ok({ Pending: { set: { steps }, events: { TriageStepRecorded: recorded } } });
+        return ok({
+            Decided: {
+                set: { steps, kind, decidedBy: step.stage, decidedAt: recordedAt, outcome: undefined },
+                events: {
+                    TriageStepRecorded: recorded,
+                    TriageDecided: { type: 'TriageDecided', triageId: triage.id, kind, decidedBy: step.stage, decidedAt: recordedAt },
                 },
-            });
-        }),
+            },
+        });
+    }),
 
     override: decide<Collaboration.OverrideTriageDecision>(Collaboration.TriageShape, {
         Decided: (triage, params) => {

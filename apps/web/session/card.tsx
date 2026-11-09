@@ -48,12 +48,14 @@ export function RunCard({
     unit,
     visibleRuns,
     reference,
+    hideFirstQuote = false,
     compact = false,
     actions,
 }: {
     unit: ChangeUnit;
     visibleRuns?: readonly UnitRun[];
     reference?: ReactNode;
+    hideFirstQuote?: boolean;
     compact?: boolean;
     actions?: ReactNode;
 }) {
@@ -124,7 +126,9 @@ export function RunCard({
                     <RunSection
                         key={r.run.id}
                         run={r}
-                        display={quoteDisplay(runs, i, chat.solo)}
+                        display={
+                            i === 0 && hideFirstQuote && runs[i]?.quotes.length === 1 ? { quotes: false, perRequest: false } : quoteDisplay(runs, i, chat.solo)
+                        }
                         first={i === 0}
                         last={i === runs.length - 1}
                         compact={compact}

@@ -4,6 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { formatDomain } from '@domaintrail/modeling';
+import { formatStorming, type Storming } from '@domaintrail/storming';
 import { parseGuide } from './guide.js';
 import { runCli } from './main.js';
 import type { CliDeps } from './ports.js';
@@ -57,7 +58,7 @@ describe('dt guide topics', () => {
         expect(r.out.startsWith(parsed.intro)).toBe(true);
         expect(r.out).toContain(parsed.topics.find((t) => t.name === 'quick')!.text);
         for (const t of parsed.topics) expect(r.out).toMatch(new RegExp(`^ +${t.name} +`, 'm'));
-        expect(r.out.split('\n').length).toBeLessThanOrEqual(170);
+        expect(r.out.split('\n').length).toBeLessThanOrEqual(175);
     });
 
     test('the quick reference example is a file that checks without any diagnostic and is formatted', async () => {
@@ -67,6 +68,29 @@ describe('dt guide topics', () => {
         const a = await check({ 'library/loan.dt': example });
         expect(a.diagnostics).toEqual([]);
         expect(formatDomain(example)).toBe(example);
+    });
+
+    test('paired BP and DL examples are distributed through dt guide and stay in sync with their .dtes sources', async () => {
+        const stormings: Storming[] = [];
+        for (const [topic, file] of [
+            ['storming-example-bp', 'storming-bp.dtes'],
+            ['storming-example-dl', 'storming-dl.dtes'],
+        ] as const) {
+            const source = await readFile(path.join(import.meta.dir, '..', '..', '..', '..', 'docs', 'examples', file), 'utf8');
+            const [example] = blocks('dtes', (await runGuide(topic)).out);
+            expect(example).toBe(source);
+            const a = await check({ [file]: example });
+            expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+            expect(formatStorming(example)).toBe(example);
+            stormings.push(a.stormings.stormings[0]!);
+        }
+        const facts = (s: (typeof stormings)[number]) => ({
+            events: s.elements.filter((e) => e.kind === 'event').map((e) => e.id),
+            timelines: s.elements
+                .filter((e) => e.kind === 'timeline')
+                .map((e) => ({ id: e.id, steps: e.steps.map((step) => (step.type === 'event' ? step.eventId : step.events.map((v) => v.eventId))) })),
+        });
+        expect(facts(stormings[0]!)).toEqual(facts(stormings[1]!));
     });
 
     test('an unknown topic is an error with a suggestion and the topics', async () => {

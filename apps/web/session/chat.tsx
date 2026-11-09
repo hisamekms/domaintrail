@@ -437,6 +437,14 @@ export function SessionChat(props: {
         },
         [composer],
     );
+    const putDraft = useCallback(
+        (text: string): void => {
+            composer.setValue({ text, chips: [], people: [] });
+            setView('chat');
+            setReplyFocus((n) => n + 1);
+        },
+        [composer],
+    );
     // an interview's その他: the composer, in the chat, focused
     const focusComposer = useCallback((): void => {
         setView('chat');
@@ -612,6 +620,7 @@ export function SessionChat(props: {
         reveal,
         showPerson,
         putCommand,
+        putDraft,
         focusComposer,
         replies,
         journeys,
@@ -1119,6 +1128,7 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
                         <RunCard
                             unit={item.unit}
                             visibleRuns={item.runs}
+                            hideFirstQuote={look.hangsOn !== undefined && !item.runs[0]?.run.input.answer}
                             reference={look.quote && item.runs[0]?.run.input.answer && <AnswerReferenceLine run={item.runs[0].run} />}
                         />
                     ),
@@ -1140,13 +1150,15 @@ function streamRows(shown: Shown, tx: Tx): Row[] {
     const toOf = (item: StreamItem): ReplyTo | undefined =>
         item.kind === 'card' && item.runs[0]?.run.input.answer
             ? { kind: 'Answer', run: item.runs[0].run.id }
-            : item.kind === 'answer'
-              ? { kind: 'Run', run: item.run.input.answer!.answerTo }
-              : item.kind === 'message'
-                ? item.request.replyTo
-                : item.kind === 'record' && item.record.replyTo !== undefined
-                  ? { kind: 'Message', request: item.record.replyTo }
-                  : undefined;
+            : item.kind === 'card' && item.runs[0]?.run.input.requests.length === 1 && item.runs[0].run.input.requests[0]
+              ? { kind: 'Message', request: item.runs[0].run.input.requests[0].request }
+              : item.kind === 'answer'
+                ? { kind: 'Run', run: item.run.input.answer!.answerTo }
+                : item.kind === 'message'
+                  ? item.request.replyTo
+                  : item.kind === 'record' && item.record.replyTo !== undefined
+                    ? { kind: 'Message', request: item.record.replyTo }
+                    : undefined;
     return shown.entries.map((entry, i): Row => {
         const look = looks[i] ?? { hangsOn: undefined, head: false, more: false, quote: false };
         if (entry.kind === 'item') return { id: rowId(entry.item), look, to: toOf(entry.item), ...itemRow(entry.item, look) };

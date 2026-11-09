@@ -172,17 +172,16 @@ export const emitSuffix = (e: M.EmitModel): string => `${e.multiplicity}${e.when
 
 /** The events a command may emit (qualified names, each once, in the order of `emits`). */
 export const emittedEvents = (c: M.CommandModel): M.QualifiedName[] => [
-    ...new Set([
-        ...c.emits.map((e) => e.event),
-        ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event)),
-    ]),
+    ...new Set([...c.emits.map((e) => e.event), ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event))]),
 ];
 
 /** Includes outcomes supplied by lifecycle groups of this aggregate. */
 export const emittedEventsInAggregate = (agg: AggregateModel, c: M.CommandModel): M.QualifiedName[] => [
     ...new Set([
         ...emittedEvents(c),
-        ...agg.groups.flatMap((g) => g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => o.emits.map((e) => e.event)))),
+        ...agg.groups.flatMap((g) =>
+            g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => o.emits.map((e) => e.event))),
+        ),
     ]),
 ];
 

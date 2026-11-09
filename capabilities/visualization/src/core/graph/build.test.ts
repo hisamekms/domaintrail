@@ -80,7 +80,8 @@ describe('State View graph', () => {
         expect(dropOff.nodes.map((node) => node.id)).not.toContain('S.A#Collected');
         expect(collect.edges.find((edge) => edge.outcome === 'collected')).toMatchObject({ choiceStatus: 'single' });
         expect(dropOff.edges.find((edge) => edge.outcome === 'holding')).toMatchObject({
-            choiceStatus: 'external', choiceText: 'confirmed',
+            choiceStatus: 'external',
+            choiceText: 'confirmed',
         });
         expect(dropOff.edges.find((edge) => edge.outcome === 'holding')?.label?.en.name).toContain('external check required');
     });

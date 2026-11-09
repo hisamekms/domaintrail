@@ -545,8 +545,13 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
             const id = `${c.id}${outcome ? `:${outcome.name}` : ''}|${source}->${target}`;
             if (seen.has(id)) continue;
             seen.add(id);
-            const detail = outcome ? { outcome: outcome.name, choiceStatus: outcome.select?.kind ?? 'single' as const,
-                ...(outcome.select && { choiceText: outcome.select.kind === 'expression' ? outcome.select.source : outcome.select.text }) } : {};
+            const detail = outcome
+                ? {
+                      outcome: outcome.name,
+                      choiceStatus: outcome.select?.kind ?? ('single' as const),
+                      ...(outcome.select && { choiceText: outcome.select.kind === 'expression' ? outcome.select.source : outcome.select.text }),
+                  }
+                : {};
             const node = source === target ? nodes.find((n) => n.id === source) : undefined;
             if (node) (node.internal ??= []).push({ id, elementId: c.id, label, ...(events && { events }), ...detail });
             else edges.push({ id, kind: 'transition', source, target, label, ...(events && { events }), ...detail });
@@ -580,8 +585,13 @@ function commandLabel(c: CommandModel, outcome?: OutcomeModel): Texts {
     const result = outcome ? ` / ${outcome.name}` : '';
     const choice = outcome?.select?.kind;
     const statusJa = choice === 'expression' ? ' [式]' : choice === 'external' ? ' [外部検査が必要]' : choice === 'declared' ? ' [自然文のみ]' : '';
-    const statusEn = choice === 'expression' ? ' [expression]' : choice === 'external' ? ' [external check required]' : choice === 'declared' ? ' [declared only]' : '';
-    return anyLang({ name: `${signature}${result}${statusEn}`, label: `${label ?? signature}${result}${statusJa}`, both: `${label ? `${label} ` : ''}${signature}${result}${statusEn}` });
+    const statusEn =
+        choice === 'expression' ? ' [expression]' : choice === 'external' ? ' [external check required]' : choice === 'declared' ? ' [declared only]' : '';
+    return anyLang({
+        name: `${signature}${result}${statusEn}`,
+        label: `${label ?? signature}${result}${statusJa}`,
+        both: `${label ? `${label} ` : ''}${signature}${result}${statusEn}`,
+    });
 }
 
 function namedEventsLabel(outcome: OutcomeModel, model: DomainModel): Texts | undefined {

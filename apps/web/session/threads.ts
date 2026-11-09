@@ -3,7 +3,7 @@
 // with no line quoting it; the replies that follow it, each to the same row or to a reply already hanging there, hang
 // on the same line. A reply with something in between quotes what it replies to on its first line (「↩ 名前: …」, a
 // click goes there). Solo puts the AI's card and its answer (or its run card) right under the message, so they hang on
-// it; Collab keeps the stream by time, so only the replies that happen to come right after hang.
+// it; Collab keeps the stream by time, so only adjacent replies and single-request AI turns hang.
 
 import type { ChatEntry, StreamItem } from './stream';
 
@@ -64,11 +64,17 @@ export function replyLooks(lines: readonly ThreadLine[]): ReplyLook[] {
  */
 export function threadLines(entries: readonly ChatEntry[]): ThreadLine[] {
     const cardOf = new Map<string, string>();
+    const slotted = new Set(entries.flatMap((e) => (e.kind === 'slot' ? [e.request] : [])));
     const items = entries.flatMap((e): StreamItem[] => (e.kind === 'item' ? [e.item] : e.content.kind === 'item' ? [e.content.item] : []));
     for (const i of items) if (i.kind === 'card') for (const { run } of i.runs) cardOf.set(run.id, i.key);
     const toOf = (item: StreamItem): string | undefined => {
         if (item.kind === 'answer') return cardOf.get(item.run.input.answer?.answerTo ?? '');
-        if (item.kind === 'card' && item.runs[0]?.run.input.answer) return `answer:${item.runs[0].run.id}`;
+        if (item.kind === 'card') {
+            const first = item.runs[0]?.run;
+            if (first?.input.answer) return `answer:${first.id}`;
+            const request = first?.input.requests.length === 1 ? first.input.requests[0]?.request : undefined;
+            return request && !slotted.has(request) ? `message:${request}` : undefined;
+        }
         // a record at the end of an interview's thread replies to its last message
         if (item.kind === 'record') return item.record.replyTo === undefined ? undefined : `message:${item.record.replyTo}`;
         if (item.kind !== 'message') return undefined;

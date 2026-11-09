@@ -33,10 +33,12 @@ test('dt show exposes kind-specific named outcomes and selection obligations', a
     const json = showJson(result.model!, { kind: 'command', agg: aggregate, command: finish });
     expect(json).toMatchObject({
         show: 'command',
-        command: { outcomes: [
-            { name: 'collected', kinds: ['COLLECT'], from: 'Unassigned', to: 'Done', selection: 'single' },
-            { name: 'delivered', kinds: ['DROP_OFF'], from: 'Unassigned', to: 'Done', selection: 'external', selectionText: 'carrier confirmed' },
-        ] },
+        command: {
+            outcomes: [
+                { name: 'collected', kinds: ['COLLECT'], from: 'Unassigned', to: 'Done', selection: 'single' },
+                { name: 'delivered', kinds: ['DROP_OFF'], from: 'Unassigned', to: 'Done', selection: 'external', selectionText: 'carrier confirmed' },
+            ],
+        },
     });
     const lines = showText(result.model!, { kind: 'command', agg: aggregate, command: finish });
     expect(lines.some((line) => line.includes('delivered') && line.includes('for DROP_OFF') && line.includes('select external'))).toBe(true);

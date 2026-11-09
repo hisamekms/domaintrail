@@ -489,10 +489,16 @@ interface Param {
 function namedSubjectType(agg: AggregateModel, c: CommandModel): string {
     if (!agg.states.length) return agg.name;
     if (!agg.lifecycleField) {
-        const sources = [...new Set([...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))].flatMap((o) => o.from))];
+        const sources = [
+            ...new Set(
+                [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))].flatMap((o) => o.from),
+            ),
+        ];
         return sources.map((from) => stateTypeName(agg, from)).join(' | ') || 'never';
     }
-    const pairs = agg.validStates.flatMap(({ kind }) => applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => `${kind}${stateTypeName(agg, from)}`)));
+    const pairs = agg.validStates.flatMap(({ kind }) =>
+        applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => `${kind}${stateTypeName(agg, from)}`)),
+    );
     return [...new Set(pairs)].join(' | ') || 'never';
 }
 
@@ -537,16 +543,25 @@ export class CheckWriter {
             const first = agg.states.find((state) => state.name === o.from[0]);
             const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, [...agg.fields, ...(first?.fields ?? [])]);
             for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
-            const code = choice?.kind === 'expression' ? this.compiler.compile(choice.expr, scope).js : choice?.kind === 'external' ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})` : 'true';
+            const code =
+                choice?.kind === 'expression'
+                    ? this.compiler.compile(choice.expr, scope).js
+                    : choice?.kind === 'external'
+                      ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})`
+                      : 'true';
             const group = agg.groups.find((g) => g.cases.some((x) => x.command === c.name && x.outcomes.includes(o)));
-            const guards = c.factory ? [] : [
-                ...(agg.states.length ? [matchesAny(subject, 'state', o.from)] : []),
-                ...(group && agg.lifecycleField ? [matchesAny(subject, agg.lifecycleField, group.values)] : []),
-            ].filter((guard): guard is string => guard !== undefined);
+            const guards = c.factory
+                ? []
+                : [
+                      ...(agg.states.length ? [matchesAny(subject, 'state', o.from)] : []),
+                      ...(group && agg.lifecycleField ? [matchesAny(subject, agg.lifecycleField, group.values)] : []),
+                  ].filter((guard): guard is string => guard !== undefined);
             return `${o.name}: ${guards.length ? `(${guards.map((guard) => `(${guard})`).join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
         });
         const body = `return { ${choices.join(', ')} };`;
-        lines.push(`export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`);
+        lines.push(
+            `export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`,
+        );
         lines.push(`    return (${params(args, body)}) => { ${body} };`);
         lines.push('}');
         return lines;
@@ -567,8 +582,10 @@ export class CheckWriter {
         const names = args.map((a) => a.name).join(', ');
         const allSources = [...c.outcomes, ...groups.flatMap((g) => g.case.outcomes)].flatMap((o) => o.from);
         const entries = [
-            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as typeof groups[number] | undefined, sources: allSources })),
-            ...groups.flatMap((g) => g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g, sources: g.case.outcomes.flatMap((o) => o.from) }))),
+            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as (typeof groups)[number] | undefined, sources: allSources })),
+            ...groups.flatMap((g) =>
+                g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g, sources: g.case.outcomes.flatMap((o) => o.from) })),
+            ),
         ];
         const external = entries.filter(({ requirement }) => !requirement.expr);
         const union = [...new Set(entries.map((e) => e.key))].map((x) => `'${x}'`).join(' | ');
@@ -584,7 +601,9 @@ export class CheckWriter {
             const check = `if (!(${holds})) return '${key}';`;
             if (!group) return check;
             if (c.factory || !agg.lifecycleField) return check;
-            const guards = [matchesAny(subject, agg.lifecycleField, group.group.values), matchesAny(subject, 'state', sources)].filter((guard): guard is string => guard !== undefined);
+            const guards = [matchesAny(subject, agg.lifecycleField, group.group.values), matchesAny(subject, 'state', sources)].filter(
+                (guard): guard is string => guard !== undefined,
+            );
             return `if (${guards.map((guard) => `(${guard})`).join(' && ')}) { ${check} }`;
         });
         body.push('return undefined;');

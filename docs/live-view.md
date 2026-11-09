@@ -242,7 +242,7 @@ step through 5, 10, 25, 50, 100, 200, 400 and 800% ([ADR 0029](adr/0029-react-fl
   and its `then` are drawn, and the branch only where the design's lines do not already join its two events (event →
   read model → issuer → command → handler → event; then only its label is drawn, still pressable, ADR 0032 §15); Big
   Picture keeps the time order lines. An undecided issuer or handler (an open hotspot on
-  the command asks it) is an empty dashed note 「誰が処理する？」 where it would stand. At Design
+  the command asks it) is an empty dashed note 「何が処理する？」 where it would stand. At Design
   Level each step is a group of columns (read models on the row of the issuer looking at them, commands with their
   issuers on top, handlers, the event, policies; a hotspot above the sticky it is on) and the elements stand in a band
   above the row of their event, an exception's above its lane.
@@ -327,7 +327,7 @@ the target's):
 | time: an exception's `then`                  | 例外「{例外名}」から戻る                                      |
 | time: the order (Big Picture)                | 「{タイムライン名}」で「{A}」のあとに「{B}」 (no name when in every timeline) |
 | question: hotspot → sticky                   | 「{B}」への問い (a resolved hotspot's with a green check)     |
-| question: undecided slot → command           | 「{B}」を誰が行うか / 誰が処理するかはまだ決まっていない      |
+| question: undecided slot → command           | 「{B}」を誰が行うか / 何が処理するかはまだ決まっていない      |
 
 Pressing a line selects it and opens a small popover by where it was pressed, with the same two lines; its two ends
 are buttons (named for screen readers with the kind, 「コマンド 配車を組む へ移る」) that move the camera to that

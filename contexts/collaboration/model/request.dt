@@ -32,6 +32,7 @@ context Collaboration {
     journey: GuideJourneyKey "道のり"
     command: SuggestedCommand? "勧めるコマンド"
     targets: ModelTarget[0..3] "その場"
+    invitation: Bool? "DL を始める招待"
   }
 
   /// 人が付箋（ストーミングの要素）を直したこと（ADR 0033）。AI を通さずに dt が `.dtes` に書いた。前後の値を写し取る。

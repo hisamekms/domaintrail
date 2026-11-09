@@ -212,7 +212,10 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
                 out.push({ name: `check${t}Requires`, origin, at: cat });
             }
         }
-        if (commands.some((c) => c.emits.length > 0 || c.outcomes.some((o) => o.emits.length > 0)) || el.members.some((m) => m.kind === 'transitionGroup' && m.cases.some((x) => x.outcomes.some((o) => o.emits.length > 0)))) {
+        if (
+            commands.some((c) => c.emits.length > 0 || c.outcomes.some((o) => o.emits.length > 0)) ||
+            el.members.some((m) => m.kind === 'transitionGroup' && m.cases.some((x) => x.outcomes.some((o) => o.emits.length > 0)))
+        ) {
             out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, at });
         }
     }

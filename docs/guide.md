@@ -2134,7 +2134,7 @@ storming OrderToCash "注文から入金まで" { // an ID, unique in the worksp
   hotspot RetryLimit "支払は何回まで再試行する？" {
     on PaymentFailed
   }
-  hotspot WhoRefunds "返金は誰が処理する？" { // not decided: asked, never guessed (S024 is off while it is open)
+  hotspot WhoRefunds "返金は何が処理する？" { // not decided: asked, never guessed (S024 is off while it is open)
     on RefundOrder
   }
   hotspot IssuedEvent "請求書の発行をイベントにする？" {
@@ -2476,7 +2476,7 @@ At Design Level no line joins two events in time order where the placement shows
 exception's branch and its `then` are drawn, and the branch only where the design's lines (event → read model → issuer
 → command → handler → event, say) do not already join its two events — the exception's label stays either way (Big
 Picture draws the time order). An issuer or handler an open hotspot
-leaves undecided is an empty dashed note where it would stand («未決定» 誰が処理する？), so a silenced gap stays in view;
+leaves undecided is an empty dashed note where it would stand («未決定» 何が処理する？), so a silenced gap stays in view;
 `dt check` lists them too. An
 event that arrives `from` an external system has that system before it. A hotspot is stuck on top of the sticky it is
 `on` (an event, a command, a policy, …), not a step of the flow.
@@ -2527,7 +2527,8 @@ it (its main flows and its exceptions); its row in the navigator brings the fram
 <!-- topic: storming-rules -->
 ### Diagnostics of a storming
 
-S001–S009 and S014–S033 need only the storming, S010–S013 check its `ref`s against the model. Each example below is a whole
+S001–S009 and S014–S033 need only the storming, S010–S013 check its `ref`s against the model, and S034 needs
+`dt check --storming-level=design-level`. Each example below is a whole
 file with that one problem. Syntax errors are `SYNTAX`: an unknown keyword or clause, a `ref` or clause in a timeline or
 group, a declaration outside a storming or inside a body, a nested group, an empty group, a keyword used as an ID
 (`by`, `handledBy` and `from` included), a list with a comma too many (`emits A,`).
@@ -2916,7 +2917,7 @@ storming Checkout {
 **S024**: a command that does not say who issues it (`by`, or a policy that `issues` it), who handles it (`handledBy`)
 or what comes of it (`emits`): at Design Level a command is a whole row, read model → issuer → command → handler →
 event. Add what is decided. What is not decided is never guessed: put an open hotspot `on` the command, asking it
-(`hotspot WhoHandles "誰が処理する？" { on ConfirmOrder }`); while it is open, S024 is off for that command. Resolving the
+(`hotspot WhoHandles "何が処理する？" { on ConfirmOrder }`); while it is open, S024 is off for that command. Resolving the
 hotspot turns it on again, until the relation is written.
 
 ```dtes
@@ -3120,6 +3121,22 @@ storming Checkout {
 }
 ```
 
+**S034** (info, only with `dt check --storming-level=design-level`): adjacent events in a timeline have no stated origin for
+the later event. Investigate whether there is a human decision, policy, external fact, or only time order. The diagnostic
+does not require a causal edge.
+
+```dtes
+// S034
+storming Checkout {
+  event OrderConfirmed
+  event InvoiceIssued
+  timeline Main {
+    OrderConfirmed
+    InvoiceIssued
+  }
+}
+```
+
 <!-- topic: storming-practice -->
 ### Event Storming with DomainTrail
 
@@ -3152,11 +3169,21 @@ what the files show at once, then has the AI coach you: why the step you are at 
 the command that does a step, the places to look at and the questions to ask the people.
 
 **Design Level next**, once the flow is agreed (the brief says how far to go):
+- When the facilitator chooses to begin, read `dt guide storming-example-bp` and `dt guide storming-example-dl`, then
+  run `dt check --storming-level=design-level` for the chosen storming (and `--timeline` when one flow was chosen).
+  The S034 advice locates questions, not required edges: timeline order alone does not prove cause. Work on the
+  facilitator's chosen scope, one flow or the whole storming.
+- Make a small, visibly provisional `.dtes` edit from the current evidence and show it in the UI. State its basis,
+  assumptions and one or two points that would most change the picture. Ask while editing rather than demanding a
+  complete answer before drawing. A person need not know the final model at the start. Revise the same elements as
+  the conversation sharpens; do not turn a provisional interpretation into a `.dt` model automatically.
 - Write each command as its whole row (`dt guide dtes-quick`): who issues it, `by` an `actor` or `external` system —
   or the `policy` that `issues` it, reacting to an earlier event (「〜したら〜する」), and then no `by`; the
   `readmodel` the issuer `reads` to decide (for a policy's command, the policy `reads` it: 「〜が起きたら、〜を見て、〜を出す」,
   one command per policy); what handles it, `handledBy` an `aggregate` or an `external` system; and what it `emits`. An event that arrives from outside without a command of ours is `from` the external system.
-- **Never fill a relation by guessing.** When nobody knows who issues or handles a command, or what a policy reacts to,
+- **Never present an inference as settled.** A plausible actor, policy or aggregate may be drawn as a provisional
+  hypothesis when the current evidence supports it; say what would falsify it and keep consequential uncertainty as a
+  `hotspot` on the affected element. When nobody has a basis for who issues or handles a command, or what a policy reacts to,
   do not invent an actor or an aggregate to silence the error: put a `hotspot` `on` that command or policy, asking it.
   The open hotspot is the honest result, and it turns the incompleteness error (S024, S008, S027) off.
 - Fine-grained events found here (reservations, authorisations, internal failures, retries) get `level design`, so
@@ -3171,6 +3198,78 @@ model is modeling (see [Modeling with DomainTrail](#modeling-with-domaintrail)).
 **Keep it a storming.** It records what people found, including the doubts: do not tidy it into a design document,
 do not delete hotspots or events because they look redundant, and keep the IDs stable (people and the chat refer to
 them).
+
+<!-- topic: storming-example-bp -->
+### Big Picture `.dtes` example
+
+The first pass records facts and their time order. This example is also maintained in `docs/examples/storming-bp.dtes` in DomainTrail itself.
+
+```dtes
+storming Fulfillment "注文の履行" {
+  event OrderPlaced "注文された"
+  event OrderApproved "注文が承認された"
+  event StockReserved "在庫が確保された"
+  event ParcelDelivered "荷物が届いた"
+  event AuditRecorded "監査が記録された"
+
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderApproved
+    StockReserved
+    ParcelDelivered
+    AuditRecorded
+  }
+}
+```
+
+<!-- topic: storming-example-dl -->
+### Design Level `.dtes` example
+
+The same event IDs and timeline remain. The human decision and policy are provisional explanations; the delivery handoff stays a question. `ParcelDelivered` arrives from an external system. `AuditRecorded` follows it in time, but this example does not claim a causal relation between them. This example is also maintained in `docs/examples/storming-dl.dtes` in DomainTrail itself.
+
+```dtes
+storming Fulfillment "注文の履行" {
+  event OrderPlaced "注文された"
+  event OrderApproved "注文が承認された"
+  event StockReserved "在庫が確保された"
+  event ParcelDelivered "荷物が届いた" {
+    from Courier
+  }
+  event AuditRecorded "監査が記録された"
+
+  actor Clerk "担当者"
+  external Courier "配送会社"
+  aggregate Order "注文"
+  aggregate Inventory "在庫"
+
+  command ApproveOrder "注文を承認する" {
+    by Clerk
+    on OrderPlaced
+    handledBy Order
+    emits OrderApproved
+  }
+  policy ReserveAfterApproval "承認後に在庫を確保する" {
+    on OrderApproved
+    issues ReserveStock
+  }
+  command ReserveStock "在庫を確保する" {
+    handledBy Inventory
+    emits StockReserved
+  }
+
+  hotspot DeliveryHandoff "在庫確保から配送までの責任は誰が持つ？" {
+    on StockReserved
+  }
+
+  timeline Normal "通常" {
+    OrderPlaced
+    OrderApproved
+    StockReserved
+    ParcelDelivered
+    AuditRecorded
+  }
+}
+```
 
 <!-- topic: rules -->
 ## Rules
@@ -3248,6 +3347,7 @@ storming](#diagnostics-of-a-storming).
 | S031 | `.dtes`: a policy `issues` one command |
 | S032 | `.dtes`: a command with `on` has `by` an actor (a rule reacting to an event is a policy's `on`) |
 | S033 | `.dtes`: a command `by` an external system has no `on` (an external system reacting to our event is a policy) |
+| S034 | (info, only with `dt check --storming-level=design-level`) an adjacent timeline step worth examining; temporal order alone does not imply cause |
 | J001 | `domaintrail.journey.json` reads against its schema (`schema/journey.schema.json`): JSON, the keys and enums it allows, the goals and marks of each pattern, unique journey IDs |
 | J002 | (warning) a journey names a storming that does not exist (an ES journey's key, a `FromStorming` journey's `from.stormings`) |
 | J003 | (warning) a journey names a context that does not exist (a `OneContext` journey's `from.context`) |

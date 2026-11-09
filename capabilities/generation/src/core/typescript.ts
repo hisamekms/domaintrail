@@ -686,10 +686,12 @@ class ContextEmitter {
                 for (const pair of pairs) {
                     this.out.push('');
                     this.jsdoc([...describedLines(s), ...invariantLines(s.invariants), seeLine(s.location)]);
-                    this.iface(this.pairType(agg, pair.kind, s.name), [commonTypeName(agg)], [
-                        `readonly ${STATE_TAG}: '${s.name}';`,
-                        `readonly ${agg.lifecycleField}: '${pair.kind}';`,
-                    ], s.fields);
+                    this.iface(
+                        this.pairType(agg, pair.kind, s.name),
+                        [commonTypeName(agg)],
+                        [`readonly ${STATE_TAG}: '${s.name}';`, `readonly ${agg.lifecycleField}: '${pair.kind}';`],
+                        s.fields,
+                    );
                 }
                 this.out.push('');
                 this.line(`export type ${stateTypeName(agg, s)} = ${pairs.map((p) => this.pairType(agg, p.kind, s.name)).join(' | ') || 'never'};`);
@@ -746,10 +748,20 @@ class ContextEmitter {
             }
             this.line('}');
         }
-        const events = [...new Set(commands.flatMap((c) => c.legacy ? emittedEvents(c) : [
-            ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event)),
-            ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.emits.map((e) => e.event)))),
-        ]))];
+        const events = [
+            ...new Set(
+                commands.flatMap((c) =>
+                    c.legacy
+                        ? emittedEvents(c)
+                        : [
+                              ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event)),
+                              ...agg.groups.flatMap((g) =>
+                                  g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.emits.map((e) => e.event))),
+                              ),
+                          ],
+                ),
+            ),
+        ];
         if (events.length > 0) {
             this.out.push('');
             this.jsdoc([`Events that the commands of ${agg.name} may emit.`, seeLine(agg.location)]);
@@ -765,16 +777,29 @@ class ContextEmitter {
     private commandNamed(agg: AggregateModel, c: CommandModel): void {
         const self = aggregateParamName(agg);
         const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
-        const errorNames = [...new Set([...c.errors, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires.map((r) => r.error)))])];
+        const errorNames = [
+            ...new Set([...c.errors, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires.map((r) => r.error)))]),
+        ];
         const errors = errorNames.length ? errorNames.map((e) => this.ref(e)).join(' | ') : 'never';
         const kinds = agg.lifecycleField ? agg.validStates.map((v) => v.kind) : ['*'];
         const all = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
         const sources = agg.states.length ? agg.states.map((s) => s.name) : [''];
-        const inputs = c.factory ? [] : kinds.flatMap((kind) => sources.flatMap((from) => {
-            const applicable = applicableOutcomes(agg, c, kind).filter((o) => !agg.states.length || o.from.includes(from));
-            if (!applicable.length) return [];
-            return [{ kind, from, applicable, type: agg.lifecycleField ? this.pairType(agg, kind, from) : agg.states.length ? stateTypeName(agg, from) : agg.name }];
-        }));
+        const inputs = c.factory
+            ? []
+            : kinds.flatMap((kind) =>
+                  sources.flatMap((from) => {
+                      const applicable = applicableOutcomes(agg, c, kind).filter((o) => !agg.states.length || o.from.includes(from));
+                      if (!applicable.length) return [];
+                      return [
+                          {
+                              kind,
+                              from,
+                              applicable,
+                              type: agg.lifecycleField ? this.pairType(agg, kind, from) : agg.states.length ? stateTypeName(agg, from) : agg.name,
+                          },
+                      ];
+                  }),
+              );
         if (c.params.length) {
             this.jsdoc([`The parameters of ${agg.name}.${c.name}, by name.`, seeLine(c.location)]);
             this.line(`export interface ${paramsTypeName(agg, c)} {`);
@@ -791,11 +816,12 @@ class ContextEmitter {
         ]);
         if (c.factory) {
             const byName = new Map<string, { outcome: OutcomeModel; kinds: string[] }>();
-            for (const kind of kinds) for (const o of applicableOutcomes(agg, c, kind)) {
-                const found = byName.get(o.name);
-                if (found) found.kinds.push(kind);
-                else byName.set(o.name, { outcome: o, kinds: [kind] });
-            }
+            for (const kind of kinds)
+                for (const o of applicableOutcomes(agg, c, kind)) {
+                    const found = byName.get(o.name);
+                    if (found) found.kinds.push(kind);
+                    else byName.set(o.name, { outcome: o, kinds: [kind] });
+                }
             const outcomes = [...byName.values()].map(({ outcome: o, kinds: applicableKinds }): Outcome => ({
                 key: o.name,
                 first: `aggregate: ${agg.lifecycleField ? applicableKinds.map((k) => this.pairType(agg, k, o.to)).join(' | ') : stateTypeName(agg, o.to)}`,
@@ -806,7 +832,8 @@ class ContextEmitter {
             this.result(') => ', outcomes, errors, '', ';');
         } else {
             const input = inputs.map((x) => x.type).join(' | ') || 'never';
-            const resultOf = (x: typeof inputs[number]): Outcome[] => x.applicable.map((o): Outcome => ({
+            const resultOf = (x: (typeof inputs)[number]): Outcome[] =>
+                x.applicable.map((o): Outcome => ({
                     key: o.name,
                     first: `aggregate: ${agg.lifecycleField ? this.pairType(agg, x.kind, o.to) : agg.states.length ? stateTypeName(agg, o.to) : agg.name}`,
                     emits: [...o.emits],
@@ -836,14 +863,17 @@ class ContextEmitter {
         ]);
         if (c.factory) {
             const byName = new Map<string, { outcome: OutcomeModel; kinds: string[] }>();
-            for (const kind of kinds) for (const o of applicableOutcomes(agg, c, kind)) {
-                const found = byName.get(o.name);
-                if (found) found.kinds.push(kind);
-                else byName.set(o.name, { outcome: o, kinds: [kind] });
-            }
+            for (const kind of kinds)
+                for (const o of applicableOutcomes(agg, c, kind)) {
+                    const found = byName.get(o.name);
+                    if (found) found.kinds.push(kind);
+                    else byName.set(o.name, { outcome: o, kinds: [kind] });
+                }
             const decisionOutcomes = [...byName.values()].map(({ outcome: o, kinds: applicableKinds }): Outcome => {
                 const fields = this.setType(outcomeFields(agg, c, undefined, o.to, o).set);
-                const set = agg.lifecycleField ? applicableKinds.map((kind) => `Omit<${fields}, '${agg.lifecycleField}'> & { readonly ${agg.lifecycleField}: '${kind}' }`).join(' | ') : fields;
+                const set = agg.lifecycleField
+                    ? applicableKinds.map((kind) => `Omit<${fields}, '${agg.lifecycleField}'> & { readonly ${agg.lifecycleField}: '${kind}' }`).join(' | ')
+                    : fields;
                 return { key: o.name, first: `set: ${set}`, emits: [...o.emits] };
             });
             this.line(`export type ${decisionTypeName(agg, c)} = (`);
@@ -851,7 +881,8 @@ class ContextEmitter {
             this.result(') => ', decisionOutcomes, errors, '', ';');
         } else {
             const input = inputs.map((x) => x.type).join(' | ') || 'never';
-            const resultOf = (x: typeof inputs[number]): Outcome[] => x.applicable.map((o): Outcome => ({
+            const resultOf = (x: (typeof inputs)[number]): Outcome[] =>
+                x.applicable.map((o): Outcome => ({
                     key: o.name,
                     first: `set: ${this.setType(outcomeFields(agg, c, x.from || undefined, o.to, o).set)}`,
                     emits: [...o.emits],
@@ -995,10 +1026,14 @@ class ContextEmitter {
     /** The generated check of a command's requirements, with the parameters of its contract. */
     private requiresCheck(agg: AggregateModel, c: CommandModel): string[] {
         const states = agg.states;
-        const sources = unique(c.legacy ? c.transitions.flatMap((t) => t.from) : [
-            ...c.outcomes.flatMap((o) => o.from),
-            ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.from))),
-        ]);
+        const sources = unique(
+            c.legacy
+                ? c.transitions.flatMap((t) => t.from)
+                : [
+                      ...c.outcomes.flatMap((o) => o.from),
+                      ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.from))),
+                  ],
+        );
         const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') || 'never' : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
         const params = c.params.length ? { name: paramsArgName(agg), type: paramsTypeName(agg, c) } : undefined;

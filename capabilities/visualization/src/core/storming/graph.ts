@@ -50,7 +50,7 @@ const stereotype = (ja: string, en: string): Texts => perLang({ ja: `«${ja}»`,
 /** What a gap's empty slot asks. */
 const GAP_LABELS: Record<'by' | 'handledBy', Texts> = {
     by: perLang({ ja: '誰が発行する？', en: 'Who issues it?' }),
-    handledBy: perLang({ ja: '誰が処理する？', en: 'Who handles it?' }),
+    handledBy: perLang({ ja: '何が処理する？', en: 'What handles it?' }),
 };
 
 const STEREOTYPES: Record<NodeElementKind, Texts> = {

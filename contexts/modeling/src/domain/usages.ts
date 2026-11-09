@@ -43,7 +43,9 @@ export function fieldUseText(u: FieldUse, name: (x: Named) => string): string {
 export function commandsWithOutcome(model: DomainModel, id: string): { agg: AggregateModel; command: CommandModel }[] {
     return model.elements.flatMap((agg) =>
         agg.kind === 'aggregate'
-            ? agg.commands.filter((c) => emittedEventsInAggregate(agg, c).some((e) => e === id) || c.errors.some((e) => e === id)).map((command) => ({ agg, command }))
+            ? agg.commands
+                  .filter((c) => emittedEventsInAggregate(agg, c).some((e) => e === id) || c.errors.some((e) => e === id))
+                  .map((command) => ({ agg, command }))
             : [],
     );
 }

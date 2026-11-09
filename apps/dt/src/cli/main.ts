@@ -39,6 +39,7 @@ import {
 } from './trust.js';
 import { PublishError } from './publish.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
+import { designLevelAdvice } from './storming-advice.js';
 
 export interface CliIO {
     out: (line: string) => void;
@@ -134,13 +135,19 @@ async function knowledgeCheck(root: string, analysis: Analysis): Promise<Analysi
     };
 }
 
-async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report?: JsonReport, forGeneration = false, target?: 'ts'): Promise<Analysis> {
+async function runCheck(
+    config: ResolvedConfig,
+    io: CliIO,
+    deps: CliDeps,
+    report?: JsonReport,
+    options: { forGeneration?: boolean; target?: 'ts'; advice?: { storming?: string; timeline?: string } } = {},
+): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
     const analyzed = await analyze(sources);
     const gateDiagnostics = [
-        ...(forGeneration && analyzed.sourceModel ? generationGateDiagnostics(analyzed.sourceModel) : []),
-        ...(target && analyzed.model ? targetCapabilityDiagnostics(analyzed.model, target) : []),
+        ...(options.forGeneration && analyzed.sourceModel ? generationGateDiagnostics(analyzed.sourceModel) : []),
+        ...(options.target && analyzed.model ? targetCapabilityDiagnostics(analyzed.model, options.target) : []),
     ];
     const gated = gateDiagnostics.length
         ? {
@@ -151,7 +158,10 @@ async function runCheck(config: ResolvedConfig, io: CliIO, deps: CliDeps, report
         : analyzed;
     const checked = await journeyCheck(root, gated);
     // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
-    const analysis = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
+    const base = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
+    const analysis = options.advice
+        ? { ...base, diagnostics: [...base.diagnostics, ...designLevelAdvice(base.stormings.stormings, options.advice)].sort(compareDiagnostics) }
+        : base;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
     const infos = analysis.diagnostics.filter((d) => d.severity === 'info').length;
@@ -233,13 +243,23 @@ Examples:
   dt check
   dt check --format json
   dt check --for-generation
+  dt check --storming-level design-level --storming OrderToCash --timeline Normal
   dt -r domain check
   dt -c config/domaintrail.jsonc check`,
         )
         .addOption(formatOption())
-        .action(async (opts: { format: Format; forGeneration?: boolean }) => {
+        .addOption(new Option('--storming-level <level>', 'include explicit storming-level exploration advice').choices(['design-level']))
+        .option('--storming <id>', 'limit Design Level advice to one storming ID')
+        .option('--timeline <id>', 'limit Design Level advice to one timeline ID (use with --storming)')
+        .action(async (opts: { format: Format; forGeneration?: boolean; stormingLevel?: 'design-level'; storming?: string; timeline?: string }) => {
+            if ((opts.storming || opts.timeline) && !opts.stormingLevel)
+                throw new CliError('--storming and --timeline require --storming-level design-level.', 2);
+            if (opts.timeline && !opts.storming) throw new CliError('--timeline requires --storming <id>.', 2);
             if (opts.format === 'json') report = {};
-            const a = await runCheck(await config(), io, deps, report, opts.forGeneration);
+            const a = await runCheck(await config(), io, deps, report, {
+                forGeneration: opts.forGeneration,
+                advice: opts.stormingLevel ? { storming: opts.storming, timeline: opts.timeline } : undefined,
+            });
             exitCode = a.ok && a.files.length > 0 ? 0 : 1;
         });
 
@@ -281,7 +301,7 @@ Examples:
             if (opts.out !== undefined && !staysInside(opts.out)) {
                 throw new ConfigError(`--out must stay inside ${cfg.root} (the directory of the config file, else the root): '${opts.out}'`);
             }
-            const a = await runCheck(cfg, io, deps, report, true, 'ts');
+            const a = await runCheck(cfg, io, deps, report, { forGeneration: true, target: 'ts' });
             if (a.files.length === 0) {
                 exitCode = 1; // reported by runCheck
                 return;
