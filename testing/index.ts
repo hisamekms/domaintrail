@@ -454,14 +454,25 @@ export interface CommandSpec {
     readonly stateful: boolean;
     /** Entries of `emits` whose bounds the types do not express. */
     readonly counted: readonly EmitSpec[];
+    /** Named outcomes of ADR 0035; absent for legacy state-keyed commands. */
+    readonly outcomes?: readonly {
+        readonly name: string;
+        readonly to: string;
+        readonly from: readonly string[];
+        readonly kinds: readonly string[];
+    }[];
+    readonly kindField?: string;
+    readonly validStates?: readonly { readonly kind: string; readonly states: readonly string[] }[];
+    /** Evaluates all executable outcome selection rules on the pre-command inputs. */
+    readonly choices?: (...args: never[]) => Readonly<Record<string, boolean>>;
 }
 
 type Res =
-    | { ok: true; value: Record<string, { aggregate: { state?: string }; events: Record<string, unknown> } | undefined> }
+    | { ok: true; value: Record<string, { aggregate: { state?: string; [key: string]: unknown }; events: Record<string, unknown> } | undefined> }
     | { ok: false; error: { type?: string } };
 
 /** The one outcome of a success value, as `[key, outcome]`. */
-function theOutcome(name: string, value: Res & { ok: true }): [string, { aggregate: { state?: string }; events: Record<string, unknown> }] {
+function theOutcome(name: string, value: Res & { ok: true }): [string, { aggregate: { state?: string; [key: string]: unknown }; events: Record<string, unknown> }] {
     const entries = Object.entries(value.value).filter((e): e is [string, NonNullable<(typeof e)[1]>] => e[1] !== undefined);
     if (entries.length !== 1) fail(`${name} returned ${entries.length} outcomes (${entries.map(([k]) => k).join(', ')}); a success value holds exactly one.`);
     return entries[0];
@@ -488,6 +499,42 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
         property(s.input(), s.examples, options, predicate);
     };
     const out: TestCase[] = [];
+
+    if (s.outcomes) {
+        out.push({
+            name: `${s.name} selects one applicable named outcome, preserves its kind and reaches a valid state`,
+            run: prop((args) => {
+                const r = call(args);
+                if (!r.ok) return;
+                const [name, selected] = theOutcome(s.name, r);
+                const from = s.factory ? undefined : (args[0] as { state?: string }).state;
+                const kind = s.kindField ? (s.factory ? selected.aggregate[s.kindField] : (args[0] as Record<string, unknown>)[s.kindField]) : undefined;
+                const possible = s.outcomes!.filter((o) =>
+                    (!o.from.length || (from !== undefined && o.from.includes(from))) &&
+                    (!o.kinds.length || (typeof kind === 'string' && o.kinds.includes(kind))));
+                const matching = possible.find((o) => o.name === name);
+                if (!matching) fail(`${describe(args)} returned outcome '${name}', which is unavailable for kind ${show(kind)} and source ${show(from)}.`);
+                if (s.stateful && selected.aggregate.state !== matching.to)
+                    fail(`${describe(args)} returned outcome '${name}' in state ${show(selected.aggregate.state)}; expected '${matching.to}'.`);
+                if (s.kindField && !s.factory && selected.aggregate[s.kindField] !== kind)
+                    fail(`${describe(args)} changed readonly kind '${s.kindField}' from ${show(kind)} to ${show(selected.aggregate[s.kindField])}.`);
+                const valid = s.validStates?.find((v) => v.kind === kind);
+                if (valid && !valid.states.includes(matching.to))
+                    fail(`${describe(args)} returned invalid kind–state pair ${show(kind)} / '${matching.to}'.`);
+                if (s.choices) {
+                    const evaluate = (input: unknown[]) => (s.choices as (...a: unknown[]) => Readonly<Record<string, boolean>>)(...input);
+                    const firstInput = structuredClone(args) as unknown[];
+                    const values = evaluate(firstInput);
+                    if (!deepEqual(firstInput, args)) fail(`${describe(args)}: a choice check changed its input.`);
+                    if (!deepEqual(values, evaluate(structuredClone(args) as unknown[])))
+                        fail(`${describe(args)}: a choice check returned different results for the same input.`);
+                    const selectedCount = possible.filter((o) => values[o.name]).length;
+                    if (selectedCount !== 1) fail(`${describe(args)} has ${selectedCount} applicable choice rules; expected exactly one.`);
+                    if (!values[name]) fail(`${describe(args)} returned outcome '${name}' although its choice rule is false.`);
+                }
+            }),
+        });
+    }
 
     if (s.requires.length && s.firstFailing) {
         const elseErrors = [...new Set(s.requires.map((r) => r.error))];
@@ -521,7 +568,7 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
                 const r = call(args);
                 if (!r.ok) return;
                 const [to, o] = theOutcome(s.name, r);
-                if (s.stateful && o.aggregate.state !== to)
+                if (s.stateful && o.aggregate.state !== (s.outcomes?.find((x) => x.name === to)?.to ?? to))
                     fail(`${describe(args)} returned the outcome '${to}' with an aggregate in state ${show(o.aggregate.state)}.`);
                 const v = checkOf<(a: unknown) => readonly string[]>(s.invariants, s.declaredInvariants, s.givenInvariants)(o.aggregate);
                 if (v.length) fail(`${describe(args)} made an aggregate that violates ${v.map((n) => `'${n}'`).join(', ')}: ${show(o.aggregate)}`);

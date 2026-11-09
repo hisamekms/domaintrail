@@ -100,7 +100,7 @@ describe('field sets: generated TypeScript', () => {
         const sales = ts(v, 'Sales');
         expect(sales).toMatch(/export interface Term extends Described \{\n    readonly name: string;\n\}/);
         expect(sales).toContain('return a.label === b.label && sameOptional(a.doc, b.doc, ($0: string, $1: string) => $0 === $1) && a.name === b.name;');
-        expect(sales).toContain("if (!((term.name.length > 0) && (term.label.length > 0))) violated.push('named');");
+        expect(sales).toContain("if (!((Array.from(term.name).length > 0) && (Array.from(term.label).length > 0))) violated.push('named');");
     });
 
     test('unions of the events, the aggregates and the events of each aggregate', () => {

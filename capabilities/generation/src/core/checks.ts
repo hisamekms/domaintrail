@@ -14,6 +14,7 @@ import { BINARY_OP_TEXT, contextNames, elementOf, elementsIn, sharedContexts } f
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import { RUNTIME_NAMES, TS_RESERVED, commonTypeName, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
+import { aggregateParamName, choiceCheckName, choiceChecksTypeName, commandTypeName, paramsArgName, paramsTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
@@ -171,10 +172,13 @@ const strip = (t: Ty): Ty => (t.k === 'opt' ? t.inner : t);
 function scalar(b: Binding): string {
     const t = strip(b.ty); // an optional value is guarded by exists(...) (M009)
     const p = primOf(t);
-    if (p === 'Decimal' && !(t.k === 'prim' && t.literal)) return `Number(${b.js})`;
     if (p === 'Timestamp') return `${b.js}.getTime()`;
     return b.js;
 }
+
+const isDecimal = (b: Binding): boolean => primOf(strip(b.ty)) === 'Decimal';
+const compare = (a: Binding, b: Binding, op: string): string =>
+    isDecimal(a) || isDecimal(b) ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0` : `${scalar(a)} ${op} ${scalar(b)}`;
 
 export class ExprCompiler {
     /** Counter of temporaries (`$0`, `$1`, …), which no DSL name can collide with. */
@@ -229,7 +233,7 @@ export class ExprCompiler {
         if (s.k === 'struct' || s.k === 'union') return `${this.env.valueRef(s.el.id, equalName(s.el))}(${a}, ${b})`;
         const pa = primOf(s);
         const pb = primOf(strip(u));
-        if (pa === 'Decimal' || pb === 'Decimal') return `${scalar({ js: a, ty: t })} === ${scalar({ js: b, ty: u })}`;
+        if (pa === 'Decimal' || pb === 'Decimal') return `decimalCompare(String(${a}), String(${b})) === 0`;
         if (pa === 'Timestamp') return `${a}.getTime() === ${b}.getTime()`;
         return `${a} === ${b}`;
     }
@@ -266,7 +270,7 @@ export class ExprCompiler {
             case 'int':
                 return { js: e.value < 0 ? `(${e.value})` : String(e.value), ty: { k: 'prim', name: 'Int', literal: true } };
             case 'decimal':
-                return { js: e.value.startsWith('-') ? `(${e.value})` : e.value, ty: { k: 'prim', name: 'Decimal', literal: true } };
+                return { js: quote(e.value), ty: { k: 'prim', name: 'Decimal', literal: true } };
             case 'string':
                 return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true } };
             case 'name':
@@ -278,15 +282,17 @@ export class ExprCompiler {
             case 'exists':
                 return wrapped(`${this.compile(e.operand, scope).js} !== undefined`);
             case 'count':
-            case 'length':
-                return { js: `${this.compile(e.k === 'count' ? e.collection : e.operand, scope).js}.length`, ty: { k: 'prim', name: 'Int' } };
+            case 'length': {
+                const value = this.compile(e.k === 'count' ? e.collection : e.operand, scope);
+                return { js: e.k === 'length' ? `Array.from(${value.js}).length` : `${value.js}.length`, ty: { k: 'prim', name: 'Int' } };
+            }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
             case 'range': {
                 const v = this.compile(e.operand, scope);
                 const lo = this.compile(e.lower, scope);
                 const hi = this.compile(e.upper, scope);
-                return wrapped(`${scalar(lo)} <= ${scalar(v)} && ${scalar(v)} <= ${scalar(hi)}`);
+                return wrapped(`${compare(lo, v, '<=')} && ${compare(v, hi, '<=')}`);
             }
             case 'quantifier': {
                 const c = this.compile(e.collection, scope);
@@ -335,7 +341,7 @@ export class ExprCompiler {
                     case 'le':
                     case 'gt':
                     case 'ge':
-                        return wrapped(`${scalar(l)} ${BINARY_OP_TEXT[e.op]} ${scalar(r)}`);
+                        return wrapped(compare(l, r, BINARY_OP_TEXT[e.op]));
                 }
             }
         }
@@ -384,10 +390,40 @@ export function quote(text: string): string {
     return `'${JSON.stringify(text).slice(1, -1).replace(/\\"/g, '"').replace(/'/g, "\\'")}'`;
 }
 
-/** A regular expression literal for a pattern written as in JavaScript; `new RegExp(…)` when a literal cannot hold it. */
+/** Translate portable shorthand classes without nesting classes or changing escaped backslashes. */
+export function portableRegexPattern(pattern: string): string {
+    const classes: Record<string, [string, string]> = {
+        d: ['[0-9]', '0-9'],
+        D: ['[^0-9]', ''],
+        s: ['[ \\t\\n\\r\\f\\v]', ' \\t\\n\\r\\f\\v'],
+        S: ['[^ \\t\\n\\r\\f\\v]', ''],
+        w: ['[A-Za-z0-9_]', 'A-Za-z0-9_'],
+        W: ['[^A-Za-z0-9_]', ''],
+    };
+    let inClass = false;
+    let out = '';
+    for (let i = 0; i < pattern.length; i++) {
+        const char = pattern[i];
+        if (char === '\\') {
+            const next = pattern[++i];
+            if (next === undefined) throw new Error('Trailing backslash in regex');
+            const replacement = classes[next];
+            if (replacement) {
+                if (inClass && !replacement[1]) throw new Error(`\\${next} is not portable inside a character class`);
+                out += replacement[inClass ? 1 : 0];
+            } else out += `\\${next}`;
+        } else {
+            if (char === '[' && !inClass) inClass = true;
+            else if (char === ']' && inClass) inClass = false;
+            out += char;
+        }
+    }
+    return out;
+}
+
+/** A Unicode-aware JavaScript regex for the portable subset. */
 function regex(pattern: string): string {
-    if (pattern === '' || /[\n\r\u2028\u2029]/.test(pattern) || /(^|[^\\])(\\\\)*\//.test(pattern)) return `new RegExp(${quote(pattern)})`;
-    return `/${pattern}/`;
+    return `new RegExp(${quote(portableRegexPattern(pattern))}, 'u')`;
 }
 
 /** A scope with the fields of an element, read from `subject`. */
@@ -461,6 +497,89 @@ export class CheckWriter {
 
     constructor(private readonly env: CheckEnv) {
         this.compiler = new ExprCompiler(env);
+    }
+
+    /** Predicate values for every named outcome; external choices have mandatory typed slots. */
+    choices(agg: AggregateModel, c: CommandModel): string[] {
+        const outcomes = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
+        if (!outcomes.length) return [];
+        const external = outcomes.filter((o) => o.select?.kind === 'external');
+        const subject = aggregateParamName(agg);
+        const parameters = paramsArgName(agg);
+        const args = [
+            ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
+            ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
+        ];
+        const signature = args.map((a) => `${a.name}: ${a.type}`).join(', ');
+        const lines = [
+            `export type ${choiceChecksTypeName(agg, c)} = { ${external.map((o) => `readonly ${o.name}: (${signature}) => boolean`).join('; ')} };`,
+            '',
+        ];
+        const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
+        for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
+        const choices = outcomes.map((o) => {
+            const choice = o.select;
+            const code = choice?.kind === 'expression' ? this.compiler.compile(choice.expr, scope).js : choice?.kind === 'external' ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})` : 'true';
+            const group = agg.groups.find((g) => g.cases.some((x) => x.command === c.name && x.outcomes.includes(o)));
+            const guards = c.factory ? [] : [
+                ...(agg.states.length && o.from.length ? [`[${o.from.map((from) => `'${from}'`).join(', ')}].includes(${subject}.state)`] : []),
+                ...(group && agg.lifecycleField ? [`[${group.values.map((value) => `'${value}'`).join(', ')}].includes(${subject}.${agg.lifecycleField})`] : []),
+            ];
+            return `${o.name}: ${guards.length ? `(${guards.join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
+        });
+        const body = `return { ${choices.join(', ')} };`;
+        lines.push(`export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`);
+        lines.push(`    return (${params(args, body)}) => { ${body} };`);
+        lines.push('}');
+        return lines;
+    }
+
+    /** Common requirements followed by matching `on` requirements in source order. */
+    namedRequirements(agg: AggregateModel, c: CommandModel): string[] {
+        const groups = agg.groups.flatMap((g, i) => g.cases.filter((x) => x.command === c.name).map((x) => ({ group: g, index: i, case: x })));
+        if (!c.requires.length && !groups.some((g) => g.case.requires.length)) return [];
+        const type = commandTypeName(agg, c);
+        const subject = aggregateParamName(agg);
+        const parameters = paramsArgName(agg);
+        const args = [
+            ...(c.factory ? [] : [{ name: subject, type: agg.name }]),
+            ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
+        ];
+        const sig = args.map((a) => `${a.name}: ${a.type}`).join(', ');
+        const names = args.map((a) => a.name).join(', ');
+        const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, agg.fields);
+        for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
+        const entries = [
+            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as typeof groups[number] | undefined })),
+            ...groups.flatMap((g) => g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g }))),
+        ];
+        const external = entries.filter(({ requirement }) => !requirement.expr);
+        const union = [...new Set(entries.map((e) => e.key))].map((x) => `'${x}'`).join(' | ');
+        const lines: string[] = [];
+        if (external.length) {
+            lines.push(`export type ${declaredRequiresName(type)} = { ${external.map((x) => `readonly ${x.key}: (${sig}) => boolean`).join('; ')} };`, '');
+        }
+        const body = entries.map(({ requirement, key, group }) => {
+            const holds = requirement.expr ? this.compiler.compile(requirement.expr, scope).js : `checks.${key}(${names})`;
+            const check = `if (!(${holds})) return '${key}';`;
+            if (!group) return check;
+            if (c.factory || !agg.lifecycleField) return check;
+            return `if (([${group.group.values.map((v) => `'${v}'`).join(', ')}] as readonly string[]).includes(${subject}.${agg.lifecycleField})) { ${check} }`;
+        });
+        body.push('return undefined;');
+        const name = external.length ? requiresWithName(type) : requiresName(type);
+        const returns = `${union} | undefined`;
+        if (external.length) {
+            lines.push(`export function ${name}(checks: ${declaredRequiresName(type)}): (${sig}) => ${returns} {`);
+            lines.push(`    return (${params(args, body.join(' '))}) => {`);
+            lines.push(...body.map((line) => `        ${line}`));
+            lines.push('    };', '}');
+        } else {
+            lines.push(`export function ${name}(${params(args, body.join(' '))}): ${returns} {`);
+            lines.push(...body.map((line) => `    ${line}`));
+            lines.push('}');
+        }
+        return lines;
     }
 
     /**

@@ -449,10 +449,14 @@ context Collaboration {
         exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       } else InvalidReply
       outcome Completed: Running -> Completed
-        select { report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran)) }
+        select {
+          report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))
+        }
         emits RunCompleted
       outcome Failed: Running -> Failed
-        select { not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))) }
+        select {
+          not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran)))
+        }
         emits RunFailed
     }
 
