@@ -73,7 +73,7 @@ describe("the canvas's controls", () => {
     const canvas = { getZoom: () => 1, selectedIds: () => [] } as unknown as DiagramCanvas;
 
     test('the main canvas: the camera, 詰めて表示, the legend and «, without 印刷 or 書き出し', () => {
-        const html = render(<CanvasControls canvas={canvas} fitAll={() => {}} legend={null} compact={{ on: false, onToggle: () => {} }} keys />);
+        const html = render(<CanvasControls id="main" canvas={canvas} fitAll={() => {}} legend={null} compact={{ on: false, onToggle: () => {} }} keys />);
         for (const label of ['縮小', '拡大', '全体を表示（Shift+1）', '詰めて表示', 'キャンバスの操作を畳む（U）'])
             expect(html).toContain(`aria-label="${label}"`);
         expect(html).not.toContain('印刷');
@@ -81,7 +81,7 @@ describe("the canvas's controls", () => {
     });
 
     test('the inspector’s state diagram keeps its 書き出し there', () => {
-        const html = render(<CanvasControls canvas={canvas} fitAll={() => {}} legend={null} exporting={control()} />);
+        const html = render(<CanvasControls id="states" canvas={canvas} fitAll={() => {}} legend={null} exporting={control()} />);
         expect(html).toContain('aria-label="書き出し"');
     });
 });

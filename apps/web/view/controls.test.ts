@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { MESSAGES } from '../i18n';
 import { legendRows } from '../legend';
-import { canvasShortcut, EXPANDED, formatZoom, parseControls, toggleCollapsed } from './controls';
+import { canvasShortcut, controlsStorageKey, EXPANDED, formatZoom, parseControls, toggleCollapsed } from './controls';
 
 const key = (k: Partial<Parameters<typeof canvasShortcut>[0]>): Parameters<typeof canvasShortcut>[0] => ({
     key: '',
@@ -55,6 +55,11 @@ describe("the canvas's bottom-left controls", () => {
         expect(parseControls(null)).toEqual(EXPANDED);
         expect(parseControls('{"zoom":1}')).toEqual(EXPANDED);
         expect(parseControls('not json')).toEqual(EXPANDED);
+    });
+
+    test('each canvas has a separate persisted setting', () => {
+        expect(controlsStorageKey('workspace:structure')).toBe('domaintrail.canvas.controls.workspace%3Astructure');
+        expect(controlsStorageKey('states:Sales.Order')).toBe('domaintrail.canvas.controls.states%3ASales.Order');
     });
 });
 

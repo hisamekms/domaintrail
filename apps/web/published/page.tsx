@@ -205,7 +205,15 @@ function Page({ theme, mode }: { theme: 'light' | 'dark'; mode: ReturnType<typeo
                                 <div className={`view-area${graph ? ' drawn' : ''}`}>
                                     <FlowCanvas onMount={setCanvas} />
                                     <KnowledgeMarks canvas={canvas} />
-                                    {graph && <CanvasControls canvas={canvas} fitAll={() => canvas && fitAll(canvas, graph, true)} legend={null} keys />}
+                                    {graph && (
+                                        <CanvasControls
+                                            id="published"
+                                            canvas={canvas}
+                                            fitAll={() => canvas && fitAll(canvas, graph, true)}
+                                            legend={null}
+                                            keys
+                                        />
+                                    )}
                                     {entries?.length === 0 && <div className="empty">{t.noStormings}</div>}
                                 </div>
                             </section>

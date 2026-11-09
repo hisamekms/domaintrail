@@ -1,9 +1,8 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 /**
- * Whether the canvas's bottom-left controls (− % + ⤢ ◎ and the legend) are collapsed into one » button. One state,
- * remembered per browser: the bar's « and » buttons and the `U` key all toggle it (the key used to hide the controls
- * only for now, over a separate choice of the canvas's menu; with that menu gone, there is nothing to come back to).
+ * Whether one canvas's bottom-left controls (− % + ⤢ ◎ and the legend) are collapsed into one » button. Each canvas
+ * remembers its state per browser; the bar's « and » buttons and the `U` key toggle only that canvas's controls.
  */
 export interface ControlsState {
     readonly collapsed: boolean;
@@ -49,8 +48,9 @@ export function takesText(el: Element | null): boolean {
     return el instanceof HTMLElement && el.isContentEditable;
 }
 
-/** localStorage key of the state (JSON, like the other persisted settings). */
+/** Former shared localStorage key, read as the initial value for controls without an individual setting. */
 export const CONTROLS_KEY = 'domaintrail.canvas.controls';
+export const controlsStorageKey = (id: string): string => `${CONTROLS_KEY}.${encodeURIComponent(id)}`;
 
 /**
  * The saved state, if it is one; expanded otherwise. The former choice of what to show (`{ zoom, legend }`) reads as
@@ -69,45 +69,53 @@ export function parseControls(raw: string | null): ControlsState {
     return EXPANDED;
 }
 
-// one state for every canvas of the page (the main canvas and the inspector's state diagram)
-let state: ControlsState | null = null;
-const listeners = new Set<() => void>();
+const states = new Map<string, ControlsState>();
+const listeners = new Map<string, Set<() => void>>();
 
-function current(): ControlsState {
+function current(id: string): ControlsState {
+    let state = states.get(id);
     if (!state) {
         let raw: string | null = null;
         try {
-            raw = localStorage.getItem(CONTROLS_KEY);
+            raw = localStorage.getItem(controlsStorageKey(id)) ?? localStorage.getItem(CONTROLS_KEY);
         } catch {
             // storage unavailable (private mode, etc.)
         }
         state = parseControls(raw);
+        states.set(id, state);
     }
     return state;
 }
 
-function update(next: ControlsState): void {
-    state = next;
+function update(id: string, next: ControlsState): void {
+    states.set(id, next);
     try {
-        localStorage.setItem(CONTROLS_KEY, JSON.stringify(next));
+        localStorage.setItem(controlsStorageKey(id), JSON.stringify(next));
     } catch {
         // storage unavailable (private mode, etc.)
     }
-    for (const l of listeners) l();
+    for (const l of listeners.get(id) ?? []) l();
 }
 
-/** Whether the bottom-left controls are collapsed, shared by every canvas of the page. */
+/** Whether this canvas's bottom-left controls are collapsed. */
 export interface CanvasControls {
     readonly collapsed: boolean;
     readonly toggle: () => void;
 }
 
-const subscribe = (l: () => void): (() => void) => {
-    listeners.add(l);
-    return () => listeners.delete(l);
+const subscribe = (id: string, l: () => void): (() => void) => {
+    const own = listeners.get(id) ?? new Set<() => void>();
+    own.add(l);
+    listeners.set(id, own);
+    return () => {
+        own.delete(l);
+        if (own.size === 0) listeners.delete(id);
+    };
 };
 
-export function useCanvasControls(): CanvasControls {
-    const s = useSyncExternalStore(subscribe, current, current);
-    return { collapsed: s.collapsed, toggle: () => update(toggleCollapsed(current())) };
+export function useCanvasControls(id: string): CanvasControls {
+    const subscribeOwn = useCallback((l: () => void) => subscribe(id, l), [id]);
+    const snapshot = useCallback(() => current(id), [id]);
+    const s = useSyncExternalStore(subscribeOwn, snapshot, snapshot);
+    return { collapsed: s.collapsed, toggle: () => update(id, toggleCollapsed(current(id))) };
 }

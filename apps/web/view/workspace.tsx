@@ -256,6 +256,7 @@ export function ViewWorkspace(props: {
                 {isCanvas(view) && props.overlay}
                 {isCanvas(view) && !nothing && (
                     <CanvasControls
+                        id={`workspace:${view.kind}`}
                         canvas={canvas}
                         fitAll={fitView}
                         legend={legendView && { view: legendView, open: legends.isOpen(legendView), onToggle: () => legends.toggle(legendView) }}

@@ -18,6 +18,8 @@ const ANIMATE = { animate: true };
  * 印刷 and 書き出し are in its toolbar (`ExportButton`); the inspector's state diagram has its 書き出し here.
  */
 export function CanvasControls(props: {
+    /** Stable identity of this diagram's controls, including across remounts. */
+    id: string;
     canvas: DiagramCanvas | null;
     fitAll: () => void;
     /** The legend of what the canvas shows, if it shows something. */
@@ -31,7 +33,7 @@ export function CanvasControls(props: {
 }) {
     const { canvas, fitAll, legend } = props;
     const t = useT();
-    const { collapsed, toggle } = useCanvasControls();
+    const { collapsed, toggle } = useCanvasControls(props.id);
     const root = useRef<HTMLDivElement>(null);
     const [exportOpen, setExportOpen] = useState(false);
     const closeExport = useCallback(() => setExportOpen(false), []);

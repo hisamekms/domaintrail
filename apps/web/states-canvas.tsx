@@ -207,6 +207,7 @@ export function StatesCanvas(props: {
                             )}
                         </div>
                         <CanvasControls
+                            id={`states:${aggregateId}`}
                             canvas={canvas}
                             fitAll={() => canvas && fitAll(canvas, graph, true)}
                             legend={{ view: 'states', open: props.legendOpen, onToggle: props.onLegendToggle }}

@@ -173,6 +173,7 @@ describe("the canvas controls' legend", () => {
     test('is the shapes icon (the book is the catalog’s)', () => {
         const html = render(
             <CanvasControls
+                id="main"
                 canvas={canvas}
                 fitAll={() => {}}
                 legend={{ view: 'contextMap', open: false, onToggle: () => {} }}
