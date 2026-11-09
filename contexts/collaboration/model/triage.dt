@@ -122,13 +122,18 @@ context Collaboration {
       /// 段は前の段より後（機械的な判定 → Clef → 軽いモデル）で、同じ段は1回。
       requires inOrder "段の順" @externalCheck("段の順序と重複を、既存の段の記録を参照して判定する") else TriageStepOutOfOrder
       outcome Pending: Pending -> Pending
-        select { step.verdict == TriageVerdict.Unknown and step.stage != TriageStage.Model }
+        select {
+          step.verdict == TriageVerdict.Unknown and step.stage != TriageStage.Model
+        }
         changes steps
         emits TriageStepRecorded
       outcome Decided: Pending -> Decided
-        select { step.verdict != TriageVerdict.Unknown or step.stage == TriageStage.Model }
+        select {
+          step.verdict != TriageVerdict.Unknown or step.stage == TriageStage.Model
+        }
         changes steps
-        emits TriageStepRecorded, TriageDecided
+        emits TriageStepRecorded,
+              TriageDecided
     }
 
     /// 回答役（まだ答えていない相談を変更依頼か AI 宛てでないに）や実行役（変更依頼を相談に）が結論を訂正する。
