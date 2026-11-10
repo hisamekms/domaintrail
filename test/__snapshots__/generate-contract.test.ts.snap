@@ -1711,7 +1711,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Billing, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Partial<Options> = {}): Arbitraries {
+export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<Generation, 'declared'> = {}): Arbitraries {
     const seed = options.seed ?? testing.DEFAULT_SEED;
     const given: Partial<Arbitraries> = options.arbitraries?.Billing ?? {};
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);
@@ -1842,7 +1842,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Common, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Partial<Options> = {}): Arbitraries {
+export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<Generation, 'declared'> = {}): Arbitraries {
     const seed = options.seed ?? testing.DEFAULT_SEED;
     const given: Partial<Arbitraries> = options.arbitraries?.Common ?? {};
     const a: Arbitraries = testing.lazy<Arbitraries>({
@@ -1958,7 +1958,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Sales, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Partial<Options> = {}): Arbitraries {
+export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<Generation, 'declared'> = {}): Arbitraries {
     const seed = options.seed ?? testing.DEFAULT_SEED;
     const given: Partial<Arbitraries> = options.arbitraries?.Sales ?? {};
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);

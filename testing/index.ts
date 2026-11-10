@@ -307,7 +307,7 @@ export function boundaries(b: Base, h: Hints, seed: number): unknown[] {
     }
     if (b === 'String' || b === 'UUID') {
         const sampled = h.pattern !== undefined ? fc.stringMatching(new RegExp(h.pattern)) : b === 'UUID' ? fc.uuid() : undefined;
-        const [sample] = sampled ? fc.sample(sampled, { seed, numRuns: 1 }) : ['a'];
+        const sample = (sampled ? fc.sample(sampled, { seed, numRuns: 1 })[0] : 'a') ?? 'a';
         out.push('', sample, `${sample}x`, `x${sample}`, sample.slice(0, -1));
         if (b === 'UUID') out.push(sample.toUpperCase());
         for (const n of [h.minLength, h.maxLength])
@@ -478,7 +478,7 @@ function theOutcome(
 ): [string, { aggregate: { state?: string; [key: string]: unknown }; events: Record<string, unknown> }] {
     const entries = Object.entries(value.value).filter((e): e is [string, NonNullable<(typeof e)[1]>] => e[1] !== undefined);
     if (entries.length !== 1) fail(`${name} returned ${entries.length} outcomes (${entries.map(([k]) => k).join(', ')}); a success value holds exactly one.`);
-    return entries[0];
+    return entries[0]!; // the length check above establishes this entry
 }
 
 export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
