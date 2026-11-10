@@ -887,7 +887,7 @@ class TestsEmitter {
             `}`,
             '',
             `/** The arbitraries of ${ctx}, with the overrides, declared checks and examples of the options. */`,
-            `export function arbitraries(options: Partial<Options> = {}): Arbitraries {`,
+            `export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<Generation, 'declared'> = {}): Arbitraries {`,
             ...locals(defsText, true),
             ...cycles.map((c) => indent(c, '    ')),
             `    const a: Arbitraries = testing.lazy<Arbitraries>({`,

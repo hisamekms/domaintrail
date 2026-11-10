@@ -336,7 +336,7 @@ export interface Implementation {
 }
 
 /** The arbitraries of Collaboration, with the overrides, declared checks and examples of the options. */
-export function arbitraries(options: Partial<Options> = {}): Arbitraries {
+export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<Generation, 'declared'> = {}): Arbitraries {
     const seed = options.seed ?? testing.DEFAULT_SEED;
     const given: Partial<Arbitraries> = options.arbitraries?.Collaboration ?? {};
     const declared: DeclaredChecks = options.declared?.Collaboration ?? {};

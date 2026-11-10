@@ -5,6 +5,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
+import * as fc from 'fast-check';
 import { generateTypeScript } from './typescript.js';
 import { check, linkNodeModules } from '../test-helpers.js';
 
@@ -17,6 +18,14 @@ const KERNEL = `shared context Kernel {
   }
   primitive Line: Int { value >= 1 }
 }`;
+
+const KERNEL_EXTERNAL = KERNEL.replace(
+    'primitive Line: Int { value >= 1 }',
+    `primitive Line: Int {
+    invariant positive { value >= 1 }
+    invariant registered "registered in external catalog" @externalCheck("catalog is external")
+  }`,
+);
 
 const SALES = `context Sales {
   id OrderId: UUID
@@ -94,7 +103,8 @@ describe('a context written into another package', () => {
             await mkdir(path.dirname(path.join(dir, rel)), { recursive: true });
             await writeFile(path.join(dir, rel), content);
         };
-        const a = await check({ 'kernel.dt': KERNEL, 'sales.dt': SALES });
+        const a = await check({ 'kernel.dt': KERNEL_EXTERNAL, 'sales.dt': SALES });
+        expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
         for (const f of generateTypeScript(a.model!, DIRS, { dir: 'tests' }, {}, MODULES)) await write(f.path, f.content);
         // the kernel's package exports its context and its tests
         await write(
@@ -111,10 +121,21 @@ describe('a context written into another package', () => {
         await Bun.write(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
         await symlink(path.join(dir, 'packages', 'kernel'), path.join(dir, 'node_modules', '@acme', 'kernel'));
         await write(
+            'usage.ts',
+            `import * as KernelTests from '@acme/kernel/tests';
+// @ts-expect-error the external invariant requires contract options
+KernelTests.contract({});
+// @ts-expect-error the declared check must be supplied
+KernelTests.contract({}, { declared: { Kernel: { Line: {} } } });
+KernelTests.contract({}, { declared: { Kernel: { Line: { registered: () => true } } } });
+`,
+        );
+        await write(
             'tsconfig.json',
             JSON.stringify({
                 compilerOptions: {
                     strict: true,
+                    noUncheckedIndexedAccess: true,
                     noEmit: true,
                     target: 'ES2023',
                     module: 'preserve',
@@ -128,5 +149,12 @@ describe('a context written into another package', () => {
         );
         const r = Bun.spawnSync([process.execPath, TSC, '-p', 'tsconfig.json'], { cwd: dir });
         expect({ code: r.exitCode, output: r.stdout.toString() + r.stderr.toString() }).toEqual({ code: 0, output: '' });
+        const sales = await import(path.join(dir, 'tests', 'Sales.ts'));
+        let registeredChecks = 0;
+        const arbs = sales.arbitraries({
+            declared: { Kernel: { Line: { registered: () => (registeredChecks++, true) } } },
+        });
+        expect(fc.sample(arbs.Order, { numRuns: 1 })).toHaveLength(1);
+        expect(registeredChecks).toBeGreaterThan(0);
     }, 60_000);
 });
