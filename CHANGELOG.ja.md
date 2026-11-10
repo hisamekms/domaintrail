@@ -10,6 +10,33 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.11.0] - 2026-11-10
+
+### 追加
+
+- `dt check --no-knowledge` は files ストアのナレッジ診断だけを省き、モデル・ストーミング・ジャーニーの検査を
+  続けます。`dt check --scope dtes` はイベントストーミングの診断だけを報告しますが、`ref` の解決には `.dt`
+  モデルを読みます。モデルの構文エラーで `ref` を検査できない場合や `.dtes` ファイルがない場合は失敗します。
+  どちらも JSON 出力で使え、AI エージェントが編集中の範囲の診断を取得できます。
+
+### 変更
+
+- リポジトリの保守: コミットメッセージとステージ済みファイルを検査する commitlint と prek を追加し、`ws` を更新
+  しました。
+
+### 修正
+
+- 生成された `_runtime.ts` の選択・リスト・Decimal のヘルパーが、`strict` と
+  `noUncheckedIndexedAccess` を有効にした型チェックを通るようにしました。
+- 別々のパッケージに生成したコンテキストの契約テストで、`@externalCheck` を持つコンテキストの任意値生成器を
+  他のコンテキストから利用しても型チェックが通るようにしました。`contract` に必要な外部チェックは引き続き必須です。
+
+### アップグレード手順
+
+- この型エラーの回避策として `noUncheckedIndexedAccess` を無効にしたり、生成された契約テストを TypeScript の
+  検査対象から外したりしていた場合は、domaintrail を更新して `dt generate ts` を再実行し、これらの検査を戻して
+  ください。モデルが要求する外部チェックを渡したうえで、生成された契約テストを実行してください。
+
 ## [0.10.0] - 2026-11-10
 
 ### 追加
@@ -962,6 +989,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/hisamekms/domaintrail/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/hisamekms/domaintrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/hisamekms/domaintrail/compare/v0.8.0...v0.8.1
