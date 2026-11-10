@@ -25,7 +25,7 @@ export type Stored<E> = { readonly event: E; readonly meta: EventMeta };
 export type Subscriber<E = DomainEvent> = (stored: Stored<E>) => void | Promise<void>;
 
 // The persistent events as data. `satisfies` makes the compiler report this list when `persistent` changes in the DSL.
-const persistent = { OrderPlaced: true, OrderConfirmed: true, InvoicePaid: true } satisfies Record<PersistentEvent['type'], true>;
+const persistent = { 'Sales.OrderPlaced': true, 'Sales.OrderConfirmed': true, 'Billing.InvoicePaid': true } satisfies Record<PersistentEvent['type'], true>;
 
 const isPersistent = (s: Stored<DomainEvent>): s is Stored<PersistentEvent> => s.event.type in persistent;
 

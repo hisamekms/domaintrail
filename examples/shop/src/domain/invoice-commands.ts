@@ -9,6 +9,7 @@ export const invoiceCommands: Billing.InvoiceCommands = {
     ),
 
     pay: decide<Billing.PayInvoiceDecision>(Billing.InvoiceShape, {
-        Open: (invoice, { paidAt }) => ok({ Paid: { set: { paidAt }, events: { InvoicePaid: { type: 'InvoicePaid', invoiceId: invoice.id, paidAt } } } }),
+        Open: (invoice, { paidAt }) =>
+            ok({ Paid: { set: { paidAt }, events: { 'Billing.InvoicePaid': { type: 'Billing.InvoicePaid', invoiceId: invoice.id, paidAt } } } }),
     }),
 };

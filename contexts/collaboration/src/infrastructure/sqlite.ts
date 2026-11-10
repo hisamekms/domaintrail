@@ -902,7 +902,7 @@ function slashCommands(db: DatabaseSync): SlashCommandRepository {
 function outbox(db: DatabaseSync): EventOutbox {
     const append = db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (:session, :type, :payload, :at)');
     const requestSent = db.prepare(
-        "SELECT seq, session_id, payload, recorded_at FROM outbox WHERE type = 'RequestSent' AND json_extract(payload, '$.requestId') = :request ORDER BY seq",
+        "SELECT seq, session_id, payload, recorded_at FROM outbox WHERE type IN ('RequestSent', 'Collaboration.RequestSent') AND json_extract(payload, '$.requestId') = :request ORDER BY seq",
     );
     const replace = db.prepare('UPDATE outbox SET type = :type, payload = :payload WHERE seq = :seq');
     const all = db.prepare('SELECT seq, session_id, payload, recorded_at FROM outbox WHERE seq > :cursor ORDER BY seq LIMIT :limit');

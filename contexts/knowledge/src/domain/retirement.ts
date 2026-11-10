@@ -172,7 +172,7 @@ export function admitProposal(candidate: RetirementCandidate, context: ProposalC
         const seen = new Set(dismissed.flatMap((p) => p.evidence.map(evidenceKey)));
         if (candidate.evidence.every((e) => seen.has(evidenceKey(e)))) return refused('dismissedBefore');
     }
-    return ok({ proposal: made.value.Open.aggregate, event: made.value.Open.events.RetirementProposed });
+    return ok({ proposal: made.value.Open.aggregate, event: made.value.Open.events['Knowledge.RetirementProposed'] });
 }
 
 /** A proposal approved: the proposal and the item as they are after it. */
@@ -218,18 +218,18 @@ export function decideApproval(
         if (!r.ok) return err({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
         return ok({
             proposal: aggregate,
-            proposalEvent: events.RetirementProposalApproved,
+            proposalEvent: events['Knowledge.RetirementProposalApproved'],
             item: r.value.Live.aggregate,
-            itemEvent: r.value.Live.events.KnowledgeItemRetired,
+            itemEvent: r.value.Live.events['Knowledge.KnowledgeItemRetired'],
         });
     }
     const r = knowledgeItemCommands.unretire(item, { proposal: proposal.id, by, at });
     if (!r.ok) return err({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
     return ok({
         proposal: aggregate,
-        proposalEvent: events.RetirementProposalApproved,
+        proposalEvent: events['Knowledge.RetirementProposalApproved'],
         item: r.value.Live.aggregate,
-        itemEvent: r.value.Live.events.KnowledgeItemUnretired,
+        itemEvent: r.value.Live.events['Knowledge.KnowledgeItemUnretired'],
     });
 }
 
@@ -247,7 +247,7 @@ export function decideDismissal(
     if (proposal.state !== 'Open') return err({ type: 'Knowledge.ProposalDecided', proposalId: id });
     const r = retirementProposalCommands.dismiss(proposal, { by, at });
     if (!r.ok) throw new Error('dismiss refused an open proposal');
-    return ok({ proposal: r.value.Dismissed.aggregate, event: r.value.Dismissed.events.RetirementProposalDismissed });
+    return ok({ proposal: r.value.Dismissed.aggregate, event: r.value.Dismissed.events['Knowledge.RetirementProposalDismissed'] });
 }
 
 /**
@@ -270,7 +270,9 @@ export const retirementProposalCommands: Knowledge.RetirementProposalCommands = 
         return ok({
             Open: {
                 set: { id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt },
-                events: { RetirementProposed: { type: 'RetirementProposed', proposalId: id, item, action, proposedBy, explanation, proposedAt } },
+                events: {
+                    'Knowledge.RetirementProposed': { type: 'Knowledge.RetirementProposed', proposalId: id, item, action, proposedBy, explanation, proposedAt },
+                },
             },
         });
     }),
@@ -281,8 +283,8 @@ export const retirementProposalCommands: Knowledge.RetirementProposalCommands = 
                 Approved: {
                     set: { decidedBy: by, decidedAt: at },
                     events: {
-                        RetirementProposalApproved: {
-                            type: 'RetirementProposalApproved',
+                        'Knowledge.RetirementProposalApproved': {
+                            type: 'Knowledge.RetirementProposalApproved',
                             proposalId: proposal.id,
                             item: proposal.item,
                             action: proposal.action,
@@ -300,8 +302,8 @@ export const retirementProposalCommands: Knowledge.RetirementProposalCommands = 
                 Dismissed: {
                     set: { decidedBy: by, decidedAt: at },
                     events: {
-                        RetirementProposalDismissed: {
-                            type: 'RetirementProposalDismissed',
+                        'Knowledge.RetirementProposalDismissed': {
+                            type: 'Knowledge.RetirementProposalDismissed',
                             proposalId: proposal.id,
                             item: proposal.item,
                             action: proposal.action,

@@ -72,9 +72,9 @@ export type ProgressWork = (work: InProgressWork, step: Step) => Result<
 - The key is the target state's name; every command has this shape, also with one target. An aggregate without
   states is keyed by the aggregate's name (`{ Customer: { aggregate, events } }`).
 - With several keys, each branch marks the other keys `?: never`, so a value with two outcomes is rejected.
-- `events` is always present, keyed by the events' names (their `type` tag; an event of another context by its simple
-  name). By multiplicity: `X` → `X: X`; `X?` → `X?: X`; `X[0..*]` → `X: readonly X[]` (written even when empty);
-  `X[1..*]` → `X: readonly [X, ...X[]]`; other `[n..m]` → `X: readonly X[]` with the bounds in JSDoc. Without events,
+- `events` is always present, keyed by the events' qualified names (`'Sales.X'`), as are their `type` tags. By
+  multiplicity: `X` → `'Sales.X': X`; `X?` → `'Sales.X'?: X`; `X[0..*]` → `'Sales.X': readonly X[]` (written even when empty);
+  `X[1..*]` → `'Sales.X': readonly [X, ...X[]]`; other `[n..m]` → `'Sales.X': readonly X[]` with the bounds in JSDoc. Without events,
   the runtime type `NoEvents` (`{ readonly [type: string]: never }`): `{}` is assignable, nothing else.
 - Events have **no order** in the contract: they are facts of one decision. With event sourcing, applying the events
   of one command must not depend on their order.

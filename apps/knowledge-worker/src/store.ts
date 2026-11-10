@@ -628,7 +628,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 if (!r.ok) throw new Error('setBookmark refused a live item');
                 const next = r.value.Live.aggregate;
                 return {
-                    statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeBookmarkChanged)]),
+                    statements: this.writes(project, [next], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeBookmarkChanged'])]),
                     value: ok(next),
                 };
             },
@@ -656,7 +656,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                     project,
                     [next],
                     [{ item: id, past: pastVersionOf(item, next) }],
-                    [auditOf(r.value.Live.events.KnowledgeItemCorrected)],
+                    [auditOf(r.value.Live.events['Knowledge.KnowledgeItemCorrected'])],
                 );
                 return { statements, value: ok(next) };
             },
@@ -689,7 +689,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 project,
                 sides.map((s) => s.aggregate),
                 [],
-                sides.map((s) => auditOf(s.events.KnowledgeConflictUnlinked)),
+                sides.map((s) => auditOf(s.events['Knowledge.KnowledgeConflictUnlinked'])),
             );
             return { statements, value: ok(sides.map((s) => s.aggregate)) };
         });
@@ -722,7 +722,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 project,
                 sides.map((s) => s.aggregate),
                 [],
-                sides.map((s) => auditOf(s.events.KnowledgeHandedOverToHotspot)),
+                sides.map((s) => auditOf(s.events['Knowledge.KnowledgeHandedOverToHotspot'])),
             );
             return { statements, value: ok(sides.map((s) => s.aggregate)) };
         });
@@ -743,7 +743,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const r = knowledgeItemCommands.delete(item, { by, at: this.now() });
             if (!r.ok) throw new Error('delete refused a live item');
             return {
-                statements: this.writes(project, [r.value.Deleted.aggregate], [], [auditOf(r.value.Deleted.events.KnowledgeItemDeleted)]),
+                statements: this.writes(project, [r.value.Deleted.aggregate], [], [auditOf(r.value.Deleted.events['Knowledge.KnowledgeItemDeleted'])]),
                 value: ok(deletion),
             };
         });
@@ -765,7 +765,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 const r = knowledgeItemCommands.delete(item, { by, at: this.now() });
                 if (!r.ok) throw new Error('delete refused a live item');
                 deleted.push(r.value.Deleted.aggregate);
-                audit.push(auditOf(r.value.Deleted.events.KnowledgeItemDeleted));
+                audit.push(auditOf(r.value.Deleted.events['Knowledge.KnowledgeItemDeleted']));
                 messages.push(...sourceMessages(item));
             }
             return {
@@ -788,7 +788,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const r = knowledgeItemCommands.restore(item, { by, at: this.now() });
             if (!r.ok) throw new Error('restore refused a deleted item');
             const restored = r.value.Live.aggregate;
-            return { statements: this.writes(project, [restored], [], [auditOf(r.value.Live.events.KnowledgeItemRestored)]), value: ok(restored) };
+            return { statements: this.writes(project, [restored], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeItemRestored'])]), value: ok(restored) };
         });
     }
 
@@ -887,7 +887,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const r = knowledgeItemCommands.retire(item, { ...retirement, by, at: this.now() });
             if (!r.ok) return { statements: [], value: r };
             const next = r.value.Live.aggregate;
-            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeItemRetired)]), value: ok(next) };
+            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeItemRetired'])]), value: ok(next) };
         });
     }
 
@@ -905,7 +905,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const r = knowledgeItemCommands.unretire(item, { by, at: this.now() });
             if (!r.ok) return { statements: [], value: r };
             const next = r.value.Live.aggregate;
-            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeItemUnretired)]), value: ok(next) };
+            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeItemUnretired'])]), value: ok(next) };
         });
     }
 

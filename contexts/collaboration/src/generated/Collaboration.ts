@@ -1105,7 +1105,7 @@ export type QueueAgentRun = (
 ) => Result<{
     readonly Queued: {
         readonly aggregate: QueuedAgentRun;
-        readonly events: { readonly RunQueued: RunQueued };
+        readonly events: { readonly 'Collaboration.RunQueued': RunQueued };
     };
 }, FacilitatorOnly | DuplicateRequest | InputMismatch>;
 
@@ -1124,7 +1124,7 @@ export type QueueAgentRunDecision = (
 ) => Result<{
     readonly Queued: {
         readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp; readonly revertObstacle: RevertObstacle | undefined };
-        readonly events: { readonly RunQueued: RunQueued };
+        readonly events: { readonly 'Collaboration.RunQueued': RunQueued };
     };
 }, FacilitatorOnly | DuplicateRequest | InputMismatch>;
 
@@ -1179,7 +1179,7 @@ export type RecordEditAgentRun = (
 ) => Result<{
     readonly Edited: {
         readonly aggregate: EditedAgentRun;
-        readonly events: { readonly RunEdited: RunEdited };
+        readonly events: { readonly 'Collaboration.RunEdited': RunEdited };
     };
 }, InputMismatch | ChangedMismatch>;
 
@@ -1198,7 +1198,7 @@ export type RecordEditAgentRunDecision = (
 ) => Result<{
     readonly Edited: {
         readonly set: { readonly id: AgentRunId; readonly session: SessionId; readonly input: RunInput; readonly queuedBy: ParticipantId; readonly queuedAt: Timestamp; readonly baseRevision: RevisionId; readonly resultRevision: RevisionId; readonly finishedAt: Timestamp; readonly reapplies: AgentRunId | undefined; readonly conflict: EditConflict | undefined; readonly hotspotName: StormingLocalName | undefined };
-        readonly events: { readonly RunEdited: RunEdited };
+        readonly events: { readonly 'Collaboration.RunEdited': RunEdited };
     };
 }, InputMismatch | ChangedMismatch>;
 
@@ -1240,7 +1240,7 @@ export type NameHotspotAgentRun = (
 ) => Result<{
     readonly Edited: {
         readonly aggregate: EditedAgentRun;
-        readonly events: { readonly RunHotspotNamed: RunHotspotNamed };
+        readonly events: { readonly 'Collaboration.RunHotspotNamed': RunHotspotNamed };
     };
 }, ChangedMismatch>;
 
@@ -1257,7 +1257,7 @@ export type NameHotspotAgentRunDecision = {
     readonly Edited: (agentRun: EditedAgentRun, params: NameHotspotAgentRunParams) => Result<{
         readonly Edited: {
             readonly set: { readonly resultRevision: RevisionId; readonly hotspotName: StormingLocalName | undefined };
-            readonly events: { readonly RunHotspotNamed: RunHotspotNamed };
+            readonly events: { readonly 'Collaboration.RunHotspotNamed': RunHotspotNamed };
         };
     }, ChangedMismatch>;
 };
@@ -1294,7 +1294,7 @@ export type NoteConflictAgentRun = (
 ) => Result<{
     readonly Edited: {
         readonly aggregate: EditedAgentRun;
-        readonly events: { readonly RunEditConflicted: RunEditConflicted };
+        readonly events: { readonly 'Collaboration.RunEditConflicted': RunEditConflicted };
     };
 }, never>;
 
@@ -1310,7 +1310,7 @@ export type NoteConflictAgentRunDecision = {
     readonly Edited: (agentRun: EditedAgentRun, params: NoteConflictAgentRunParams) => Result<{
         readonly Edited: {
             readonly set: { readonly conflict: EditConflict | undefined };
-            readonly events: { readonly RunEditConflicted: RunEditConflicted };
+            readonly events: { readonly 'Collaboration.RunEditConflicted': RunEditConflicted };
         };
     }, never>;
 };
@@ -1345,7 +1345,7 @@ export type RevertAgentRun = (
 ) => Result<{
     readonly Reverted: {
         readonly aggregate: RevertedAgentRun;
-        readonly events: { readonly RunReverted: RunReverted };
+        readonly events: { readonly 'Collaboration.RunReverted': RunReverted };
     };
 }, InputMismatch | ChangedMismatch>;
 
@@ -1363,7 +1363,7 @@ export type RevertAgentRunDecision = {
     readonly Queued: (agentRun: QueuedAgentRun, params: RevertAgentRunParams) => Result<{
         readonly Reverted: {
             readonly set: { readonly baseRevision: RevisionId; readonly resultRevision: RevisionId; readonly changed: boolean; readonly finishedAt: Timestamp };
-            readonly events: { readonly RunReverted: RunReverted };
+            readonly events: { readonly 'Collaboration.RunReverted': RunReverted };
         };
     }, InputMismatch | ChangedMismatch>;
 };
@@ -1402,7 +1402,7 @@ export type LeaveToAgentAgentRun = (
 ) => Result<{
     readonly Queued: {
         readonly aggregate: QueuedAgentRun;
-        readonly events: { readonly RevertLeftToAgent: RevertLeftToAgent };
+        readonly events: { readonly 'Collaboration.RevertLeftToAgent': RevertLeftToAgent };
     };
 }, InputMismatch>;
 
@@ -1419,7 +1419,7 @@ export type LeaveToAgentAgentRunDecision = {
     readonly Queued: (agentRun: QueuedAgentRun, params: LeaveToAgentAgentRunParams) => Result<{
         readonly Queued: {
             readonly set: { readonly revertObstacle: RevertObstacle | undefined };
-            readonly events: { readonly RevertLeftToAgent: RevertLeftToAgent };
+            readonly events: { readonly 'Collaboration.RevertLeftToAgent': RevertLeftToAgent };
         };
     }, InputMismatch>;
 };
@@ -1457,7 +1457,7 @@ export type StartAgentRun = (
 ) => Result<{
     readonly Running: {
         readonly aggregate: RunningAgentRun;
-        readonly events: { readonly RunStarted: RunStarted };
+        readonly events: { readonly 'Collaboration.RunStarted': RunStarted };
     };
 }, never>;
 
@@ -1473,7 +1473,7 @@ export type StartAgentRunDecision = {
     readonly Queued: (agentRun: QueuedAgentRun, params: StartAgentRunParams) => Result<{
         readonly Running: {
             readonly set: { readonly baseRevision: RevisionId; readonly startedAt: Timestamp };
-            readonly events: { readonly RunStarted: RunStarted };
+            readonly events: { readonly 'Collaboration.RunStarted': RunStarted };
         };
     }, never>;
 };
@@ -1515,14 +1515,14 @@ export type FinishAgentRun = (
     | {
           readonly Completed: {
               readonly aggregate: CompletedAgentRun;
-              readonly events: { readonly RunCompleted: RunCompleted };
+              readonly events: { readonly 'Collaboration.RunCompleted': RunCompleted };
           };
           readonly Failed?: never;
       }
     | {
           readonly Failed: {
               readonly aggregate: FailedAgentRun;
-              readonly events: { readonly RunFailed: RunFailed };
+              readonly events: { readonly 'Collaboration.RunFailed': RunFailed };
           };
           readonly Completed?: never;
       },
@@ -1541,14 +1541,14 @@ export type FinishAgentRunDecision = (
     | {
           readonly Completed: {
               readonly set: { readonly report: RunReport; readonly resultRevision: RevisionId; readonly changed: boolean; readonly reply: AgentReply | undefined; readonly review: RunReview | undefined; readonly finishedAt: Timestamp };
-              readonly events: { readonly RunCompleted: RunCompleted };
+              readonly events: { readonly 'Collaboration.RunCompleted': RunCompleted };
           };
           readonly Failed?: never;
       }
     | {
           readonly Failed: {
               readonly set: { readonly reason: FailureReason; readonly report: RunReport | undefined; readonly resultRevision: RevisionId | undefined; readonly finishedAt: Timestamp };
-              readonly events: { readonly RunFailed: RunFailed };
+              readonly events: { readonly 'Collaboration.RunFailed': RunFailed };
           };
           readonly Completed?: never;
       },
@@ -1597,7 +1597,7 @@ export type AskClarificationAgentRun = (
 ) => Result<{
     readonly NeedsClarification: {
         readonly aggregate: NeedsClarificationAgentRun;
-        readonly events: { readonly RunNeedsClarification: RunNeedsClarification };
+        readonly events: { readonly 'Collaboration.RunNeedsClarification': RunNeedsClarification };
     };
 }, InvalidReply>;
 
@@ -1615,7 +1615,7 @@ export type AskClarificationAgentRunDecision = {
     readonly Running: (agentRun: RunningAgentRun, params: AskClarificationAgentRunParams) => Result<{
         readonly NeedsClarification: {
             readonly set: { readonly question: Text; readonly reply: AgentReply | undefined; readonly resultRevision: RevisionId; readonly finishedAt: Timestamp };
-            readonly events: { readonly RunNeedsClarification: RunNeedsClarification };
+            readonly events: { readonly 'Collaboration.RunNeedsClarification': RunNeedsClarification };
         };
     }, InvalidReply>;
 };
@@ -1658,7 +1658,7 @@ export type DeclineAgentRun = (
 ) => Result<{
     readonly Declined: {
         readonly aggregate: DeclinedAgentRun;
-        readonly events: { readonly RunDeclined: RunDeclined };
+        readonly events: { readonly 'Collaboration.RunDeclined': RunDeclined };
     };
 }, InvalidReply>;
 
@@ -1676,7 +1676,7 @@ export type DeclineAgentRunDecision = {
     readonly Running: (agentRun: RunningAgentRun, params: DeclineAgentRunParams) => Result<{
         readonly Declined: {
             readonly set: { readonly reply: AgentReply; readonly resultRevision: RevisionId; readonly finishedAt: Timestamp };
-            readonly events: { readonly RunDeclined: RunDeclined };
+            readonly events: { readonly 'Collaboration.RunDeclined': RunDeclined };
         };
     }, InvalidReply>;
 };
@@ -1716,7 +1716,7 @@ export type FailAgentRun = (
 ) => Result<{
     readonly Failed: {
         readonly aggregate: FailedAgentRun;
-        readonly events: { readonly RunFailed: RunFailed };
+        readonly events: { readonly 'Collaboration.RunFailed': RunFailed };
     };
 }, ReportRequired>;
 
@@ -1733,7 +1733,7 @@ export type FailAgentRunDecision = {
     readonly Running: (agentRun: RunningAgentRun, params: FailAgentRunParams) => Result<{
         readonly Failed: {
             readonly set: { readonly reason: FailureReason; readonly report: RunReport | undefined; readonly resultRevision: RevisionId | undefined; readonly finishedAt: Timestamp };
-            readonly events: { readonly RunFailed: RunFailed };
+            readonly events: { readonly 'Collaboration.RunFailed': RunFailed };
         };
     }, ReportRequired>;
 };
@@ -1774,7 +1774,7 @@ export type CancelAgentRun = (
 ) => Result<{
     readonly Cancelled: {
         readonly aggregate: CancelledAgentRun;
-        readonly events: { readonly RunCancelled: RunCancelled };
+        readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
     };
 }, FacilitatorOnly>;
 
@@ -1792,14 +1792,14 @@ export type CancelAgentRunDecision = {
     readonly Queued: (agentRun: QueuedAgentRun, params: CancelAgentRunParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
-            readonly events: { readonly RunCancelled: RunCancelled };
+            readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
         };
     }, FacilitatorOnly>;
     /** @emits RunCancelled — exactly once when the command succeeds */
     readonly Running: (agentRun: RunningAgentRun, params: CancelAgentRunParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
-            readonly events: { readonly RunCancelled: RunCancelled };
+            readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
         };
     }, FacilitatorOnly>;
 };
@@ -1857,7 +1857,7 @@ export type AgentRunEvent = RunQueued | RunEdited | RunHotspotNamed | RunEditCon
  * @see contexts/collaboration/model/agent-run.dt:497
  */
 export interface RunQueued {
-    readonly type: 'RunQueued';
+    readonly type: 'Collaboration.RunQueued';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** セッション */
@@ -1875,7 +1875,7 @@ export interface RunQueued {
  * @see contexts/collaboration/model/agent-run.dt:505
  */
 export interface RunReverted {
-    readonly type: 'RunReverted';
+    readonly type: 'Collaboration.RunReverted';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** 基準リビジョン */
@@ -1893,7 +1893,7 @@ export interface RunReverted {
  * @see contexts/collaboration/model/agent-run.dt:513
  */
 export interface RunEdited {
-    readonly type: 'RunEdited';
+    readonly type: 'Collaboration.RunEdited';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** セッション */
@@ -1917,7 +1917,7 @@ export interface RunEdited {
  * @see contexts/collaboration/model/agent-run.dt:524
  */
 export interface RunHotspotNamed {
-    readonly type: 'RunHotspotNamed';
+    readonly type: 'Collaboration.RunHotspotNamed';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** AI が付けた名前 */
@@ -1932,7 +1932,7 @@ export interface RunHotspotNamed {
  * @see contexts/collaboration/model/agent-run.dt:530
  */
 export interface RunEditConflicted {
-    readonly type: 'RunEditConflicted';
+    readonly type: 'Collaboration.RunEditConflicted';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** 食い違い */
@@ -1945,7 +1945,7 @@ export interface RunEditConflicted {
  * @see contexts/collaboration/model/agent-run.dt:535
  */
 export interface RevertLeftToAgent {
-    readonly type: 'RevertLeftToAgent';
+    readonly type: 'Collaboration.RevertLeftToAgent';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** わけ */
@@ -1958,7 +1958,7 @@ export interface RevertLeftToAgent {
  * @see contexts/collaboration/model/agent-run.dt:540
  */
 export interface RunStarted {
-    readonly type: 'RunStarted';
+    readonly type: 'Collaboration.RunStarted';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** リビジョンID */
@@ -1972,7 +1972,7 @@ export interface RunStarted {
  * @see contexts/collaboration/model/agent-run.dt:546
  */
 export interface RunCompleted {
-    readonly type: 'RunCompleted';
+    readonly type: 'Collaboration.RunCompleted';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** リビジョンID */
@@ -1987,7 +1987,7 @@ export interface RunCompleted {
  * @see contexts/collaboration/model/agent-run.dt:553
  */
 export interface RunNeedsClarification {
-    readonly type: 'RunNeedsClarification';
+    readonly type: 'Collaboration.RunNeedsClarification';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** 文章 */
@@ -2003,7 +2003,7 @@ export interface RunNeedsClarification {
  * @see contexts/collaboration/model/agent-run.dt:560
  */
 export interface RunDeclined {
-    readonly type: 'RunDeclined';
+    readonly type: 'Collaboration.RunDeclined';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** リビジョンID */
@@ -2017,7 +2017,7 @@ export interface RunDeclined {
  * @see contexts/collaboration/model/agent-run.dt:566
  */
 export interface RunFailed {
-    readonly type: 'RunFailed';
+    readonly type: 'Collaboration.RunFailed';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** 失敗の理由 */
@@ -2031,7 +2031,7 @@ export interface RunFailed {
  * @see contexts/collaboration/model/agent-run.dt:572
  */
 export interface RunCancelled {
-    readonly type: 'RunCancelled';
+    readonly type: 'Collaboration.RunCancelled';
     /** エージェント実行ID */
     readonly runId: AgentRunId;
     /** 参加者ID */
@@ -2295,7 +2295,7 @@ export type ApproveAssumptionApproval = (
 ) => Result<{
     readonly Approved: {
         readonly aggregate: ApprovedAssumptionApproval;
-        readonly events: { readonly AssumptionApproved: AssumptionApproved };
+        readonly events: { readonly 'Collaboration.AssumptionApproved': AssumptionApproved };
     };
 }, FacilitatorOnly>;
 
@@ -2312,7 +2312,7 @@ export type ApproveAssumptionApprovalDecision = (
 ) => Result<{
     readonly Approved: {
         readonly set: { readonly id: AssumptionApprovalId; readonly session: SessionId; readonly assumption: AssumptionRef; readonly approvedBy: ParticipantId; readonly approvedAt: Timestamp };
-        readonly events: { readonly AssumptionApproved: AssumptionApproved };
+        readonly events: { readonly 'Collaboration.AssumptionApproved': AssumptionApproved };
     };
 }, FacilitatorOnly>;
 
@@ -2347,7 +2347,7 @@ export type AssumptionApprovalEvent = AssumptionApproved;
  * @see contexts/collaboration/model/approval.dt:36
  */
 export interface AssumptionApproved {
-    readonly type: 'AssumptionApproved';
+    readonly type: 'Collaboration.AssumptionApproved';
     /** 前提の承認ID */
     readonly approvalId: AssumptionApprovalId;
     /** セッション */
@@ -2824,7 +2824,7 @@ export type StartSlashCommand = (
 ) => Result<{
     readonly Working: {
         readonly aggregate: WorkingSlashCommand;
-        readonly events: { readonly SlashCommandStarted: SlashCommandStarted };
+        readonly events: { readonly 'Collaboration.SlashCommandStarted': SlashCommandStarted };
     };
 }, never>;
 
@@ -2840,7 +2840,7 @@ export type StartSlashCommandDecision = (
 ) => Result<{
     readonly Working: {
         readonly set: { readonly id: SlashCommandId; readonly session: SessionId; readonly kind: SlashCommandKind; readonly startedBy: ParticipantId; readonly opening: RequestId; readonly scope: StormingName | undefined; readonly language: UiLanguage; readonly startedAt: Timestamp; readonly guide: GuideSnapshot | undefined };
-        readonly events: { readonly SlashCommandStarted: SlashCommandStarted };
+        readonly events: { readonly 'Collaboration.SlashCommandStarted': SlashCommandStarted };
     };
 }, never>;
 
@@ -2868,7 +2868,7 @@ export type ListSlashCommand = (
 ) => Result<{
     readonly Listed: {
         readonly aggregate: ListedSlashCommand;
-        readonly events: { readonly CandidatesListed: CandidatesListed };
+        readonly events: { readonly 'Collaboration.CandidatesListed': CandidatesListed };
     };
 }, never>;
 
@@ -2884,7 +2884,7 @@ export type ListSlashCommandDecision = {
     readonly Working: (slashCommand: WorkingSlashCommand, params: ListSlashCommandParams) => Result<{
         readonly Listed: {
             readonly set: { readonly candidates: readonly CommandCandidate[]; readonly listedAt: Timestamp };
-            readonly events: { readonly CandidatesListed: CandidatesListed };
+            readonly events: { readonly 'Collaboration.CandidatesListed': CandidatesListed };
         };
     }, never>;
 };
@@ -2915,7 +2915,7 @@ export type AnswerSlashCommand = (
 ) => Result<{
     readonly Answered: {
         readonly aggregate: AnsweredSlashCommand;
-        readonly events: { readonly SlashCommandAnswered: SlashCommandAnswered };
+        readonly events: { readonly 'Collaboration.SlashCommandAnswered': SlashCommandAnswered };
     };
 }, never>;
 
@@ -2931,7 +2931,7 @@ export type AnswerSlashCommandDecision = {
     readonly Working: (slashCommand: WorkingSlashCommand, params: AnswerSlashCommandParams) => Result<{
         readonly Answered: {
             readonly set: { readonly answer: RequestId; readonly next: NextAnswer | undefined; readonly answeredAt: Timestamp };
-            readonly events: { readonly SlashCommandAnswered: SlashCommandAnswered };
+            readonly events: { readonly 'Collaboration.SlashCommandAnswered': SlashCommandAnswered };
         };
     }, never>;
 };
@@ -2969,7 +2969,7 @@ export type ApplySlashCommand = (
 ) => Result<{
     readonly Applied: {
         readonly aggregate: AppliedSlashCommand;
-        readonly events: { readonly CandidatesApplied: CandidatesApplied };
+        readonly events: { readonly 'Collaboration.CandidatesApplied': CandidatesApplied };
     };
 }, FacilitatorOnly | NoSuchCandidate>;
 
@@ -2987,7 +2987,7 @@ export type ApplySlashCommandDecision = {
     readonly Listed: (slashCommand: ListedSlashCommand, params: ApplySlashCommandParams) => Result<{
         readonly Applied: {
             readonly set: { readonly chosen: readonly [CandidateIndex, ...CandidateIndex[]]; readonly appliedBy: ParticipantId | undefined; readonly appliedAt: Timestamp; readonly run: AgentRunId };
-            readonly events: { readonly CandidatesApplied: CandidatesApplied };
+            readonly events: { readonly 'Collaboration.CandidatesApplied': CandidatesApplied };
         };
     }, FacilitatorOnly | NoSuchCandidate>;
 };
@@ -3029,7 +3029,7 @@ export type StopSlashCommand = (
 ) => Result<{
     readonly Stopped: {
         readonly aggregate: StoppedSlashCommand;
-        readonly events: { readonly SlashCommandStopped: SlashCommandStopped };
+        readonly events: { readonly 'Collaboration.SlashCommandStopped': SlashCommandStopped };
     };
 }, NotTheStarter>;
 
@@ -3047,14 +3047,14 @@ export type StopSlashCommandDecision = {
     readonly Working: (slashCommand: WorkingSlashCommand, params: StopSlashCommandParams) => Result<{
         readonly Stopped: {
             readonly set: { readonly stoppedBy: ParticipantId; readonly stoppedAt: Timestamp };
-            readonly events: { readonly SlashCommandStopped: SlashCommandStopped };
+            readonly events: { readonly 'Collaboration.SlashCommandStopped': SlashCommandStopped };
         };
     }, NotTheStarter>;
     /** @emits SlashCommandStopped — exactly once when the command succeeds */
     readonly Listed: (slashCommand: ListedSlashCommand, params: StopSlashCommandParams) => Result<{
         readonly Stopped: {
             readonly set: { readonly stoppedBy: ParticipantId; readonly stoppedAt: Timestamp };
-            readonly events: { readonly SlashCommandStopped: SlashCommandStopped };
+            readonly events: { readonly 'Collaboration.SlashCommandStopped': SlashCommandStopped };
         };
     }, NotTheStarter>;
 };
@@ -3098,7 +3098,7 @@ export type SlashCommandEvent = SlashCommandStarted | CandidatesListed | SlashCo
  * @see contexts/collaboration/model/command.dt:144
  */
 export interface SlashCommandStarted {
-    readonly type: 'SlashCommandStarted';
+    readonly type: 'Collaboration.SlashCommandStarted';
     /** コマンドID */
     readonly commandId: SlashCommandId;
     /** セッション */
@@ -3124,7 +3124,7 @@ export interface SlashCommandStarted {
  * @see contexts/collaboration/model/command.dt:156
  */
 export interface CandidatesListed {
-    readonly type: 'CandidatesListed';
+    readonly type: 'Collaboration.CandidatesListed';
     /** コマンドID */
     readonly commandId: SlashCommandId;
     /** 候補 */
@@ -3138,7 +3138,7 @@ export interface CandidatesListed {
  * @see contexts/collaboration/model/command.dt:162
  */
 export interface SlashCommandAnswered {
-    readonly type: 'SlashCommandAnswered';
+    readonly type: 'Collaboration.SlashCommandAnswered';
     /** コマンドID */
     readonly commandId: SlashCommandId;
     /** 依頼ID */
@@ -3154,7 +3154,7 @@ export interface SlashCommandAnswered {
  * @see contexts/collaboration/model/command.dt:169
  */
 export interface CandidatesApplied {
-    readonly type: 'CandidatesApplied';
+    readonly type: 'Collaboration.CandidatesApplied';
     /** コマンドID */
     readonly commandId: SlashCommandId;
     /** 候補の番号 */
@@ -3172,7 +3172,7 @@ export interface CandidatesApplied {
  * @see contexts/collaboration/model/command.dt:178
  */
 export interface SlashCommandStopped {
-    readonly type: 'SlashCommandStopped';
+    readonly type: 'Collaboration.SlashCommandStopped';
     /** コマンドID */
     readonly commandId: SlashCommandId;
     /** 参加者ID */
@@ -4524,7 +4524,7 @@ export type StartInterview = (
 ) => Result<{
     readonly Asking: {
         readonly aggregate: AskingInterview;
-        readonly events: { readonly InterviewStarted: InterviewStarted };
+        readonly events: { readonly 'Collaboration.InterviewStarted': InterviewStarted };
     };
 }, never>;
 
@@ -4540,7 +4540,7 @@ export type StartInterviewDecision = (
 ) => Result<{
     readonly Asking: {
         readonly set: { readonly id: InterviewId; readonly session: SessionId; readonly command: InterviewCommand; readonly startedBy: ParticipantId; readonly opening: RequestId; readonly focus: ModelTarget | undefined; readonly language: UiLanguage; readonly startedAt: Timestamp; readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
-        readonly events: { readonly InterviewStarted: InterviewStarted };
+        readonly events: { readonly 'Collaboration.InterviewStarted': InterviewStarted };
     };
 }, never>;
 
@@ -4568,7 +4568,7 @@ export type HearInterview = (
 ) => Result<{
     readonly Asking: {
         readonly aggregate: AskingInterview;
-        readonly events: { readonly InterviewAnswered: InterviewAnswered };
+        readonly events: { readonly 'Collaboration.InterviewAnswered': InterviewAnswered };
     };
 }, never>;
 
@@ -4585,14 +4585,14 @@ export type HearInterviewDecision = {
     readonly Asking: (interview: AskingInterview, params: HearInterviewParams) => Result<{
         readonly Asking: {
             readonly set: { readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
-            readonly events: { readonly InterviewAnswered: InterviewAnswered };
+            readonly events: { readonly 'Collaboration.InterviewAnswered': InterviewAnswered };
         };
     }, never>;
     /** @emits InterviewAnswered — exactly once when the command succeeds */
     readonly Briefed: (interview: BriefedInterview, params: HearInterviewParams) => Result<{
         readonly Asking: {
             readonly set: { readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
-            readonly events: { readonly InterviewAnswered: InterviewAnswered };
+            readonly events: { readonly 'Collaboration.InterviewAnswered': InterviewAnswered };
         };
     }, never>;
 };
@@ -4624,7 +4624,7 @@ export type AskInterview = (
 ) => Result<{
     readonly Asking: {
         readonly aggregate: AskingInterview;
-        readonly events: { readonly InterviewQuestionAsked: InterviewQuestionAsked };
+        readonly events: { readonly 'Collaboration.InterviewQuestionAsked': InterviewQuestionAsked };
     };
 }, InterviewMovedOn>;
 
@@ -4641,7 +4641,7 @@ export type AskInterviewDecision = {
     readonly Asking: (interview: AskingInterview, params: AskInterviewParams) => Result<{
         readonly Asking: {
             readonly set: { readonly awaiting: RequestId | undefined; readonly asked: AskedQuestion | undefined };
-            readonly events: { readonly InterviewQuestionAsked: InterviewQuestionAsked };
+            readonly events: { readonly 'Collaboration.InterviewQuestionAsked': InterviewQuestionAsked };
         };
     }, InterviewMovedOn>;
 };
@@ -4682,7 +4682,7 @@ export type SummarizeInterview = (
 ) => Result<{
     readonly Briefed: {
         readonly aggregate: BriefedInterview;
-        readonly events: { readonly InterviewBriefed: InterviewBriefed };
+        readonly events: { readonly 'Collaboration.InterviewBriefed': InterviewBriefed };
     };
 }, InterviewMovedOn>;
 
@@ -4699,7 +4699,7 @@ export type SummarizeInterviewDecision = {
     readonly Asking: (interview: AskingInterview, params: SummarizeInterviewParams) => Result<{
         readonly Briefed: {
             readonly set: { readonly brief: InterviewBrief; readonly answered: RequestId; readonly briefedAt: Timestamp };
-            readonly events: { readonly InterviewBriefed: InterviewBriefed };
+            readonly events: { readonly 'Collaboration.InterviewBriefed': InterviewBriefed };
         };
     }, InterviewMovedOn>;
 };
@@ -4746,7 +4746,7 @@ export type ConfirmInterview = (
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedInterview;
-        readonly events: { readonly InterviewConfirmed: InterviewConfirmed };
+        readonly events: { readonly 'Collaboration.InterviewConfirmed': InterviewConfirmed };
     };
 }, FacilitatorOnly>;
 
@@ -4763,7 +4763,7 @@ export type ConfirmInterviewDecision = {
     readonly Briefed: (interview: BriefedInterview, params: ConfirmInterviewParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly brief: InterviewBrief; readonly edited: boolean; readonly confirmedBy: ParticipantId | undefined; readonly confirmedAt: Timestamp; readonly run: AgentRunId | undefined };
-            readonly events: { readonly InterviewConfirmed: InterviewConfirmed };
+            readonly events: { readonly 'Collaboration.InterviewConfirmed': InterviewConfirmed };
         };
     }, FacilitatorOnly>;
 };
@@ -4806,7 +4806,7 @@ export type RejectInterview = (
 ) => Result<{
     readonly Rejected: {
         readonly aggregate: RejectedInterview;
-        readonly events: { readonly InterviewRejected: InterviewRejected };
+        readonly events: { readonly 'Collaboration.InterviewRejected': InterviewRejected };
     };
 }, FacilitatorOnly>;
 
@@ -4823,7 +4823,7 @@ export type RejectInterviewDecision = {
     readonly Briefed: (interview: BriefedInterview, params: RejectInterviewParams) => Result<{
         readonly Rejected: {
             readonly set: { readonly rejectedBy: ParticipantId; readonly note: Text | undefined; readonly rejectedAt: Timestamp };
-            readonly events: { readonly InterviewRejected: InterviewRejected };
+            readonly events: { readonly 'Collaboration.InterviewRejected': InterviewRejected };
         };
     }, FacilitatorOnly>;
 };
@@ -4864,7 +4864,7 @@ export type StopInterview = (
 ) => Result<{
     readonly Stopped: {
         readonly aggregate: StoppedInterview;
-        readonly events: { readonly InterviewStopped: InterviewStopped };
+        readonly events: { readonly 'Collaboration.InterviewStopped': InterviewStopped };
     };
 }, NotTheInterviewer>;
 
@@ -4882,14 +4882,14 @@ export type StopInterviewDecision = {
     readonly Asking: (interview: AskingInterview, params: StopInterviewParams) => Result<{
         readonly Stopped: {
             readonly set: { readonly stoppedBy: ParticipantId; readonly stoppedAt: Timestamp };
-            readonly events: { readonly InterviewStopped: InterviewStopped };
+            readonly events: { readonly 'Collaboration.InterviewStopped': InterviewStopped };
         };
     }, NotTheInterviewer>;
     /** @emits InterviewStopped — exactly once when the command succeeds */
     readonly Briefed: (interview: BriefedInterview, params: StopInterviewParams) => Result<{
         readonly Stopped: {
             readonly set: { readonly stoppedBy: ParticipantId; readonly stoppedAt: Timestamp };
-            readonly events: { readonly InterviewStopped: InterviewStopped };
+            readonly events: { readonly 'Collaboration.InterviewStopped': InterviewStopped };
         };
     }, NotTheInterviewer>;
 };
@@ -4937,7 +4937,7 @@ export type InterviewEvent = InterviewStarted | InterviewAnswered | InterviewQue
  * @see contexts/collaboration/model/interview.dt:211
  */
 export interface InterviewStarted {
-    readonly type: 'InterviewStarted';
+    readonly type: 'Collaboration.InterviewStarted';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** セッション */
@@ -4961,7 +4961,7 @@ export interface InterviewStarted {
  * @see contexts/collaboration/model/interview.dt:222
  */
 export interface InterviewAnswered {
-    readonly type: 'InterviewAnswered';
+    readonly type: 'Collaboration.InterviewAnswered';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** 依頼ID */
@@ -4975,7 +4975,7 @@ export interface InterviewAnswered {
  * @see contexts/collaboration/model/interview.dt:228
  */
 export interface InterviewQuestionAsked {
-    readonly type: 'InterviewQuestionAsked';
+    readonly type: 'Collaboration.InterviewQuestionAsked';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** 依頼ID */
@@ -4992,7 +4992,7 @@ export interface InterviewQuestionAsked {
  * @see contexts/collaboration/model/interview.dt:237
  */
 export interface InterviewBriefed {
-    readonly type: 'InterviewBriefed';
+    readonly type: 'Collaboration.InterviewBriefed';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** 要約 */
@@ -5008,7 +5008,7 @@ export interface InterviewBriefed {
  * @see contexts/collaboration/model/interview.dt:244
  */
 export interface InterviewConfirmed {
-    readonly type: 'InterviewConfirmed';
+    readonly type: 'Collaboration.InterviewConfirmed';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** 要約 */
@@ -5027,7 +5027,7 @@ export interface InterviewConfirmed {
  * @see contexts/collaboration/model/interview.dt:255
  */
 export interface InterviewStopped {
-    readonly type: 'InterviewStopped';
+    readonly type: 'Collaboration.InterviewStopped';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** 参加者ID */
@@ -5041,7 +5041,7 @@ export interface InterviewStopped {
  * @see contexts/collaboration/model/interview.dt:261
  */
 export interface InterviewRejected {
-    readonly type: 'InterviewRejected';
+    readonly type: 'Collaboration.InterviewRejected';
     /** 聞き取りID */
     readonly interviewId: InterviewId;
     /** 参加者ID */
@@ -5469,7 +5469,7 @@ export type PlaceMark = (
 ) => Result<{
     readonly Placed: {
         readonly aggregate: PlacedMark;
-        readonly events: { readonly MarkPlaced: MarkPlaced };
+        readonly events: { readonly 'Collaboration.MarkPlaced': MarkPlaced };
     };
 }, MarkNotForTarget | FacilitatorDoesNotVote | FacilitatorOnly>;
 
@@ -5488,7 +5488,7 @@ export type PlaceMarkDecision = (
 ) => Result<{
     readonly Placed: {
         readonly set: { readonly id: MarkId; readonly session: SessionId; readonly participant: ParticipantId; readonly target: MarkTarget; readonly sign: MarkSign; readonly placedAt: Timestamp };
-        readonly events: { readonly MarkPlaced: MarkPlaced };
+        readonly events: { readonly 'Collaboration.MarkPlaced': MarkPlaced };
     };
 }, MarkNotForTarget | FacilitatorDoesNotVote | FacilitatorOnly>;
 
@@ -5527,7 +5527,7 @@ export type RemoveMark = (
 ) => Result<{
     readonly Removed: {
         readonly aggregate: RemovedMark;
-        readonly events: { readonly MarkRemoved: MarkRemoved };
+        readonly events: { readonly 'Collaboration.MarkRemoved': MarkRemoved };
     };
 }, never>;
 
@@ -5543,7 +5543,7 @@ export type RemoveMarkDecision = {
     readonly Placed: (mark: PlacedMark, params: RemoveMarkParams) => Result<{
         readonly Removed: {
             readonly set: { readonly removedAt: Timestamp };
-            readonly events: { readonly MarkRemoved: MarkRemoved };
+            readonly events: { readonly 'Collaboration.MarkRemoved': MarkRemoved };
         };
     }, never>;
 };
@@ -5572,7 +5572,7 @@ export type MarkEvent = MarkPlaced | MarkRemoved;
  * @see contexts/collaboration/model/mark.dt:102
  */
 export interface MarkPlaced {
-    readonly type: 'MarkPlaced';
+    readonly type: 'Collaboration.MarkPlaced';
     /** 印ID */
     readonly markId: MarkId;
     /** セッション */
@@ -5592,7 +5592,7 @@ export interface MarkPlaced {
  * @see contexts/collaboration/model/mark.dt:111
  */
 export interface MarkRemoved {
-    readonly type: 'MarkRemoved';
+    readonly type: 'Collaboration.MarkRemoved';
     /** 印ID */
     readonly markId: MarkId;
     /** 参加者 */
@@ -6127,7 +6127,7 @@ export type ProposeChangeProposal = (
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenChangeProposal;
-        readonly events: { readonly ChangeProposed: ChangeProposed };
+        readonly events: { readonly 'Collaboration.ChangeProposed': ChangeProposed };
     };
 }, never>;
 
@@ -6143,7 +6143,7 @@ export type ProposeChangeProposalDecision = (
 ) => Result<{
     readonly Open: {
         readonly set: { readonly id: ChangeProposalId; readonly session: SessionId; readonly triage: TriageId; readonly request: RequestId; readonly requestedBy: ParticipantId; readonly content: ProposalContent; readonly proposedAt: Timestamp };
-        readonly events: { readonly ChangeProposed: ChangeProposed };
+        readonly events: { readonly 'Collaboration.ChangeProposed': ChangeProposed };
     };
 }, never>;
 
@@ -6182,7 +6182,7 @@ export type ApproveChangeProposal = (
 ) => Result<{
     readonly Approved: {
         readonly aggregate: ApprovedChangeProposal;
-        readonly events: { readonly ProposalApproved: ProposalApproved };
+        readonly events: { readonly 'Collaboration.ProposalApproved': ProposalApproved };
     };
 }, FacilitatorOnly | NoSuchOption>;
 
@@ -6200,7 +6200,7 @@ export type ApproveChangeProposalDecision = {
     readonly Open: (changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams) => Result<{
         readonly Approved: {
             readonly set: { readonly approvedBy: ParticipantId; readonly approvedAt: Timestamp; readonly option: ProposalOptionIndex | undefined; readonly editedHow: ProposalText | undefined; readonly run: AgentRunId };
-            readonly events: { readonly ProposalApproved: ProposalApproved };
+            readonly events: { readonly 'Collaboration.ProposalApproved': ProposalApproved };
         };
     }, FacilitatorOnly | NoSuchOption>;
 };
@@ -6244,7 +6244,7 @@ export type RejectChangeProposal = (
 ) => Result<{
     readonly Rejected: {
         readonly aggregate: RejectedChangeProposal;
-        readonly events: { readonly ProposalRejected: ProposalRejected };
+        readonly events: { readonly 'Collaboration.ProposalRejected': ProposalRejected };
     };
 }, FacilitatorOnly>;
 
@@ -6261,7 +6261,7 @@ export type RejectChangeProposalDecision = {
     readonly Open: (changeProposal: OpenChangeProposal, params: RejectChangeProposalParams) => Result<{
         readonly Rejected: {
             readonly set: { readonly rejectedBy: ParticipantId; readonly rejectedAt: Timestamp; readonly note: Text | undefined };
-            readonly events: { readonly ProposalRejected: ProposalRejected };
+            readonly events: { readonly 'Collaboration.ProposalRejected': ProposalRejected };
         };
     }, FacilitatorOnly>;
 };
@@ -6300,7 +6300,7 @@ export type WithdrawChangeProposal = (
 ) => Result<{
     readonly Withdrawn: {
         readonly aggregate: WithdrawnChangeProposal;
-        readonly events: { readonly ProposalWithdrawn: ProposalWithdrawn };
+        readonly events: { readonly 'Collaboration.ProposalWithdrawn': ProposalWithdrawn };
     };
 }, NotTheRequester>;
 
@@ -6317,7 +6317,7 @@ export type WithdrawChangeProposalDecision = {
     readonly Open: (changeProposal: OpenChangeProposal, params: WithdrawChangeProposalParams) => Result<{
         readonly Withdrawn: {
             readonly set: { readonly withdrawnAt: Timestamp };
-            readonly events: { readonly ProposalWithdrawn: ProposalWithdrawn };
+            readonly events: { readonly 'Collaboration.ProposalWithdrawn': ProposalWithdrawn };
         };
     }, NotTheRequester>;
 };
@@ -6359,7 +6359,7 @@ export type ChangeProposalEvent = ChangeProposed | ProposalApproved | ProposalRe
  * @see contexts/collaboration/model/proposal.dt:122
  */
 export interface ChangeProposed {
-    readonly type: 'ChangeProposed';
+    readonly type: 'Collaboration.ChangeProposed';
     /** 変更案ID */
     readonly proposalId: ChangeProposalId;
     /** セッション */
@@ -6381,7 +6381,7 @@ export interface ChangeProposed {
  * @see contexts/collaboration/model/proposal.dt:132
  */
 export interface ProposalApproved {
-    readonly type: 'ProposalApproved';
+    readonly type: 'Collaboration.ProposalApproved';
     /** 変更案ID */
     readonly proposalId: ChangeProposalId;
     /** 参加者ID */
@@ -6401,7 +6401,7 @@ export interface ProposalApproved {
  * @see contexts/collaboration/model/proposal.dt:141
  */
 export interface ProposalRejected {
-    readonly type: 'ProposalRejected';
+    readonly type: 'Collaboration.ProposalRejected';
     /** 変更案ID */
     readonly proposalId: ChangeProposalId;
     /** 参加者ID */
@@ -6417,7 +6417,7 @@ export interface ProposalRejected {
  * @see contexts/collaboration/model/proposal.dt:148
  */
 export interface ProposalWithdrawn {
-    readonly type: 'ProposalWithdrawn';
+    readonly type: 'Collaboration.ProposalWithdrawn';
     /** 変更案ID */
     readonly proposalId: ChangeProposalId;
     /** 参加者ID */
@@ -6994,7 +6994,7 @@ export type WriteSessionRecord = (
 ) => Result<{
     readonly Written: {
         readonly aggregate: WrittenSessionRecord;
-        readonly events: { readonly RecordWritten: RecordWritten };
+        readonly events: { readonly 'Collaboration.RecordWritten': RecordWritten };
     };
 }, never>;
 
@@ -7010,7 +7010,7 @@ export type WriteSessionRecordDecision = (
 ) => Result<{
     readonly Written: {
         readonly set: { readonly id: SessionRecordId; readonly session: SessionId; readonly by: ParticipantId | undefined; readonly fact: RecordFact; readonly replyTo: RequestId | undefined; readonly at: Timestamp; readonly revisedAt: Timestamp | undefined };
-        readonly events: { readonly RecordWritten: RecordWritten };
+        readonly events: { readonly 'Collaboration.RecordWritten': RecordWritten };
     };
 }, never>;
 
@@ -7038,7 +7038,7 @@ export type ReviseSessionRecord = (
 ) => Result<{
     readonly Written: {
         readonly aggregate: WrittenSessionRecord;
-        readonly events: { readonly RecordRevised: RecordRevised };
+        readonly events: { readonly 'Collaboration.RecordRevised': RecordRevised };
     };
 }, never>;
 
@@ -7054,7 +7054,7 @@ export type ReviseSessionRecordDecision = {
     readonly Written: (sessionRecord: WrittenSessionRecord, params: ReviseSessionRecordParams) => Result<{
         readonly Written: {
             readonly set: { readonly fact: RecordFact; readonly revisedAt: Timestamp | undefined };
-            readonly events: { readonly RecordRevised: RecordRevised };
+            readonly events: { readonly 'Collaboration.RecordRevised': RecordRevised };
         };
     }, never>;
 };
@@ -7083,7 +7083,7 @@ export type SessionRecordEvent = RecordWritten | RecordRevised;
  * @see contexts/collaboration/model/record.dt:151
  */
 export interface RecordWritten {
-    readonly type: 'RecordWritten';
+    readonly type: 'Collaboration.RecordWritten';
     /** 記録ID */
     readonly recordId: SessionRecordId;
     /** セッション */
@@ -7103,7 +7103,7 @@ export interface RecordWritten {
  * @see contexts/collaboration/model/record.dt:160
  */
 export interface RecordRevised {
-    readonly type: 'RecordRevised';
+    readonly type: 'Collaboration.RecordRevised';
     /** 記録ID */
     readonly recordId: SessionRecordId;
     /** 記録したこと */
@@ -7576,7 +7576,7 @@ export type SendRequest = (
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, TooManyTargets | DuplicateTarget | WorkspaceTarget | TooManyMentions | DuplicateMention>;
 
@@ -7597,7 +7597,7 @@ export type SendRequestDecision = (
 ) => Result<{
     readonly Sent: {
         readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, TooManyTargets | DuplicateTarget | WorkspaceTarget | TooManyMentions | DuplicateMention>;
 
@@ -7647,7 +7647,7 @@ export type RequestRevertRequest = (
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, FacilitatorOnly>;
 
@@ -7664,7 +7664,7 @@ export type RequestRevertRequestDecision = (
 ) => Result<{
     readonly Sent: {
         readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, FacilitatorOnly>;
 
@@ -7707,7 +7707,7 @@ export type RecordEditRequest = (
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, never>;
 
@@ -7723,7 +7723,7 @@ export type RecordEditRequestDecision = (
 ) => Result<{
     readonly Sent: {
         readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, never>;
 
@@ -7759,7 +7759,7 @@ export type AnswerRequest = (
 ) => Result<{
     readonly Sent: {
         readonly aggregate: SentRequest;
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, never>;
 
@@ -7775,7 +7775,7 @@ export type AnswerRequestDecision = (
 ) => Result<{
     readonly Sent: {
         readonly set: { readonly id: RequestId; readonly session: SessionId; readonly author: ParticipantId; readonly targets: readonly TargetSnapshot[]; readonly body: Text; readonly sentAt: Timestamp; readonly replyTo: ReplyTarget | undefined; readonly mentions: readonly ParticipantId[]; readonly reverts: AgentRunId | undefined; readonly viewedAt: ViewedAt | undefined; readonly journeyNote: JourneyNote | undefined; readonly edit: StickyEdit | undefined; readonly redactedAt: Timestamp | undefined };
-        readonly events: { readonly RequestSent: RequestSent };
+        readonly events: { readonly 'Collaboration.RequestSent': RequestSent };
     };
 }, never>;
 
@@ -7806,14 +7806,14 @@ export type RedactRequest = <S extends SentRequest | DismissedRequest>(
     readonly Sent: Result<{
         readonly Sent: {
             readonly aggregate: SentRequest;
-            readonly events: { readonly RequestRedacted: RequestRedacted };
+            readonly events: { readonly 'Collaboration.RequestRedacted': RequestRedacted };
         };
     }, never>;
     /** @emits RequestRedacted — exactly once when the command succeeds */
     readonly Dismissed: Result<{
         readonly Dismissed: {
             readonly aggregate: DismissedRequest;
-            readonly events: { readonly RequestRedacted: RequestRedacted };
+            readonly events: { readonly 'Collaboration.RequestRedacted': RequestRedacted };
         };
     }, never>;
 }[S['state']];
@@ -7831,14 +7831,14 @@ export type RedactRequestDecision = {
     readonly Sent: (request: SentRequest, params: RedactRequestParams) => Result<{
         readonly Sent: {
             readonly set: { readonly body: Text; readonly redactedAt: Timestamp | undefined };
-            readonly events: { readonly RequestRedacted: RequestRedacted };
+            readonly events: { readonly 'Collaboration.RequestRedacted': RequestRedacted };
         };
     }, never>;
     /** @emits RequestRedacted — exactly once when the command succeeds */
     readonly Dismissed: (request: DismissedRequest, params: RedactRequestParams) => Result<{
         readonly Dismissed: {
             readonly set: { readonly body: Text; readonly redactedAt: Timestamp | undefined };
-            readonly events: { readonly RequestRedacted: RequestRedacted };
+            readonly events: { readonly 'Collaboration.RequestRedacted': RequestRedacted };
         };
     }, never>;
 };
@@ -7873,7 +7873,7 @@ export type RequestEvent = RequestSent | RequestRedacted;
  * @see contexts/collaboration/model/request.dt:165
  */
 export interface RequestSent {
-    readonly type: 'RequestSent';
+    readonly type: 'Collaboration.RequestSent';
     /** 依頼ID */
     readonly requestId: RequestId;
     /** セッション */
@@ -7906,7 +7906,7 @@ export interface RequestSent {
  * @see contexts/collaboration/model/request.dt:185
  */
 export interface RequestRedacted {
-    readonly type: 'RequestRedacted';
+    readonly type: 'Collaboration.RequestRedacted';
     /** 依頼ID */
     readonly requestId: RequestId;
     readonly redactedAt: Timestamp;
@@ -7919,7 +7919,7 @@ export interface RequestRedacted {
  * @see contexts/collaboration/model/request.dt:191
  */
 export interface RequestDismissed {
-    readonly type: 'RequestDismissed';
+    readonly type: 'Collaboration.RequestDismissed';
     /** 依頼ID */
     readonly requestId: RequestId;
     /** 参加者ID */
@@ -8396,7 +8396,7 @@ export type TakeRevision = (
 ) => Result<{
     readonly Recorded: {
         readonly aggregate: RecordedRevision;
-        readonly events: { readonly RevisionRecorded: RevisionRecorded };
+        readonly events: { readonly 'Collaboration.RevisionRecorded': RevisionRecorded };
     };
 }, RestoreNeedsCheck | ContentHashMismatch>;
 
@@ -8414,7 +8414,7 @@ export type TakeRevisionDecision = (
 ) => Result<{
     readonly Recorded: {
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
-        readonly events: { readonly RevisionRecorded: RevisionRecorded };
+        readonly events: { readonly 'Collaboration.RevisionRecorded': RevisionRecorded };
     };
 }, RestoreNeedsCheck | ContentHashMismatch>;
 
@@ -8475,7 +8475,7 @@ export type RestoreRevision = (
 ) => Result<{
     readonly Recorded: {
         readonly aggregate: RecordedRevision;
-        readonly events: { readonly RevisionRestored: RevisionRestored };
+        readonly events: { readonly 'Collaboration.RevisionRestored': RevisionRestored };
     };
 }, FacilitatorOnly | ContentHashMismatch>;
 
@@ -8493,7 +8493,7 @@ export type RestoreRevisionDecision = (
 ) => Result<{
     readonly Recorded: {
         readonly set: { readonly id: RevisionId; readonly session: SessionId; readonly origin: RevisionOrigin; readonly contentHash: ContentHash; readonly files: readonly SnapshotFile[]; readonly validation: ValidationSummary; readonly takenAt: Timestamp };
-        readonly events: { readonly RevisionRestored: RevisionRestored };
+        readonly events: { readonly 'Collaboration.RevisionRestored': RevisionRestored };
     };
 }, FacilitatorOnly | ContentHashMismatch>;
 
@@ -8539,7 +8539,7 @@ export type RevisionEvent = RevisionRecorded | RevisionRestored;
  * @see contexts/collaboration/model/revision.dt:88
  */
 export interface RevisionRecorded {
-    readonly type: 'RevisionRecorded';
+    readonly type: 'Collaboration.RevisionRecorded';
     /** リビジョンID */
     readonly revisionId: RevisionId;
     /** セッション */
@@ -8559,7 +8559,7 @@ export interface RevisionRecorded {
  * @see contexts/collaboration/model/revision.dt:97
  */
 export interface RevisionRestored {
-    readonly type: 'RevisionRestored';
+    readonly type: 'Collaboration.RevisionRestored';
     /** リビジョンID */
     readonly revisionId: RevisionId;
     /** セッション */
@@ -8950,7 +8950,7 @@ export type StartSession = (
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenSession;
-        readonly events: { readonly SessionStarted: SessionStarted };
+        readonly events: { readonly 'Collaboration.SessionStarted': SessionStarted };
     };
 }, never>;
 
@@ -8966,7 +8966,7 @@ export type StartSessionDecision = (
 ) => Result<{
     readonly Open: {
         readonly set: { readonly id: SessionId; readonly facilitator: ParticipantId; readonly mode: SessionMode; readonly participants: readonly [Participant, ...Participant[]]; readonly startedAt: Timestamp; readonly currentJourney: GuideJourneyKey | undefined };
-        readonly events: { readonly SessionStarted: SessionStarted };
+        readonly events: { readonly 'Collaboration.SessionStarted': SessionStarted };
     };
 }, never>;
 
@@ -8998,7 +8998,7 @@ export type JoinSession = (
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenSession;
-        readonly events: { readonly ParticipantJoined: ParticipantJoined };
+        readonly events: { readonly 'Collaboration.ParticipantJoined': ParticipantJoined };
     };
 }, AlreadyJoined | SoloSession>;
 
@@ -9016,7 +9016,7 @@ export type JoinSessionDecision = {
     readonly Open: (session: OpenSession, params: JoinSessionParams) => Result<{
         readonly Open: {
             readonly set: { readonly participants: readonly [Participant, ...Participant[]] };
-            readonly events: { readonly ParticipantJoined: ParticipantJoined };
+            readonly events: { readonly 'Collaboration.ParticipantJoined': ParticipantJoined };
         };
     }, AlreadyJoined | SoloSession>;
 };
@@ -9054,7 +9054,7 @@ export type CollaborateSession = (
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenSession;
-        readonly events: { readonly SessionCollaborated: SessionCollaborated };
+        readonly events: { readonly 'Collaboration.SessionCollaborated': SessionCollaborated };
     };
 }, NotSolo>;
 
@@ -9071,7 +9071,7 @@ export type CollaborateSessionDecision = {
     readonly Open: (session: OpenSession, params: CollaborateSessionParams) => Result<{
         readonly Open: {
             readonly set: { readonly mode: SessionMode };
-            readonly events: { readonly SessionCollaborated: SessionCollaborated };
+            readonly events: { readonly 'Collaboration.SessionCollaborated': SessionCollaborated };
         };
     }, NotSolo>;
 };
@@ -9113,7 +9113,7 @@ export type ChooseJourneySession = (
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenSession;
-        readonly events: { readonly JourneyChosen: JourneyChosen };
+        readonly events: { readonly 'Collaboration.JourneyChosen': JourneyChosen };
     };
 }, FacilitatorOnly>;
 
@@ -9130,7 +9130,7 @@ export type ChooseJourneySessionDecision = {
     readonly Open: (session: OpenSession, params: ChooseJourneySessionParams) => Result<{
         readonly Open: {
             readonly set: { readonly currentJourney: GuideJourneyKey | undefined };
-            readonly events: { readonly JourneyChosen: JourneyChosen };
+            readonly events: { readonly 'Collaboration.JourneyChosen': JourneyChosen };
         };
     }, FacilitatorOnly>;
 };
@@ -9169,7 +9169,7 @@ export type CloseSession = (
 ) => Result<{
     readonly Closed: {
         readonly aggregate: ClosedSession;
-        readonly events: { readonly SessionClosed: SessionClosed };
+        readonly events: { readonly 'Collaboration.SessionClosed': SessionClosed };
     };
 }, FacilitatorOnly>;
 
@@ -9186,7 +9186,7 @@ export type CloseSessionDecision = {
     readonly Open: (session: OpenSession, params: CloseSessionParams) => Result<{
         readonly Closed: {
             readonly set: { readonly closedAt: Timestamp };
-            readonly events: { readonly SessionClosed: SessionClosed };
+            readonly events: { readonly 'Collaboration.SessionClosed': SessionClosed };
         };
     }, FacilitatorOnly>;
 };
@@ -9253,7 +9253,7 @@ export function equalParticipant(a: Participant, b: Participant): boolean {
  * @see contexts/collaboration/model/session.dt:91
  */
 export interface SessionStarted {
-    readonly type: 'SessionStarted';
+    readonly type: 'Collaboration.SessionStarted';
     /** セッションID */
     readonly sessionId: SessionId;
     /** ファシリテーター */
@@ -9271,7 +9271,7 @@ export interface SessionStarted {
  * @see contexts/collaboration/model/session.dt:99
  */
 export interface SessionCollaborated {
-    readonly type: 'SessionCollaborated';
+    readonly type: 'Collaboration.SessionCollaborated';
     /** セッションID */
     readonly sessionId: SessionId;
     readonly collaboratedAt: Timestamp;
@@ -9283,7 +9283,7 @@ export interface SessionCollaborated {
  * @see contexts/collaboration/model/session.dt:104
  */
 export interface ParticipantJoined {
-    readonly type: 'ParticipantJoined';
+    readonly type: 'Collaboration.ParticipantJoined';
     /** セッションID */
     readonly sessionId: SessionId;
     /** 参加者 */
@@ -9299,7 +9299,7 @@ export interface ParticipantJoined {
  * @see contexts/collaboration/model/session.dt:111
  */
 export interface JourneyChosen {
-    readonly type: 'JourneyChosen';
+    readonly type: 'Collaboration.JourneyChosen';
     /** セッションID */
     readonly sessionId: SessionId;
     /** 道のり */
@@ -9313,7 +9313,7 @@ export interface JourneyChosen {
  * @see contexts/collaboration/model/session.dt:117
  */
 export interface SessionClosed {
-    readonly type: 'SessionClosed';
+    readonly type: 'Collaboration.SessionClosed';
     /** セッションID */
     readonly sessionId: SessionId;
     readonly closedAt: Timestamp;
@@ -10278,7 +10278,7 @@ export type OpenTriage = (
 ) => Result<{
     readonly Pending: {
         readonly aggregate: PendingTriage;
-        readonly events: { readonly TriageOpened: TriageOpened };
+        readonly events: { readonly 'Collaboration.TriageOpened': TriageOpened };
     };
 }, never>;
 
@@ -10294,7 +10294,7 @@ export type OpenTriageDecision = (
 ) => Result<{
     readonly Pending: {
         readonly set: { readonly id: TriageId; readonly session: SessionId; readonly request: RequestId; readonly addressedBy: AddressedBy; readonly addressedByParticipant: ParticipantId; readonly steps: readonly TriageStep[]; readonly openedAt: Timestamp };
-        readonly events: { readonly TriageOpened: TriageOpened };
+        readonly events: { readonly 'Collaboration.TriageOpened': TriageOpened };
     };
 }, never>;
 
@@ -10327,14 +10327,14 @@ export type RecordTriage = (
     | {
           readonly Pending: {
               readonly aggregate: PendingTriage;
-              readonly events: { readonly TriageStepRecorded: TriageStepRecorded };
+              readonly events: { readonly 'Collaboration.TriageStepRecorded': TriageStepRecorded };
           };
           readonly Decided?: never;
       }
     | {
           readonly Decided: {
               readonly aggregate: DecidedTriage;
-              readonly events: { readonly TriageStepRecorded: TriageStepRecorded; readonly TriageDecided: TriageDecided };
+              readonly events: { readonly 'Collaboration.TriageStepRecorded': TriageStepRecorded; readonly 'Collaboration.TriageDecided': TriageDecided };
           };
           readonly Pending?: never;
       },
@@ -10353,14 +10353,14 @@ export type RecordTriageDecision = (
     | {
           readonly Pending: {
               readonly set: { readonly steps: readonly TriageStep[] };
-              readonly events: { readonly TriageStepRecorded: TriageStepRecorded };
+              readonly events: { readonly 'Collaboration.TriageStepRecorded': TriageStepRecorded };
           };
           readonly Decided?: never;
       }
     | {
           readonly Decided: {
               readonly set: { readonly steps: readonly TriageStep[]; readonly kind: TriageVerdict; readonly decidedBy: TriageStage; readonly decidedAt: Timestamp; readonly outcome: TriageOutcome | undefined };
-              readonly events: { readonly TriageStepRecorded: TriageStepRecorded; readonly TriageDecided: TriageDecided };
+              readonly events: { readonly 'Collaboration.TriageStepRecorded': TriageStepRecorded; readonly 'Collaboration.TriageDecided': TriageDecided };
           };
           readonly Pending?: never;
       },
@@ -10409,7 +10409,7 @@ export type OverrideTriage = (
 ) => Result<{
     readonly Decided: {
         readonly aggregate: DecidedTriage;
-        readonly events: { readonly TriageOverridden: TriageOverridden };
+        readonly events: { readonly 'Collaboration.TriageOverridden': TriageOverridden };
     };
 }, TriageNotOverridable>;
 
@@ -10426,7 +10426,7 @@ export type OverrideTriageDecision = {
     readonly Decided: (triage: DecidedTriage, params: OverrideTriageParams) => Result<{
         readonly Decided: {
             readonly set: { readonly steps: readonly TriageStep[]; readonly kind: TriageVerdict; readonly decidedBy: TriageStage; readonly decidedAt: Timestamp };
-            readonly events: { readonly TriageOverridden: TriageOverridden };
+            readonly events: { readonly 'Collaboration.TriageOverridden': TriageOverridden };
         };
     }, TriageNotOverridable>;
 };
@@ -10469,7 +10469,7 @@ export type ReaddressTriage = (
 ) => Result<{
     readonly Decided: {
         readonly aggregate: DecidedTriage;
-        readonly events: { readonly TriageReaddressed: TriageReaddressed };
+        readonly events: { readonly 'Collaboration.TriageReaddressed': TriageReaddressed };
     };
 }, FacilitatorOnly | RequestAlreadyAddressed>;
 
@@ -10487,7 +10487,7 @@ export type ReaddressTriageDecision = {
     readonly Decided: (triage: DecidedTriage, params: ReaddressTriageParams) => Result<{
         readonly Decided: {
             readonly set: { readonly addressedBy: AddressedBy; readonly addressedByParticipant: ParticipantId; readonly steps: readonly TriageStep[]; readonly kind: TriageVerdict; readonly decidedBy: TriageStage; readonly decidedAt: Timestamp };
-            readonly events: { readonly TriageReaddressed: TriageReaddressed };
+            readonly events: { readonly 'Collaboration.TriageReaddressed': TriageReaddressed };
         };
     }, FacilitatorOnly | RequestAlreadyAddressed>;
 };
@@ -10528,7 +10528,7 @@ export type ConcludeTriage = (
 ) => Result<{
     readonly Decided: {
         readonly aggregate: DecidedTriage;
-        readonly events: { readonly TriageConcluded: TriageConcluded };
+        readonly events: { readonly 'Collaboration.TriageConcluded': TriageConcluded };
     };
 }, TriageAlreadyConcluded | TriageNotConcludable>;
 
@@ -10546,7 +10546,7 @@ export type ConcludeTriageDecision = {
     readonly Decided: (triage: DecidedTriage, params: ConcludeTriageParams) => Result<{
         readonly Decided: {
             readonly set: { readonly outcome: TriageOutcome | undefined };
-            readonly events: { readonly TriageConcluded: TriageConcluded };
+            readonly events: { readonly 'Collaboration.TriageConcluded': TriageConcluded };
         };
     }, TriageAlreadyConcluded | TriageNotConcludable>;
 };
@@ -10591,7 +10591,7 @@ export type TriageEvent = TriageOpened | TriageStepRecorded | TriageDecided | Tr
  * @see contexts/collaboration/model/triage.dt:170
  */
 export interface TriageOpened {
-    readonly type: 'TriageOpened';
+    readonly type: 'Collaboration.TriageOpened';
     /** 仕分けID */
     readonly triageId: TriageId;
     /** セッション */
@@ -10611,7 +10611,7 @@ export interface TriageOpened {
  * @see contexts/collaboration/model/triage.dt:179
  */
 export interface TriageStepRecorded {
-    readonly type: 'TriageStepRecorded';
+    readonly type: 'Collaboration.TriageStepRecorded';
     /** 仕分けID */
     readonly triageId: TriageId;
     /** 段の記録 */
@@ -10624,7 +10624,7 @@ export interface TriageStepRecorded {
  * @see contexts/collaboration/model/triage.dt:184
  */
 export interface TriageDecided {
-    readonly type: 'TriageDecided';
+    readonly type: 'Collaboration.TriageDecided';
     /** 仕分けID */
     readonly triageId: TriageId;
     /** 結論 */
@@ -10640,7 +10640,7 @@ export interface TriageDecided {
  * @see contexts/collaboration/model/triage.dt:191
  */
 export interface TriageOverridden {
-    readonly type: 'TriageOverridden';
+    readonly type: 'Collaboration.TriageOverridden';
     /** 仕分けID */
     readonly triageId: TriageId;
     /** 段の記録 */
@@ -10655,7 +10655,7 @@ export interface TriageOverridden {
  * @see contexts/collaboration/model/triage.dt:197
  */
 export interface TriageReaddressed {
-    readonly type: 'TriageReaddressed';
+    readonly type: 'Collaboration.TriageReaddressed';
     /** 仕分けID */
     readonly triageId: TriageId;
     /** 参加者ID */
@@ -10669,7 +10669,7 @@ export interface TriageReaddressed {
  * @see contexts/collaboration/model/triage.dt:203
  */
 export interface TriageConcluded {
-    readonly type: 'TriageConcluded';
+    readonly type: 'Collaboration.TriageConcluded';
     /** 仕分けID */
     readonly triageId: TriageId;
     /** 行き先 */

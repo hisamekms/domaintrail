@@ -225,7 +225,7 @@ export const markCommands: Collaboration.MarkCommands = {
         return ok({
             Placed: {
                 set: { id, session, participant, target, sign, placedAt },
-                events: { MarkPlaced: { type: 'MarkPlaced', markId: id, session, participant, target, sign, placedAt } },
+                events: { 'Collaboration.MarkPlaced': { type: 'Collaboration.MarkPlaced', markId: id, session, participant, target, sign, placedAt } },
             },
         });
     }),
@@ -236,7 +236,14 @@ export const markCommands: Collaboration.MarkCommands = {
                 Removed: {
                     set: { removedAt },
                     events: {
-                        MarkRemoved: { type: 'MarkRemoved', markId: mark.id, participant: mark.participant, target: mark.target, sign: mark.sign, removedAt },
+                        'Collaboration.MarkRemoved': {
+                            type: 'Collaboration.MarkRemoved',
+                            markId: mark.id,
+                            participant: mark.participant,
+                            target: mark.target,
+                            sign: mark.sign,
+                            removedAt,
+                        },
                     },
                 },
             }),

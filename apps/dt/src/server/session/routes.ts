@@ -1468,7 +1468,7 @@ function extractionRoutes(extraction: SessionHttpDeps['extraction'], open: () =>
                 const b = body(raw, ['enabled']);
                 if (!b.ok) return fail(res, b.error);
                 if (typeof b.value.enabled !== 'boolean') return fail(res, { type: 'InvalidInput', field: 'enabled', message: 'Expected true or false.' });
-                if (!(await open())) return sendError(res, 409, 'SessionClosed', 'The session is closed.');
+                if (!(await open())) return sendError(res, 409, 'Collaboration.SessionClosed', 'The session is closed.');
                 await extraction.setEnabled(b.value.enabled);
                 sendJson(res, 200, { enabled: extraction.enabled() });
             },

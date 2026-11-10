@@ -113,7 +113,16 @@ describe("the page's replies", () => {
             ({
                 type: 'request.sent',
                 seq: 2,
-                event: { type: 'RequestSent', requestId: 'r1', session: 's', author: 'dev:ann', targets: [], body: 'And?', sentAt: at(0), replyTo },
+                event: {
+                    type: 'Collaboration.RequestSent',
+                    requestId: 'r1',
+                    session: 's',
+                    author: 'dev:ann',
+                    targets: [],
+                    body: 'And?',
+                    sentAt: at(0),
+                    replyTo,
+                },
             }) as unknown as EventMessage;
         expect(applyEvent(base, sent({ kind: 'Run', run: 'x' })).state.requests[0]).toMatchObject({ id: 'r1', replyTo: { kind: 'Run', run: 'x' } });
         expect(applyEvent(base, sent({ kind: 'Message', request: 'm' })).state.requests[0]).toMatchObject({ replyTo: { kind: 'Message', request: 'm' } });

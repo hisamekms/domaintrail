@@ -83,7 +83,7 @@ describe('field sets: generated TypeScript', () => {
         expect(sales).toContain('export interface ConfirmedOrder extends OrderCommon {');
         expect(sales).toMatch(/export interface OrderItem extends Common\.Tenanted \{\n    readonly id: OrderItemId;\n\}/);
         expect(sales).toMatch(
-            /export interface OrderPlaced extends Common\.Tenanted, Performed \{\n    readonly type: 'OrderPlaced';\n    readonly orderId: OrderId;\n\}/,
+            /export interface OrderPlaced extends Common\.Tenanted, Performed \{\n    readonly type: 'Sales.OrderPlaced';\n    readonly orderId: OrderId;\n\}/,
         );
         expect(sales).toContain('export interface OrderConfirmed {');
         expect(ts(a, 'Billing')).toMatch(/export interface Invoice extends Sales\.Performed \{\n    readonly id: InvoiceId;\n\}/);

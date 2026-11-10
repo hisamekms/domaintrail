@@ -153,7 +153,13 @@ describe('the commands of a change proposal', () => {
         expect(approvedInstruction(edited.aggregate)).toEqual({ targets: [order], how: 'Rename it to 受注 everywhere.' } as unknown as C.ProposalInstruction);
         const asIs = value(approve(open, undefined)).Approved;
         expect(approvedInstruction(asIs.aggregate)).toEqual({ targets: content.targets, how: content.how });
-        expect(asIs.events.ProposalApproved).toEqual({ type: 'ProposalApproved', proposalId: open.id, approvedBy: facilitator, run, approvedAt: at });
+        expect(asIs.events['Collaboration.ProposalApproved']).toEqual({
+            type: 'Collaboration.ProposalApproved',
+            proposalId: open.id,
+            approvedBy: facilitator,
+            run,
+            approvedAt: at,
+        });
         expect(
             error(
                 proposalCommands.approve(open, {
@@ -172,7 +178,7 @@ describe('the commands of a change proposal', () => {
         const withChoices = propose(choices);
         const second = value(approve(withChoices, 1)).Approved;
         expect(second.aggregate.option).toBe(1 as C.ProposalOptionIndex);
-        expect(second.events.ProposalApproved).toMatchObject({ option: 1 });
+        expect(second.events['Collaboration.ProposalApproved']).toMatchObject({ option: 1 });
         expect(approvedInstruction(second.aggregate)).toEqual({
             label: '付箋も',
             targets: [sticky],

@@ -497,7 +497,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         const { aggregate, events } = known(knowledgeItemCommands.delete(item, { by, at: now() })).Deleted;
         await writeItems([aggregate], deletedDir);
         await rm(path.join(dir, itemFileName(item.id)), { force: true });
-        await appendAudit([auditOf(events.KnowledgeItemDeleted)]);
+        await appendAudit([auditOf(events['Knowledge.KnowledgeItemDeleted'])]);
         return { items: [item.id], messages: sourceMessages(item) };
     }
 
@@ -578,7 +578,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 if ((item.bookmarked === true) === bookmarked) return ok(item);
                 const { aggregate, events } = known(knowledgeItemCommands.setBookmark(item, { bookmarked, by, at: now() })).Live;
                 await writeItems([aggregate], dir);
-                await appendAudit([auditOf(events.KnowledgeBookmarkChanged)]);
+                await appendAudit([auditOf(events['Knowledge.KnowledgeBookmarkChanged'])]);
                 return ok(aggregate);
             });
         },
@@ -660,7 +660,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                         : err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                 const { aggregate, events } = known(knowledgeItemCommands.correct(item, { corrected, by, at: now() })).Live;
                 await writeItems([aggregate], dir);
-                await appendAudit([auditOf(events.KnowledgeItemCorrected)]);
+                await appendAudit([auditOf(events['Knowledge.KnowledgeItemCorrected'])]);
                 return ok(aggregate);
             });
         },
@@ -686,7 +686,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                         unlinked.map((u) => u.aggregate),
                         dir,
                     );
-                    await appendAudit(unlinked.map((u) => auditOf(u.events.KnowledgeConflictUnlinked)));
+                    await appendAudit(unlinked.map((u) => auditOf(u.events['Knowledge.KnowledgeConflictUnlinked'])));
                     return ok(unlinked.map((u) => u.aggregate));
                 },
             );
@@ -714,7 +714,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                         handed.map((h) => h.aggregate),
                         dir,
                     );
-                    await appendAudit(handed.map((h) => auditOf(h.events.KnowledgeHandedOverToHotspot)));
+                    await appendAudit(handed.map((h) => auditOf(h.events['Knowledge.KnowledgeHandedOverToHotspot'])));
                     return ok(handed.map((h) => h.aggregate));
                 },
             );
@@ -751,7 +751,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 const { aggregate, events } = known(knowledgeItemCommands.restore(item, { by, at: now() })).Live;
                 await writeItems([aggregate], dir);
                 await rm(path.join(deletedDir, itemFileName(id)), { force: true });
-                await appendAudit([auditOf(events.KnowledgeItemRestored)]);
+                await appendAudit([auditOf(events['Knowledge.KnowledgeItemRestored'])]);
                 return ok(aggregate);
             });
         },
@@ -769,7 +769,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 const r = knowledgeItemCommands.retire(item, { ...retirement, by, at: now() });
                 if (!r.ok) return r;
                 await writeItems([r.value.Live.aggregate], dir);
-                await appendAudit([auditOf(r.value.Live.events.KnowledgeItemRetired)]);
+                await appendAudit([auditOf(r.value.Live.events['Knowledge.KnowledgeItemRetired'])]);
                 return ok(r.value.Live.aggregate);
             });
         },
@@ -782,7 +782,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 const r = knowledgeItemCommands.unretire(item, { by, at: now() });
                 if (!r.ok) return r;
                 await writeItems([r.value.Live.aggregate], dir);
-                await appendAudit([auditOf(r.value.Live.events.KnowledgeItemUnretired)]);
+                await appendAudit([auditOf(r.value.Live.events['Knowledge.KnowledgeItemUnretired'])]);
                 return ok(r.value.Live.aggregate);
             });
         },

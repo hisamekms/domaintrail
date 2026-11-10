@@ -311,7 +311,18 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
         return ok({
             Open: {
                 set: { id, session, triage, request, requestedBy, content, proposedAt },
-                events: { ChangeProposed: { type: 'ChangeProposed', proposalId: id, session, triage, request, requestedBy, content, proposedAt } },
+                events: {
+                    'Collaboration.ChangeProposed': {
+                        type: 'Collaboration.ChangeProposed',
+                        proposalId: id,
+                        session,
+                        triage,
+                        request,
+                        requestedBy,
+                        content,
+                        proposedAt,
+                    },
+                },
             },
         });
     }),
@@ -326,8 +337,8 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
                 Approved: {
                     set: { approvedBy, approvedAt, option, editedHow, run },
                     events: {
-                        ProposalApproved: {
-                            type: 'ProposalApproved',
+                        'Collaboration.ProposalApproved': {
+                            type: 'Collaboration.ProposalApproved',
                             proposalId: proposal.id,
                             approvedBy,
                             ...(option !== undefined && { option }),
@@ -349,7 +360,15 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
             return ok({
                 Rejected: {
                     set: { rejectedBy, rejectedAt, note },
-                    events: { ProposalRejected: { type: 'ProposalRejected', proposalId: proposal.id, rejectedBy, ...(note && { note }), rejectedAt } },
+                    events: {
+                        'Collaboration.ProposalRejected': {
+                            type: 'Collaboration.ProposalRejected',
+                            proposalId: proposal.id,
+                            rejectedBy,
+                            ...(note && { note }),
+                            rejectedAt,
+                        },
+                    },
                 },
             });
         },
@@ -363,7 +382,9 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
             return ok({
                 Withdrawn: {
                     set: { withdrawnAt },
-                    events: { ProposalWithdrawn: { type: 'ProposalWithdrawn', proposalId: proposal.id, withdrawnBy, withdrawnAt } },
+                    events: {
+                        'Collaboration.ProposalWithdrawn': { type: 'Collaboration.ProposalWithdrawn', proposalId: proposal.id, withdrawnBy, withdrawnAt },
+                    },
                 },
             });
         },

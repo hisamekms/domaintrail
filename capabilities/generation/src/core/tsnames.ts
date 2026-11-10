@@ -64,29 +64,21 @@ export function checkTsNames(model: SourceModel, rules: RuleSink): void {
                     rules.error('M011', `Parameter '${p.name}' of ${commandTypeName(agg, cmd)} collides with the aggregate parameter '${self}'.`, p.nameAt);
                 }
             }
-            // the events of a command's success value are keyed by their simple name
-            const keys = new Map<string, string>();
+            // The events of a command's success value are keyed by qualified name.
+            const keys = new Set<string>();
             for (const e of cmd.emits) {
                 const ev = e.event.target;
                 if (!ev) continue;
                 const qname = `${ev.context}.${ev.name}`;
-                const prev = keys.get(ev.name);
-                if (prev === qname) {
+                if (keys.has(qname)) {
                     rules.error(
                         'M011',
-                        `Event '${ev.name}' is listed more than once in 'emits' of '${agg.name}.${cmd.name}'; the events of its result are keyed by name.`,
+                        `Event '${qname}' is listed more than once in 'emits' of '${agg.name}.${cmd.name}'; the events of its result are keyed by qualified name.`,
                         e.event.at,
-                        `list it once, with a multiplicity such as '${ev.name}[1..*]' or '${ev.name}?'`,
-                    );
-                } else if (prev) {
-                    rules.error(
-                        'M011',
-                        `Events '${prev}' and '${qname}' of '${agg.name}.${cmd.name}' have the same name, and the events of its result are keyed by name.`,
-                        e.event.at,
-                        `rename one of the events`,
+                        `list it once, with a multiplicity such as '${qname}[1..*]' or '${qname}?'`,
                     );
                 } else {
-                    keys.set(ev.name, qname);
+                    keys.add(qname);
                 }
             }
         }

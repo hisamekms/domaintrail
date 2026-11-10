@@ -188,14 +188,14 @@ function applyOperation(
             if (!free.ok) return free;
             const r = knowledgeItemCommands.add({ id: operation.id, content: operation.content, sources: operation.sources, by, ...why, at });
             if (!r.ok) return r;
-            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events.KnowledgeItemAdded }] };
+            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events['Knowledge.KnowledgeItemAdded'] }] };
         }
         case 'AddSource': {
             const item = liveAt(current, operation.item);
             if (!item.ok) return item;
             const r = knowledgeItemCommands.addSource(item.value, { source: operation.source, agreed: operation.agreed, base: operation.base, by, ...why, at });
             if (!r.ok) return r;
-            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events.KnowledgeSourceAdded }] };
+            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events['Knowledge.KnowledgeSourceAdded'] }] };
         }
         case 'Update': {
             const item = liveAt(current, operation.item);
@@ -210,8 +210,10 @@ function applyOperation(
             });
             if (!r.ok) return r;
             const { aggregate, events } = r.value.Live;
-            if (events.KnowledgeItemRevised) return { ok: true, value: [{ item: aggregate, replaced: item.value, event: events.KnowledgeItemRevised }] };
-            if (events.KnowledgeItemRewritten) return { ok: true, value: [{ item: aggregate, event: events.KnowledgeItemRewritten }] };
+            if (events['Knowledge.KnowledgeItemRevised'])
+                return { ok: true, value: [{ item: aggregate, replaced: item.value, event: events['Knowledge.KnowledgeItemRevised'] }] };
+            if (events['Knowledge.KnowledgeItemRewritten'])
+                return { ok: true, value: [{ item: aggregate, event: events['Knowledge.KnowledgeItemRewritten'] }] };
             throw new Error('update emitted neither KnowledgeItemRevised nor KnowledgeItemRewritten');
         }
         case 'Conflict': {
@@ -234,8 +236,8 @@ function applyOperation(
             return {
                 ok: true,
                 value: [
-                    { item: added.value.Live.aggregate, event: added.value.Live.events.KnowledgeItemAdded },
-                    { item: linked.value.Live.aggregate, event: linked.value.Live.events.KnowledgeConflictLinked },
+                    { item: added.value.Live.aggregate, event: added.value.Live.events['Knowledge.KnowledgeItemAdded'] },
+                    { item: linked.value.Live.aggregate, event: linked.value.Live.events['Knowledge.KnowledgeConflictLinked'] },
                 ],
             };
         }

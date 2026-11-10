@@ -25,7 +25,7 @@ describe('use cases', () => {
         const saved = await shop.orders.load(order.id);
         expect(saved?.aggregate.state).toBe('Confirmed');
         expect(saved?.meta.version).toBe(4); // placed, two items added, confirmed
-        expect(shop.events.stored.map((s) => s.event.type)).toEqual(['OrderPlaced', 'OrderConfirmed']);
+        expect(shop.events.stored.map((s) => s.event.type)).toEqual(['Sales.OrderPlaced', 'Sales.OrderConfirmed']);
     });
 
     test('a domain error saves nothing and records no event', async () => {
@@ -113,8 +113,8 @@ describe('policies', () => {
         expect(invoice?.aggregate).toMatchObject({ state: 'Open', billedAmount: { amount: '37.55', currency: 'USD' } });
         const paid = await shop.app.payInvoice(invoice!.aggregate.id);
         expect(paid).toMatchObject({ ok: true, value: { state: 'Paid' } });
-        const [stored] = shop.events.stored.filter((s) => s.event.type === 'InvoicePaid');
-        expect(stored.event).toEqual({ type: 'InvoicePaid', invoiceId: invoice!.aggregate.id, paidAt: expect.any(Date) });
+        const [stored] = shop.events.stored.filter((s) => s.event.type === 'Billing.InvoicePaid');
+        expect(stored.event).toEqual({ type: 'Billing.InvoicePaid', invoiceId: invoice!.aggregate.id, paidAt: expect.any(Date) });
     });
 
     test('cancelling a confirmed order records a refund request; cancelling a draft does not', async () => {

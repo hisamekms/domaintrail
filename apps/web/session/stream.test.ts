@@ -204,13 +204,13 @@ describe('the main stream', () => {
         const asked = applyEvent(state, {
             type: 'run.needs_clarification',
             seq: 2,
-            event: { type: 'RunNeedsClarification', runId: 'x', question: 'Which?', resultRevision: 'r1', finishedAt: at(3) },
+            event: { type: 'Collaboration.RunNeedsClarification', runId: 'x', question: 'Which?', resultRevision: 'r1', finishedAt: at(3) },
         });
         expect([asked.state.runs[0]?.state, asked.refetch]).toEqual(['NeedsClarification', true]);
         const declined = applyEvent(state, {
             type: 'run.declined',
             seq: 2,
-            event: { type: 'RunDeclined', runId: 'x', resultRevision: 'r1', finishedAt: at(3) },
+            event: { type: 'Collaboration.RunDeclined', runId: 'x', resultRevision: 'r1', finishedAt: at(3) },
         });
         expect(declined.refetch).toBe(true);
     });

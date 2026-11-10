@@ -244,7 +244,7 @@ describe('the rules of marks', () => {
         ).toEqual({ type: 'Collaboration.MarkNotForTarget' });
         const placed = value(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: VOTE, placedAt: at })).Placed;
         expect(placed.aggregate).toMatchObject({ state: 'Placed', sign: VOTE, target });
-        expect(placed.events.MarkPlaced).toMatchObject({ type: 'MarkPlaced', markId: id, participant: who });
+        expect(placed.events['Collaboration.MarkPlaced']).toMatchObject({ type: 'Collaboration.MarkPlaced', markId: id, participant: who });
         const removed = value(markCommands.remove(placed.aggregate, { open: open(target), removedAt: at })).Removed;
         expect(removed.aggregate).toMatchObject({ state: 'Removed', removedAt: at });
         // the facilitator reacts like anyone

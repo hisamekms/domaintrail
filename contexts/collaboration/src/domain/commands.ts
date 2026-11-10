@@ -23,7 +23,7 @@ export const sessionCommands: Collaboration.SessionCommands = {
                     startedAt,
                     currentJourney: undefined,
                 },
-                events: { SessionStarted: { type: 'SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
+                events: { 'Collaboration.SessionStarted': { type: 'Collaboration.SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
             },
         }),
     ),
@@ -40,7 +40,9 @@ export const sessionCommands: Collaboration.SessionCommands = {
             return ok({
                 Open: {
                     set: { participants: [...session.participants, { id: participant, name, role: 'Participant', joinedAt }] },
-                    events: { ParticipantJoined: { type: 'ParticipantJoined', sessionId: session.id, participant, name, joinedAt } },
+                    events: {
+                        'Collaboration.ParticipantJoined': { type: 'Collaboration.ParticipantJoined', sessionId: session.id, participant, name, joinedAt },
+                    },
                 },
             });
         },
@@ -52,7 +54,10 @@ export const sessionCommands: Collaboration.SessionCommands = {
             if (Collaboration.checkCollaborateSessionRequires(session, params) === 'solo') return err({ type: 'Collaboration.NotSolo' });
             const { collaboratedAt } = params;
             return ok({
-                Open: { set: { mode: 'Collab' }, events: { SessionCollaborated: { type: 'SessionCollaborated', sessionId: session.id, collaboratedAt } } },
+                Open: {
+                    set: { mode: 'Collab' },
+                    events: { 'Collaboration.SessionCollaborated': { type: 'Collaboration.SessionCollaborated', sessionId: session.id, collaboratedAt } },
+                },
             });
         },
     }),
@@ -66,7 +71,14 @@ export const sessionCommands: Collaboration.SessionCommands = {
             return ok({
                 Open: {
                     set: { currentJourney: journey },
-                    events: { JourneyChosen: { type: 'JourneyChosen', sessionId: session.id, ...(journey !== undefined && { journey }), chosenAt } },
+                    events: {
+                        'Collaboration.JourneyChosen': {
+                            type: 'Collaboration.JourneyChosen',
+                            sessionId: session.id,
+                            ...(journey !== undefined && { journey }),
+                            chosenAt,
+                        },
+                    },
                 },
             });
         },
@@ -76,7 +88,12 @@ export const sessionCommands: Collaboration.SessionCommands = {
         Open: (session, params) => {
             if (Collaboration.checkCloseSessionRequires(session, params) === 'facilitatorCloses') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { closedAt } = params;
-            return ok({ Closed: { set: { closedAt }, events: { SessionClosed: { type: 'SessionClosed', sessionId: session.id, closedAt } } } });
+            return ok({
+                Closed: {
+                    set: { closedAt },
+                    events: { 'Collaboration.SessionClosed': { type: 'Collaboration.SessionClosed', sessionId: session.id, closedAt } },
+                },
+            });
         },
     }),
 };
@@ -115,8 +132,8 @@ export const requestCommands: Collaboration.RequestCommands = {
                     edit: undefined,
                 },
                 events: {
-                    RequestSent: {
-                        type: 'RequestSent',
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
                         requestId: id,
                         session,
                         author,
@@ -155,7 +172,19 @@ export const requestCommands: Collaboration.RequestCommands = {
                     edit: undefined,
                     redactedAt: undefined,
                 },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
+                events: {
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets: [],
+                        body,
+                        sentAt,
+                        mentions: [],
+                        reverts,
+                    },
+                },
             },
         });
     }),
@@ -179,7 +208,19 @@ export const requestCommands: Collaboration.RequestCommands = {
                     redactedAt: undefined,
                     edit,
                 },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], edit } },
+                events: {
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets: [],
+                        body,
+                        sentAt,
+                        mentions: [],
+                        edit,
+                    },
+                },
             },
         }),
     ),
@@ -208,8 +249,8 @@ export const requestCommands: Collaboration.RequestCommands = {
                     redactedAt: undefined,
                 },
                 events: {
-                    RequestSent: {
-                        type: 'RequestSent',
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
                         requestId: id,
                         session,
                         author,
@@ -232,7 +273,7 @@ export const requestCommands: Collaboration.RequestCommands = {
             return ok({
                 Sent: {
                     set: { body: request.redactedAt ? request.body : body, redactedAt },
-                    events: { RequestRedacted: { type: 'RequestRedacted', requestId: request.id, redactedAt } },
+                    events: { 'Collaboration.RequestRedacted': { type: 'Collaboration.RequestRedacted', requestId: request.id, redactedAt } },
                 },
             });
         },
@@ -241,7 +282,7 @@ export const requestCommands: Collaboration.RequestCommands = {
             return ok({
                 Dismissed: {
                     set: { body: request.redactedAt ? request.body : body, redactedAt },
-                    events: { RequestRedacted: { type: 'RequestRedacted', requestId: request.id, redactedAt } },
+                    events: { 'Collaboration.RequestRedacted': { type: 'Collaboration.RequestRedacted', requestId: request.id, redactedAt } },
                 },
             });
         },
@@ -262,7 +303,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         return ok({
             Queued: {
                 set: { id, session, input, queuedBy, queuedAt, revertObstacle: undefined },
-                events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
+                events: { 'Collaboration.RunQueued': { type: 'Collaboration.RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
             },
         });
     }),
@@ -293,8 +334,8 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                     hotspotName: undefined,
                 },
                 events: {
-                    RunEdited: {
-                        type: 'RunEdited',
+                    'Collaboration.RunEdited': {
+                        type: 'Collaboration.RunEdited',
                         runId: id,
                         session,
                         requests,
@@ -317,7 +358,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Edited: {
                     set: { hotspotName, resultRevision },
-                    events: { RunHotspotNamed: { type: 'RunHotspotNamed', runId: run.id, hotspotName, resultRevision } },
+                    events: { 'Collaboration.RunHotspotNamed': { type: 'Collaboration.RunHotspotNamed', runId: run.id, hotspotName, resultRevision } },
                 },
             });
         },
@@ -326,7 +367,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     // what a later run did to the same sticky, or the person's choice made (ADR 0033)
     noteConflict: decide<Collaboration.NoteConflictAgentRunDecision>(Collaboration.AgentRunShape, {
         Edited: (run, { conflict }) =>
-            ok({ Edited: { set: { conflict }, events: { RunEditConflicted: { type: 'RunEditConflicted', runId: run.id, conflict } } } }),
+            ok({
+                Edited: {
+                    set: { conflict },
+                    events: { 'Collaboration.RunEditConflicted': { type: 'Collaboration.RunEditConflicted', runId: run.id, conflict } },
+                },
+            }),
     }),
 
     // a queued revert whose turn came, reverted mechanically by the server (no agent); unchanged when nothing was left
@@ -342,7 +388,9 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Reverted: {
                     set: { baseRevision, resultRevision, changed, finishedAt },
-                    events: { RunReverted: { type: 'RunReverted', runId: run.id, baseRevision, resultRevision, changed, finishedAt } },
+                    events: {
+                        'Collaboration.RunReverted': { type: 'Collaboration.RunReverted', runId: run.id, baseRevision, resultRevision, changed, finishedAt },
+                    },
                 },
             });
         },
@@ -356,7 +404,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Queued: {
                     set: { revertObstacle: obstacle },
-                    events: { RevertLeftToAgent: { type: 'RevertLeftToAgent', runId: run.id, obstacle } },
+                    events: { 'Collaboration.RevertLeftToAgent': { type: 'Collaboration.RevertLeftToAgent', runId: run.id, obstacle } },
                 },
             });
         },
@@ -364,7 +412,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
 
     start: decide<Collaboration.StartAgentRunDecision>(Collaboration.AgentRunShape, {
         Queued: (run, { baseRevision, startedAt }) =>
-            ok({ Running: { set: { baseRevision, startedAt }, events: { RunStarted: { type: 'RunStarted', runId: run.id, baseRevision, startedAt } } } }),
+            ok({
+                Running: {
+                    set: { baseRevision, startedAt },
+                    events: { 'Collaboration.RunStarted': { type: 'Collaboration.RunStarted', runId: run.id, baseRevision, startedAt } },
+                },
+            }),
     }),
 
     // Completed when the report meets the run success rule, Failed (RuleNotMet) with the report otherwise
@@ -382,14 +435,14 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                 Completed: {
                     // the reply and the review are kept with a completed run only: a failure is the facts'
                     set: { report, resultRevision, changed, reply, review, finishedAt },
-                    events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
+                    events: { 'Collaboration.RunCompleted': { type: 'Collaboration.RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
                 },
             });
         }
         return ok({
             Failed: {
                 set: { reason: 'RuleNotMet', report, resultRevision, finishedAt },
-                events: { RunFailed: { type: 'RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
+                events: { 'Collaboration.RunFailed': { type: 'Collaboration.RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
             },
         });
     }),
@@ -401,7 +454,15 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 NeedsClarification: {
                     set: { question, reply, resultRevision, finishedAt },
-                    events: { RunNeedsClarification: { type: 'RunNeedsClarification', runId: run.id, question, resultRevision, finishedAt } },
+                    events: {
+                        'Collaboration.RunNeedsClarification': {
+                            type: 'Collaboration.RunNeedsClarification',
+                            runId: run.id,
+                            question,
+                            resultRevision,
+                            finishedAt,
+                        },
+                    },
                 },
             });
         },
@@ -414,7 +475,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Declined: {
                     set: { reply, resultRevision, finishedAt },
-                    events: { RunDeclined: { type: 'RunDeclined', runId: run.id, resultRevision, finishedAt } },
+                    events: { 'Collaboration.RunDeclined': { type: 'Collaboration.RunDeclined', runId: run.id, resultRevision, finishedAt } },
                 },
             });
         },
@@ -428,7 +489,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Failed: {
                     set: { reason, report: undefined, resultRevision: undefined, finishedAt },
-                    events: { RunFailed: { type: 'RunFailed', runId: run.id, reason, finishedAt } },
+                    events: { 'Collaboration.RunFailed': { type: 'Collaboration.RunFailed', runId: run.id, reason, finishedAt } },
                 },
             });
         },
@@ -442,7 +503,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Cancelled: {
                     set: { baseRevision: undefined, cancelledBy, cancelledAt },
-                    events: { RunCancelled: { type: 'RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
+                    events: { 'Collaboration.RunCancelled': { type: 'Collaboration.RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
                 },
             });
         },
@@ -452,7 +513,7 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
             return ok({
                 Cancelled: {
                     set: { baseRevision: run.baseRevision, cancelledBy, cancelledAt },
-                    events: { RunCancelled: { type: 'RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
+                    events: { 'Collaboration.RunCancelled': { type: 'Collaboration.RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
                 },
             });
         },
@@ -476,7 +537,17 @@ export const revisionCommands: Collaboration.RevisionCommands = {
         return ok({
             Recorded: {
                 set: { id, session, origin, contentHash, files, validation, takenAt },
-                events: { RevisionRecorded: { type: 'RevisionRecorded', revisionId: id, session, origin, contentHash, validation, takenAt } },
+                events: {
+                    'Collaboration.RevisionRecorded': {
+                        type: 'Collaboration.RevisionRecorded',
+                        revisionId: id,
+                        session,
+                        origin,
+                        contentHash,
+                        validation,
+                        takenAt,
+                    },
+                },
             },
         });
     }),
@@ -494,7 +565,16 @@ export const revisionCommands: Collaboration.RevisionCommands = {
             Recorded: {
                 set: { id, session, origin: { kind: 'Restored', restoredFrom, preRestore }, contentHash, files, validation, takenAt },
                 events: {
-                    RevisionRestored: { type: 'RevisionRestored', revisionId: id, session, restoredFrom, preRestore, contentHash, validation, takenAt },
+                    'Collaboration.RevisionRestored': {
+                        type: 'Collaboration.RevisionRestored',
+                        revisionId: id,
+                        session,
+                        restoredFrom,
+                        preRestore,
+                        contentHash,
+                        validation,
+                        takenAt,
+                    },
                 },
             },
         });

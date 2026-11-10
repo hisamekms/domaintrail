@@ -152,7 +152,7 @@ describe('sessions and requests', () => {
         ]);
         expect(start.validation).toEqual({ dtErrors: 0, dtesErrors: 0, dtesWarnings: 0, linkWarnings: 0, stale: false } as unknown as typeof start.validation);
         const events = await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id));
-        expect(events.map((e) => e.event.type)).toEqual(['SessionStarted', 'RevisionRecorded', 'ParticipantJoined']);
+        expect(events.map((e) => e.event.type)).toEqual(['Collaboration.SessionStarted', 'Collaboration.RevisionRecorded', 'Collaboration.ParticipantJoined']);
         expect(value(await s.use.joinSession({ session: id, participant: guest, name })).joined).toBe(false);
     });
 
@@ -261,7 +261,12 @@ describe('agent runs', () => {
         expect(value(await s.use.sessionState({ session: id })).revisions).toHaveLength(3);
         expect(error(await s.use.finishRun({ run: run.id, token: 'another', facts }))).toEqual({ type: 'LeaseLost', run: run.id });
         const types = (await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id))).map((e) => e.event.type);
-        expect(types.slice(-4)).toEqual(['RevisionRecorded', 'RunStarted', 'RevisionRecorded', 'RunCompleted']);
+        expect(types.slice(-4)).toEqual([
+            'Collaboration.RevisionRecorded',
+            'Collaboration.RunStarted',
+            'Collaboration.RevisionRecorded',
+            'Collaboration.RunCompleted',
+        ]);
     });
 
     test('a run that adds a .dt error or breaks a .dtes fails by the rule, with the diff; one that changes nothing keeps its base', async () => {
@@ -443,7 +448,7 @@ describe('agent replies', () => {
             state: 'Declined',
         });
         const types = (await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id))).map((e) => e.event.type);
-        expect(types.at(-1)).toBe('RunDeclined');
+        expect(types.at(-1)).toBe('Collaboration.RunDeclined');
     });
 
     test("the facilitator's answer is checked against the questions and frozen into the next run's input", async () => {
@@ -614,7 +619,11 @@ describe('agent replies', () => {
         // nothing is queued for the agent; the pages get the event
         expect(after.runs).toHaveLength(before.runs.length);
         const events = await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 });
-        expect(events.at(-1)?.event).toMatchObject({ type: 'AssumptionApproved', approvalId: approval.id, assumption: { run: run.id, assumption: 0 } });
+        expect(events.at(-1)?.event).toMatchObject({
+            type: 'Collaboration.AssumptionApproved',
+            approvalId: approval.id,
+            assumption: { run: run.id, assumption: 0 },
+        });
 
         // one decision per assumption: approved once, and not sent again with an alternative
         expect(error(await approve(run.id, 0))).toEqual({ type: 'Collaboration.AssumptionClosed', run: run.id });
@@ -669,7 +678,7 @@ describe('revisions', () => {
         expect(preRestore).toMatchObject({ origin: { kind: 'PreRestore', restoring: start.id }, contentHash: manual.contentHash });
         expect(restored).toMatchObject({ origin: { kind: 'Restored', restoredFrom: start.id, preRestore: preRestore.id }, contentHash: start.contentHash });
         const types = (await s.deps.uow.transaction((st) => st.outbox.readAfter(0, 100, id))).map((e) => e.event.type);
-        expect(types.at(-1)).toBe('RevisionRestored');
+        expect(types.at(-1)).toBe('Collaboration.RevisionRestored');
     });
 
     test('a .dtes with a syntax error is kept in the revision as written, counted as a .dtes error; restoring an earlier one recovers', async () => {
@@ -1142,7 +1151,13 @@ describe('reverting a run', () => {
         expect(revision(run.resultRevision)?.origin).toEqual({ kind: 'RunResult', run: run.id });
         expect(after.runs.at(-1)).toEqual(run);
         const events = (await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 })).map((e) => e.event.type);
-        expect(events.slice(-5)).toEqual(['RequestSent', 'RunQueued', 'RevisionRecorded', 'RevisionRecorded', 'RunReverted']);
+        expect(events.slice(-5)).toEqual([
+            'Collaboration.RequestSent',
+            'Collaboration.RunQueued',
+            'Collaboration.RevisionRecorded',
+            'Collaboration.RevisionRecorded',
+            'Collaboration.RunReverted',
+        ]);
         // what it changed is the first run's change backwards
         const compared = value(await s.use.compareRevisions({ session: id, before: run.baseRevision, after: run.resultRevision }));
         expect(compared.files.find((f) => f.path === 'sales/sales.dt')?.diff).toMatchObject({ kind: 'diff', added: 0, removed: 2 });
@@ -1210,7 +1225,7 @@ describe('reverting a run', () => {
             input: { requests: [{ request: requested.request.id, reverts: first.id }] },
         });
         expect((await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 })).at(-1)?.event).toMatchObject({
-            type: 'RevertLeftToAgent',
+            type: 'Collaboration.RevertLeftToAgent',
             runId: requested.run.id,
         });
         // tried once: the server leaves it to the agent from now on

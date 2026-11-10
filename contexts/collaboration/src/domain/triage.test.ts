@@ -181,7 +181,7 @@ describe('the commands of a triage', () => {
 
     test('open: pending, no step yet, TriageOpened', () => {
         expect(opened.aggregate).toMatchObject({ state: 'Pending', request, steps: [], addressedBy: 'Mention' });
-        expect(opened.events.TriageOpened).toMatchObject({ type: 'TriageOpened', request, addressedByParticipant: guest });
+        expect(opened.events['Collaboration.TriageOpened']).toMatchObject({ type: 'Collaboration.TriageOpened', request, addressedByParticipant: guest });
     });
 
     test('record: stage 1 unknown stays pending; Clef decides; out of order and stage 1 deciding 相談 are refused', () => {
@@ -192,7 +192,7 @@ describe('the commands of a triage', () => {
         if (!pending) throw new Error('pending');
         const decided = value(triageCommands.record(pending, { step: step('Clef', 'ChangeRequest'), recordedAt: at })).Decided;
         expect(decided?.aggregate).toMatchObject({ state: 'Decided', kind: 'ChangeRequest', decidedBy: 'Clef' });
-        expect(Object.keys(decided?.events ?? {})).toEqual(['TriageStepRecorded', 'TriageDecided']);
+        expect(Object.keys(decided?.events ?? {})).toEqual(['Collaboration.TriageStepRecorded', 'Collaboration.TriageDecided']);
         expect(error(triageCommands.record(pending, { step: step('Mechanical'), recordedAt: at }))).toEqual({ type: 'Collaboration.TriageStepOutOfOrder' });
         expect(error(triageCommands.record(opened.aggregate, { step: step('Mechanical', 'Consultation'), recordedAt: at }))).toEqual({
             type: 'Collaboration.InvalidTriageStep',

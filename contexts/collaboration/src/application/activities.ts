@@ -6,7 +6,13 @@ import type { RunActivity } from '../domain/activity.js';
 import { sameActivity } from '../domain/activity.js';
 
 /** The events that end a running run: its activity is dropped when one of them is read. */
-export const RUN_ENDING_EVENTS = ['RunCompleted', 'RunNeedsClarification', 'RunDeclined', 'RunFailed', 'RunCancelled'] as const;
+export const RUN_ENDING_EVENTS = [
+    'Collaboration.RunCompleted',
+    'Collaboration.RunNeedsClarification',
+    'Collaboration.RunDeclined',
+    'Collaboration.RunFailed',
+    'Collaboration.RunCancelled',
+] as const;
 
 export interface RunActivities {
     /** Holds the run's latest activity; whether it changed (the same activity again changes nothing). */

@@ -17,31 +17,31 @@ export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEnt
     const extractor = (extraction: Knowledge.ExtractionRef): Knowledge.Actor => ({ kind: 'Extractor', extraction });
     const person = (user: Knowledge.UserName): Knowledge.Actor => ({ kind: 'Person', user });
     switch (event.type) {
-        case 'KnowledgeItemAdded':
+        case 'Knowledge.KnowledgeItemAdded':
             return record('add', extractor(event.by), event.reason);
-        case 'KnowledgeSourceAdded':
+        case 'Knowledge.KnowledgeSourceAdded':
             return record('addSource', extractor(event.by), event.reason);
-        case 'KnowledgeItemRewritten':
+        case 'Knowledge.KnowledgeItemRewritten':
             return record('rewrite', extractor(event.by), event.reason);
-        case 'KnowledgeItemRevised':
+        case 'Knowledge.KnowledgeItemRevised':
             return record('revise', extractor(event.by), event.reason);
-        case 'KnowledgeConflictLinked':
+        case 'Knowledge.KnowledgeConflictLinked':
             return record('linkConflict', extractor(event.by), event.reason);
-        case 'KnowledgeConflictUnlinked':
+        case 'Knowledge.KnowledgeConflictUnlinked':
             return record('unlinkConflict', person(event.by));
-        case 'KnowledgeHandedOverToHotspot':
+        case 'Knowledge.KnowledgeHandedOverToHotspot':
             return record('handOverToHotspot', person(event.by), hotspotReason(event.hotspot));
-        case 'KnowledgeItemCorrected':
+        case 'Knowledge.KnowledgeItemCorrected':
             return record('correct', person(event.by));
-        case 'KnowledgeBookmarkChanged':
+        case 'Knowledge.KnowledgeBookmarkChanged':
             return record(event.bookmarked ? 'bookmark' : 'unbookmark', person(event.by));
-        case 'KnowledgeItemDeleted':
+        case 'Knowledge.KnowledgeItemDeleted':
             return record('delete', person(event.by));
-        case 'KnowledgeItemRestored':
+        case 'Knowledge.KnowledgeItemRestored':
             return record('restore', person(event.by));
-        case 'KnowledgeItemRetired':
+        case 'Knowledge.KnowledgeItemRetired':
             return record('retire', person(event.by), retirementReason(event));
-        case 'KnowledgeItemUnretired':
+        case 'Knowledge.KnowledgeItemUnretired':
             return record('unretire', person(event.by), event.proposal && reasonOf(`proposal ${event.proposal}`));
     }
 }
@@ -76,7 +76,7 @@ export function auditOfProposal(
     event: Knowledge.RetirementProposed | Knowledge.RetirementProposalDismissed,
     version: Knowledge.ItemVersion,
 ): Knowledge.AuditEntry {
-    if (event.type === 'RetirementProposed')
+    if (event.type === 'Knowledge.RetirementProposed')
         return {
             item: event.item,
             version,

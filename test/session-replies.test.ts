@@ -190,7 +190,7 @@ describe('replying to a run', () => {
             const reply = await f.send('Thanks', run);
             expect(reply.replyTo).toEqual({ kind: 'Run', run });
             const event = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 1000, f.id))).at(-1)?.event;
-            expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: { kind: 'Run', run } });
+            expect(event).toMatchObject({ type: 'Collaboration.RequestSent', requestId: reply.id, replyTo: { kind: 'Run', run } });
         }
         // a message that replies to nothing has no replyTo, in the request and its event
         const plain = await f.send('Hello');
@@ -279,7 +279,7 @@ describe('replying to a message', () => {
         const reply = await f.send('Same here.', to);
         expect(reply.replyTo).toEqual(to);
         const event = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 1000, f.id))).at(-1)?.event;
-        expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: to });
+        expect(event).toMatchObject({ type: 'Collaboration.RequestSent', requestId: reply.id, replyTo: to });
         // one's own, and a reply to a reply
         expect((await f.send('And I mean it.', { kind: 'Message', request: reply.id })).replyTo).toEqual({ kind: 'Message', request: reply.id });
 

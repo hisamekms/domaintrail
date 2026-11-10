@@ -29,14 +29,27 @@ export const recordCommands: Collaboration.SessionRecordCommands = {
             Written: {
                 set: { id, session, by, fact, replyTo, at, revisedAt: undefined },
                 events: {
-                    RecordWritten: { type: 'RecordWritten', recordId: id, session, ...(by !== undefined && { by }), fact, ...(replyTo && { replyTo }), at },
+                    'Collaboration.RecordWritten': {
+                        type: 'Collaboration.RecordWritten',
+                        recordId: id,
+                        session,
+                        ...(by !== undefined && { by }),
+                        fact,
+                        ...(replyTo && { replyTo }),
+                        at,
+                    },
                 },
             },
         }),
     ),
     revise: decide<Collaboration.ReviseSessionRecordDecision>(Collaboration.SessionRecordShape, {
         Written: (record, { fact, revisedAt }) =>
-            ok({ Written: { set: { fact, revisedAt }, events: { RecordRevised: { type: 'RecordRevised', recordId: record.id, fact, revisedAt } } } }),
+            ok({
+                Written: {
+                    set: { fact, revisedAt },
+                    events: { 'Collaboration.RecordRevised': { type: 'Collaboration.RecordRevised', recordId: record.id, fact, revisedAt } },
+                },
+            }),
     }),
 };
 

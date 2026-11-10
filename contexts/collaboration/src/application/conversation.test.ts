@@ -109,7 +109,11 @@ describe('the modes (decision 13)', () => {
             facilitatorId,
         ]);
         const events = await use.eventsAfter({ session: solo.session.id, cursor: 0, limit: 100 });
-        expect(events.map((e) => e.event.type)).toEqual(['SessionStarted', 'RevisionRecorded', 'SessionCollaborated']);
+        expect(events.map((e) => e.event.type)).toEqual([
+            'Collaboration.SessionStarted',
+            'Collaboration.RevisionRecorded',
+            'Collaboration.SessionCollaborated',
+        ]);
         expect(error(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name }))).toEqual({ type: 'Collaboration.CollabSessionOpen' });
         expect(value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name })).opened).toBe('resumed');
         expect(value(await use.joinSession({ session: solo.session.id, participant: bobId, name })).joined).toBe(true);

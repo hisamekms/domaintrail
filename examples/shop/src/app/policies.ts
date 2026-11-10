@@ -51,7 +51,7 @@ export function registerPolicies(
 ): { readonly refundRequests: readonly RefundRequest[] } {
     const refundRequests: RefundRequest[] = [];
 
-    events.on('OrderConfirmed', async (s) => {
+    events.on('Sales.OrderConfirmed', async (s) => {
         let input: Billing.IssueInvoiceInput;
         try {
             input = await billing.BillConfirmedOrder(s.event);
@@ -70,7 +70,7 @@ export function registerPolicies(
     // Not a policy of the DSL: a policy names the command it runs, and Billing has no refund command yet. So the request
     // is only recorded for a person to handle. Adding the command (and then the policy) to the DSL is the way to
     // automate it, not inventing behaviour here.
-    events.on('RefundRequested', async (s) => {
+    events.on('Sales.RefundRequested', async (s) => {
         const invoice = (await invoices.find((i) => i.order === s.event.orderId))?.aggregate;
         refundRequests.push({ order: s.event.orderId, ...(invoice && { invoice: { id: invoice.id, state: invoice.state } }), requestedAt: s.meta.recordedAt });
         log(

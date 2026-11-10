@@ -1234,7 +1234,7 @@ export type AddKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemAdded: KnowledgeItemAdded };
+        readonly events: { readonly 'Knowledge.KnowledgeItemAdded': KnowledgeItemAdded };
     };
 }, DuplicateSource>;
 
@@ -1251,7 +1251,7 @@ export type AddKnowledgeItemDecision = (
 ) => Result<{
     readonly Live: {
         readonly set: { readonly id: KnowledgeItemId; readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly conflictsWith: readonly KnowledgeItemId[]; readonly createdIn: SessionRef | undefined; readonly createdAt: Timestamp; readonly updatedAt: Timestamp; readonly bookmarked: boolean | undefined; readonly retirement: Retirement | undefined };
-        readonly events: { readonly KnowledgeItemAdded: KnowledgeItemAdded };
+        readonly events: { readonly 'Knowledge.KnowledgeItemAdded': KnowledgeItemAdded };
     };
 }, DuplicateSource>;
 
@@ -1298,7 +1298,7 @@ export type AddConflictingKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemAdded: KnowledgeItemAdded };
+        readonly events: { readonly 'Knowledge.KnowledgeItemAdded': KnowledgeItemAdded };
     };
 }, DuplicateSource | ConflictWithItself>;
 
@@ -1316,7 +1316,7 @@ export type AddConflictingKnowledgeItemDecision = (
 ) => Result<{
     readonly Live: {
         readonly set: { readonly id: KnowledgeItemId; readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly conflictsWith: readonly KnowledgeItemId[]; readonly createdIn: SessionRef | undefined; readonly createdAt: Timestamp; readonly updatedAt: Timestamp; readonly bookmarked: boolean | undefined; readonly retirement: Retirement | undefined };
-        readonly events: { readonly KnowledgeItemAdded: KnowledgeItemAdded };
+        readonly events: { readonly 'Knowledge.KnowledgeItemAdded': KnowledgeItemAdded };
     };
 }, DuplicateSource | ConflictWithItself>;
 
@@ -1363,7 +1363,7 @@ export type AddSourceKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeSourceAdded: KnowledgeSourceAdded };
+        readonly events: { readonly 'Knowledge.KnowledgeSourceAdded': KnowledgeSourceAdded };
     };
 }, StaleOperation | DuplicateSource>;
 
@@ -1381,7 +1381,7 @@ export type AddSourceKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: AddSourceKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly content: ItemContent; readonly sources: readonly Source[]; readonly updatedAt: Timestamp };
-            readonly events: { readonly KnowledgeSourceAdded: KnowledgeSourceAdded };
+            readonly events: { readonly 'Knowledge.KnowledgeSourceAdded': KnowledgeSourceAdded };
         };
     }, StaleOperation | DuplicateSource>;
 };
@@ -1432,7 +1432,7 @@ export type UpdateKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemRewritten?: KnowledgeItemRewritten; readonly KnowledgeItemRevised?: KnowledgeItemRevised };
+        readonly events: { readonly 'Knowledge.KnowledgeItemRewritten'?: KnowledgeItemRewritten; readonly 'Knowledge.KnowledgeItemRevised'?: KnowledgeItemRevised };
     };
 }, StaleOperation>;
 
@@ -1452,7 +1452,7 @@ export type UpdateKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: UpdateKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly content: ItemContent; readonly sources: readonly Source[]; readonly version: ItemVersion; readonly updatedAt: Timestamp };
-            readonly events: { readonly KnowledgeItemRewritten?: KnowledgeItemRewritten; readonly KnowledgeItemRevised?: KnowledgeItemRevised };
+            readonly events: { readonly 'Knowledge.KnowledgeItemRewritten'?: KnowledgeItemRewritten; readonly 'Knowledge.KnowledgeItemRevised'?: KnowledgeItemRevised };
         };
     }, StaleOperation>;
 };
@@ -1499,7 +1499,7 @@ export type LinkConflictKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeConflictLinked: KnowledgeConflictLinked };
+        readonly events: { readonly 'Knowledge.KnowledgeConflictLinked': KnowledgeConflictLinked };
     };
 }, StaleOperation | ConflictWithItself | ConflictWithoutSource>;
 
@@ -1518,7 +1518,7 @@ export type LinkConflictKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: LinkConflictKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly conflictsWith: readonly KnowledgeItemId[]; readonly updatedAt: Timestamp };
-            readonly events: { readonly KnowledgeConflictLinked: KnowledgeConflictLinked };
+            readonly events: { readonly 'Knowledge.KnowledgeConflictLinked': KnowledgeConflictLinked };
         };
     }, StaleOperation | ConflictWithItself | ConflictWithoutSource>;
 };
@@ -1562,7 +1562,7 @@ export type UnlinkConflictKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeConflictUnlinked: KnowledgeConflictUnlinked };
+        readonly events: { readonly 'Knowledge.KnowledgeConflictUnlinked': KnowledgeConflictUnlinked };
     };
 }, ConflictWithItself>;
 
@@ -1579,7 +1579,7 @@ export type UnlinkConflictKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: UnlinkConflictKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly conflictsWith: readonly KnowledgeItemId[]; readonly updatedAt: Timestamp };
-            readonly events: { readonly KnowledgeConflictUnlinked: KnowledgeConflictUnlinked };
+            readonly events: { readonly 'Knowledge.KnowledgeConflictUnlinked': KnowledgeConflictUnlinked };
         };
     }, ConflictWithItself>;
 };
@@ -1624,7 +1624,7 @@ export type HandOverToHotspotKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeHandedOverToHotspot: KnowledgeHandedOverToHotspot };
+        readonly events: { readonly 'Knowledge.KnowledgeHandedOverToHotspot': KnowledgeHandedOverToHotspot };
     };
 }, ConflictWithItself>;
 
@@ -1641,7 +1641,7 @@ export type HandOverToHotspotKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: HandOverToHotspotKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly content: ItemContent; readonly conflictsWith: readonly KnowledgeItemId[]; readonly updatedAt: Timestamp };
-            readonly events: { readonly KnowledgeHandedOverToHotspot: KnowledgeHandedOverToHotspot };
+            readonly events: { readonly 'Knowledge.KnowledgeHandedOverToHotspot': KnowledgeHandedOverToHotspot };
         };
     }, ConflictWithItself>;
 };
@@ -1681,7 +1681,7 @@ export type CorrectKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemCorrected: KnowledgeItemCorrected };
+        readonly events: { readonly 'Knowledge.KnowledgeItemCorrected': KnowledgeItemCorrected };
     };
 }, never>;
 
@@ -1697,7 +1697,7 @@ export type CorrectKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: CorrectKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly content: ItemContent; readonly version: ItemVersion; readonly updatedAt: Timestamp };
-            readonly events: { readonly KnowledgeItemCorrected: KnowledgeItemCorrected };
+            readonly events: { readonly 'Knowledge.KnowledgeItemCorrected': KnowledgeItemCorrected };
         };
     }, never>;
 };
@@ -1727,7 +1727,7 @@ export type SetBookmarkKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeBookmarkChanged: KnowledgeBookmarkChanged };
+        readonly events: { readonly 'Knowledge.KnowledgeBookmarkChanged': KnowledgeBookmarkChanged };
     };
 }, never>;
 
@@ -1743,7 +1743,7 @@ export type SetBookmarkKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: SetBookmarkKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly bookmarked: boolean | undefined };
-            readonly events: { readonly KnowledgeBookmarkChanged: KnowledgeBookmarkChanged };
+            readonly events: { readonly 'Knowledge.KnowledgeBookmarkChanged': KnowledgeBookmarkChanged };
         };
     }, never>;
 };
@@ -1781,7 +1781,7 @@ export type RetireKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemRetired: KnowledgeItemRetired };
+        readonly events: { readonly 'Knowledge.KnowledgeItemRetired': KnowledgeItemRetired };
     };
 }, AlreadyRetired | ReplacementWithoutReason | ReplacedByItself>;
 
@@ -1800,7 +1800,7 @@ export type RetireKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: RetireKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly updatedAt: Timestamp; readonly retirement: Retirement | undefined };
-            readonly events: { readonly KnowledgeItemRetired: KnowledgeItemRetired };
+            readonly events: { readonly 'Knowledge.KnowledgeItemRetired': KnowledgeItemRetired };
         };
     }, AlreadyRetired | ReplacementWithoutReason | ReplacedByItself>;
 };
@@ -1843,7 +1843,7 @@ export type UnretireKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemUnretired: KnowledgeItemUnretired };
+        readonly events: { readonly 'Knowledge.KnowledgeItemUnretired': KnowledgeItemUnretired };
     };
 }, NotRetired>;
 
@@ -1860,7 +1860,7 @@ export type UnretireKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: UnretireKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: { readonly updatedAt: Timestamp; readonly retirement: Retirement | undefined };
-            readonly events: { readonly KnowledgeItemUnretired: KnowledgeItemUnretired };
+            readonly events: { readonly 'Knowledge.KnowledgeItemUnretired': KnowledgeItemUnretired };
         };
     }, NotRetired>;
 };
@@ -1898,7 +1898,7 @@ export type DeleteKnowledgeItem = (
 ) => Result<{
     readonly Deleted: {
         readonly aggregate: DeletedKnowledgeItem;
-        readonly events: { readonly KnowledgeItemDeleted: KnowledgeItemDeleted };
+        readonly events: { readonly 'Knowledge.KnowledgeItemDeleted': KnowledgeItemDeleted };
     };
 }, never>;
 
@@ -1914,7 +1914,7 @@ export type DeleteKnowledgeItemDecision = {
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: DeleteKnowledgeItemParams) => Result<{
         readonly Deleted: {
             readonly set: { readonly bookmarked: boolean | undefined; readonly deletedBy: UserName; readonly deletedAt: Timestamp };
-            readonly events: { readonly KnowledgeItemDeleted: KnowledgeItemDeleted };
+            readonly events: { readonly 'Knowledge.KnowledgeItemDeleted': KnowledgeItemDeleted };
         };
     }, never>;
 };
@@ -1943,7 +1943,7 @@ export type RestoreKnowledgeItem = (
 ) => Result<{
     readonly Live: {
         readonly aggregate: LiveKnowledgeItem;
-        readonly events: { readonly KnowledgeItemRestored: KnowledgeItemRestored };
+        readonly events: { readonly 'Knowledge.KnowledgeItemRestored': KnowledgeItemRestored };
     };
 }, never>;
 
@@ -1959,7 +1959,7 @@ export type RestoreKnowledgeItemDecision = {
     readonly Deleted: (knowledgeItem: DeletedKnowledgeItem, params: RestoreKnowledgeItemParams) => Result<{
         readonly Live: {
             readonly set: NoChanges;
-            readonly events: { readonly KnowledgeItemRestored: KnowledgeItemRestored };
+            readonly events: { readonly 'Knowledge.KnowledgeItemRestored': KnowledgeItemRestored };
         };
     }, never>;
 };
@@ -2010,7 +2010,7 @@ export type KnowledgeItemEvent = KnowledgeItemAdded | KnowledgeSourceAdded | Kno
  * @see contexts/knowledge/model/item.dt:145
  */
 export interface KnowledgeItemAdded {
-    readonly type: 'KnowledgeItemAdded';
+    readonly type: 'Knowledge.KnowledgeItemAdded';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2030,7 +2030,7 @@ export interface KnowledgeItemAdded {
  * @see contexts/knowledge/model/item.dt:154
  */
 export interface KnowledgeSourceAdded {
-    readonly type: 'KnowledgeSourceAdded';
+    readonly type: 'Knowledge.KnowledgeSourceAdded';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2051,7 +2051,7 @@ export interface KnowledgeSourceAdded {
  * @see contexts/knowledge/model/item.dt:164
  */
 export interface KnowledgeItemRewritten {
-    readonly type: 'KnowledgeItemRewritten';
+    readonly type: 'Knowledge.KnowledgeItemRewritten';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2070,7 +2070,7 @@ export interface KnowledgeItemRewritten {
  * @see contexts/knowledge/model/item.dt:173
  */
 export interface KnowledgeItemRevised {
-    readonly type: 'KnowledgeItemRevised';
+    readonly type: 'Knowledge.KnowledgeItemRevised';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2088,7 +2088,7 @@ export interface KnowledgeItemRevised {
  * @see contexts/knowledge/model/item.dt:181
  */
 export interface KnowledgeConflictLinked {
-    readonly type: 'KnowledgeConflictLinked';
+    readonly type: 'Knowledge.KnowledgeConflictLinked';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2108,7 +2108,7 @@ export interface KnowledgeConflictLinked {
  * @see contexts/knowledge/model/item.dt:190
  */
 export interface KnowledgeConflictUnlinked {
-    readonly type: 'KnowledgeConflictUnlinked';
+    readonly type: 'Knowledge.KnowledgeConflictUnlinked';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2126,7 +2126,7 @@ export interface KnowledgeConflictUnlinked {
  * @see contexts/knowledge/model/item.dt:198
  */
 export interface KnowledgeHandedOverToHotspot {
-    readonly type: 'KnowledgeHandedOverToHotspot';
+    readonly type: 'Knowledge.KnowledgeHandedOverToHotspot';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2146,7 +2146,7 @@ export interface KnowledgeHandedOverToHotspot {
  * @see contexts/knowledge/model/item.dt:207
  */
 export interface KnowledgeItemCorrected {
-    readonly type: 'KnowledgeItemCorrected';
+    readonly type: 'Knowledge.KnowledgeItemCorrected';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2162,7 +2162,7 @@ export interface KnowledgeItemCorrected {
  * @see contexts/knowledge/model/item.dt:214
  */
 export interface KnowledgeBookmarkChanged {
-    readonly type: 'KnowledgeBookmarkChanged';
+    readonly type: 'Knowledge.KnowledgeBookmarkChanged';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2179,7 +2179,7 @@ export interface KnowledgeBookmarkChanged {
  * @see contexts/knowledge/model/item.dt:222
  */
 export interface KnowledgeItemDeleted {
-    readonly type: 'KnowledgeItemDeleted';
+    readonly type: 'Knowledge.KnowledgeItemDeleted';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2195,7 +2195,7 @@ export interface KnowledgeItemDeleted {
  * @see contexts/knowledge/model/item.dt:229
  */
 export interface KnowledgeItemRestored {
-    readonly type: 'KnowledgeItemRestored';
+    readonly type: 'Knowledge.KnowledgeItemRestored';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2211,7 +2211,7 @@ export interface KnowledgeItemRestored {
  * @see contexts/knowledge/model/item.dt:236
  */
 export interface KnowledgeItemRetired {
-    readonly type: 'KnowledgeItemRetired';
+    readonly type: 'Knowledge.KnowledgeItemRetired';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2233,7 +2233,7 @@ export interface KnowledgeItemRetired {
  * @see contexts/knowledge/model/item.dt:246
  */
 export interface KnowledgeItemUnretired {
-    readonly type: 'KnowledgeItemUnretired';
+    readonly type: 'Knowledge.KnowledgeItemUnretired';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
     /** 版 */
@@ -2830,7 +2830,7 @@ export type ProposeRetirementProposal = (
 ) => Result<{
     readonly Open: {
         readonly aggregate: OpenRetirementProposal;
-        readonly events: { readonly RetirementProposed: RetirementProposed };
+        readonly events: { readonly 'Knowledge.RetirementProposed': RetirementProposed };
     };
 }, MalformedProposal>;
 
@@ -2851,7 +2851,7 @@ export type ProposeRetirementProposalDecision = (
 ) => Result<{
     readonly Open: {
         readonly set: { readonly id: RetirementProposalId; readonly item: KnowledgeItemId; readonly action: ProposalAction; readonly reason: RetirementReason | undefined; readonly replacedBy: KnowledgeItemId | undefined; readonly explanation: Reason; readonly evidence: readonly [Evidence, ...Evidence[]]; readonly proposedBy: Proposer; readonly proposedAt: Timestamp };
-        readonly events: { readonly RetirementProposed: RetirementProposed };
+        readonly events: { readonly 'Knowledge.RetirementProposed': RetirementProposed };
     };
 }, MalformedProposal>;
 
@@ -2892,7 +2892,7 @@ export type ApproveRetirementProposal = (
 ) => Result<{
     readonly Approved: {
         readonly aggregate: ApprovedRetirementProposal;
-        readonly events: { readonly RetirementProposalApproved: RetirementProposalApproved };
+        readonly events: { readonly 'Knowledge.RetirementProposalApproved': RetirementProposalApproved };
     };
 }, never>;
 
@@ -2908,7 +2908,7 @@ export type ApproveRetirementProposalDecision = {
     readonly Open: (retirementProposal: OpenRetirementProposal, params: ApproveRetirementProposalParams) => Result<{
         readonly Approved: {
             readonly set: { readonly decidedBy: UserName; readonly decidedAt: Timestamp };
-            readonly events: { readonly RetirementProposalApproved: RetirementProposalApproved };
+            readonly events: { readonly 'Knowledge.RetirementProposalApproved': RetirementProposalApproved };
         };
     }, never>;
 };
@@ -2937,7 +2937,7 @@ export type DismissRetirementProposal = (
 ) => Result<{
     readonly Dismissed: {
         readonly aggregate: DismissedRetirementProposal;
-        readonly events: { readonly RetirementProposalDismissed: RetirementProposalDismissed };
+        readonly events: { readonly 'Knowledge.RetirementProposalDismissed': RetirementProposalDismissed };
     };
 }, never>;
 
@@ -2953,7 +2953,7 @@ export type DismissRetirementProposalDecision = {
     readonly Open: (retirementProposal: OpenRetirementProposal, params: DismissRetirementProposalParams) => Result<{
         readonly Dismissed: {
             readonly set: { readonly decidedBy: UserName; readonly decidedAt: Timestamp };
-            readonly events: { readonly RetirementProposalDismissed: RetirementProposalDismissed };
+            readonly events: { readonly 'Knowledge.RetirementProposalDismissed': RetirementProposalDismissed };
         };
     }, never>;
 };
@@ -2984,7 +2984,7 @@ export type RetirementProposalEvent = RetirementProposed | RetirementProposalApp
  * @see contexts/knowledge/model/retirement.dt:126
  */
 export interface RetirementProposed {
-    readonly type: 'RetirementProposed';
+    readonly type: 'Knowledge.RetirementProposed';
     /** 廃止の候補ID */
     readonly proposalId: RetirementProposalId;
     /** ナレッジ */
@@ -3004,7 +3004,7 @@ export interface RetirementProposed {
  * @see contexts/knowledge/model/retirement.dt:135
  */
 export interface RetirementProposalApproved {
-    readonly type: 'RetirementProposalApproved';
+    readonly type: 'Knowledge.RetirementProposalApproved';
     /** 廃止の候補ID */
     readonly proposalId: RetirementProposalId;
     /** ナレッジ */
@@ -3022,7 +3022,7 @@ export interface RetirementProposalApproved {
  * @see contexts/knowledge/model/retirement.dt:143
  */
 export interface RetirementProposalDismissed {
-    readonly type: 'RetirementProposalDismissed';
+    readonly type: 'Knowledge.RetirementProposalDismissed';
     /** 廃止の候補ID */
     readonly proposalId: RetirementProposalId;
     /** ナレッジ */

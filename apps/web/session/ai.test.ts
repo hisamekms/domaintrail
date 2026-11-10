@@ -155,9 +155,9 @@ describe('the AI in the header and the composer', () => {
     test('a triage or proposal event fetches the state again', () => {
         const me = { session: 's', participant: { id: 'f', name: 'Fumi', role: 'facilitator' } } as unknown as Me;
         const held = adopt(INITIAL_SESSION, state(), me, true);
-        const event = { type: 'triage.decided', seq: 2, event: { type: 'TriageDecided', triageId: 't', kind: 'Consultation', decidedAt: at(1) } };
+        const event = { type: 'triage.decided', seq: 2, event: { type: 'Collaboration.TriageDecided', triageId: 't', kind: 'Consultation', decidedAt: at(1) } };
         expect(receive(held, event as never).refetch).toBe(true);
-        const proposed = { type: 'proposal.approved', seq: 3, event: { type: 'ProposalApproved', proposalId: 'x' } };
+        const proposed = { type: 'proposal.approved', seq: 3, event: { type: 'Collaboration.ProposalApproved', proposalId: 'x' } };
         expect(receive(held, proposed as never).refetch).toBe(true);
     });
 });
