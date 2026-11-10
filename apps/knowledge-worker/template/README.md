@@ -229,7 +229,8 @@ version's changelog (`node_modules/domaintrail/CHANGELOG.md`) for anything to do
    items their title, removes the items written before it, and the old Worker's writes fail until the new one is
    deployed; migration 3 adds retiring and its proposals — `items.retirement` and the table `proposals` — and
    changes nothing that is there: until the new Worker is deployed, a dt of this version gets 404 for 廃止する and the
-   proposals, and its extractions' proposals are not kept);
+   proposals, and its extractions' proposals are not kept; migration 4 adds a shared bookmark column, initially off
+   for every existing item, and an index for bookmarked-only lists);
 3. `npx wrangler deploy`;
 4. run the publish workflow once (`workflow_dispatch`), so that the page draws the stormings as the new version lays
    them out (the page says so when a published form is of a version it cannot draw).
