@@ -123,7 +123,7 @@ describe('the operations reserved to the facilitator', () => {
         const target = { kind: 'QuestionOption', run: UNKNOWN, question: 'q', option: 'o' };
         expect(await answer(await api(ada, 'marks', { target, sign: { kind: 'Vote' }, placed: true }))).toEqual([
             403,
-            { error: { type: 'Collaboration.FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." } },
+            { error: { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." } },
         ]);
         expect(await answer(await api(bob, 'marks', { target, sign: { kind: 'Vote' }, placed: true }))).toEqual([
             404,
