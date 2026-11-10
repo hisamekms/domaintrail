@@ -237,7 +237,8 @@ Runs without prompts. The default is read-only. JSON output includes the evidenc
 proposed config and next commands. Existing configurations and source files are never rewritten or moved. Multiple
 independent products in one workspace are unsupported; run init from each product root instead. --apply creates only
 a new single-package domaintrail.jsonc with no existing model and is safe to repeat. In a monorepo, use the reported
-ownership decision and dt guide output-dirs to edit the config after agreement.
+ownership decision and dt guide output-dirs to edit the config after agreement. With -c, init inspects the directory
+of that explicit config file as the workspace root; otherwise -r/cwd selects the directory to inspect.
 
 Examples:
   dt init --format json
@@ -253,9 +254,21 @@ Examples:
                 throw error;
             });
             if (!cfg) return;
-            const root = path.resolve(program.opts().root);
+            // An explicit -c selects the config's own workspace root, even when -r/cwd points elsewhere.
+            const root = program.opts().config ? cfg.root : path.resolve(program.opts().root);
             const plan = await initPlan(root, cfg, deps);
-            if (opts.apply && plan.status === 'ready') await applyInitPlan(plan);
+            if (opts.apply && plan.status === 'ready') {
+                try {
+                    await applyInitPlan(plan);
+                } catch (error) {
+                    if (errorCode(error) !== 'EEXIST') throw error;
+                    plan.status = 'needs_decision';
+                    plan.reasons.push('domaintrail.jsonc appeared after the plan was computed; init did not overwrite it.');
+                    plan.decisions.push('Re-run dt init to inspect the current configuration.');
+                    plan.changes = [];
+                    plan.next = ['dt init'];
+                }
+            }
             if (opts.apply && (plan.status === 'needs_decision' || plan.status === 'unsupported')) exitCode = 1;
             io.out(opts.format === 'json' ? JSON.stringify(plan, null, 2) : initPlanText(plan));
         });

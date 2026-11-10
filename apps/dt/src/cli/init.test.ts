@@ -155,4 +155,40 @@ describe('AI-first init', () => {
             changes: [],
         });
     });
+
+    test('an explicit -c selects the config directory instead of the -r directory', async () => {
+        const root = await workspace();
+        const configRoot = path.join(root, 'config');
+        await mkdir(configRoot);
+        await writeFile(path.join(configRoot, 'domaintrail.jsonc'), '{"sources":["model/**/*.dt"]}\n');
+        const out: string[] = [];
+        const code = await runCli(
+            ['-r', root, '-c', path.join(configRoot, 'domaintrail.jsonc'), 'init', '--apply', '--format', 'json'],
+            { out: (s) => out.push(s), err: () => undefined },
+            cliDeps(),
+        );
+        const plan = JSON.parse(out.join('\n')) as Record<string, unknown>;
+        expect(code).toBe(0);
+        expect(plan).toMatchObject({ root: configRoot, status: 'existing', changes: [], layout: { sources: ['model/**/*.dt'] } });
+    });
+
+    test('an apply race returns one JSON decision instead of overwriting the new config', async () => {
+        const root = await workspace();
+        const base = cliDeps();
+        const deps = {
+            ...base,
+            findDomainFiles: async (...args: Parameters<typeof base.findDomainFiles>) => {
+                await writeFile(path.join(root, 'domaintrail.jsonc'), '{"sources":["legacy/**/*.dt"]}\n');
+                return base.findDomainFiles(...args);
+            },
+        };
+        const out: string[] = [];
+        const err: string[] = [];
+        const code = await runCli(['-r', root, 'init', '--apply', '--format', 'json'], { out: (s) => out.push(s), err: (s) => err.push(s) }, deps);
+        const plan = JSON.parse(out.join('\n')) as Record<string, unknown>;
+        expect(code).toBe(1);
+        expect(err).toEqual([]);
+        expect(plan).toMatchObject({ status: 'needs_decision', applied: false, changes: [] });
+        expect(await readFile(path.join(root, 'domaintrail.jsonc'), 'utf8')).toBe('{"sources":["legacy/**/*.dt"]}\n');
+    });
 });
