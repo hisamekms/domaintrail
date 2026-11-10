@@ -242,6 +242,18 @@ describe("an item: its title and labels' line while closed, its text as Markdown
         expect(h).toContain('<div class="knowledge-fold shut" aria-hidden="true">');
     });
 
+    test('a shared bookmark is visible while closed and can be removed when opened', () => {
+        const saved = { ...item, bookmarked: true } as KnowledgeItem;
+        const closed = render(true, <ItemRow item={saved} from={undefined} open={false} onToggle={() => undefined} />);
+        expect(closed).toContain('aria-label="ブックマーク"');
+        const opened = render(true, <ItemRow item={saved} from={undefined} open onToggle={() => undefined} />);
+        expect(opened).toContain('aria-pressed="true" data-tooltip="プロジェクト全体で共有"');
+        expect(opened).toContain('ブックマークを外す');
+        const unsaved = row(true);
+        expect(unsaved).toContain('ブックマークする');
+        expect(unsaved).toContain('data-tooltip="プロジェクト全体で共有"');
+    });
+
     test("opened: its labels as the ナレッジ list's chips (when, kind, origin, perspective), each filtering by itself", () => {
         const h = row(true);
         const chips = [...h.matchAll(/<button type="button" class="knowledge-chip" data-tooltip="([^"]*)">([^<]*)<\/button>/g)].map((m) => [m[2], m[1]]);
@@ -312,6 +324,7 @@ describe('retiring (廃止, ADR 0031 section 12)', () => {
             </I18nProvider>,
         );
         expect(html).toContain('<summary>廃止の候補 1</summary>');
+        expect(html).toContain('ブックマークのみ表示');
         expect(html).toContain('もうやっていないと話に出た');
         expect(html).toContain('当てはまらなくなった');
         expect(html).toMatch(/class="act act-decide"[^>]*>承認</);

@@ -731,7 +731,11 @@ dt only (`/api/session/knowledge`):
   project reads (when it starts and every few minutes) to redact them in its own session database.
 - ナレッジ in the activity bar lists every item, with a search over the titles, the text and the quotes and filters by
   AS-IS / TO-BE, kind and origin (and by a perspective, chosen from an item's chip, shown as one more chip while it
-  filters). The filters stay while the tab is closed. Opening an item rings its stickies on the canvas.
+  filters). ブックマークのみ表示 shows the items bookmarked by the project, and combines with the search and other filters.
+  Anyone can bookmark or unbookmark an opened item, including one to discuss later with a domain expert. A bookmark
+  marks attention, not confirmation; it leaves the item's content version alone and survives correction and retirement.
+  A retired item stays out of the ordinary list, but appears with 廃止も表示; deleting it clears its bookmark. The filters
+  stay while the tab is closed. Opening an item rings its stickies on the canvas.
 - **Retiring** (廃止, [ADR 0031](adr/0031-knowledge.md#12-retiring-an-item) section 12): an opened item has 廃止する,
   which offers the reasons 置き換わった (then the newer item, chosen among the others), 当てはまらなくなった and 誤り, one
   or none, and retires it at once with 元に戻す for 10 seconds, as 消す does. A retired item keeps its text, sources and

@@ -3819,6 +3819,12 @@ and a short quote, which lets a reader check the wording without the session dat
 An item records what was said or found at a time; nothing marks it confirmed: `origin` tells how far to trust it. A
 `term` is about the words of the business; the `.dt` `terms` keep defining the model's.
 
+**Bookmarks** are shared across the project. Bookmark an item that you want to return to, for example one to discuss
+with a domain expert. The ナレッジ list can show bookmarked items only, together with its other search filters. Anyone
+in the project can add or remove one. A bookmark records attention, not confirmation of the finding: it does not
+change the item's text, labels or content version. Corrections and extraction leave it in place. A retired item keeps
+its bookmark but stays out of the ordinary list; unretiring reveals it again. Deleting an item clears its bookmark.
+
 **Taken from the talk.** In a session (`dt open`, `dt collab`), the AI's **extractor** turns the talk into items: after
 30 seconds without a message following a person's message (`quietSeconds`), right after each answer of the AI, and when
 the session ends; at most once a minute (`minIntervalSeconds`). It is **off unless enabled**:
@@ -4001,7 +4007,8 @@ GitHub Actions example.
 
 The page shows the storming with a dot on each sticky that has knowledge (a mark for a conflict), a sticky's items
 when it is selected, the ナレッジ list with its search and filters, the items about stickies no published storming
-has (removed or renamed) apart, and the date of the drawing. Anyone who can open it may correct, retire and delete, with
+has (removed or renamed) apart, and the date of the drawing. Anyone who can open it may bookmark or unbookmark an item,
+and use ブックマークのみ表示 to return to the project's shared selections. They may also correct, retire and delete, with
 元に戻す for 10 seconds, and approve or dismiss the 廃止の候補; the retired items are hidden there too unless 廃止も表示.
 `dt publish` sends the drawing only: a retired item gives no dot on the page, nor is it listed among the items about
 missing stickies.

@@ -102,6 +102,8 @@ export interface Filters {
     readonly perspective?: string;
     /** 廃止も表示: the retired items too (hidden by default). */
     readonly retired?: boolean;
+    /** Only the project's shared bookmarks. */
+    readonly bookmarked?: boolean;
 }
 
 export const NO_FILTERS: Filters = { q: '', when: [], kind: [], origin: [] };
@@ -154,6 +156,7 @@ export function queryOf(filters: Filters, cursor?: string): URLSearchParams {
     if (filters.perspective !== undefined) params.set('perspective', filters.perspective);
     if (filters.q.trim() !== '') params.set('q', filters.q.trim());
     if (filters.retired) params.set('retired', 'include');
+    if (filters.bookmarked) params.set('bookmarked', 'true');
     if (cursor !== undefined) params.set('cursor', cursor);
     return params;
 }

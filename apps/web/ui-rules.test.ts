@@ -126,8 +126,8 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         reason: "a side of a knowledge conflict (kind, title, labels) that opens it under the pair: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the card's, not a button's",
     },
     'knowledge/panel.tsx knowledge-chip': {
-        count: 4,
-        reason: "a filter of the ナレッジ list (AS-IS, ルール, 発言…, 廃止も表示), on or off, an opened item's label as the same chip, which filters the list by it, and a reason chosen to retire an item (置き換わった…, on or off): a chip or badge of its own (a count, a reaction, a status pill): a view setting",
+        count: 5,
+        reason: "a filter of the ナレッジ list (AS-IS, ルール, 発言…, ブックマークのみ表示, 廃止も表示), on or off, an opened item's label as the same chip, which filters the list by it, and a reason chosen to retire an item (置き換わった…, on or off): a chip or badge of its own (a count, a reaction, a status pill): a view setting",
     },
     'knowledge/panel.tsx knowledge-link': {
         count: 1,
