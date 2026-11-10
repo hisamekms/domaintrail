@@ -8,7 +8,7 @@
 // (section 3). A retired item (廃止, section 12) is hidden from the lists unless 廃止も表示, then faded, with its reason
 // and the item that replaced it; the AI's 廃止の候補 head the ナレッジ list, each approved or dismissed by a person.
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Archive, ArchiveRestore, Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Bookmark, Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
@@ -344,6 +344,9 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
     const api = useKnowledgeApi();
     const [editing, setEditing] = useState(false);
     const [retiring, setRetiring] = useState(false);
+    const [bookmarkBusy, setBookmarkBusy] = useState(false);
+    const [bookmarked, setBookmarked] = useState(item.bookmarked === true);
+    useEffect(() => setBookmarked(item.bookmarked === true), [item.bookmarked]);
     const [history, setHistory] = useState<readonly PastVersion[]>([]);
     const file = useRef<HTMLInputElement>(null);
     useEffect(() => {
@@ -363,6 +366,18 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
             view?.changed();
         } catch (e) {
             view?.setError(failure(e));
+        }
+    };
+    const setBookmark = async (): Promise<void> => {
+        setBookmarkBusy(true);
+        try {
+            const changed = await api.setBookmark(item.id, !bookmarked);
+            setBookmarked(changed.bookmarked === true);
+            view?.changed();
+        } catch (e) {
+            view?.setError(failure(e));
+        } finally {
+            setBookmarkBusy(false);
         }
     };
     if (editing) return <CorrectForm item={item} onDone={() => setEditing(false)} />;
@@ -404,6 +419,16 @@ function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefi
             {retiring && <RetireForm item={item} onDone={() => setRetiring(false)} />}
             {!retiring && (
                 <span className="knowledge-actions">
+                    <Act
+                        kind="decide-sub"
+                        icon={<Bookmark size={12} fill={bookmarked ? 'currentColor' : 'none'} aria-hidden />}
+                        aria-pressed={bookmarked}
+                        data-tooltip={t.bookmarkShared}
+                        disabled={bookmarkBusy}
+                        onClick={() => void setBookmark()}
+                    >
+                        {bookmarked ? t.removeBookmark : t.addBookmark}
+                    </Act>
                     <Act kind="open" icon={<Pencil size={12} aria-hidden />} onClick={() => setEditing(true)}>
                         {t.correct}
                     </Act>
@@ -486,7 +511,12 @@ export function ItemRow({
             <button type="button" className="knowledge-item-head" aria-expanded={open} onClick={onToggle}>
                 <span className="knowledge-kind">{t.kinds[item.content.labels.kind]}</span>
                 <span className="knowledge-item-title">{item.content.title}</span>
-                {item.conflictsWith.length > 0 && <CircleAlert className="knowledge-conflict-icon" size={14} aria-label={t.conflict} />}
+                {(item.bookmarked || item.conflictsWith.length > 0) && (
+                    <span className="knowledge-item-icons">
+                        {item.bookmarked && <Bookmark size={14} fill="currentColor" role="img" aria-label={t.bookmark} />}
+                        {item.conflictsWith.length > 0 && <CircleAlert className="knowledge-conflict-icon" size={14} role="img" aria-label={t.conflict} />}
+                    </span>
+                )}
             </button>
             {/* the labels' line is the row's too: a click on it opens the item (the head is the keyboard's target) */}
             <div className={`knowledge-fold${open ? ' shut' : ''}`} aria-hidden={open || undefined} onClick={open ? undefined : onToggle}>
@@ -610,6 +640,7 @@ function SideBySide({
                     <button key={i.id} type="button" className="knowledge-side" aria-expanded={isOpen(i.id)} onClick={() => onToggle(i)}>
                         <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
                         <span className="knowledge-item-title">{i.content.title}</span>
+                        {i.bookmarked && <Bookmark size={14} fill="currentColor" role="img" aria-label={t.bookmark} />}
                         <Meta item={i} />
                     </button>
                 ))}
@@ -865,12 +896,22 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
                                         when: filters.when,
                                         kind: filters.kind,
                                         origin: filters.origin,
+                                        ...(filters.bookmarked && { bookmarked: true }),
                                         ...(filters.retired && { retired: true }),
                                     })
                                 }
                             />
                         )}
                         <span className="knowledge-chips">
+                            <button
+                                type="button"
+                                className="knowledge-chip"
+                                aria-pressed={filters.bookmarked === true}
+                                data-tooltip={t.bookmarkShared}
+                                onClick={() => setFilters({ ...filters, bookmarked: !filters.bookmarked })}
+                            >
+                                {t.showBookmarked}
+                            </button>
                             <button
                                 type="button"
                                 className="knowledge-chip"

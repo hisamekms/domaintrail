@@ -116,6 +116,9 @@ describe('the knowledge on the page', () => {
         expect(queryOf(NO_FILTERS, 'c1').toString()).toBe('cursor=c1');
         // 廃止も表示: the retired items too; hidden by default
         expect(queryOf({ ...NO_FILTERS, retired: true }).toString()).toBe('retired=include');
+        expect(queryOf({ ...NO_FILTERS, q: '締め', bookmarked: true, retired: true }, 'c1').toString()).toBe(
+            'q=%E7%B7%A0%E3%82%81&retired=include&bookmarked=true&cursor=c1',
+        );
         expect(queryOf({ ...NO_FILTERS, perspective: '営業' }).toString()).toBe('perspective=%E5%96%B6%E6%A5%AD');
     });
 

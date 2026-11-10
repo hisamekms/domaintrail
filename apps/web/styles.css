@@ -9759,6 +9759,16 @@ button.act-mark:hover:not(:disabled) .act-mark-box {
     font-weight: var(--fw-strong);
     overflow-wrap: anywhere;
 }
+.knowledge-item-icons {
+    display: inline-flex;
+    align-items: center;
+    justify-self: end;
+    gap: var(--space-1);
+    color: var(--action);
+}
+.knowledge-side > svg[aria-label] {
+    color: var(--action);
+}
 /* an opened item's text */
 .knowledge-body {
     min-width: 0;

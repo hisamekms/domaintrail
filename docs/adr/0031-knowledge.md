@@ -69,6 +69,12 @@ One item holds one finding. It has:
   stays on one machine, so the quote is what lets a reader check the AI's wording;
 - `version`, with the earlier versions kept; `conflictsWith`: the items it contradicts.
 
+People can also add a **project-shared bookmark** to any interesting item, including one they want to discuss with a
+domain expert later. This is an attention marker, not a confirmation of the finding. It is independent of `content`
+and its versions: correction and extraction leave it in place, and toggling it does not make a new content version.
+Retirement keeps the bookmark, although the item stays out of ordinary lists; unretiring reveals it again. Deletion
+clears it. The audit records who added or removed it.
+
 A `term` is about the words of the business. The `.dt` `terms` keep defining the model's terms; the two are not
 merged.
 

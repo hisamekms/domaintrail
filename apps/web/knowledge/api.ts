@@ -100,6 +100,7 @@ export interface KnowledgeApi {
     /** An item with its earlier versions; undefined when it is gone. */
     get(id: string): Promise<ItemWithHistory | undefined>;
     correct(id: string, content: unknown): Promise<Knowledge.LiveKnowledgeItem>;
+    setBookmark(id: string, bookmarked: boolean): Promise<Knowledge.LiveKnowledgeItem>;
     delete(id: string): Promise<Deletion>;
     restore(id: string): Promise<Knowledge.LiveKnowledgeItem>;
     unlink(id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]>;
@@ -152,6 +153,8 @@ export const knowledgeApi = {
             throw e;
         }),
     correct: (id: string, content: unknown): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/correct`, liveItem, { json: { content } }),
+    setBookmark: (id: string, bookmarked: boolean): Promise<Knowledge.LiveKnowledgeItem> =>
+        call(`/items/${enc(id)}/bookmark`, liveItem, { json: { bookmarked } }),
     delete: (id: string): Promise<Deletion> => call(`/items/${enc(id)}/delete`, deletion, { json: {} }),
     restore: (id: string): Promise<Knowledge.LiveKnowledgeItem> => call(`/items/${enc(id)}/restore`, liveItem, { json: {} }),
     unlink: (id: string, other: string): Promise<Knowledge.LiveKnowledgeItem[]> => call(`/items/${enc(id)}/unlink`, liveItems, { json: { other } }),

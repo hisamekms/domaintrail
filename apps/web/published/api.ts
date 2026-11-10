@@ -81,6 +81,7 @@ export function workerKnowledgeApi(project: string): KnowledgeApi {
                 throw e;
             }),
         correct: (id, content) => call(item(id), liveItem, { method: 'PATCH', body: { json: { content } } }),
+        setBookmark: (id, bookmarked) => call(`${item(id)}/bookmark`, liveItem, { method: 'POST', body: { json: { bookmarked } } }),
         delete: (id) => call(item(id), deletion, { method: 'DELETE' }),
         restore: (id) => call(`${item(id)}/restore`, liveItem, { method: 'POST' }),
         unlink: (id, other) => call(`${item(id)}/unlink`, liveItems, { method: 'POST', body: { json: { other } } }),
