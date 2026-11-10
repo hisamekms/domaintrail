@@ -60,7 +60,7 @@ as `domaintrail`, its full name, for when `dt` clashes with another command.
 ## Where to read next
 
 - **[Getting started](docs/getting-started.md)** ([日本語](docs/getting-started.ja.md)): working with an AI agent,
-  a first model step by step, generating, implementing and testing, and the editors.
+  a first model step by step, generating, implementing and testing, and the editors. For AI setup, run `dt init --format json`.
 - **[The guide](docs/guide.md)**, also printed by `dt guide` one topic at a time: the reference for the DSL and the
   CLI, written for people and AI agents. Start with its [quick reference](docs/guide.md#quick-reference).
 - **[examples/shop](examples/shop/README.md)**: a complete example — the model, the generated code and the code an AI

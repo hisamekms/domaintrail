@@ -40,6 +40,7 @@ import {
 import { PublishError } from './publish.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 import { designLevelAdvice } from './storming-advice.js';
+import { applyInitPlan, initPlan, initPlanText } from './init.js';
 
 export interface CliIO {
     out: (line: string) => void;
@@ -208,6 +209,7 @@ export async function runCli(argv: readonly string[], io: CliIO, deps: CliDeps):
             'after',
             `
 Examples:
+  dt init                       inspect this project and propose a DomainTrail layout
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
@@ -219,9 +221,57 @@ Examples:
   dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
   dt export svg --storming S -o s.svg   a diagram as the Live View's 書き出し → SVG saves it, without a browser
 
-New to dt, or an AI agent? Run \`dt guide\` first: the workflow, the DSL at a glance and the commands, then the list
-of topics to read with \`dt guide <topic>\` (e.g. \`dt guide requires\`) when you need one.`,
+New to this project, or an AI agent? Run \`dt init --format json\` to inspect its layout and unresolved decisions.
+Then run \`dt guide\` for the workflow and topics to read with \`dt guide <topic>\` when you need one.`,
         );
+
+    program
+        .command('init')
+        .description('Assess this project and propose a DomainTrail layout; apply only a new single-package config.')
+        .option('--apply', 'create the proposed config only for a new single-package project with no existing model')
+        .addOption(formatOption())
+        .addHelpText(
+            'after',
+            `
+Runs without prompts. The default is read-only. JSON output includes the evidence, reasons, unresolved decisions,
+proposed config and next commands. Existing configurations and source files are never rewritten or moved. Multiple
+independent products in one workspace are unsupported; run init from each product root instead. --apply creates only
+a new single-package domaintrail.jsonc with no existing model and is safe to repeat. In a monorepo, use the reported
+ownership decision and dt guide output-dirs to edit the config after agreement. With -c, init inspects the directory
+of that explicit config file as the workspace root; otherwise -r/cwd selects the directory to inspect.
+
+Examples:
+  dt init --format json
+  dt init --apply`,
+        )
+        .action(async (opts: { apply?: boolean; format: Format }) => {
+            const cfg = await config().catch((error: unknown) => {
+                if (opts.format === 'json' && (error instanceof ConfigError || error instanceof CliError)) {
+                    io.out(JSON.stringify({ error: error.message }));
+                    exitCode = error instanceof ConfigError ? 2 : error.exitCode;
+                    return undefined;
+                }
+                throw error;
+            });
+            if (!cfg) return;
+            // An explicit -c selects the config's own workspace root, even when -r/cwd points elsewhere.
+            const root = program.opts().config ? cfg.root : path.resolve(program.opts().root);
+            const plan = await initPlan(root, cfg, deps);
+            if (opts.apply && plan.status === 'ready') {
+                try {
+                    await applyInitPlan(plan);
+                } catch (error) {
+                    if (errorCode(error) !== 'EEXIST') throw error;
+                    plan.status = 'needs_decision';
+                    plan.reasons.push('domaintrail.jsonc appeared after the plan was computed; init did not overwrite it.');
+                    plan.decisions.push('Re-run dt init to inspect the current configuration.');
+                    plan.changes = [];
+                    plan.next = ['dt init'];
+                }
+            }
+            if (opts.apply && (plan.status === 'needs_decision' || plan.status === 'unsupported')) exitCode = 1;
+            io.out(opts.format === 'json' ? JSON.stringify(plan, null, 2) : initPlanText(plan));
+        });
 
     program
         .command('check')

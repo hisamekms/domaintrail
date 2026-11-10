@@ -91,6 +91,8 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 
 **The commands:**
 
+- `dt init` — inspect this project and propose source, knowledge and TypeScript output locations (`--format json` for AI;
+  `--apply` to create an unambiguous new config).
 - `dt guide [topic]` — this reference, one section, or `--all`.
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
 - `dt migrate dtes` — rewrite `.dtes` files of earlier versions (v0.1: `actor`, `target` in a command → `by`,
@@ -152,29 +154,38 @@ dt open --port 8080             # http://127.0.0.1:8080, until Ctrl+C
 ## File layout (recommended)
 
 File names and directories carry no meaning: every matching `.dt` file belongs to the workspace, and a context may be
-split across any files. The recommended layout is one directory per context and one file per aggregate:
+split across any files. Run `dt init --format json` to inspect an existing project before choosing its layout. For a
+new single-package project, keep authored model, stormings and knowledge apart from generated TypeScript:
 
 ```text
-common/context.dt      shared context Common "共通" { ... }      // a shared context has no aggregates
-sales/context.dt       /// 説明  context Sales "販売" { terms { ... } }
-sales/order.dt         context Sales { id OrderId ...  aggregate Order { ... }  entity OrderItem ...  event OrderPlaced ... }
-sales/customer.dt      context Sales { id CustomerId ...  aggregate Customer { ... } }
-billing/context.dt     /// 説明  context Billing "請求" { terms { ... } }
-billing/invoice.dt     context Billing { id InvoiceId ...  aggregate Invoice { ... } }
-stormings/order-to-cash.dtes   storming OrderToCash "注文から入金まで" { ... }   // one storming per file
+domaintrail.jsonc
+model/common/context.dt       shared context Common "共通" { ... }
+model/sales/context.dt        /// 説明  context Sales "販売" { terms { ... } }
+model/sales/order.dt          context Sales { id OrderId ...  aggregate Order { ... } }
+model/billing/invoice.dt      context Billing { id InvoiceId ...  aggregate Invoice { ... } }
+stormings/order-to-cash.dtes  storming OrderToCash "注文から入金まで" { ... }
+knowledge/kn_*.md            items of the files knowledge store, when there are any
+generated/domain/            TypeScript written by dt generate ts; never edit it
 ```
 
-- `<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
+- `model/<context>/<aggregate>.dt` holds the aggregate and what only it uses: its ID, entities, events, errors, enums,
   primitives and values.
-- `<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several of
+- `model/<context>/context.dt` holds the context's name (表示名), description and `terms`, and the elements used by several of
   its aggregates or by none (field sets, for example). The other files open the context without a name or `///`:
   `context Sales { ... }`. A context's description is written once, in one of its files (M025).
 - An aggregate's ID stays in the aggregate's file even when other aggregates reference it.
 - A storming goes to `stormings/<storming>.dtes`, apart from the contexts: it may span several of them.
+- The `files` knowledge store uses `knowledge/` at the workspace root. It is not a source glob.
+- In a one-product monorepo, keep model, stormings and knowledge at the product root. Put generated TypeScript in its
+  owning package with `generate.ts.contexts.<Context>.out` and `module` (see `dt guide output-dirs`). Package names
+  alone do not establish ownership, so `dt init` asks for a decision instead of guessing. Multiple independent
+  products under one DomainTrail configuration are unsupported; initialize each product at its own root.
 - Directory and file names are kebab-case: `PurchaseOrder` → `purchase-order.dt`, `OrderFulfillment` →
   `order-fulfillment/`.
 
-This is a convention, not a rule: `check` neither requires nor warns about any layout.
+This is a convention, not a rule: `check` neither requires nor warns about any layout. `dt init` preserves existing
+configurations and source files; `dt init --apply` creates `domaintrail.jsonc` only for a new single-package project
+without an existing model. In a monorepo, settle ownership, then edit the configuration using `dt guide output-dirs`.
 
 <!-- topic: dsl -->
 ## DSL
