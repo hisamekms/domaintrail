@@ -6,6 +6,7 @@ import type { AppliedExtraction } from './application/ports.js';
 import {
     WireError,
     appliedExtraction,
+    bookmarkBody,
     decodeErrorBody,
     domainErrorBody,
     domainErrorOf,
@@ -53,6 +54,9 @@ describe('the wire', () => {
             deletedAt: at,
         };
         expect(knowledgeItem(overJson(deleted), 'item')).toEqual(deleted);
+        const bookmarked = { ...liveItem('kn_00000005'), bookmarked: true };
+        expect(knowledgeItem(overJson(bookmarked), 'item')).toEqual(bookmarked);
+        expect(() => knowledgeItem({ ...bookmarked, bookmarked: 'yes' }, 'item')).toThrow('item.bookmarked: expected a boolean');
         const result: AppliedExtraction = {
             items: [liveItem('kn_00000001')],
             dropped: [{ operation: sent.operations[1], reason: { type: 'StaleOperation' } }],
@@ -90,15 +94,23 @@ describe('the wire', () => {
             q: '見積 もり',
             limit: 20,
             cursor: 'abc',
+            bookmarked: true as const,
         };
         expect(knowledgeQueryOf(new URLSearchParams(knowledgeQueryParams(query).toString()))).toEqual(query);
         expect(() => knowledgeQueryOf(new URLSearchParams('when=later'))).toThrow('when[0]: expected one of as_is, to_be, none');
         expect(() => knowledgeQueryOf(new URLSearchParams('limit=1000'))).toThrow('limit: expected an integer from 1 to 200');
+        expect(() => knowledgeQueryOf(new URLSearchParams('bookmarked=false'))).toThrow(WireError);
     });
 
     test("the extraction switch's body", () => {
         expect(extractionSwitch({ enabled: false }, 'body')).toEqual({ enabled: false });
         expect(() => extractionSwitch({ enabled: 'yes' }, 'body')).toThrow('body.enabled: expected a boolean');
+    });
+
+    test('the explicit shared bookmark body', () => {
+        expect(bookmarkBody({ bookmarked: true }, 'body')).toBe(true);
+        expect(bookmarkBody({ bookmarked: false }, 'body')).toBe(false);
+        expect(() => bookmarkBody({ bookmarked: 'yes' }, 'body')).toThrow('body.bookmarked: expected a boolean');
     });
 });
 

@@ -33,6 +33,8 @@ export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEnt
             return record('handOverToHotspot', person(event.by), hotspotReason(event.hotspot));
         case 'KnowledgeItemCorrected':
             return record('correct', person(event.by));
+        case 'KnowledgeBookmarkChanged':
+            return record(event.bookmarked ? 'bookmark' : 'unbookmark', person(event.by));
         case 'KnowledgeItemDeleted':
             return record('delete', person(event.by));
         case 'KnowledgeItemRestored':

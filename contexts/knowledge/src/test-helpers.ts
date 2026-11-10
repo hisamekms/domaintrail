@@ -132,6 +132,7 @@ export function memoryStore(items: readonly Knowledge.LiveKnowledgeItem[] = []):
             return item?.state === 'Live' ? { item } : undefined;
         },
         correct: unused,
+        setBookmark: unused,
         unlinkConflict: unused,
         handOverToHotspot: unused,
         delete: unused,

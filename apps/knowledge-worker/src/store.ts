@@ -604,6 +604,11 @@ export class D1KnowledgeStore implements KnowledgeStore {
         return { items, dropped, replayed: true };
     }
 
+    // Implemented with the bookmark route and D1 migration in the dependent Worker PR.
+    async setBookmark(): Promise<never> {
+        throw new Error('Bookmark support requires the Worker bookmark migration.');
+    }
+
     async correct(
         project: Knowledge.ProjectName,
         id: Knowledge.KnowledgeItemId,

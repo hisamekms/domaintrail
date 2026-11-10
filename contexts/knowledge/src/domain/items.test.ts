@@ -166,6 +166,21 @@ describe('a conflict', () => {
 });
 
 describe("a person's edits", () => {
+    test('a bookmark changes only the shared marker and records the action time', () => {
+        const item = liveItem('kn_00000001');
+        const by = userName('alice@example.com');
+        const { aggregate, events } = value(commands.setBookmark(item, { bookmarked: true, by, at: later })).Live;
+        expect(aggregate).toEqual({ ...item, bookmarked: true });
+        expect(events.KnowledgeBookmarkChanged).toEqual({
+            type: 'KnowledgeBookmarkChanged',
+            itemId: item.id,
+            version: item.version,
+            bookmarked: true,
+            by,
+            at: later,
+        });
+    });
+
     const person = userName('a@example.com');
 
     test('a correction is always a new version, even of an item of the running session', () => {

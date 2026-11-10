@@ -184,6 +184,8 @@ const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
     'revise',
     'linkConflict',
     'correct',
+    'bookmark',
+    'unbookmark',
     'delete',
     'restore',
     'unlinkConflict',
@@ -520,6 +522,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             const matching = (await shownItems())
                 .filter((i) => {
                     if (!listed(i)) return false;
+                    if (query.bookmarked && !i.bookmarked) return false;
                     const { labels } = i.content;
                     if (about && !i.content.about.some((a) => about.has(a))) return false;
                     if (query.when && !query.when.includes(labels.when)) return false;
@@ -565,6 +568,19 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             const live = new Set((await Promise.all(found.conflictsWith.map(liveOne))).flatMap((i) => (i ? [i.id] : [])));
             const item = withLiveConflicts(found, (other) => live.has(other));
             return opts?.history ? { item, history: [] } : { item };
+        },
+
+        async setBookmark(project, id, bookmarked, by) {
+            checkProject(project);
+            return exclusive(async () => {
+                const item = await liveOne(id);
+                if (!item) return err(await unavailable(id));
+                if ((item.bookmarked === true) === bookmarked) return ok(item);
+                const { aggregate, events } = known(knowledgeItemCommands.setBookmark(item, { bookmarked, by, at: now() })).Live;
+                await writeItems([aggregate], dir);
+                await appendAudit([auditOf(events.KnowledgeBookmarkChanged)]);
+                return ok(aggregate);
+            });
         },
 
         /**

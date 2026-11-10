@@ -14,6 +14,8 @@ context Knowledge {
     createdIn: SessionRef? "作ったセッション"
     createdAt: Timestamp "作った日時"
     updatedAt: Timestamp "変えた日時"
+    /// プロジェクト全体のブックマーク。中身の版には含めない。
+    bookmarked: Bool? "ブックマーク"
     /// 廃止したとき。中身・出典・版はそのまま残る（消すのとは別）。
     retirement: Retirement? "廃止"
 
@@ -99,6 +101,12 @@ context Knowledge {
       changes content, version, updatedAt
       emits KnowledgeItemCorrected
 
+    /// 人が共有ブックマークを付け外しする。中身と版は変えない。
+    command setBookmark(bookmarked: Bool, by: UserName, at: Timestamp) "ブックマークを変える"
+      Live -> Live
+      changes bookmarked
+      emits KnowledgeBookmarkChanged
+
     /// 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
     command retire(reason: RetirementReason?, replacedBy: KnowledgeItemId? "置き換え先", proposal: RetirementProposalId? "候補", by: UserName, at: Timestamp) "廃止する"
       Live -> Live
@@ -122,6 +130,7 @@ context Knowledge {
     /// 人が消す。
     command delete(by: UserName, at: Timestamp) "消す"
       Live -> Deleted
+      changes bookmarked
       emits KnowledgeItemDeleted
 
     /// 人が、掃除の前に消したのを取り消す（元に戻す）。
@@ -198,6 +207,14 @@ context Knowledge {
   persistent event KnowledgeItemCorrected "直した" {
     itemId: KnowledgeItemId
     version: ItemVersion
+    by: UserName
+    at: Timestamp
+  }
+
+  persistent event KnowledgeBookmarkChanged "ブックマークを変えた" {
+    itemId: KnowledgeItemId
+    version: ItemVersion
+    bookmarked: Bool
     by: UserName
     at: Timestamp
   }

@@ -60,7 +60,9 @@ function memoryStore(): KnowledgeStore & { readonly extractions: Knowledge.Extra
         extractions,
         items,
         about: async (_p, stickies) => live().filter((i) => i.content.about.some((a) => stickies.includes(a))),
-        search: async (_p, query) => ({ items: live().filter((i) => query.session === undefined || i.createdIn === query.session) }),
+        search: async (_p, query) => ({
+            items: live().filter((i) => (query.session === undefined || i.createdIn === query.session) && (!query.bookmarked || i.bookmarked)),
+        }),
         async applyExtraction(_p, extraction) {
             const before = results.get(idempotencyKey(extraction.by));
             if (before) return { ...before, replayed: true };
@@ -72,8 +74,19 @@ function memoryStore(): KnowledgeStore & { readonly extractions: Knowledge.Extra
             return result;
         },
         counts: unused,
-        get: unused,
+        get: async (_p, id) => {
+            const item = items.get(id);
+            return item?.state === 'Live' ? { item } : undefined;
+        },
         correct: unused,
+        setBookmark: async (_p, id, bookmarked) => {
+            const item = items.get(id);
+            if (!item) return { ok: false, error: { type: 'KnowledgeItemNotFound' as const, itemId: id } };
+            if (item.state !== 'Live') return { ok: false, error: { type: 'KnowledgeItemGone' as const, itemId: id } };
+            const next = { ...item, bookmarked };
+            items.set(id, next);
+            return { ok: true, value: next };
+        },
         unlinkConflict: unused,
         handOverToHotspot: unused,
         delete: unused,
@@ -200,6 +213,20 @@ describe('knowledge taken from a session', () => {
             '見積もりは営業が当日中に出す',
         ]);
         expect(prompts[0]).toContain('<talk-n0nce>');
+
+        // A participant's shared bookmark is visible to another participant through the session API.
+        const bookmarkedId = [...store.items.values()][0].id;
+        const bookmarkUrl = `${server.url}api/session/knowledge/items/${bookmarkedId}/bookmark`;
+        const set = await fetch(bookmarkUrl, { method: 'POST', headers: { cookie: bob, ...json }, body: JSON.stringify({ bookmarked: true }) });
+        expect(set.status).toBe(200);
+        expect(((await set.json()) as Knowledge.LiveKnowledgeItem).bookmarked).toBe(true);
+        const list = await fetch(`${server.url}api/session/knowledge?bookmarked=true`, { headers: { cookie: ada } });
+        expect(list.status).toBe(200);
+        expect(((await list.json()) as { items: Knowledge.LiveKnowledgeItem[] }).items.map((i) => i.id)).toEqual([bookmarkedId]);
+        const unset = await fetch(bookmarkUrl, { method: 'POST', headers: { cookie: ada, ...json }, body: JSON.stringify({ bookmarked: false }) });
+        expect(unset.status).toBe(200);
+        const invalidBookmark = await fetch(bookmarkUrl, { method: 'POST', headers: { cookie: ada, ...json }, body: JSON.stringify({ bookmarked: 'yes' }) });
+        expect(invalidBookmark.status).toBe(400);
 
         // a mere acknowledgement: stopped at the mechanical stage, no model asked
         await say('ありがとうございます！');

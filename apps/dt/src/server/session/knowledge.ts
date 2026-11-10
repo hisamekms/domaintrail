@@ -9,6 +9,7 @@
 // | GET  /api/session/knowledge/counts?storming= | counts (the dot and the mark)  |
 // | GET  /api/session/knowledge/items/:id        | get (`?history=1`: versions)   |
 // | POST /api/session/knowledge/items/:id/correct | correct `{ content }` (直す)  |
+// | POST /api/session/knowledge/items/:id/bookmark | setBookmark `{ bookmarked }` |
 // | POST /api/session/knowledge/items/:id/delete | delete (消す)                  |
 // | POST /api/session/knowledge/items/:id/restore | restore (元に戻す)            |
 // | POST /api/session/knowledge/items/:id/unlink | unlinkConflict `{ other }` (食い違いではない) |
@@ -32,6 +33,7 @@ import {
     domainErrorBody,
     domainErrorStatus,
     itemContent,
+    bookmarkBody,
     itemId,
     imageId,
     knowledgeQueryOf,
@@ -228,6 +230,11 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
                 const b = await json(req);
                 const content = itemContent(typeof b === 'object' && b !== null && 'content' in b ? b.content : undefined, 'content');
                 const r = await store.correct(project, id, content, by);
+                return r.ok ? done(res, 200, r.value) : itemError(res, r.error);
+            }
+            case 'bookmark': {
+                const bookmarked = bookmarkBody(await json(req), 'body');
+                const r = await store.setBookmark(project, id, bookmarked, by);
                 return r.ok ? done(res, 200, r.value) : itemError(res, r.error);
             }
             case 'delete': {

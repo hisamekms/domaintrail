@@ -65,6 +65,8 @@ context Knowledge {
     revise "新しい版にした"
     linkConflict "食い違いをつないだ"
     correct "直した"
+    bookmark "ブックマークした"
+    unbookmark "ブックマークを外した"
     delete "消した"
     restore "元に戻した"
     unlinkConflict "食い違いを外した"
