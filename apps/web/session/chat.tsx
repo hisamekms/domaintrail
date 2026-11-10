@@ -9,7 +9,7 @@
 // chosen with Shift/⌘, and for the triage's record), approve or reject proposals, answer or pick an alternative on a
 // card, cancel, and the menus of the cards and of the head. In Solo (`dt open`) what only makes sense with others is
 // hidden: every message goes to the AI as it is sent.
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type UIEvent } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type UIEvent } from 'react';
 import { createPortal } from 'react-dom';
 import {
     ArrowDown,
@@ -1952,7 +1952,8 @@ function Composer(props: {
             : reply && tx.chat.replies.replyingTo(reply.name);
     const t = useT();
     const naming = useTargetNaming();
-    const value = composer.value;
+    const value = useSyncExternalStore(composer.subscribe, composer.snapshot, composer.snapshot);
+    const draftError = useSyncExternalStore(composer.subscribe, composer.errorSnapshot, composer.errorSnapshot);
     const input = useRef<HTMLElement | null>(null);
     const editor = useRef<ComposerEditorApi | null>(null);
     const size = useComposerSize(input);
@@ -2301,7 +2302,7 @@ function Composer(props: {
                 </div>
             </div>
             {notice && <p className="session-note">{notice}</p>}
-            {(error ?? composer.error) && <p className="session-note session-error">{tx.error(error ?? composer.error ?? '')}</p>}
+            {(error ?? draftError) && <p className="session-note session-error">{tx.error(error ?? draftError ?? '')}</p>}
         </div>
     );
 }

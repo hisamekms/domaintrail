@@ -380,6 +380,11 @@ export interface ComposerDraft {
     /** The unsent request: its text and targets (empty while there is none, and until it is loaded). */
     readonly value: ComposerValue;
     readonly error: string | undefined;
+    /** A stable subscription: typing updates the composer without rendering the page that owns it. */
+    subscribe(this: void, listener: () => void): () => void;
+    snapshot(this: void): ComposerValue;
+    chipsSnapshot(this: void): ComposerValue['chips'];
+    errorSnapshot(this: void): string | undefined;
     /** Changes it; it is saved shortly after typing stops. */
     setValue(value: ComposerValue): void;
     /** Forgets it (once it was sent). */
@@ -388,39 +393,42 @@ export interface ComposerDraft {
 
 const isEmpty = (v: ComposerValue): boolean => v.text === '' && v.chips.length === 0;
 
-/** The chat composer's one unsent request of a participant in a session, kept in the drafts' storage until it is sent. */
-export function useComposerDraft(storage: DraftStorage, scope: DraftScope | undefined): ComposerDraft {
-    const [value, setValueState] = useState<ComposerValue>(EMPTY_COMPOSER);
-    const [error, setError] = useState<string | undefined>();
-    const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-    const session = scope?.session;
-    const participant = scope?.participant;
-    const key = useMemo(() => (session && participant ? composerScope({ session, participant }) : undefined), [session, participant]);
-
-    useEffect(() => {
-        setValueState(EMPTY_COMPOSER);
-        if (!key) return;
-        let cancelled = false;
-        storage.load(key).then(
-            (loaded) => {
-                const draft = loaded.find((d) => d.id === COMPOSER_DRAFT);
-                // typing before the load finished wins; a draft saved before there were chips (or people) has none
-                if (!cancelled && draft) setValueState((v) => (isEmpty(v) ? { text: draft.body, chips: draft.chips ?? [], people: draft.people ?? [] } : v));
-            },
-            (e: unknown) => setError(message(e)),
-        );
-        return () => {
-            cancelled = true;
-            clearTimeout(timer.current);
-        };
-    }, [storage, key]);
-
-    const setValue = useCallback(
-        (next: ComposerValue) => {
+/** The draft store has one owner, but only readers of its changing fields subscribe to typing. */
+export function createComposerDraft(storage: DraftStorage, key: DraftScope | undefined): ComposerDraft & { start(): () => void } {
+    let value: ComposerValue = EMPTY_COMPOSER;
+    let error: string | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const listeners = new Set<() => void>();
+    const notify = (): void => listeners.forEach((listener) => listener());
+    const setError = (next: string | undefined): void => {
+        if (error === next) return;
+        error = next;
+        notify();
+    };
+    const setValueState = (next: ComposerValue): void => {
+        if (value === next) return;
+        value = next;
+        notify();
+    };
+    return {
+        get value() {
+            return value;
+        },
+        get error() {
+            return error;
+        },
+        subscribe: (listener) => {
+            listeners.add(listener);
+            return () => listeners.delete(listener);
+        },
+        snapshot: () => value,
+        chipsSnapshot: () => value.chips,
+        errorSnapshot: () => error,
+        setValue: (next) => {
             setValueState(next);
-            clearTimeout(timer.current);
+            clearTimeout(timer);
             if (!key) return;
-            timer.current = setTimeout(() => {
+            timer = setTimeout(() => {
                 const now = Date.now();
                 const write = isEmpty(next)
                     ? storage.remove(key, COMPOSER_DRAFT)
@@ -431,14 +439,36 @@ export function useComposerDraft(storage: DraftStorage, scope: DraftScope | unde
                 );
             }, AUTOSAVE_MS);
         },
-        [storage, key],
-    );
+        clear: async () => {
+            clearTimeout(timer);
+            setValueState(EMPTY_COMPOSER);
+            if (key) await storage.remove(key, COMPOSER_DRAFT);
+        },
+        start: () => {
+            if (!key) return () => clearTimeout(timer);
+            let cancelled = false;
+            storage.load(key).then(
+                (loaded) => {
+                    const draft = loaded.find((d) => d.id === COMPOSER_DRAFT);
+                    // typing before the load finished wins; a draft saved before there were chips (or people) has none
+                    if (!cancelled && draft && isEmpty(value)) setValueState({ text: draft.body, chips: draft.chips ?? [], people: draft.people ?? [] });
+                },
+                (e: unknown) => !cancelled && setError(message(e)),
+            );
+            return () => {
+                cancelled = true;
+                clearTimeout(timer);
+            };
+        },
+    };
+}
 
-    const clear = useCallback(async () => {
-        clearTimeout(timer.current);
-        setValueState(EMPTY_COMPOSER);
-        if (key) await storage.remove(key, COMPOSER_DRAFT);
-    }, [storage, key]);
-
-    return { value, error, setValue, clear };
+/** The chat composer's one unsent request of a participant in a session, kept in the drafts' storage until it is sent. */
+export function useComposerDraft(storage: DraftStorage, scope: DraftScope | undefined): ComposerDraft {
+    const session = scope?.session;
+    const participant = scope?.participant;
+    const key = useMemo(() => (session && participant ? composerScope({ session, participant }) : undefined), [session, participant]);
+    const draft = useMemo(() => createComposerDraft(storage, key), [storage, key]);
+    useEffect(() => draft.start(), [draft]);
+    return draft;
 }
