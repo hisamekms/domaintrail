@@ -10,6 +10,84 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.10.0] - 2026-11-10
+
+### 追加
+
+- **種類ごとの集約ライフサイクルと名前付きコマンド結果**（`dt guide kind-lifecycles`、ADR 0035）: 必須の
+  `readonly` な enum フィールドで `transitions for` のライフサイクルを選べます。`initial` は開始状態を示します。
+  `outcome` に名前を付けると、同じ状態へ至る結果にもそれぞれ遷移先・変更・イベントを定義できます。同じ状態から
+  複数の結果がある場合は `select` 式で選びます。DSL で表せない判断には理由付きの `@externalCheck` を宣言
+  できます。状態ビューは種類ごとに表示でき、`dt show` は有効な状態と結果を示します。
+- **生成可能性の検査**: `dt check --for-generation` は、式のない自然言語の `select`・`requires`・
+  `invariant` をエラーにします。`dt generate ts` は書き込み前にこの検査を実行します。外部チェックには型付きの
+  実装口と生成された契約テストが必要です。
+- **共同イベントストーミングの進め方**: 配布できる Big Picture と Design Level の例、任意の
+  `dt check --storming-level design-level` の助言、ジャーニーが進んだ後に Design Level の範囲を選ぶ案内を追加
+  しました。アクターが発行するコマンドの `on Event` で、ポリシーを置かずに イベント → アクター → コマンド を
+  表せます。
+- **プロジェクト共有のナレッジのブックマーク**: files と Cloudflare の両ストアで印の付け外しと絞り込みができ
+  ます。修正・抽出・廃止後も印は残ります。独立したナレッジ画面では検索できる一覧と操作可能な詳細を並べて
+  表示し、キャンバスを見ながら読むためのサイドバーも残します。
+- **`dt open`・`dt collab`・`dt agent` で Codex に対応**: `--agent codex` を指定でき、承認済みの外部パス
+  の読み取り専用コピーも利用できます。Claude Code 向けの `agent.run.allowedTools` の個別規則は Codex では
+  利用できません。
+- **AI 向けの `dt init`**: プロジェクトの証拠と未決定事項を含む配置案を、対話なしでテキストまたは版付き JSON
+  で返します。`dt init --apply` が `domaintrail.jsonc` を作るのは、既存モデルのない新規の単一パッケージだけ
+  です。既存の設定とソースは保持します。モノレポでは生成 TS の所有先を決めてから設定を編集します。独立した
+  複数製品は別々のルートが必要です。
+
+### 変更
+
+- チャットでは人の回答が AI の質問の後に、その回答を受けて再開した AI の作業がさらにその後に表示され、
+  スレッド線でつながります。メッセージの入力中は、1 文字ごとにページ全体とチャット欄を再描画しなくなりました。
+- Design Level では、同じ時点に複数レーンで現れるコマンドやポリシーを一つだけ描き、各レーンのイベントへ
+  線をつなぎます。例外の分岐イベントが設計上の線ですでにつながる場合は、重複する分岐線を省き、選択できる
+  ラベルは残します。
+
+### 修正
+
+- Solo の AI 作業カードへの返信操作を、そのカードに固定し、ホバー・フォーカス・タッチで見つけられるように
+  しました。
+- コマンドの処理担当が未決定の場合は「何が処理する？」と尋ねます。発行者については引き続き誰が行うかを
+  尋ねます。Codex は、案内に表示される末尾のスラッシュ付きパスでも、承認済み読み取りコピーの一覧を取得
+  できます。
+
+### アップグレード手順
+
+1. **生成前にモデルの判断を確認します。** 遷移先が一つの従来のコマンドは引き続き使えます。
+   `Pending -> Approved | Rejected` のような複数の遷移先は、結果に名前を付けるまで生成できません。
+   コマンド直下の `changes` と `emits … when` を該当する結果へ移し、競合する結果のそれぞれに `select`
+   を書きます。例:
+
+   ```dt
+   // 変更前
+   command review() {
+     Pending -> Approved | Rejected
+   }
+   // 変更後: 実際に使える判断材料をモデルに合わせて指定する
+   command review(approved: Bool) {
+     outcome approved: Pending -> Approved
+       select { approved }
+     outcome rejected: Pending -> Rejected
+       select { not approved }
+   }
+   ```
+
+   式のない `requires`・`invariant` には、実行できる式か理由付きの
+   `@externalCheck("この判断が外部にある理由")` が必要です。この注釈は検査の義務を示すだけで、検査を実行しません。
+   `dt check --for-generation` で残る問題を調べます。種類ごとのライフサイクルには、必須で `readonly` の
+   enum セレクター、適用される `initial` 状態、`transitions for` グループを追加します。詳しくは
+   `dt guide kind-lifecycles` を参照してください。
+2. **外部での検査を実装し、生成されたテストを実行します。** 外部チェックには生成された型付きの実装口が必要
+   で、`generate.ts.tests` で契約テストを有効にします。無効な場合は生成が失敗します。モデルの変更後に
+   `dt generate ts` を実行し、名前付き結果に合わせて実装を更新して、生成されたテストを実行します。モデルを
+   変更していない場合も再生成してください。0.9 で生成された契約テストは、別のマイナーバージョンでは読み
+   込めません。
+3. **Cloudflare のナレッジストアを使う場合**は、テンプレートの README の Upgrade 節に従い、
+   `0004_bookmark.sql` を適用して新しい Worker とページをデプロイします。既存の項目には印が付きません。
+   files ストアの移行は不要です。
+
 ## [0.9.0] - 2026-11-07
 
 ### 追加
@@ -884,6 +962,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.10.0]: https://github.com/hisamekms/domaintrail/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/hisamekms/domaintrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/hisamekms/domaintrail/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/hisamekms/domaintrail/compare/v0.7.0...v0.8.0
