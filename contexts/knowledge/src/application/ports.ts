@@ -41,6 +41,8 @@ export interface KnowledgeQuery {
     readonly session?: Knowledge.SessionRef;
     /** The retired items too (`include`), or those only (`only`); absent: the items not retired. */
     readonly retired?: RetiredFilter;
+    /** Only items bookmarked by the project, when true. */
+    readonly bookmarked?: true;
     /** At most this many per page (the store's own default and maximum otherwise). */
     readonly limit?: number;
     /** Where the previous page ended (`Page.next`). */
@@ -150,6 +152,14 @@ export interface KnowledgeStore {
         project: Project,
         id: ItemId,
         corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+
+    /** Set the project's shared bookmark; a repeated setting changes neither the item nor its audit. */
+    setBookmark(
+        project: Project,
+        id: ItemId,
+        bookmarked: boolean,
         by: Knowledge.UserName,
     ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
 

@@ -263,6 +263,7 @@ const KEYS = [
     'createdIn',
     'createdAt',
     'updatedAt',
+    'bookmarked',
     'retired',
     'sources',
     'state',
@@ -420,6 +421,8 @@ function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string |
     if (retiredEntry !== undefined && retiredEntry.node.kind !== 'map')
         throw new Unreadable(retiredEntry.line, "'retired' is a map of reason, replacedBy, by, at, proposal.");
     const retirement = retirementOf(f, retiredEntry?.node.kind === 'map' ? retiredEntry.node : undefined);
+    const bookmark = f.optional('bookmarked');
+    if (bookmark !== undefined && bookmark !== 'true' && bookmark !== 'false') throw new Unreadable(f.line('bookmarked'), "'bookmarked' is true or false.");
     const common: Knowledge.KnowledgeItemCommon = {
         id,
         content,
@@ -429,6 +432,7 @@ function itemOf(front: MapNode, text: string, bodyLine: number, fileId: string |
         ...(createdIn !== undefined && { createdIn: f.made('createdIn', Knowledge.makeSessionRef, createdIn) }),
         createdAt: f.time('createdAt'),
         updatedAt: f.time('updatedAt'),
+        ...(bookmark === 'true' && { bookmarked: true }),
         ...(retirement !== undefined && { retirement }),
     };
     const state = f.optional('state') ?? 'live';
@@ -523,6 +527,7 @@ export function printItemFile(item: Knowledge.KnowledgeItem): string {
     list('conflictsWith', item.conflictsWith);
     if (item.createdIn !== undefined) out.push(`createdIn: ${scalar(item.createdIn)}`);
     out.push(`createdAt: ${time(item.createdAt)}`, `updatedAt: ${time(item.updatedAt)}`);
+    if (item.bookmarked) out.push('bookmarked: true');
     const r = item.retirement;
     if (r !== undefined) {
         out.push('retired:');

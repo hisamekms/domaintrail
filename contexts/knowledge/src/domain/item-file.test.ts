@@ -60,6 +60,16 @@ describe('the file of an item', () => {
         expect(problem(printItemFile(retired).replace('reason: replaced', 'reason: stale')).message).toContain('replaced, obsolete, wrong');
     });
 
+    test('the shared bookmark is optional in old files and may be edited by hand', () => {
+        const old = printItemFile(liveItem('kn_00000001'));
+        expect(read(old).bookmarked).toBeUndefined();
+        const marked = old.replace('updatedAt: 2026-11-05T09:00:00.000Z', 'updatedAt: 2026-11-05T09:00:00.000Z\nbookmarked: true');
+        expect(read(marked).bookmarked).toBe(true);
+        expect(printItemFile(read(marked))).toContain('bookmarked: true\n');
+        expect(read(marked.replace('bookmarked: true', 'bookmarked: false')).bookmarked).toBeUndefined();
+        expect(problem(marked.replace('bookmarked: true', 'bookmarked: maybe')).message).toContain("'bookmarked' is true or false");
+    });
+
     test('a deleted item, a hand-written item without sources, and empty lists', () => {
         const deleted: Knowledge.DeletedKnowledgeItem = {
             ...liveItem('kn_00000001'),

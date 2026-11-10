@@ -53,6 +53,36 @@ async function apply(
 const ids = (items: readonly { id: Knowledge.KnowledgeItemId }[]): string[] => items.map((i) => i.id);
 
 describe('the files store', () => {
+    test('a shared bookmark filters before pagination, survives edits and retirement, and records only actual changes', async () => {
+        await apply('s1', 1, add('kn_00000001'), add('kn_00000002'));
+        const id = itemId('kn_00000001');
+        const initial = (await store.get(project, id))?.item;
+        expect(initial?.bookmarked).toBeUndefined();
+        expect(await store.setBookmark(project, id, true, alice)).toMatchObject({ ok: true, value: { bookmarked: true, version: 1 } });
+        await store.setBookmark(project, id, true, alice);
+        const filtered = await store.search(project, { bookmarked: true, limit: 1 });
+        expect(ids(filtered.items)).toEqual([id]);
+        expect(filtered.next).toBeUndefined();
+        expect((await store.audit(project, { item: id })).items.map((e) => e.operation)).toEqual(['bookmark', 'add']);
+        await apply('s1', 2, { kind: 'AddSource', item: id, base: version(1), source: source('s1', 'm-after-bookmark'), agreed: false });
+        expect((await store.get(project, id))?.item.bookmarked).toBe(true);
+        expect((await store.correct(project, id, content('corrected'), alice)).ok).toBe(true);
+        expect((await store.get(project, id))?.item.bookmarked).toBe(true);
+        await store.retire(project, id, {}, alice);
+        expect((await store.search(project, { bookmarked: true })).items).toEqual([]);
+        expect(ids((await store.search(project, { bookmarked: true, retired: 'include' })).items)).toEqual([id]);
+        await store.unretire(project, id, alice);
+        expect(ids((await store.search(project, { bookmarked: true })).items)).toEqual([id]);
+        await store.setBookmark(project, id, false, alice);
+        expect((await store.get(project, id))?.item.bookmarked).toBeUndefined();
+        expect((await store.search(project, { bookmarked: true })).items).toEqual([]);
+        expect((await store.audit(project, { item: id })).items.map((e) => e.operation)).toContain('unbookmark');
+        await store.setBookmark(project, id, true, alice);
+        await store.delete(project, id, alice);
+        const restored = await store.restore(project, id, alice);
+        expect(restored.ok && restored.value.bookmarked).toBeUndefined();
+    });
+
     test('add writes one Markdown file per item; get and about read it back', async () => {
         const r = await apply('s1', 1, add('kn_00000001'), add('kn_00000002', { about: ['Ordering.Placed'] }));
         expect(r.replayed).toBe(false);

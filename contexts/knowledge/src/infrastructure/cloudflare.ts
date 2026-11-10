@@ -268,6 +268,13 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
             return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItem, what));
         },
 
+        async setBookmark(project, id, bookmarked, by) {
+            const res = await request(project, `${itemPath(id)}/bookmark`, { method: 'POST', json: { bookmarked }, headers: actor(by) });
+            const what = `setting the bookmark of ${id}`;
+            const gone = await missing(res, what);
+            return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItem, what));
+        },
+
         async unlinkConflict(project, id, other, by) {
             const res = await request(project, `${itemPath(id)}/unlink`, { method: 'POST', json: { other }, headers: actor(by) });
             const what = `unlinking ${id} from ${other}`;

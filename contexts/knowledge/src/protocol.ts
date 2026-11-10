@@ -217,6 +217,7 @@ export function knowledgeQueryParams(query: KnowledgeQuery): URLSearchParams {
     if (query.q !== undefined) params.set('q', query.q);
     if (query.session !== undefined) params.set('session', query.session);
     if (query.retired !== undefined) params.set('retired', query.retired);
+    if (query.bookmarked) params.set('bookmarked', 'true');
     if (query.limit !== undefined) params.set('limit', String(query.limit));
     if (query.cursor !== undefined) params.set('cursor', query.cursor);
     return params;
@@ -238,6 +239,7 @@ export function knowledgeQueryOf(params: URLSearchParams): KnowledgeQuery {
     const q = one('q', str);
     const session = one('session', branded(Knowledge.makeSessionRef, str));
     const retired = one('retired', oneOf<RetiredFilter>(['include', 'only']));
+    const bookmarked = one('bookmarked', oneOf(['true'] as const));
     const limit = one('limit', limitOf);
     const cursor = one('cursor', str);
     return {
@@ -249,6 +251,7 @@ export function knowledgeQueryOf(params: URLSearchParams): KnowledgeQuery {
         ...(q !== undefined && q.trim() !== '' && { q }),
         ...(session !== undefined && { session }),
         ...(retired !== undefined && { retired }),
+        ...(bookmarked !== undefined && { bookmarked: true }),
         ...(limit !== undefined && { limit }),
         ...(cursor !== undefined && { cursor }),
     };
@@ -320,6 +323,8 @@ const AUDIT_OPERATIONS: readonly Knowledge.AuditOperation[] = [
     'revise',
     'linkConflict',
     'correct',
+    'bookmark',
+    'unbookmark',
     'delete',
     'restore',
     'unlinkConflict',
@@ -505,6 +510,7 @@ export const knowledgeItem: Decoder<Knowledge.KnowledgeItem> = (v, at) => {
     const o = obj(v, at);
     const createdIn = opt(sessionRef, o.createdIn, `${at}.createdIn`);
     const retired = opt(retirement, o.retirement, `${at}.retirement`);
+    const bookmarked = opt(bool, o.bookmarked, `${at}.bookmarked`);
     const common: Knowledge.KnowledgeItemCommon = {
         id: itemId(o.id, `${at}.id`),
         content: itemContent(o.content, `${at}.content`),
@@ -514,6 +520,7 @@ export const knowledgeItem: Decoder<Knowledge.KnowledgeItem> = (v, at) => {
         ...(createdIn !== undefined && { createdIn }),
         createdAt: time(o.createdAt, `${at}.createdAt`),
         updatedAt: time(o.updatedAt, `${at}.updatedAt`),
+        ...(bookmarked === true && { bookmarked: true }),
         ...(retired !== undefined && { retirement: retired }),
     };
     const state = oneOf(['Live', 'Deleted'] as const)(o.state, `${at}.state`);
@@ -526,6 +533,12 @@ export const knowledgeItem: Decoder<Knowledge.KnowledgeItem> = (v, at) => {
 export const liveItem: Decoder<Knowledge.LiveKnowledgeItem> = (v, at) => {
     const item = knowledgeItem(v, at);
     return item.state === 'Live' ? item : fail(`${at}.state`, 'expected a live item');
+};
+
+/** A person's explicit setting of the shared bookmark. */
+export const bookmarkBody: Decoder<boolean> = (v, at) => {
+    const o = obj(v, at);
+    return bool(o.bookmarked, `${at}.bookmarked`);
 };
 
 const pastVersion: Decoder<PastVersion> = (v, at) => {

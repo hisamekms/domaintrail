@@ -84,6 +84,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     createdIn: by.session,
                     createdAt: at,
                     updatedAt: at,
+                    bookmarked: undefined,
                     retirement: undefined,
                 },
                 events: {
@@ -120,6 +121,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     createdIn: by.session,
                     createdAt: at,
                     updatedAt: at,
+                    bookmarked: undefined,
                     retirement: undefined,
                 },
                 events: {
@@ -268,6 +270,25 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         },
     }),
 
+    setBookmark: decide<Knowledge.SetBookmarkKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
+        Live: (item, { bookmarked, by, at }) =>
+            ok({
+                Live: {
+                    set: { bookmarked: bookmarked ? true : undefined, updatedAt: at },
+                    events: {
+                        KnowledgeBookmarkChanged: {
+                            type: 'KnowledgeBookmarkChanged',
+                            itemId: item.id,
+                            version: item.version,
+                            bookmarked,
+                            by,
+                            at,
+                        },
+                    },
+                },
+            }),
+    }),
+
     retire: decide<Knowledge.RetireKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Live: (item, params) => {
             switch (Knowledge.checkRetireKnowledgeItemRequires(item, params)) {
@@ -332,7 +353,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         Live: (item, { by, at }) =>
             ok({
                 Deleted: {
-                    set: { deletedBy: by, deletedAt: at },
+                    set: { deletedBy: by, deletedAt: at, bookmarked: undefined },
                     events: { KnowledgeItemDeleted: { type: 'KnowledgeItemDeleted', itemId: item.id, version: item.version, by, at } },
                 },
             }),
