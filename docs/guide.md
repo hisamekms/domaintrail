@@ -1053,8 +1053,9 @@ context Work {
 - The states of `when` must be sources (left) or targets (right) of the command's transitions, and the pattern must
   match at least one of its outcomes (M006). A `create command` has no source: only `when -> X`. Commands of an
   aggregate without states take no `when`.
-- An event is listed once per command (M011): its events are keyed by name in the generated result, so two events of
-  different contexts with the same name cannot be emitted by one command.
+- An event is listed once per command (M011). Generated `events` are keyed by qualified name (`'Sales.OrderPlaced'`),
+  so a command can emit same-named events of different contexts. Event `type` tags are also qualified, including
+  events stored or published outside the command result.
 - The events of one command have **no order**: they are facts of one decision. With event sourcing, applying the
   events of one command must not depend on their order.
 - **When the contract and the implementation disagree**, follow `@see` on the generated type to the declaration,
@@ -1423,7 +1424,7 @@ export type ConfirmOrder = (
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
-        readonly events: { readonly OrderConfirmed: OrderConfirmed };
+        readonly events: { readonly 'Sales.OrderConfirmed': OrderConfirmed };
     };
 }, EmptyOrder>;
 ```
@@ -1470,11 +1471,11 @@ another context by its simple name) and typed by its multiplicity:
 
 The JSDoc says the same in words, one `@emits` line per entry (`@emits WorkCompleted — exactly once when it ends in
 Completed`). Return the value with `ok`, which takes its type from the contract, so that the compiler checks the
-object exactly: a missing event is reported as `Property 'WorkCompleted' is missing …`, an event the outcome does not
-emit as `… 'WorkCompleted' does not exist in type …`:
+object exactly: a missing event is reported as `Property 'Sales.WorkCompleted' is missing …`, an event the outcome does not
+emit as `… 'Sales.WorkCompleted' does not exist in type …`:
 
 ```ts
-return ok({ Confirmed: { aggregate: confirmed, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
+return ok({ Confirmed: { aggregate: confirmed, events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
 ```
 
 A command takes the aggregate in any source state of its transitions. When every source state has the same outputs
@@ -1493,14 +1494,14 @@ export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     readonly Draft: Result<{
         readonly Draft: {
             readonly aggregate: DraftOrder;
-            readonly events: { readonly NoteChanged?: NoteChanged };
+            readonly events: { readonly 'Sales.NoteChanged'?: NoteChanged };
         };
     }, never>;
     /** @emits NoteChanged? — at most once when the command succeeds */
     readonly Confirmed: Result<{
         readonly Confirmed: {
             readonly aggregate: ConfirmedOrder;
-            readonly events: { readonly NoteChanged?: NoteChanged };
+            readonly events: { readonly 'Sales.NoteChanged'?: NoteChanged };
         };
     }, never>;
 }[S['state']];
@@ -1529,7 +1530,7 @@ export type ConfirmOrderDecision = {
     readonly Draft: (order: DraftOrder, params: ConfirmOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedAt: Timestamp };
-            readonly events: { readonly OrderConfirmed: OrderConfirmed };
+            readonly events: { readonly 'Sales.OrderConfirmed': OrderConfirmed };
         };
     }, EmptyOrder>;
 };
@@ -1570,7 +1571,7 @@ Confirmed outcome in the `Draft` handler of `changeNote`, or leaving a handler o
 import { Sales, decide, err, ok } from '../generated/domain/index.js';
 
 const noteChanged = (order: Sales.Order, note: string | undefined) =>
-    note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
+    note === order.note ? {} : { 'Sales.NoteChanged': { type: 'Sales.NoteChanged', orderId: order.id, note } as const };
 
 export const changeNote: Sales.OrderCommands['changeNote'] = decide<Sales.ChangeNoteOrderDecision>(Sales.OrderShape, {
     Draft: (order, { note }) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
@@ -1580,7 +1581,7 @@ export const changeNote: Sales.OrderCommands['changeNote'] = decide<Sales.Change
 export const confirm: Sales.OrderCommands['confirm'] = decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
     Draft: (order, { at }) => {
         if (order.items.length === 0) return err({ type: 'Sales.EmptyOrder' });
-        return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
+        return ok({ Confirmed: { set: { confirmedAt: at }, events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
     },
 });
 ```
@@ -1968,7 +1969,7 @@ import type { Sales } from '../generated/domain/index.js';
 import type { EventMeta } from './stored.js';
 
 interface MetaByEvent {
-    OrderPlaced: { readonly channel: 'web' | 'store' };
+    'Sales.OrderPlaced': { readonly channel: 'web' | 'store' };
 }
 
 export type MetaOf<E extends { type: string }> = EventMeta & (E['type'] extends keyof MetaByEvent ? MetaByEvent[E['type']] : {});

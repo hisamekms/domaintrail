@@ -299,16 +299,20 @@ describe('the reply_to_request column (migration 7)', () => {
         const uow = createUnitOfWork(db);
         const toRun = { kind: 'Run', run: runId };
         const stored = JSON.stringify(db.prepare('SELECT data FROM requests').all());
+        const storedEvent = db.prepare('SELECT type, payload FROM outbox').get();
         const read = await uow.transaction((s) => ({
             plain: s.requests.load(knownRequestId(rid)),
             reply: s.requests.load(knownRequestId(replyId)),
             run: s.runs.load(knownAgentRunId(replyRunId))?.run,
             events: s.outbox.readAfter(0, 10, knownSessionId(sid)),
+            sent: s.outbox.requestSent(knownRequestId(replyId)),
         }));
         expect(read.plain?.replyTo).toBeUndefined();
         expect(read.reply?.replyTo).toEqual(toRun as C.ReplyTarget);
         expect(read.run?.input.requests[0].replyTo).toEqual(toRun as C.FrozenReplyTarget);
-        expect(read.events.map((e) => (e.event.type === 'RequestSent' ? e.event.replyTo : undefined))).toEqual([toRun as C.ReplyTarget]);
+        expect(read.events.map((e) => (e.event.type === 'Collaboration.RequestSent' ? e.event.replyTo : undefined))).toEqual([toRun as C.ReplyTarget]);
+        expect(read.sent.map((e) => e.event.type)).toEqual(['Collaboration.RequestSent']);
+        expect(storedEvent).toEqual({ type: 'RequestSent', payload: expect.stringContaining('"type":"RequestSent"') });
         // reading rewrites nothing
         expect(JSON.stringify(db.prepare('SELECT data FROM requests').all())).toBe(stored);
         expect(db.prepare('SELECT reply_to_request FROM requests WHERE id = ?').get(replyId)).toEqual({ reply_to_request: null });
@@ -457,7 +461,12 @@ describe('no confirmed revisions (migration 9)', () => {
         insert.run(recorded, sid, 1, 'Recorded', 'SessionStart', revision(recorded).contentHash, JSON.stringify(revision(recorded)));
         insert.run(confirmed, sid, 2, 'Confirmed', 'SessionStart', confirmedRow.contentHash, JSON.stringify(confirmedRow));
         const outbox = old.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)');
-        outbox.run(sid, 'RevisionRecorded', JSON.stringify({ type: 'RevisionRecorded', revisionId: recorded }), '2026-10-31T09:00:00.000Z');
+        outbox.run(
+            sid,
+            'Collaboration.RevisionRecorded',
+            JSON.stringify({ type: 'Collaboration.RevisionRecorded', revisionId: recorded }),
+            '2026-10-31T09:00:00.000Z',
+        );
         outbox.run(
             sid,
             'RevisionConfirmed',
@@ -478,7 +487,7 @@ describe('no confirmed revisions (migration 9)', () => {
             events: s.outbox.readAfter(0, 10, knownSessionId(sid)),
         }));
         expect(read.revision).toEqual({ ...revision(confirmed), takenAt: new Date('2026-10-31T09:00:00.000Z') } as unknown as C.Revision);
-        expect(read.events.map((e) => e.event.type)).toEqual(['RevisionRecorded']);
+        expect(read.events.map((e) => e.event.type)).toEqual(['Collaboration.RevisionRecorded']);
         db.close();
     });
 });
@@ -592,8 +601,8 @@ describe('triages and change proposals (migration 11)', () => {
         old.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, ?, ?, ?)').run(runId, sid, 1, 'Failed', JSON.stringify(run));
         old.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
             sid,
-            'SessionStarted',
-            JSON.stringify({ type: 'SessionStarted', sessionId: sid, facilitator: who, name: 'Facilitator', startedAt: at }),
+            'Collaboration.SessionStarted',
+            JSON.stringify({ type: 'Collaboration.SessionStarted', sessionId: sid, facilitator: who, name: 'Facilitator', startedAt: at }),
             '2026-10-31T09:00:00.000Z',
         );
         old.close();
@@ -617,7 +626,7 @@ describe('triages and change proposals (migration 11)', () => {
             checked: 'Failed',
         });
         expect(read.run && C.checkAgentRun(read.run)).toEqual([]);
-        expect(read.events.map((e) => e.event.type === 'SessionStarted' && e.event.mode)).toEqual(['Collab']);
+        expect(read.events.map((e) => e.event.type === 'Collaboration.SessionStarted' && e.event.mode)).toEqual(['Collab']);
         expect([read.triages, read.proposals]).toEqual([[], []]);
         // nothing is rewritten: the rows keep their former shape until saved again
         expect(JSON.parse((db.prepare('SELECT data FROM agent_runs').get() as { data: string }).data).report.formatted).toBe(true);

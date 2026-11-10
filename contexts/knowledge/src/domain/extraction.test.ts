@@ -44,9 +44,9 @@ describe('applying an extraction', () => {
         const outcome = applyExtraction({ by, operations }, store(older), at);
         expect(outcome.dropped).toEqual([]);
         expect(outcome.applied.map((a) => a.changes.map((c) => c.event.type))).toEqual([
-            ['KnowledgeItemAdded'],
-            ['KnowledgeSourceAdded'],
-            ['KnowledgeItemRewritten'],
+            ['Knowledge.KnowledgeItemAdded'],
+            ['Knowledge.KnowledgeSourceAdded'],
+            ['Knowledge.KnowledgeItemRewritten'],
         ]);
         expect(outcome.items.map((i): unknown[] => [i.id, i.version, i.content.text])).toEqual([
             ['kn_00000002', 1, 'more precise'],

@@ -16,6 +16,8 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 
 - 生成されるドメインエラーの `type` に BC 名を含めます（`Sales.EmptyOrder`）。ID やドメインプリミティブの
   `Invalid…` エラーも対象です。エラーの TypeScript インターフェース名は各 BC のモジュール内で従来どおりです。
+- 生成イベントの `type` とコマンド結果の `events` のキーを `Sales.OrderPlaced` のような BC 修飾名にしました。
+  異なる BC の同名イベントを一つのコマンドから発行できます。
 
 ### アップグレード手順
 
@@ -23,6 +25,10 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
   `Sales.EmptyOrder` / `Sales.InvalidOrderId` のような BC 修飾名へ変更してください。生成契約テストも修飾名を
   期待します。コラボレーション API とナレッジ API のドメインエラーも修飾名で送受信します。API 独自のエラー名は
   従来どおりです。
+- TypeScript を再生成し、イベントの値、`switch`、購読、コマンド結果のキーを BC 修飾名に変更してください。
+  例: `{ 'Sales.OrderPlaced': { type: 'Sales.OrderPlaced', ... } }`。
+- DomainTrail 外に保存したイベントは、旧い短い `type` を移行するか、読み取り時に正規化してください。
+  DomainTrail の既存セッション outbox は読み取り時に正規化し、新規イベントは修飾名で保存します。
 
 ## [0.11.0] - 2026-11-10
 

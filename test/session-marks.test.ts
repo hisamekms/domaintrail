@@ -194,8 +194,18 @@ describe('setting marks', () => {
         expect(value(await f.use.sessionState({ session: f.id })).marks).toHaveLength(3);
 
         // each change is in the outbox: a move removes before it places
-        const types = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 200, f.id))).map((e) => e.event.type).filter((t) => t.startsWith('Mark'));
-        expect(types).toEqual(['MarkPlaced', 'MarkRemoved', 'MarkPlaced', 'MarkPlaced', 'MarkPlaced', 'MarkPlaced', 'MarkRemoved']);
+        const types = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 200, f.id)))
+            .map((e) => e.event.type)
+            .filter((t) => t.startsWith('Collaboration.Mark'));
+        expect(types).toEqual([
+            'Collaboration.MarkPlaced',
+            'Collaboration.MarkRemoved',
+            'Collaboration.MarkPlaced',
+            'Collaboration.MarkPlaced',
+            'Collaboration.MarkPlaced',
+            'Collaboration.MarkPlaced',
+            'Collaboration.MarkRemoved',
+        ]);
     });
 
     test('closed votes are frozen: the answer closes them, and nothing can be placed or taken off', async () => {

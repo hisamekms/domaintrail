@@ -229,7 +229,7 @@ export type PayInvoice = (
 ) => Result<{
     readonly Paid: {
         readonly aggregate: PaidInvoice;
-        readonly events: { readonly InvoicePaid: InvoicePaid };
+        readonly events: { readonly 'Billing.InvoicePaid': InvoicePaid };
     };
 }, never>;
 
@@ -245,7 +245,7 @@ export type PayInvoiceDecision = {
     readonly Open: (invoice: OpenInvoice, params: PayInvoiceParams) => Result<{
         readonly Paid: {
             readonly set: { readonly paidAt: Timestamp };
-            readonly events: { readonly InvoicePaid: InvoicePaid };
+            readonly events: { readonly 'Billing.InvoicePaid': InvoicePaid };
         };
     }, never>;
 };
@@ -275,7 +275,7 @@ export type InvoiceEvent = InvoicePaid;
  * @see billing/invoice.dt:22
  */
 export interface InvoicePaid {
-    readonly type: 'InvoicePaid';
+    readonly type: 'Billing.InvoicePaid';
     /** 請求書ID */
     readonly invoiceId: InvoiceId;
     /** 支払日時 */
@@ -546,7 +546,7 @@ export type RegisterCustomer = (
 ) => Result<{
     readonly Customer: {
         readonly aggregate: Customer;
-        readonly events: { readonly CustomerRegistered: CustomerRegistered };
+        readonly events: { readonly 'Sales.CustomerRegistered': CustomerRegistered };
     };
 }, never>;
 
@@ -562,7 +562,7 @@ export type RegisterCustomerDecision = (
 ) => Result<{
     readonly Customer: {
         readonly set: { readonly id: CustomerId; readonly name: string; readonly email: Common.EmailAddress };
-        readonly events: { readonly CustomerRegistered: CustomerRegistered };
+        readonly events: { readonly 'Sales.CustomerRegistered': CustomerRegistered };
     };
 }, never>;
 
@@ -679,7 +679,7 @@ export type CustomerEvent = CustomerRegistered;
  * @see sales/customer.dt:20
  */
 export interface CustomerRegistered {
-    readonly type: 'CustomerRegistered';
+    readonly type: 'Sales.CustomerRegistered';
     /** 顧客ID */
     readonly customerId: CustomerId;
 }
@@ -1032,7 +1032,7 @@ export type PlaceOrder = (
 ) => Result<{
     readonly Draft: {
         readonly aggregate: DraftOrder;
-        readonly events: { readonly OrderPlaced: OrderPlaced };
+        readonly events: { readonly 'Sales.OrderPlaced': OrderPlaced };
     };
 }, never>;
 
@@ -1048,7 +1048,7 @@ export type PlaceOrderDecision = (
 ) => Result<{
     readonly Draft: {
         readonly set: { readonly id: OrderId; readonly items: readonly OrderItem[]; readonly customer: CustomerId; readonly note: string | undefined };
-        readonly events: { readonly OrderPlaced: OrderPlaced };
+        readonly events: { readonly 'Sales.OrderPlaced': OrderPlaced };
     };
 }, never>;
 
@@ -1132,7 +1132,7 @@ export type ConfirmOrder = (
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
-        readonly events: { readonly OrderConfirmed: OrderConfirmed };
+        readonly events: { readonly 'Sales.OrderConfirmed': OrderConfirmed };
     };
 }, EmptyOrder>;
 
@@ -1149,7 +1149,7 @@ export type ConfirmOrderDecision = {
     readonly Draft: (order: DraftOrder, params: ConfirmOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly confirmedAt: Timestamp };
-            readonly events: { readonly OrderConfirmed: OrderConfirmed };
+            readonly events: { readonly 'Sales.OrderConfirmed': OrderConfirmed };
         };
     }, EmptyOrder>;
 };
@@ -1189,7 +1189,7 @@ export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
     readonly Draft: Result<{
         readonly Cancelled: {
             readonly aggregate: CancelledOrder;
-            readonly events: { readonly OrderCancelled: OrderCancelled };
+            readonly events: { readonly 'Sales.OrderCancelled': OrderCancelled };
         };
     }, NoteRequired>;
     /**
@@ -1199,7 +1199,7 @@ export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
     readonly Confirmed: Result<{
         readonly Cancelled: {
             readonly aggregate: CancelledOrder;
-            readonly events: { readonly OrderCancelled: OrderCancelled; readonly RefundRequested: RefundRequested };
+            readonly events: { readonly 'Sales.OrderCancelled': OrderCancelled; readonly 'Sales.RefundRequested': RefundRequested };
         };
     }, NoteRequired>;
 }[S['state']];
@@ -1218,7 +1218,7 @@ export type CancelOrderDecision = {
     readonly Draft: (order: DraftOrder, params: CancelOrderParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly reason: CancelReason };
-            readonly events: { readonly OrderCancelled: OrderCancelled };
+            readonly events: { readonly 'Sales.OrderCancelled': OrderCancelled };
         };
     }, NoteRequired>;
     /**
@@ -1228,7 +1228,7 @@ export type CancelOrderDecision = {
     readonly Confirmed: (order: ConfirmedOrder, params: CancelOrderParams) => Result<{
         readonly Cancelled: {
             readonly set: { readonly reason: CancelReason };
-            readonly events: { readonly OrderCancelled: OrderCancelled; readonly RefundRequested: RefundRequested };
+            readonly events: { readonly 'Sales.OrderCancelled': OrderCancelled; readonly 'Sales.RefundRequested': RefundRequested };
         };
     }, NoteRequired>;
 };
@@ -1268,14 +1268,14 @@ export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     readonly Draft: Result<{
         readonly Draft: {
             readonly aggregate: DraftOrder;
-            readonly events: { readonly NoteChanged?: NoteChanged };
+            readonly events: { readonly 'Sales.NoteChanged'?: NoteChanged };
         };
     }, never>;
     /** @emits NoteChanged? — at most once when the command succeeds */
     readonly Confirmed: Result<{
         readonly Confirmed: {
             readonly aggregate: ConfirmedOrder;
-            readonly events: { readonly NoteChanged?: NoteChanged };
+            readonly events: { readonly 'Sales.NoteChanged'?: NoteChanged };
         };
     }, never>;
 }[S['state']];
@@ -1293,14 +1293,14 @@ export type ChangeNoteOrderDecision = {
     readonly Draft: (order: DraftOrder, params: ChangeNoteOrderParams) => Result<{
         readonly Draft: {
             readonly set: { readonly note: string | undefined };
-            readonly events: { readonly NoteChanged?: NoteChanged };
+            readonly events: { readonly 'Sales.NoteChanged'?: NoteChanged };
         };
     }, never>;
     /** @emits NoteChanged? — at most once when the command succeeds */
     readonly Confirmed: (order: ConfirmedOrder, params: ChangeNoteOrderParams) => Result<{
         readonly Confirmed: {
             readonly set: { readonly note: string | undefined };
-            readonly events: { readonly NoteChanged?: NoteChanged };
+            readonly events: { readonly 'Sales.NoteChanged'?: NoteChanged };
         };
     }, never>;
 };
@@ -1358,7 +1358,7 @@ export function equalOrderItem(a: OrderItem, b: OrderItem): boolean {
  * @see sales/order.dt:80
  */
 export interface OrderPlaced {
-    readonly type: 'OrderPlaced';
+    readonly type: 'Sales.OrderPlaced';
     /** 注文ID */
     readonly orderId: OrderId;
 }
@@ -1369,7 +1369,7 @@ export interface OrderPlaced {
  * @see sales/order.dt:84
  */
 export interface OrderConfirmed {
-    readonly type: 'OrderConfirmed';
+    readonly type: 'Sales.OrderConfirmed';
     /** 注文ID */
     readonly orderId: OrderId;
     /** 確定日時 — 顧客が注文を確定した日時。キャンセル可否の判定に使う。 */
@@ -1381,7 +1381,7 @@ export interface OrderConfirmed {
  * @see sales/order.dt:89
  */
 export interface OrderCancelled {
-    readonly type: 'OrderCancelled';
+    readonly type: 'Sales.OrderCancelled';
     /** 注文ID */
     readonly orderId: OrderId;
     /** 取消理由 */
@@ -1394,7 +1394,7 @@ export interface OrderCancelled {
  * @see sales/order.dt:95
  */
 export interface RefundRequested {
-    readonly type: 'RefundRequested';
+    readonly type: 'Sales.RefundRequested';
     /** 注文ID */
     readonly orderId: OrderId;
 }
@@ -1404,7 +1404,7 @@ export interface RefundRequested {
  * @see sales/order.dt:99
  */
 export interface NoteChanged {
-    readonly type: 'NoteChanged';
+    readonly type: 'Sales.NoteChanged';
     /** 注文ID */
     readonly orderId: OrderId;
     /** 備考 */
@@ -1725,7 +1725,7 @@ export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<G
         OpenInvoice: () => testing.withExamples(given.OpenInvoice ?? testing.cast<Billing.OpenInvoice>(fc.record({ state: fc.constant('Open' as const), id: a.InvoiceId, order: SalesArbs().OrderId, billedAmount: CommonArbs().Money })), options.examples?.Invoice?.states?.Open, () => [], 'Billing.OpenInvoice'),
         PaidInvoice: () => testing.withExamples(given.PaidInvoice ?? testing.cast<Billing.PaidInvoice>(fc.record({ state: fc.constant('Paid' as const), id: a.InvoiceId, order: SalesArbs().OrderId, billedAmount: CommonArbs().Money, paidAt: testing.cast<Date>(scalar.Timestamp) })), options.examples?.Invoice?.states?.Paid, () => [], 'Billing.PaidInvoice'),
         Invoice: () => given.Invoice ?? fc.oneof(a.OpenInvoice, a.PaidInvoice),
-        InvoicePaid: () => given.InvoicePaid ?? testing.cast<Billing.InvoicePaid>(fc.record({ type: fc.constant('InvoicePaid' as const), invoiceId: a.InvoiceId, paidAt: testing.cast<Date>(scalar.Timestamp) })),
+        InvoicePaid: () => given.InvoicePaid ?? testing.cast<Billing.InvoicePaid>(fc.record({ type: fc.constant('Billing.InvoicePaid' as const), invoiceId: a.InvoiceId, paidAt: testing.cast<Date>(scalar.Timestamp) })),
     });
     return a;
 }
@@ -1969,7 +1969,7 @@ export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<G
         CustomerId: () => testing.valid(given.CustomerId ?? testing.collide(testing.cast<Sales.CustomerId>(testing.base('UUID', {})), seed), (v) => Sales.checkCustomerId(v).length === 0, 'Sales.CustomerId'),
         AvailableEmail: () => given.AvailableEmail ?? testing.cast<Sales.AvailableEmail>(CommonArbs().EmailAddress),
         Customer: () => testing.withExamples(given.Customer ?? testing.cast<Sales.Customer>(fc.record({ id: a.CustomerId, name: testing.cast<string>(scalar.String), email: CommonArbs().EmailAddress })), options.examples?.Customer?.aggregates, () => [], 'Sales.Customer'),
-        CustomerRegistered: () => given.CustomerRegistered ?? testing.cast<Sales.CustomerRegistered>(fc.record({ type: fc.constant('CustomerRegistered' as const), customerId: a.CustomerId })),
+        CustomerRegistered: () => given.CustomerRegistered ?? testing.cast<Sales.CustomerRegistered>(fc.record({ type: fc.constant('Sales.CustomerRegistered' as const), customerId: a.CustomerId })),
         OrderId: () => testing.valid(given.OrderId ?? testing.collide(testing.cast<Sales.OrderId>(testing.base('UUID', {})), seed), (v) => Sales.checkOrderId(v).length === 0, 'Sales.OrderId'),
         OrderItemId: () => testing.valid(given.OrderItemId ?? testing.collide(testing.cast<Sales.OrderItemId>(testing.base('UUID', {})), seed), (v) => Sales.checkOrderItemId(v).length === 0, 'Sales.OrderItemId'),
         CancelReason: () => given.CancelReason ?? fc.constantFrom<Sales.CancelReason>('Requested', 'Other'),
@@ -1980,11 +1980,11 @@ export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<G
         CancelledOrder: () => testing.withExamples(testing.valid(given.CancelledOrder ?? testing.cast<Sales.CancelledOrder>(fc.record({ state: fc.constant('Cancelled' as const), id: a.OrderId, items: testing.many(a.OrderItem, 0), customer: a.CustomerId, note: testing.cast<string>(scalar.String), reason: a.CancelReason }, { requiredKeys: ['state', 'id', 'items', 'customer', 'reason'] })), (v) => Sales.checkCancelledOrder(v).length === 0, 'Sales.CancelledOrder'), options.examples?.Order?.states?.Cancelled, Sales.checkCancelledOrder, 'Sales.CancelledOrder'),
         Order: () => given.Order ?? fc.oneof(a.DraftOrder, a.ConfirmedOrder, a.CancelledOrder),
         OrderItem: () => given.OrderItem ?? testing.cast<Sales.OrderItem>(fc.record({ id: a.OrderItemId, sku: a.Sku, quantity: a.Quantity, unitPrice: CommonArbs().Money })),
-        OrderPlaced: () => given.OrderPlaced ?? testing.cast<Sales.OrderPlaced>(fc.record({ type: fc.constant('OrderPlaced' as const), orderId: a.OrderId })),
-        OrderConfirmed: () => given.OrderConfirmed ?? testing.cast<Sales.OrderConfirmed>(fc.record({ type: fc.constant('OrderConfirmed' as const), orderId: a.OrderId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
-        OrderCancelled: () => given.OrderCancelled ?? testing.cast<Sales.OrderCancelled>(fc.record({ type: fc.constant('OrderCancelled' as const), orderId: a.OrderId, reason: a.CancelReason })),
-        RefundRequested: () => given.RefundRequested ?? testing.cast<Sales.RefundRequested>(fc.record({ type: fc.constant('RefundRequested' as const), orderId: a.OrderId })),
-        NoteChanged: () => given.NoteChanged ?? testing.cast<Sales.NoteChanged>(fc.record({ type: fc.constant('NoteChanged' as const), orderId: a.OrderId, note: testing.cast<string>(scalar.String) }, { requiredKeys: ['type', 'orderId'] })),
+        OrderPlaced: () => given.OrderPlaced ?? testing.cast<Sales.OrderPlaced>(fc.record({ type: fc.constant('Sales.OrderPlaced' as const), orderId: a.OrderId })),
+        OrderConfirmed: () => given.OrderConfirmed ?? testing.cast<Sales.OrderConfirmed>(fc.record({ type: fc.constant('Sales.OrderConfirmed' as const), orderId: a.OrderId, confirmedAt: testing.cast<Date>(scalar.Timestamp) })),
+        OrderCancelled: () => given.OrderCancelled ?? testing.cast<Sales.OrderCancelled>(fc.record({ type: fc.constant('Sales.OrderCancelled' as const), orderId: a.OrderId, reason: a.CancelReason })),
+        RefundRequested: () => given.RefundRequested ?? testing.cast<Sales.RefundRequested>(fc.record({ type: fc.constant('Sales.RefundRequested' as const), orderId: a.OrderId })),
+        NoteChanged: () => given.NoteChanged ?? testing.cast<Sales.NoteChanged>(fc.record({ type: fc.constant('Sales.NoteChanged' as const), orderId: a.OrderId, note: testing.cast<string>(scalar.String) }, { requiredKeys: ['type', 'orderId'] })),
     });
     return a;
 }

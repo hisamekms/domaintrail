@@ -110,7 +110,7 @@ declare const confirmed: Sales.ConfirmedOrder;
 declare const at: Date;
 
 type ConfirmResult = ReturnType<Sales.ConfirmOrder>;
-const confirmedEvent = (order: Sales.DraftOrder): Sales.OrderConfirmed => ({ type: 'OrderConfirmed', orderId: order.id, confirmedAt: at });
+const confirmedEvent = (order: Sales.DraftOrder): Sales.OrderConfirmed => ({ type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at });
 
 export function stateFieldScope(order: Sales.DraftOrder): void {
     // @ts-expect-error state-specific field is not available on a DraftOrder
@@ -118,11 +118,11 @@ export function stateFieldScope(order: Sales.DraftOrder): void {
 }
 export function wrongOutputState(order: Sales.DraftOrder): ConfirmResult {
     // @ts-expect-error the outcome of confirm is Confirmed
-    return ok({ Cancelled: { aggregate: { ...order, state: 'Cancelled', reason: 'Other' }, events: { OrderConfirmed: confirmedEvent(order) } } });
+    return ok({ Cancelled: { aggregate: { ...order, state: 'Cancelled', reason: 'Other' }, events: { 'Sales.OrderConfirmed': confirmedEvent(order) } } });
 }
 export function wrongAggregate(order: Sales.DraftOrder): ConfirmResult {
     // @ts-expect-error the aggregate of the Confirmed outcome is a ConfirmedOrder
-    return ok({ Confirmed: { aggregate: order, events: { OrderConfirmed: confirmedEvent(order) } } });
+    return ok({ Confirmed: { aggregate: order, events: { 'Sales.OrderConfirmed': confirmedEvent(order) } } });
 }
 export function undeclaredError(): ConfirmResult {
     // @ts-expect-error error type not declared by the command (it is cancel's)
@@ -131,26 +131,26 @@ export function undeclaredError(): ConfirmResult {
 export function undeclaredEvent(order: Sales.DraftOrder): ConfirmResult {
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: at };
     // @ts-expect-error event not declared in emits
-    return ok({ Confirmed: { aggregate: c, events: { OrderConfirmed: confirmedEvent(order), OrderCancelled: { type: 'OrderCancelled', orderId: c.id, reason: 'Other' } } } });
+    return ok({ Confirmed: { aggregate: c, events: { 'Sales.OrderConfirmed': confirmedEvent(order), 'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: c.id, reason: 'Other' } } } });
 }
 export function missingEvent(order: Sales.DraftOrder): ConfirmResult {
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: at };
-    // @ts-expect-error emits OrderConfirmed: exactly one, so it cannot be left out
+    // @ts-expect-error emits 'Sales.OrderConfirmed': exactly one, so it cannot be left out
     return ok({ Confirmed: { aggregate: c, events: {} } });
 }
 export function twoEvents(order: Sales.DraftOrder): ConfirmResult {
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: at };
     // @ts-expect-error exactly one, not a list
-    return ok({ Confirmed: { aggregate: c, events: { OrderConfirmed: [confirmedEvent(order), confirmedEvent(order)] } } });
+    return ok({ Confirmed: { aggregate: c, events: { 'Sales.OrderConfirmed': [confirmedEvent(order), confirmedEvent(order)] } } });
 }
 export function declaredOnly(order: Sales.DraftOrder, when: Date): ConfirmResult {
     if (order.items.length === 0) return err({ type: 'Sales.EmptyOrder' });
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: when };
-    return ok({ Confirmed: { aggregate: c, events: { OrderConfirmed: confirmedEvent(order) } } });
+    return ok({ Confirmed: { aggregate: c, events: { 'Sales.OrderConfirmed': confirmedEvent(order) } } });
 }
 export const noEvents: Sales.OrderCommands['addItem'] = (order, { item }) =>
     // @ts-expect-error a command without emits emits nothing
-    ok({ Draft: { aggregate: { ...order, items: [...order.items, item] }, events: { OrderPlaced: { type: 'OrderPlaced', orderId: order.id } } } });
+    ok({ Draft: { aggregate: { ...order, items: [...order.items, item] }, events: { 'Sales.OrderPlaced': { type: 'Sales.OrderPlaced', orderId: order.id } } } });
 
 declare const commands: Sales.OrderCommands;
 // @ts-expect-error confirm accepts only Draft orders
@@ -174,12 +174,12 @@ if (r.ok) {
 const c = commands.cancel(confirmed, { reason: 'Requested' });
 if (c.ok) {
     // RefundRequested when Confirmed ->: a Confirmed order emits it
-    const refund: Sales.RefundRequested = c.value.Cancelled.events.RefundRequested;
+    const refund: Sales.RefundRequested = c.value.Cancelled.events['Sales.RefundRequested'];
 }
 const d = commands.cancel(draft, { reason: 'Requested' });
 if (d.ok) {
     // @ts-expect-error a Draft order does not
-    d.value.Cancelled.events.RefundRequested;
+    d.value.Cancelled.events['Sales.RefundRequested'];
 }
 // @ts-expect-error IDs are branded and not interchangeable
 const wrongId: Sales.OrderId = draft.customer;
@@ -274,7 +274,7 @@ if (d.ok) {
 // an implementation returning a Draft work as InProgress is rejected
 export const wrong: Tasks.ChangeWork = (work, { title }) =>
     // @ts-expect-error Draft -> InProgress is not a transition of change
-    ok({ InProgress: { aggregate: { ...work, title, state: 'InProgress' } as Tasks.InProgressWork, events: { WorkChanged: { type: 'WorkChanged', workId: work.id } } } });
+    ok({ InProgress: { aggregate: { ...work, title, state: 'InProgress' } as Tasks.InProgressWork, events: { 'Tasks.WorkChanged': { type: 'Tasks.WorkChanged', workId: work.id } } } });
 `,
         );
         const r = tscIn(work, 'src/use.ts');
@@ -287,7 +287,7 @@ export const wrong: Tasks.ChangeWork = (work, { title }) =>
             path.join(work, 'src', 'impl.ts'),
             `import { Tasks, decide, err, ok } from '../generated/index.js';
 
-const changed = (work: Tasks.Work) => ({ WorkChanged: { type: 'WorkChanged', workId: work.id } }) as const;
+const changed = (work: Tasks.Work) => ({ 'Tasks.WorkChanged': { type: 'Tasks.WorkChanged', workId: work.id } }) as const;
 declare const now: Date;
 
 export const commands: Tasks.WorkCommands = {

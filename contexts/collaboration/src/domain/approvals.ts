@@ -45,7 +45,16 @@ export const approvalCommands: Collaboration.AssumptionApprovalCommands = {
         return ok({
             Approved: {
                 set: { id, session, assumption, approvedBy, approvedAt },
-                events: { AssumptionApproved: { type: 'AssumptionApproved', approvalId: id, session, assumption, approvedBy, approvedAt } },
+                events: {
+                    'Collaboration.AssumptionApproved': {
+                        type: 'Collaboration.AssumptionApproved',
+                        approvalId: id,
+                        session,
+                        assumption,
+                        approvedBy,
+                        approvedAt,
+                    },
+                },
             },
         });
     }),

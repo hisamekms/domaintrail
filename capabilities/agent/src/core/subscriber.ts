@@ -100,7 +100,11 @@ const COMPLETION_TRIES = 5;
  * The events after which a run may be claimable: a run queued; a revert the server reverted itself (the queue moved
  * on), or left to the agent. A revert the server has not tried yet is never given to the agent.
  */
-const CLAIMABLE: ReadonlySet<string> = new Set([AGENT_EVENT_TYPES.RunQueued, AGENT_EVENT_TYPES.RunReverted, AGENT_EVENT_TYPES.RevertLeftToAgent]);
+const CLAIMABLE: ReadonlySet<string> = new Set([
+    AGENT_EVENT_TYPES['Collaboration.RunQueued'],
+    AGENT_EVENT_TYPES['Collaboration.RunReverted'],
+    AGENT_EVENT_TYPES['Collaboration.RevertLeftToAgent'],
+]);
 
 /** A run's state on the server may have moved on: cancelled, lease expired or taken. Nothing more to do for it. */
 const isFinal = (r: ApiResult<unknown>): boolean => !r.ok && (r.status === 409 || r.status === 404);

@@ -89,7 +89,7 @@ describe("the page's derivations", () => {
             type: 'mark.placed',
             seq: 2,
             event: {
-                type: 'MarkPlaced',
+                type: 'Collaboration.MarkPlaced',
                 markId: '9',
                 session: 's',
                 participant: 'ann',
@@ -104,7 +104,14 @@ describe("the page's derivations", () => {
         const removed = {
             type: 'mark.removed',
             seq: 3,
-            event: { type: 'MarkRemoved', markId: '9', participant: 'ann', target: message, sign: reaction('❤️'), removedAt: '2026-11-01T09:01:00.000Z' },
+            event: {
+                type: 'Collaboration.MarkRemoved',
+                markId: '9',
+                participant: 'ann',
+                target: message,
+                sign: reaction('❤️'),
+                removedAt: '2026-11-01T09:01:00.000Z',
+            },
         } as const;
         expect(applyEvent(once, removed)).toEqual({ state: { ...once, seq: 3, marks: [] }, refetch: false });
     });
@@ -118,7 +125,7 @@ describe("the page's derivations", () => {
             type: 'assumption.approved',
             seq: 2,
             event: {
-                type: 'AssumptionApproved',
+                type: 'Collaboration.AssumptionApproved',
                 approvalId: 'a1',
                 session: 's',
                 assumption: { run: 'r1', assumption: 0 },

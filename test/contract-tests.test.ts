@@ -127,12 +127,14 @@ const testing = await import(path.join(dir, 'node_modules', 'domaintrail', 'test
 const { Shop, decide, ok, err } = domain;
 
 const forbidden = (code: string): boolean => code.startsWith('Z');
-const added = (cart: { id: string }, n: number) => ({ Added: Array.from({ length: n }, () => ({ type: 'Added', cart: cart.id })) });
+const added = (cart: { id: string }, n: number) => ({ 'Shop.Added': Array.from({ length: n }, () => ({ type: 'Shop.Added', cart: cart.id })) });
 
 /** A correct implementation; `change` replaces some of its parts. */
 function cart(change: Record<string, unknown> = {}) {
     return {
-        start: decide(Shop.CartShape, ({ id }: { id: string }) => ok({ Open: { set: { id, lines: [] }, events: { Opened: { type: 'Opened', cart: id } } } })),
+        start: decide(Shop.CartShape, ({ id }: { id: string }) =>
+            ok({ Open: { set: { id, lines: [] }, events: { 'Shop.Opened': { type: 'Shop.Opened', cart: id } } } }),
+        ),
         add: decide(Shop.CartShape, {
             Open: (c: any, { line, limit }: any) => {
                 if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Shop.Duplicate' });
@@ -200,7 +202,7 @@ describe('generated contract tests', () => {
                 'Shop > domain primitives > makeQty accepts exactly the values that hold the invariants of Qty, reporting the first one violated',
                 'Shop > Cart > Cart.add returns the error of the first requirement that does not hold, and none of their errors when all hold',
                 'Shop > Cart > Cart.close makes an aggregate that holds the invariants of its state',
-                'Shop > Cart > Cart.add emits Added[2..3] as many times as declared',
+                'Shop > Cart > Cart.add emits Shop.Added[2..3] as many times as declared',
                 'Shop > Cart > Cart.start is pure: the same input gives the same result, and the input is not changed',
             ]),
         );
@@ -307,8 +309,8 @@ describe('generated contract tests', () => {
             }),
         });
         const r = await run(contract({ Cart: once }));
-        expect(failing(r)).toEqual(['Shop > Cart > Cart.add emits Added[2..3] as many times as declared']);
-        expect(Object.values(r).join()).toContain('emitted Added 1 times; declared Added[2..3]');
+        expect(failing(r)).toEqual(['Shop > Cart > Cart.add emits Shop.Added[2..3] as many times as declared']);
+        expect(Object.values(r).join()).toContain('emitted Shop.Added 1 times; declared Shop.Added[2..3]');
     });
 
     test('T5 catches randomness and a changed input', async () => {

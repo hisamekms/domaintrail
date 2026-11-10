@@ -87,7 +87,7 @@ describe('the records in the chat', () => {
         const written = applyEvent(base, {
             type: 'record.written',
             seq: 2,
-            event: { type: 'RecordWritten', recordId: 'r1', session: 's', by: 'f', fact: goal.fact, at: goal.at },
+            event: { type: 'Collaboration.RecordWritten', recordId: 'r1', session: 's', by: 'f', fact: goal.fact, at: goal.at },
         } as never);
         expect(written.refetch).toBe(false);
         expect(written.state.records).toEqual([goal]);
@@ -95,7 +95,7 @@ describe('the records in the chat', () => {
         const revised = applyEvent(written.state, {
             type: 'record.revised',
             seq: 3,
-            event: { type: 'RecordRevised', recordId: 'r1', fact, revisedAt: '2026-11-04T09:00:09.000Z' },
+            event: { type: 'Collaboration.RecordRevised', recordId: 'r1', fact, revisedAt: '2026-11-04T09:00:09.000Z' },
         } as never);
         expect(revised.state.records).toEqual([{ ...goal, fact, revisedAt: '2026-11-04T09:00:09.000Z' }]);
     });

@@ -9,11 +9,11 @@
 import { Sales, decide, err, ok } from '../../generated/domain/index.js';
 
 const noteChanged = (order: Sales.Order, note: string | undefined) =>
-    note === order.note ? {} : { NoteChanged: { type: 'NoteChanged', orderId: order.id, note } as const };
+    note === order.note ? {} : { 'Sales.NoteChanged': { type: 'Sales.NoteChanged', orderId: order.id, note } as const };
 
 export const orderCommands: Sales.OrderCommands = {
     place: decide<Sales.PlaceOrderDecision>(Sales.OrderShape, ({ id, customer }) =>
-        ok({ Draft: { set: { id, items: [], customer, note: undefined }, events: { OrderPlaced: { type: 'OrderPlaced', orderId: id } } } }),
+        ok({ Draft: { set: { id, items: [], customer, note: undefined }, events: { 'Sales.OrderPlaced': { type: 'Sales.OrderPlaced', orderId: id } } } }),
     ),
 
     // `changes items`: the only field it sets. The requirements in declaration order: the first that fails decides the error.
@@ -35,7 +35,12 @@ export const orderCommands: Sales.OrderCommands = {
         Draft: (order, params) => {
             if (Sales.checkConfirmOrderRequires(order, params) === 'hasItems') return err({ type: 'Sales.EmptyOrder' });
             const { at } = params;
-            return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
+            return ok({
+                Confirmed: {
+                    set: { confirmedAt: at },
+                    events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } },
+                },
+            });
         },
     }),
 
@@ -44,7 +49,7 @@ export const orderCommands: Sales.OrderCommands = {
         Draft: (order, params) => {
             if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
             const { reason } = params;
-            return ok({ Cancelled: { set: { reason }, events: { OrderCancelled: { type: 'OrderCancelled', orderId: order.id, reason } } } });
+            return ok({ Cancelled: { set: { reason }, events: { 'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: order.id, reason } } } });
         },
         Confirmed: (order, params) => {
             if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
@@ -53,8 +58,8 @@ export const orderCommands: Sales.OrderCommands = {
                 Cancelled: {
                     set: { reason },
                     events: {
-                        OrderCancelled: { type: 'OrderCancelled', orderId: order.id, reason },
-                        RefundRequested: { type: 'RefundRequested', orderId: order.id },
+                        'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: order.id, reason },
+                        'Sales.RefundRequested': { type: 'Sales.RefundRequested', orderId: order.id },
                     },
                 },
             });

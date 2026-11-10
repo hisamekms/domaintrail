@@ -461,7 +461,7 @@ export const reservationCommands: Booking.ReservationCommands = {
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
-                events: { ReservationRequested: { type: 'ReservationRequested', reservationId: id, room, slot } },
+                events: { 'Booking.ReservationRequested': { type: 'Booking.ReservationRequested', reservationId: id, room, slot } },
             },
         }),
     ),
@@ -474,7 +474,7 @@ export const reservationCommands: Booking.ReservationCommands = {
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
-                    events: { ReservationConfirmed: { type: 'ReservationConfirmed', reservationId: reservation.id, confirmedAt: at } },
+                    events: { 'Booking.ReservationConfirmed': { type: 'Booking.ReservationConfirmed', reservationId: reservation.id, confirmedAt: at } },
                 },
             });
         },

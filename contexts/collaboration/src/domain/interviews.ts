@@ -668,8 +668,8 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             Asking: {
                 set: { id, session, command, startedBy, opening, focus, language, startedAt, awaiting: opening, asked: undefined },
                 events: {
-                    InterviewStarted: {
-                        type: 'InterviewStarted',
+                    'Collaboration.InterviewStarted': {
+                        type: 'Collaboration.InterviewStarted',
                         interviewId: id,
                         session,
                         command,
@@ -689,7 +689,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             ok({
                 Asking: {
                     set: { awaiting: message, asked: undefined },
-                    events: { InterviewAnswered: { type: 'InterviewAnswered', interviewId: interview.id, message, heardAt } },
+                    events: { 'Collaboration.InterviewAnswered': { type: 'Collaboration.InterviewAnswered', interviewId: interview.id, message, heardAt } },
                 },
             }),
         // a word on the brief: it is dropped, and the interviewer takes it from there
@@ -697,7 +697,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             ok({
                 Asking: {
                     set: { awaiting: message, asked: undefined },
-                    events: { InterviewAnswered: { type: 'InterviewAnswered', interviewId: interview.id, message, heardAt } },
+                    events: { 'Collaboration.InterviewAnswered': { type: 'Collaboration.InterviewAnswered', interviewId: interview.id, message, heardAt } },
                 },
             }),
     }),
@@ -710,8 +710,8 @@ export const interviewCommands: Collaboration.InterviewCommands = {
                 Asking: {
                     set: { awaiting: undefined, asked: question },
                     events: {
-                        InterviewQuestionAsked: {
-                            type: 'InterviewQuestionAsked',
+                        'Collaboration.InterviewQuestionAsked': {
+                            type: 'Collaboration.InterviewQuestionAsked',
                             interviewId: interview.id,
                             question: question.question,
                             choices: question.choices,
@@ -731,7 +731,15 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             return ok({
                 Briefed: {
                     set: { brief: summary, answered, briefedAt },
-                    events: { InterviewBriefed: { type: 'InterviewBriefed', interviewId: interview.id, brief: summary, answered, briefedAt } },
+                    events: {
+                        'Collaboration.InterviewBriefed': {
+                            type: 'Collaboration.InterviewBriefed',
+                            interviewId: interview.id,
+                            brief: summary,
+                            answered,
+                            briefedAt,
+                        },
+                    },
                 },
             });
         },
@@ -745,8 +753,8 @@ export const interviewCommands: Collaboration.InterviewCommands = {
                 Confirmed: {
                     set: { brief: confirmedBrief, edited, confirmedBy, run, confirmedAt },
                     events: {
-                        InterviewConfirmed: {
-                            type: 'InterviewConfirmed',
+                        'Collaboration.InterviewConfirmed': {
+                            type: 'Collaboration.InterviewConfirmed',
                             interviewId: interview.id,
                             brief: confirmedBrief,
                             edited,
@@ -767,7 +775,15 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             return ok({
                 Rejected: {
                     set: { rejectedBy, note, rejectedAt },
-                    events: { InterviewRejected: { type: 'InterviewRejected', interviewId: interview.id, rejectedBy, ...(note && { note }), rejectedAt } },
+                    events: {
+                        'Collaboration.InterviewRejected': {
+                            type: 'Collaboration.InterviewRejected',
+                            interviewId: interview.id,
+                            rejectedBy,
+                            ...(note && { note }),
+                            rejectedAt,
+                        },
+                    },
                 },
             });
         },
@@ -786,7 +802,7 @@ function stopped(
     {
         readonly Stopped: {
             readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Date };
-            readonly events: { readonly InterviewStopped: Collaboration.InterviewStopped };
+            readonly events: { readonly 'Collaboration.InterviewStopped': Collaboration.InterviewStopped };
         };
     },
     Collaboration.NotTheInterviewer
@@ -796,7 +812,7 @@ function stopped(
     return ok({
         Stopped: {
             set: { stoppedBy, stoppedAt },
-            events: { InterviewStopped: { type: 'InterviewStopped', interviewId: interview.id, stoppedBy, stoppedAt } },
+            events: { 'Collaboration.InterviewStopped': { type: 'Collaboration.InterviewStopped', interviewId: interview.id, stoppedBy, stoppedAt } },
         },
     });
 }

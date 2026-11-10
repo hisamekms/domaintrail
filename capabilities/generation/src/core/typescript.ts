@@ -454,7 +454,7 @@ class ContextEmitter {
                 case 'event':
                 case 'error':
                     this.jsdoc([...describedLines(el), ...(el.kind === 'event' && el.persistent ? [PERSISTENT_LINE] : []), seeLine(el.location)]);
-                    this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.kind === 'error' ? el.id : el.name}';`], ownFields(el));
+                    this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.id}';`], ownFields(el));
                     break;
                 case 'aggregate':
                     this.aggregate(el);
@@ -1104,12 +1104,12 @@ class ContextEmitter {
         this.line(`${indent}>${end}`);
     }
 
-    /** The `events` of an outcome: one property per event, keyed by its name, typed by its multiplicity. */
+    /** The `events` of an outcome: one property per event, keyed by its qualified name, typed by its multiplicity. */
     private events(emits: EmitModel[]): string {
         if (emits.length === 0) return NO_EVENTS_TYPE;
         const props = emits.map((e) => {
             const t = this.ref(e.event);
-            const key = e.event.slice(e.event.indexOf('.') + 1);
+            const key = `'${e.event}'`;
             if (e.lower === 1 && e.upper === 1) return `readonly ${key}: ${t}`;
             if (e.lower === 0 && e.upper === 1) return `readonly ${key}?: ${t}`;
             if (e.lower === 1 && e.upper === undefined) return `readonly ${key}: readonly [${t}, ...${t}[]]`;

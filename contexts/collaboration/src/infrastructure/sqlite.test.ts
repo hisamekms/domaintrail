@@ -63,7 +63,7 @@ const revision = knownRevisionId('00000000-0000-4000-8000-000000000020');
 function openSession(stores: Stores, id: C.SessionId): void {
     const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), mode: 'Collab', startedAt: at }));
     stores.sessions.save(Open.aggregate);
-    stores.outbox.append(id, [Open.events.SessionStarted], at);
+    stores.outbox.append(id, [Open.events['Collaboration.SessionStarted']], at);
 }
 
 function queued(id: number, session: C.SessionId = sessionId): C.QueuedAgentRun {
@@ -146,7 +146,7 @@ describe('schema and transactions', () => {
         expect(await uow.transaction((s) => [s.sessions.load(sessionId), s.outbox.readAfter(0, 10)])).toEqual([undefined, []]);
         await uow.transaction((s) => openSession(s, sessionId));
         const [entry] = await uow.transaction((s) => s.outbox.readAfter(0, 10));
-        expect(entry).toMatchObject({ session: sessionId, event: { type: 'SessionStarted', startedAt: at } });
+        expect(entry).toMatchObject({ session: sessionId, event: { type: 'Collaboration.SessionStarted', startedAt: at } });
         expect(await uow.transaction((s) => s.outbox.readAfter(entry.seq, 10))).toEqual([]);
     });
 
@@ -408,7 +408,7 @@ describe('rows written before requests had several targets', () => {
         expect(requests[1].sentAt).toEqual(new Date('2026-10-31T11:48:36.979Z'));
         expect(plain(runs[0].input.requests.map((r) => r.targets))).toEqual([[], [element]]);
         expect(plain(runs[0].input.note)).toBe('税込で固定');
-        expect(plain(events.map((e) => (e.event.type === 'RequestSent' ? e.event.targets : undefined)))).toEqual([[], [element]]);
+        expect(plain(events.map((e) => (e.event.type === 'Collaboration.RequestSent' ? e.event.targets : undefined)))).toEqual([[], [element]]);
         // reading changes nothing in the database; a request saved again is written in the new shape
         expect(JSON.stringify(db.prepare('SELECT data FROM requests').all())).toBe(stored);
         await uow.transaction((st) => st.requests.save(requests[0]));
@@ -416,11 +416,11 @@ describe('rows written before requests had several targets', () => {
         expect(Object.keys(requests[1])).toEqual(['state', 'id', 'session', 'author', 'targets', 'body', 'sentAt', 'dismissedBy', 'dismissedAt', 'mentions']);
         // written before people could be mentioned: they mention no one, the event too
         expect(requests.map((r) => r.mentions)).toEqual([[], []]);
-        expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.mentions : undefined))).toEqual([[], []]);
+        expect(events.map((e) => (e.event.type === 'Collaboration.RequestSent' ? e.event.mentions : undefined))).toEqual([[], []]);
         // written before messages carried the view they were sent from: none, in the request, the run and the event
         expect(requests.map((r) => r.viewedAt)).toEqual([undefined, undefined]);
         expect(runs[0].input.requests.map((r) => r.viewedAt)).toEqual([undefined, undefined]);
-        expect(events.map((e) => (e.event.type === 'RequestSent' ? e.event.viewedAt : undefined))).toEqual([undefined, undefined]);
+        expect(events.map((e) => (e.event.type === 'Collaboration.RequestSent' ? e.event.viewedAt : undefined))).toEqual([undefined, undefined]);
     });
 
     test('a request with the view it was sent from keeps it through the store', async () => {
@@ -521,7 +521,7 @@ describe("rows written before the agent's reply was structured", () => {
             expect(C.checkAgentRun(r)).toEqual([]);
         }
         expect(done?.state === 'Completed' && done.changed).toBe(true);
-        expect(events.map((e) => e.event.type)).toEqual(['RunNeedsClarification', 'RunCompleted']);
+        expect(events.map((e) => e.event.type)).toEqual(['Collaboration.RunNeedsClarification', 'Collaboration.RunCompleted']);
     });
 });
 
@@ -580,8 +580,8 @@ describe('change proposals written when a proposal was three texts', () => {
             raw(proposal),
         );
         for (const payload of [
-            { type: 'ChangeProposed', proposalId: ids.proposal, content: former },
-            { type: 'ProposalApproved', proposalId: ids.proposal, edited, run: ids.run },
+            { type: 'Collaboration.ChangeProposed', proposalId: ids.proposal, content: former },
+            { type: 'Collaboration.ProposalApproved', proposalId: ids.proposal, edited, run: ids.run },
         ])
             db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
                 ids.session,
@@ -609,9 +609,14 @@ describe('change proposals written when a proposal was three texts', () => {
         expect(plain(read.run?.input.proposals?.approved)).toEqual([
             { proposal: ids.proposal, request: ids.request, instruction: { targets: [], how: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ' } },
         ]);
-        expect(plain(read.events.map((e) => (e.event.type === 'ChangeProposed' ? e.event.content : e.event)))).toEqual([
+        expect(plain(read.events.map((e) => (e.event.type === 'Collaboration.ChangeProposed' ? e.event.content : e.event)))).toEqual([
             { targets: [], how: '取り消しのコマンド\n@{Sales.Order}, sales/order.dt\nConfirmed から Cancelled へ', options: [] },
-            { type: 'ProposalApproved', proposalId: ids.proposal, run: ids.run, editedHow: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ' },
+            {
+                type: 'Collaboration.ProposalApproved',
+                proposalId: ids.proposal,
+                run: ids.run,
+                editedHow: '取り消しのコマンド\n@{Sales.Order}\nPlaced からだけ',
+            },
         ]);
         // reading changes nothing in the database
         expect(JSON.stringify(db.prepare('SELECT data FROM proposals').all())).toBe(stored);
@@ -716,7 +721,7 @@ describe('a `/` command written when `/guide` was `/es:next` or `/hint`', () => 
             'Answered',
             JSON.stringify(command),
         );
-        const started = { type: 'SlashCommandStarted', commandId: 'c-legacy', session, kind, startedBy: 'p1', opening: 'r1', language: 'Ja' };
+        const started = { type: 'Collaboration.SlashCommandStarted', commandId: 'c-legacy', session, kind, startedBy: 'p1', opening: 'r1', language: 'Ja' };
         db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
             session,
             started.type,
@@ -731,7 +736,7 @@ describe('a `/` command written when `/guide` was `/es:next` or `/hint`', () => 
         expect(commands.map((c) => [c.kind, c.state])).toEqual([['Guide', 'Answered']]);
         // its steps, written before they had places to go: none
         expect(commands[0]?.state === 'Answered' && commands[0].next?.steps[0]?.targets).toEqual([]);
-        expect(events.map((e) => (e.event.type === 'SlashCommandStarted' ? e.event.kind : undefined))).toEqual(['Guide']);
+        expect(events.map((e) => (e.event.type === 'Collaboration.SlashCommandStarted' ? e.event.kind : undefined))).toEqual(['Guide']);
         expect(JSON.parse((db.prepare('SELECT data FROM slash_commands').get() as { data: string }).data)).toMatchObject({ kind });
     });
 });

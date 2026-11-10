@@ -132,10 +132,13 @@ export const upgradeSlashCommand = (v: unknown): unknown => withNext(withGuideKi
  * `SlashCommandStarted`.
  */
 export function upgradeEvent(v: unknown): unknown {
-    if (isObject(v) && v.type === 'SlashCommandStarted') return withGuideKind(v);
-    if (isObject(v) && v.type === 'SlashCommandAnswered') return withNext(v);
-    if (isObject(v) && v.type === 'SessionStarted') return withMode(v);
-    if (isObject(v) && v.type === 'ChangeProposed') return { ...v, content: upgradeContent(v.content) };
-    if (isObject(v) && v.type === 'ProposalApproved') return withEditedHow(v);
-    return isObject(v) && v.type === 'RequestSent' ? withReplyTarget(withMentions(withTargets(v))) : v;
+    if (!isObject(v) || typeof v.type !== 'string') return v;
+    // Old outbox rows keep the short type in both the indexed column and the JSON payload.
+    const event = v.type.includes('.') ? v : { ...v, type: `Collaboration.${v.type}` };
+    if (event.type === 'Collaboration.SlashCommandStarted') return withGuideKind(event);
+    if (event.type === 'Collaboration.SlashCommandAnswered') return withNext(event);
+    if (event.type === 'Collaboration.SessionStarted') return withMode(event);
+    if (event.type === 'Collaboration.ChangeProposed') return { ...event, content: upgradeContent(event.content) };
+    if (event.type === 'Collaboration.ProposalApproved') return withEditedHow(event);
+    return event.type === 'Collaboration.RequestSent' ? withReplyTarget(withMentions(withTargets(event))) : event;
 }

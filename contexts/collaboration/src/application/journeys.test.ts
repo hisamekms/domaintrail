@@ -167,7 +167,7 @@ describe('the current journey', () => {
         expect(value(await use.sessionState({ session })).session.currentJourney as string | undefined).toBe('all');
         expect(value(await use.chooseJourney({ session, actor: facilitator })).currentJourney).toBeUndefined();
         const events = await use.eventsAfter({ session, cursor: 0, limit: 100 });
-        expect(events.map((e) => e.event.type).filter((x) => x === 'JourneyChosen')).toHaveLength(2);
+        expect(events.map((e) => e.event.type).filter((x) => x === 'Collaboration.JourneyChosen')).toHaveLength(2);
         const solo = await open('Solo');
         expect(value(await solo.use.chooseJourney({ session: solo.session, actor: facilitator, journey: all })).currentJourney as string | undefined).toBe(
             'all',

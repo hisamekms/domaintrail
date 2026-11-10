@@ -6,7 +6,7 @@ import { Sales, decide, ok } from '../../generated/domain/index.js';
 
 export const customerCommands: Sales.CustomerCommands = {
     register: decide<Sales.RegisterCustomerDecision>(Sales.CustomerShape, ({ id, name, email }) =>
-        ok({ Customer: { set: { id, name, email }, events: { CustomerRegistered: { type: 'CustomerRegistered', customerId: id } } } }),
+        ok({ Customer: { set: { id, name, email }, events: { 'Sales.CustomerRegistered': { type: 'Sales.CustomerRegistered', customerId: id } } } }),
     ),
 
     // `changes name` and no `emits`: renaming is not a fact other contexts react to.

@@ -86,23 +86,23 @@ describe('emits in the generated TypeScript', () => {
 const ev = <T extends string>(type: T, work: Tasks.Work) => ({ type, workId: work.id });
 
 export const commands: Tasks.WorkCommands = {
-    open: ({ id }) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { WorkOpened: { type: 'WorkOpened', workId: id }, ItemAdded: [] } } }),
+    open: ({ id }) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { 'Tasks.WorkOpened': { type: 'Tasks.WorkOpened', workId: id }, 'Tasks.ItemAdded': [] } } }),
     progress: (work, { at }) => {
         if (at.getTime() < 0) return err({ type: 'Tasks.NotReady' });
-        if (at.getTime() === 0) return ok({ InProgress: { aggregate: work, events: { StepRecorded: ev('StepRecorded', work) } } });
+        if (at.getTime() === 0) return ok({ InProgress: { aggregate: work, events: { 'Tasks.StepRecorded': ev('Tasks.StepRecorded', work) } } });
         return ok({
             Completed: {
                 aggregate: { ...work, state: 'Completed', completedAt: at },
-                events: { StepRecorded: ev('StepRecorded', work), WorkCompleted: ev('WorkCompleted', work) },
+                events: { 'Tasks.StepRecorded': ev('Tasks.StepRecorded', work), 'Tasks.WorkCompleted': ev('Tasks.WorkCompleted', work) },
             },
         });
     },
     cancel: decide<Tasks.CancelWorkDecision>(Tasks.WorkShape, {
-        Draft: (work) => ok({ Cancelled: { set: {}, events: { WorkCancelled: ev('WorkCancelled', work) } } }),
-        InProgress: (work) => ok({ Cancelled: { set: {}, events: { WorkCancelled: ev('WorkCancelled', work), RefundRequested: ev('RefundRequested', work) } } }),
+        Draft: (work) => ok({ Cancelled: { set: {}, events: { 'Tasks.WorkCancelled': ev('Tasks.WorkCancelled', work) } } }),
+        InProgress: (work) => ok({ Cancelled: { set: {}, events: { 'Tasks.WorkCancelled': ev('Tasks.WorkCancelled', work), 'Tasks.RefundRequested': ev('Tasks.RefundRequested', work) } } }),
     }),
-    add: (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [ev('ItemAdded', work)] } } }),
-    batch: (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [ev('ItemAdded', work), ev('ItemAdded', work)] } } }),
+    add: (work) => ok({ Draft: { aggregate: work, events: { 'Tasks.ItemAdded': [ev('Tasks.ItemAdded', work)] } } }),
+    batch: (work) => ok({ Draft: { aggregate: work, events: { 'Tasks.ItemAdded': [ev('Tasks.ItemAdded', work), ev('Tasks.ItemAdded', work)] } } }),
     start: (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: {} } }),
 };
 
@@ -114,7 +114,7 @@ if (r.ok) {
     const to: 'InProgress' | 'Completed' = o.to;
     if (o.to === 'Completed') {
         const done: Tasks.CompletedWork = o.aggregate;
-        const completed: Tasks.WorkCompleted = o.events.WorkCompleted;
+        const completed: Tasks.WorkCompleted = o.events['Tasks.WorkCompleted'];
     }
     const all: readonly (Tasks.StepRecorded | Tasks.WorkCompleted)[] = eventList(o.events);
     // @ts-expect-error not only steps
@@ -135,30 +135,30 @@ const events: readonly Tasks.WorkEvent[] = r.ok ? eventList(outcome(r.value).eve
     test('a wrong implementation is a compile error whose message names the event', async () => {
         const cases: Record<string, [string, string]> = {
             missing: [
-                `ok({ Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { StepRecorded: step(work) } } })`,
-                "Property 'WorkCompleted' is missing in type",
+                `ok({ Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { 'Tasks.StepRecorded': step(work) } } })`,
+                "Property ''Tasks.WorkCompleted'' is missing in type",
             ],
             wrongOutcome: [
-                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`,
-                "'WorkCompleted' does not exist in type",
+                `ok({ InProgress: { aggregate: work, events: { 'Tasks.StepRecorded': step(work), 'Tasks.WorkCompleted': done(work) } } })`,
+                "''Tasks.WorkCompleted'' does not exist in type",
             ],
             undeclared: [
-                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work), NoteChanged: { type: 'NoteChanged', workId: work.id } } } })`,
-                "'NoteChanged' does not exist in type",
+                `ok({ InProgress: { aggregate: work, events: { 'Tasks.StepRecorded': step(work), 'Tasks.NoteChanged': { type: 'Tasks.NoteChanged', workId: work.id } } } })`,
+                "''Tasks.NoteChanged'' does not exist in type",
             ],
             twoOutcomes: [
-                `ok({ InProgress: { aggregate: work, events: { StepRecorded: step(work) } }, Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { StepRecorded: step(work), WorkCompleted: done(work) } } })`,
+                `ok({ InProgress: { aggregate: work, events: { 'Tasks.StepRecorded': step(work) } }, Completed: { aggregate: { ...work, state: 'Completed', completedAt: at }, events: { 'Tasks.StepRecorded': step(work), 'Tasks.WorkCompleted': done(work) } } })`,
                 "Types of property 'Completed' are incompatible",
             ],
         };
-        const noEvents = `export const start: Tasks.StartWork = (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: { StepRecorded: step(work) } } });`;
-        const empty = `export const add: Tasks.AddWork = (work) => ok({ Draft: { aggregate: work, events: { ItemAdded: [] } } });`;
+        const noEvents = `export const start: Tasks.StartWork = (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: { 'Tasks.StepRecorded': step(work) } } });`;
+        const empty = `export const add: Tasks.AddWork = (work) => ok({ Draft: { aggregate: work, events: { 'Tasks.ItemAdded': [] } } });`;
         await writeFile(
             path.join(dir, 'src', 'wrong.ts'),
             [
                 `import { ok, type Tasks } from '../generated/index.js';`,
-                `const step = (w: Tasks.Work): Tasks.StepRecorded => ({ type: 'StepRecorded', workId: w.id });`,
-                `const done = (w: Tasks.Work): Tasks.WorkCompleted => ({ type: 'WorkCompleted', workId: w.id });`,
+                `const step = (w: Tasks.Work): Tasks.StepRecorded => ({ type: 'Tasks.StepRecorded', workId: w.id });`,
+                `const done = (w: Tasks.Work): Tasks.WorkCompleted => ({ type: 'Tasks.WorkCompleted', workId: w.id });`,
                 ...Object.entries(cases).map(([name, [body]]) => `export const ${name}: Tasks.ProgressWork = (work, { at }) => ${body};`),
                 noEvents,
                 empty,

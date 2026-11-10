@@ -916,7 +916,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     });
                     if (!decided.ok) return decided;
                     made = decided.value.Placed.aggregate;
-                    events.push(decided.value.Placed.events.MarkPlaced);
+                    events.push(decided.value.Placed.events['Collaboration.MarkPlaced']);
                 }
                 const removed: Collaboration.RemovedMark[] = [];
                 for (const mark of change.remove) {
@@ -926,7 +926,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     const { Removed } = decided(markCommands.remove(mark, { open: off.value, removedAt: at }));
                     stores.marks.save(Removed.aggregate);
                     removed.push(Removed.aggregate);
-                    events.unshift(Removed.events.MarkRemoved);
+                    events.unshift(Removed.events['Collaboration.MarkRemoved']);
                 }
                 if (made) stores.marks.save(made);
                 stores.outbox.append(session, events, at);

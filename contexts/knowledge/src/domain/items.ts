@@ -88,8 +88,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     retirement: undefined,
                 },
                 events: {
-                    KnowledgeItemAdded: {
-                        type: 'KnowledgeItemAdded',
+                    'Knowledge.KnowledgeItemAdded': {
+                        type: 'Knowledge.KnowledgeItemAdded',
                         itemId: id,
                         version: FIRST_VERSION,
                         conflictsWith: [],
@@ -125,8 +125,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     retirement: undefined,
                 },
                 events: {
-                    KnowledgeItemAdded: {
-                        type: 'KnowledgeItemAdded',
+                    'Knowledge.KnowledgeItemAdded': {
+                        type: 'Knowledge.KnowledgeItemAdded',
                         itemId: id,
                         version: FIRST_VERSION,
                         conflictsWith: [other],
@@ -153,8 +153,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { content: { ...item.content, labels }, sources: [...item.sources, source], updatedAt: at },
                     events: {
-                        KnowledgeSourceAdded: {
-                            type: 'KnowledgeSourceAdded',
+                        'Knowledge.KnowledgeSourceAdded': {
+                            type: 'Knowledge.KnowledgeSourceAdded',
                             itemId: item.id,
                             version: item.version,
                             // whether it raised the origin, for the audit log
@@ -179,14 +179,23 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 return ok({
                     Live: {
                         set: { content: revised, sources, version: item.version, updatedAt: at },
-                        events: { KnowledgeItemRewritten: { type: 'KnowledgeItemRewritten', itemId: item.id, version: item.version, by, ...why, at } },
+                        events: {
+                            'Knowledge.KnowledgeItemRewritten': {
+                                type: 'Knowledge.KnowledgeItemRewritten',
+                                itemId: item.id,
+                                version: item.version,
+                                by,
+                                ...why,
+                                at,
+                            },
+                        },
                     },
                 });
             const version = nextVersion(item.version);
             return ok({
                 Live: {
                     set: { content: revised, sources, version, updatedAt: at },
-                    events: { KnowledgeItemRevised: { type: 'KnowledgeItemRevised', itemId: item.id, version, by, ...why, at } },
+                    events: { 'Knowledge.KnowledgeItemRevised': { type: 'Knowledge.KnowledgeItemRevised', itemId: item.id, version, by, ...why, at } },
                 },
             });
         },
@@ -209,8 +218,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { conflictsWith, updatedAt: at },
                     events: {
-                        KnowledgeConflictLinked: {
-                            type: 'KnowledgeConflictLinked',
+                        'Knowledge.KnowledgeConflictLinked': {
+                            type: 'Knowledge.KnowledgeConflictLinked',
                             itemId: item.id,
                             version: item.version,
                             other,
@@ -234,7 +243,14 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { conflictsWith, updatedAt: at },
                     events: {
-                        KnowledgeConflictUnlinked: { type: 'KnowledgeConflictUnlinked', itemId: item.id, version: item.version, other, by, at },
+                        'Knowledge.KnowledgeConflictUnlinked': {
+                            type: 'Knowledge.KnowledgeConflictUnlinked',
+                            itemId: item.id,
+                            version: item.version,
+                            other,
+                            by,
+                            at,
+                        },
                     },
                 },
             });
@@ -251,7 +267,15 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { content: { ...item.content, about }, conflictsWith: item.conflictsWith.filter((id) => id !== other), updatedAt: at },
                     events: {
-                        KnowledgeHandedOverToHotspot: { type: 'KnowledgeHandedOverToHotspot', itemId: item.id, version: item.version, hotspot, other, by, at },
+                        'Knowledge.KnowledgeHandedOverToHotspot': {
+                            type: 'Knowledge.KnowledgeHandedOverToHotspot',
+                            itemId: item.id,
+                            version: item.version,
+                            hotspot,
+                            other,
+                            by,
+                            at,
+                        },
                     },
                 },
             });
@@ -264,7 +288,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
             return ok({
                 Live: {
                     set: { content: corrected, version, updatedAt: at },
-                    events: { KnowledgeItemCorrected: { type: 'KnowledgeItemCorrected', itemId: item.id, version, by, at } },
+                    events: { 'Knowledge.KnowledgeItemCorrected': { type: 'Knowledge.KnowledgeItemCorrected', itemId: item.id, version, by, at } },
                 },
             });
         },
@@ -276,8 +300,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { bookmarked: bookmarked ? true : undefined },
                     events: {
-                        KnowledgeBookmarkChanged: {
-                            type: 'KnowledgeBookmarkChanged',
+                        'Knowledge.KnowledgeBookmarkChanged': {
+                            type: 'Knowledge.KnowledgeBookmarkChanged',
                             itemId: item.id,
                             version: item.version,
                             bookmarked,
@@ -311,8 +335,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { retirement, updatedAt: at },
                     events: {
-                        KnowledgeItemRetired: {
-                            type: 'KnowledgeItemRetired',
+                        'Knowledge.KnowledgeItemRetired': {
+                            type: 'Knowledge.KnowledgeItemRetired',
                             itemId: item.id,
                             version: item.version,
                             ...(reason && { reason }),
@@ -335,8 +359,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { retirement: undefined, updatedAt: at },
                     events: {
-                        KnowledgeItemUnretired: {
-                            type: 'KnowledgeItemUnretired',
+                        'Knowledge.KnowledgeItemUnretired': {
+                            type: 'Knowledge.KnowledgeItemUnretired',
                             itemId: item.id,
                             version: item.version,
                             ...(proposal && { proposal }),
@@ -354,13 +378,18 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
             ok({
                 Deleted: {
                     set: { deletedBy: by, deletedAt: at, bookmarked: undefined },
-                    events: { KnowledgeItemDeleted: { type: 'KnowledgeItemDeleted', itemId: item.id, version: item.version, by, at } },
+                    events: { 'Knowledge.KnowledgeItemDeleted': { type: 'Knowledge.KnowledgeItemDeleted', itemId: item.id, version: item.version, by, at } },
                 },
             }),
     }),
 
     restore: decide<Knowledge.RestoreKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Deleted: (item, { by, at }) =>
-            ok({ Live: { set: {}, events: { KnowledgeItemRestored: { type: 'KnowledgeItemRestored', itemId: item.id, version: item.version, by, at } } } }),
+            ok({
+                Live: {
+                    set: {},
+                    events: { 'Knowledge.KnowledgeItemRestored': { type: 'Knowledge.KnowledgeItemRestored', itemId: item.id, version: item.version, by, at } },
+                },
+            }),
     }),
 };

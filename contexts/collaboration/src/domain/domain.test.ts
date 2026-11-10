@@ -312,8 +312,8 @@ describe('transitions', () => {
     test('finish completes a run that meets the success rule and fails one that does not, with its report', () => {
         const done = value(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: true, finishedAt: later }));
         expect(done.Completed?.aggregate).toMatchObject({ state: 'Completed', resultRevision: result, changed: true, baseRevision: base });
-        expect(done.Completed?.events.RunCompleted).toEqual({
-            type: 'RunCompleted',
+        expect(done.Completed?.events['Collaboration.RunCompleted']).toEqual({
+            type: 'Collaboration.RunCompleted',
             runId: running.id,
             resultRevision: result,
             changed: true,
@@ -408,7 +408,7 @@ describe('transitions', () => {
         });
         const restored = value(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Facilitator' })).Recorded;
         expect(restored.aggregate.origin).toEqual({ kind: 'Restored', restoredFrom: base, preRestore: result });
-        expect(restored.events.RevisionRestored).toMatchObject({ restoredFrom: base, preRestore: result });
+        expect(restored.events['Collaboration.RevisionRestored']).toMatchObject({ restoredFrom: base, preRestore: result });
     });
 });
 

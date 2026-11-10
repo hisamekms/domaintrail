@@ -466,7 +466,7 @@ class TestsEmitter {
                 case 'event':
                     add(
                         el.name,
-                        `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${this.record([`type: fc.constant('${el.name}' as const)`], el.fields)})`,
+                        `given.${el.name} ?? testing.cast<${this.type(el.name)}>(${this.record([`type: fc.constant('${el.id}' as const)`], el.fields)})`,
                     );
                     break;
                 case 'enum':
@@ -593,10 +593,9 @@ class TestsEmitter {
         const declaredReqs = c.requires.filter((r) => !r.expr).map((r) => `'${r.name}'`);
         const invs = aggregateInvariants(agg);
         const declaredInvs = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
-        const simple = (q: string): string => q.slice(q.indexOf('.') + 1);
         const emits = c.emits.filter(counted).map((e) => {
             const parts = [
-                `key: '${simple(e.event)}'`,
+                `key: '${e.event}'`,
                 `lower: ${e.lower}`,
                 ...(e.upper !== undefined ? [`upper: ${e.upper}`] : []),
                 `from: [${(e.when?.from ?? []).map((s) => `'${s}'`).join(', ')}]`,
@@ -658,7 +657,7 @@ class TestsEmitter {
                 .filter(counted)
                 .map(
                     (e) =>
-                        `{ key: '${e.event.slice(e.event.indexOf('.') + 1)}', lower: ${e.lower}, ${e.upper !== undefined ? `upper: ${e.upper}, ` : ''}from: [${o.from.map((s) => `'${s}'`).join(', ')}], to: ['${o.name}'] }`,
+                        `{ key: '${e.event}', lower: ${e.lower}, ${e.upper !== undefined ? `upper: ${e.upper}, ` : ''}from: [${o.from.map((s) => `'${s}'`).join(', ')}], to: ['${o.name}'] }`,
                 ),
         );
         return [

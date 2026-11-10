@@ -213,7 +213,17 @@ export const triageCommands: Collaboration.TriageCommands = {
         return ok({
             Pending: {
                 set: { id, session, request, addressedBy, addressedByParticipant, steps: [], openedAt },
-                events: { TriageOpened: { type: 'TriageOpened', triageId: id, session, request, addressedBy, addressedByParticipant, openedAt } },
+                events: {
+                    'Collaboration.TriageOpened': {
+                        type: 'Collaboration.TriageOpened',
+                        triageId: id,
+                        session,
+                        request,
+                        addressedBy,
+                        addressedByParticipant,
+                        openedAt,
+                    },
+                },
             },
         });
     }),
@@ -230,15 +240,21 @@ export const triageCommands: Collaboration.TriageCommands = {
         }
         const { step, recordedAt } = params;
         const steps = [...triage.steps, step];
-        const recorded: Collaboration.TriageStepRecorded = { type: 'TriageStepRecorded', triageId: triage.id, step };
+        const recorded: Collaboration.TriageStepRecorded = { type: 'Collaboration.TriageStepRecorded', triageId: triage.id, step };
         const kind = decisionOf(step);
-        if (kind === undefined) return ok({ Pending: { set: { steps }, events: { TriageStepRecorded: recorded } } });
+        if (kind === undefined) return ok({ Pending: { set: { steps }, events: { 'Collaboration.TriageStepRecorded': recorded } } });
         return ok({
             Decided: {
                 set: { steps, kind, decidedBy: step.stage, decidedAt: recordedAt, outcome: undefined },
                 events: {
-                    TriageStepRecorded: recorded,
-                    TriageDecided: { type: 'TriageDecided', triageId: triage.id, kind, decidedBy: step.stage, decidedAt: recordedAt },
+                    'Collaboration.TriageStepRecorded': recorded,
+                    'Collaboration.TriageDecided': {
+                        type: 'Collaboration.TriageDecided',
+                        triageId: triage.id,
+                        kind,
+                        decidedBy: step.stage,
+                        decidedAt: recordedAt,
+                    },
                 },
             },
         });
@@ -251,7 +267,7 @@ export const triageCommands: Collaboration.TriageCommands = {
             return ok({
                 Decided: {
                     set: { steps: [...triage.steps, step], kind: step.verdict, decidedBy: step.stage, decidedAt: overriddenAt },
-                    events: { TriageOverridden: { type: 'TriageOverridden', triageId: triage.id, step, kind: step.verdict } },
+                    events: { 'Collaboration.TriageOverridden': { type: 'Collaboration.TriageOverridden', triageId: triage.id, step, kind: step.verdict } },
                 },
             });
         },
@@ -279,7 +295,7 @@ export const triageCommands: Collaboration.TriageCommands = {
                         decidedBy: 'Facilitator',
                         decidedAt: readdressedAt,
                     },
-                    events: { TriageReaddressed: { type: 'TriageReaddressed', triageId: triage.id, by, readdressedAt } },
+                    events: { 'Collaboration.TriageReaddressed': { type: 'Collaboration.TriageReaddressed', triageId: triage.id, by, readdressedAt } },
                 },
             });
         },
@@ -294,7 +310,12 @@ export const triageCommands: Collaboration.TriageCommands = {
                     return err({ type: 'Collaboration.TriageNotConcludable' });
             }
             const { to, concludedAt } = params;
-            return ok({ Decided: { set: { outcome: to }, events: { TriageConcluded: { type: 'TriageConcluded', triageId: triage.id, to, concludedAt } } } });
+            return ok({
+                Decided: {
+                    set: { outcome: to },
+                    events: { 'Collaboration.TriageConcluded': { type: 'Collaboration.TriageConcluded', triageId: triage.id, to, concludedAt } },
+                },
+            });
         },
     }),
 };
