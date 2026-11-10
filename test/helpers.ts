@@ -48,7 +48,14 @@ export function only(a: Analysis, code: string): Diagnostic[] {
 
 export async function tempCopyOfExamples(): Promise<string> {
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-'));
-    await cp(EXAMPLES, dir, { recursive: true, filter: (src) => !src.includes(`${path.sep}generated`) && !src.includes(`${path.sep}.dt`) });
+    await cp(EXAMPLES, dir, {
+        recursive: true,
+        filter: (src) =>
+            !path
+                .relative(EXAMPLES, src)
+                .split(path.sep)
+                .some((part) => part === 'generated' || part === '.dt'),
+    });
     return dir;
 }
 

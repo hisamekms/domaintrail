@@ -1569,7 +1569,8 @@ export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<st
             const choices = verify.choices(...args);
             const selected = Object.keys(r.value as object).filter((name) => (r.value as Record<string, unknown>)[name] !== undefined);
             const trueNames = names.filter((name) => choices[name]);
-            if (selected.length !== 1 || !names.includes(selected[0]) || trueNames.length !== 1 || trueNames[0] !== selected[0])
+            const selectedName = selected[0];
+            if (selectedName === undefined || selected.length !== 1 || !names.includes(selectedName) || trueNames.length !== 1 || trueNames[0] !== selectedName)
                 throw new Error('DomainTrail choice contract violated: expected exactly one applicable selected outcome.');
         }
         const value: Record<string, unknown> = {};
@@ -1600,7 +1601,7 @@ export const sameOptional = <T>(a: T | undefined, b: T | undefined, same: (x: T,
 
 /** Whether two lists are equal: the same length, and equal by \`same\` element by element (for generated checks). */
 export const sameList = <T>(a: readonly T[], b: readonly T[], same: (x: T, y: T) => boolean): boolean =>
-    a.length === b.length && a.every((x, i) => same(x, b[i]));
+    a.length === b.length && a.every((x, i) => same(x, b[i]!));
 
 /** Whether no two elements of a list are equal by \`same\`: \`unique(…)\` of the DSL (for generated checks). */
 export const distinct = <T>(xs: readonly T[], same: (x: T, y: T) => boolean): boolean =>
@@ -1624,7 +1625,7 @@ export function decimalCompare(a: string, b: string): -1 | 0 | 1 {
     const parts = (v: string) => {
         const negative = v.startsWith('-');
         const [whole, fraction = ''] = (negative ? v.slice(1) : v).split('.');
-        return { negative, whole: whole.replace(/^0+/, '') || '0', fraction: fraction.replace(/0+$/, '') };
+        return { negative, whole: (whole ?? '').replace(/^0+/, '') || '0', fraction: fraction.replace(/0+$/, '') };
     };
     const x = parts(a), y = parts(b);
     const zero = (v: typeof x) => v.whole === '0' && v.fraction === '';
