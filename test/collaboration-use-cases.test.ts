@@ -184,10 +184,12 @@ describe('sessions and requests', () => {
         });
         // several targets: at most 20, each once, and never the whole workspace (which is no target at all)
         const many = Array.from({ length: 21 }, (_, i) => element(`Sales.E${i}`));
-        expect(error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: many, body: text('x') }))).toEqual({ type: 'TooManyTargets' });
+        expect(error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: many, body: text('x') }))).toEqual({
+            type: 'Collaboration.TooManyTargets',
+        });
         expect(
             error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [element('Sales.Order'), element('Sales.Order')], body: text('x') })),
-        ).toEqual({ type: 'DuplicateTarget' });
+        ).toEqual({ type: 'Collaboration.DuplicateTarget' });
         expect(
             error(
                 await s.use.sendRequest({
@@ -197,20 +199,20 @@ describe('sessions and requests', () => {
                     body: text('x'),
                 }),
             ),
-        ).toEqual({ type: 'WorkspaceTarget' });
+        ).toEqual({ type: 'Collaboration.WorkspaceTarget' });
         const two = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: many.slice(0, 20), body: text('x') }));
         expect(two.targets).toHaveLength(20);
         const target: readonly C.TargetSnapshot[] = [];
         const sent = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: target, body: text('x') }));
         await dismissedBefore(s, sent);
         expect(error(await s.use.queueRun({ session: id, requests: [sent.id], actor: actor(facilitator) }))).toEqual({
-            type: 'RequestAlreadyDismissed',
+            type: 'Collaboration.RequestAlreadyDismissed',
             request: sent.id,
         });
         expect(error(await s.use.queueRun({ session: id, requests: [], actor: actor(facilitator) }))).toEqual({ type: 'NoRequests' });
         value(await s.use.closeSession({ session: id, actor: actor(facilitator) }));
         expect(error(await s.use.sendRequest({ session: id, actor: actor(guest), targets: target, body: text('x') }))).toEqual({
-            type: 'SessionAlreadyClosed',
+            type: 'Collaboration.SessionAlreadyClosed',
         });
     });
 
@@ -226,9 +228,13 @@ describe('sessions and requests', () => {
         await dismissedBefore(s, stored);
         const state = value(await s.use.sessionState({ session: id }));
         expect(state.runs[0]).toEqual(run);
-        expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(facilitator) }))).toMatchObject({ type: 'RequestAlreadyDismissed' });
+        expect(error(await s.use.queueRun({ session: id, requests: [request], actor: actor(facilitator) }))).toMatchObject({
+            type: 'Collaboration.RequestAlreadyDismissed',
+        });
         const again = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: run.input.requests[0].targets, body: text('y') }));
-        expect(error(await s.use.queueRun({ session: id, requests: [again.id, again.id], actor: actor(facilitator) }))).toEqual({ type: 'DuplicateRequest' });
+        expect(error(await s.use.queueRun({ session: id, requests: [again.id, again.id], actor: actor(facilitator) }))).toEqual({
+            type: 'Collaboration.DuplicateRequest',
+        });
     });
 });
 
@@ -384,7 +390,7 @@ describe('agent replies', () => {
         const before = value(await s.use.sessionState({ session: id })).revisions.length;
         await s.write('sales/sales.dt', SALES.replace('    command confirm()', '    command cancel()\n      Draft -> Draft\n\n    command confirm()'));
         expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request: stranger, status: 'done' }] }) }))).toEqual({
-            type: 'InvalidReply',
+            type: 'Collaboration.InvalidReply',
         });
         expect(value(await s.use.sessionState({ session: id })).revisions).toHaveLength(before);
         const kept = reply({
@@ -412,9 +418,9 @@ describe('agent replies', () => {
             requests: [{ request, status: 'question' }],
             questions: [{ id: 'q1', text: 'Which state?', requests: [request], options: [{ id: 'draft', label: 'Draft' }], multiple: false }],
         });
-        expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: asking }))).toEqual({ type: 'InvalidReply' });
+        expect(error(await s.use.finishRun({ run: run.id, token, facts, reply: asking }))).toEqual({ type: 'Collaboration.InvalidReply' });
         expect(error(await s.use.askClarification({ run: run.id, token, question: text('Which?'), reply: reply({ requests: [] }) }))).toEqual({
-            type: 'InvalidReply',
+            type: 'Collaboration.InvalidReply',
         });
         const asked = value(await s.use.askClarification({ run: run.id, token, question: text('Which state?'), reply: asking }));
         expect(asked.run).toMatchObject({ state: 'NeedsClarification', question: 'Which state?', reply: asking });
@@ -519,7 +525,7 @@ describe('agent replies', () => {
                 pick: { pickOf: of, assumption: tally(assumption), alternative: key(alternative) },
             });
         // not completed yet: nothing to pick
-        expect(error(await pickOf(run.id))).toEqual({ type: 'RunNotPickable', run: run.id });
+        expect(error(await pickOf(run.id))).toEqual({ type: 'Collaboration.RunNotPickable', run: run.id });
         const assumptions = [
             { text: 'Only drafts.', requests: [request], alternatives: [] },
             {
@@ -534,15 +540,15 @@ describe('agent replies', () => {
         value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
 
         const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ee');
-        expect(error(await pickOf(unknown))).toEqual({ type: 'RunNotFound', run: unknown });
+        expect(error(await pickOf(unknown))).toEqual({ type: 'Collaboration.RunNotFound', run: unknown });
         // an assumption or an alternative the reply does not have
-        expect(error(await pickOf(run.id, 2))).toEqual({ type: 'AlternativeNotFound', run: run.id });
-        expect(error(await pickOf(run.id, 0, 'any'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
-        expect(error(await pickOf(run.id, 1, 'other'))).toEqual({ type: 'AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 2))).toEqual({ type: 'Collaboration.AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 0, 'any'))).toEqual({ type: 'Collaboration.AlternativeNotFound', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'other'))).toEqual({ type: 'Collaboration.AlternativeNotFound', run: run.id });
         // the requests queued again are the run's, no fewer and no more
         const other = value(await s.use.sendRequest({ session: id, actor: actor(guest), targets: [], body: text('Also rename it.') }));
-        expect(error(await pickOf(run.id, 1, 'any', [request, other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
-        expect(error(await pickOf(run.id, 1, 'any', [other.id]))).toEqual({ type: 'PickMismatch', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'any', [request, other.id]))).toEqual({ type: 'Collaboration.PickMismatch', run: run.id });
+        expect(error(await pickOf(run.id, 1, 'any', [other.id]))).toEqual({ type: 'Collaboration.PickMismatch', run: run.id });
         expect(value(await s.use.sessionState({ session: id })).runs).toHaveLength(1);
 
         const next = value(await pickOf(run.id));
@@ -558,7 +564,7 @@ describe('agent replies', () => {
         expect(previous.map((p) => p.run.id)).toEqual([run.id]);
         expect(previous[0].changes.kind).toBe('diff');
         // a run that did not complete (queued) cannot be picked from
-        expect(error(await pickOf(next.id))).toEqual({ type: 'RunNotPickable', run: next.id });
+        expect(error(await pickOf(next.id))).toEqual({ type: 'Collaboration.RunNotPickable', run: next.id });
     });
 
     test("a pick of another session's run is refused", async () => {
@@ -570,7 +576,7 @@ describe('agent replies', () => {
         const mine = value(await s.use.sendRequest({ session: second, actor: actor(guest), targets: [], body: text('Again.') }));
         const pick = { pickOf: run.id, assumption: value(C.makeTally(0)), alternative: value(C.makeReplyKey('all')) };
         expect(error(await s.use.queueRun({ session: second, requests: [mine.id], actor: actor(facilitator), pick }))).toEqual({
-            type: 'RunOfAnotherSession',
+            type: 'Collaboration.RunOfAnotherSession',
             run: run.id,
         });
     });
@@ -588,7 +594,7 @@ describe('agent replies', () => {
                 pick: { pickOf: run.id, assumption: tally(assumption), alternative: value(C.makeReplyKey(alternative)) },
             });
         // not completed yet: nothing to approve
-        expect(error(await approve(run.id, 0))).toEqual({ type: 'RunNotApprovable', run: run.id });
+        expect(error(await approve(run.id, 0))).toEqual({ type: 'Collaboration.RunNotApprovable', run: run.id });
         const assumptions = [
             { text: 'Only drafts.', requests: [request], alternatives: [{ id: 'any', label: 'Any state' }] },
             { text: 'Cancel keeps the order.', requests: [request], alternatives: [{ id: 'delete', label: 'Delete it' }] },
@@ -596,9 +602,9 @@ describe('agent replies', () => {
         value(await s.use.finishRun({ run: run.id, token, facts, reply: reply({ requests: [{ request, status: 'done' }], assumptions }) }));
 
         const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ee');
-        expect(error(await approve(unknown, 0))).toEqual({ type: 'RunNotFound', run: unknown });
-        expect(error(await approve(run.id, 2))).toEqual({ type: 'AssumptionNotFound', run: run.id });
-        expect(error(await approve(run.id, 0, guest))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await approve(unknown, 0))).toEqual({ type: 'Collaboration.RunNotFound', run: unknown });
+        expect(error(await approve(run.id, 2))).toEqual({ type: 'Collaboration.AssumptionNotFound', run: run.id });
+        expect(error(await approve(run.id, 0, guest))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
 
         const before = value(await s.use.sessionState({ session: id }));
         const approval = value(await approve(run.id, 0));
@@ -611,8 +617,8 @@ describe('agent replies', () => {
         expect(events.at(-1)?.event).toMatchObject({ type: 'AssumptionApproved', approvalId: approval.id, assumption: { run: run.id, assumption: 0 } });
 
         // one decision per assumption: approved once, and not sent again with an alternative
-        expect(error(await approve(run.id, 0))).toEqual({ type: 'AssumptionClosed', run: run.id });
-        expect(error(await pickOf(0, 'any'))).toEqual({ type: 'AssumptionClosed', run: run.id });
+        expect(error(await approve(run.id, 0))).toEqual({ type: 'Collaboration.AssumptionClosed', run: run.id });
+        expect(error(await pickOf(0, 'any'))).toEqual({ type: 'Collaboration.AssumptionClosed', run: run.id });
         // the votes of the approved assumption close; those of the other stay open
         const vote = (assumption: number) =>
             s.use.setMark({
@@ -622,11 +628,11 @@ describe('agent replies', () => {
                 sign: { kind: 'Vote' },
                 placed: true,
             });
-        expect(error(await vote(0))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await vote(0))).toEqual({ type: 'Collaboration.MarkTargetClosed' });
         value(await vote(1));
         // the other assumption picked: a later run took over the run's requests, so nothing of it can be approved now
         value(await pickOf(1, 'delete'));
-        expect(error(await approve(run.id, 1))).toEqual({ type: 'AssumptionClosed', run: run.id });
+        expect(error(await approve(run.id, 1))).toEqual({ type: 'Collaboration.AssumptionClosed', run: run.id });
     });
 
     test("an approval of another session's run is refused", async () => {
@@ -637,11 +643,13 @@ describe('agent replies', () => {
         const { id: second } = await started(s);
         const assumption = { run: run.id, assumption: value(C.makeTally(0)) };
         expect(error(await s.use.approveAssumption({ session: second, actor: actor(facilitator), assumption }))).toEqual({
-            type: 'RunOfAnotherSession',
+            type: 'Collaboration.RunOfAnotherSession',
             run: run.id,
         });
         // nor in a closed session
-        expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption }))).toEqual({ type: 'SessionAlreadyClosed' });
+        expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption }))).toEqual({
+            type: 'Collaboration.SessionAlreadyClosed',
+        });
     });
 });
 
@@ -691,14 +699,14 @@ describe('revisions', () => {
         const { id, start } = await started(s);
         await s.write('sales/sales.dt', `${SALES}\n`);
         expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
-            type: 'ExternalChangesSinceSnapshot',
+            type: 'Collaboration.ExternalChangesSinceSnapshot',
             paths: [value(C.makeWorkspacePath('sales/sales.dt'))],
         });
         value(await s.use.takeRevision({ session: id, actor: actor(facilitator) }));
 
         await symlink(path.join(s.root, 'sales'), path.join(s.root, 'linked'));
         expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
-            type: 'SymlinkInWorkspace',
+            type: 'Collaboration.SymlinkInWorkspace',
             path: value(C.makeWorkspacePath('linked')),
         });
         await rm(path.join(s.root, 'linked'));
@@ -713,7 +721,7 @@ describe('revisions', () => {
         expect(
             error(await s.use.restoreRevision({ session: id, revision: knownRevisionId('00000000-0000-4000-8000-999999999999'), actor: actor(facilitator) })),
         ).toMatchObject({
-            type: 'RevisionNotFound',
+            type: 'Collaboration.RevisionNotFound',
         });
         value(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
         expect(await s.read('sales/sales.dt')).toBe(SALES);
@@ -777,7 +785,7 @@ describe('revisions', () => {
         const byHand = `${edited}\n// by hand\n`;
         await s.write('sales/sales.dt', byHand);
         expect(error(await s.use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
-            type: 'ExternalChangesSinceSnapshot',
+            type: 'Collaboration.ExternalChangesSinceSnapshot',
             paths: [value(C.makeWorkspacePath('sales/sales.dt'))],
         });
         expect(await s.read('sales/sales.dt')).toBe(byHand);
@@ -795,7 +803,7 @@ describe('revisions', () => {
         const ops = await s.use.restoreOperations({ session: id });
         expect(ops.map((o) => [o.result, o.reason, o.manual, o.preRestore, o.restored])).toEqual([
             ['Refused', 'RunInProgress', undefined, undefined, undefined],
-            ['Refused', 'ExternalChangesSinceSnapshot', undefined, undefined, undefined],
+            ['Refused', 'Collaboration.ExternalChangesSinceSnapshot', undefined, undefined, undefined],
             ['Restored', undefined, manual?.id, preRestore.id, restored.id],
         ]);
     });
@@ -809,7 +817,7 @@ describe('revisions', () => {
         const use = createCollaboration(narrow);
         value(await use.takeRevision({ session: id, actor: actor(facilitator) }));
         const refused = error(await use.restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }));
-        expect(refused).toEqual({ type: 'PathOutsideRoot', path: 'stormings/returns.dtes' });
+        expect(refused).toEqual({ type: 'Collaboration.PathOutsideRoot', path: 'stormings/returns.dtes' });
         expect(await s.read('stormings/returns.dtes')).toBe(RETURNS);
 
         // a link appears between the checks and the write: the writer refuses before writing anything
@@ -827,14 +835,14 @@ describe('revisions', () => {
             },
         };
         expect(error(await createCollaboration(racing).restoreRevision({ session: id, revision: start.id, actor: actor(facilitator) }))).toEqual({
-            type: 'SymlinkInWorkspace',
+            type: 'Collaboration.SymlinkInWorkspace',
             path: value(C.makeWorkspacePath('linked')),
         });
         expect(await s.read('sales/sales.dt')).toBe(`${SALES}\n`);
         const ops = await s.use.restoreOperations({ session: id });
         expect(ops.map((o) => [o.result, o.reason, o.preRestore !== undefined])).toEqual([
-            ['Refused', 'PathOutsideRoot', true],
-            ['Refused', 'SymlinkInWorkspace', true],
+            ['Refused', 'Collaboration.PathOutsideRoot', true],
+            ['Refused', 'Collaboration.SymlinkInWorkspace', true],
         ]);
     });
 
@@ -878,7 +886,7 @@ describe('revisions', () => {
         // the workspace differs from the last revision now: the two-step records it and restores the pre-restore one
         const pre = preRestore?.id ?? start.id;
         expect(error(await s.use.restoreRevision({ session: id, revision: pre, actor: actor(facilitator) }))).toMatchObject({
-            type: 'ExternalChangesSinceSnapshot',
+            type: 'Collaboration.ExternalChangesSinceSnapshot',
         });
         value(await s.use.restoreRevision({ session: id, revision: pre, actor: actor(facilitator), recordExternalChanges: true }));
         expect(await s.read('sales/sales.dt')).toBe(edited);
@@ -951,7 +959,7 @@ describe('revisions', () => {
 
         const other = value(await s.use.startSession({ facilitator, name })).revision;
         expect(error(await s.use.compareRevisions({ session: id, before: start.id, after: other.id }))).toEqual({
-            type: 'RevisionOfAnotherSession',
+            type: 'Collaboration.RevisionOfAnotherSession',
             revision: other.id,
         });
     });
@@ -981,7 +989,7 @@ describe('revisions', () => {
         expect(validated).toBe(2);
         const other = value(await s.use.startSession({ facilitator, name })).revision;
         expect(error(await counting.modelChanges({ session: id, before: start.id, after: other.id }))).toEqual({
-            type: 'RevisionOfAnotherSession',
+            type: 'Collaboration.RevisionOfAnotherSession',
             revision: other.id,
         });
     });
@@ -1106,7 +1114,9 @@ describe('reverting a run', () => {
         const before = value(await s.use.sessionState({ session: id }));
 
         // the facilitator's only: nothing is sent, queued or recorded for anyone else
-        expect(error(await s.use.requestRevert({ session: id, actor: actor(guest), run: first.id, body: revertBody }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await s.use.requestRevert({ session: id, actor: actor(guest), run: first.id, body: revertBody }))).toEqual({
+            type: 'Collaboration.FacilitatorOnly',
+        });
         expect(value(await s.use.sessionState({ session: id }))).toEqual(before);
 
         // asked: a request and a run queued like any other, nothing written yet
@@ -1142,7 +1152,7 @@ describe('reverting a run', () => {
         // reverted once: the assumptions of the run are closed, its votes too, and it is not reverted again
         const tally = (n: number): C.Tally => value(C.makeTally(n));
         expect(error(await s.use.approveAssumption({ session: id, actor: actor(facilitator), assumption: { run: first.id, assumption: tally(0) } }))).toEqual({
-            type: 'AssumptionClosed',
+            type: 'Collaboration.AssumptionClosed',
             run: first.id,
         });
         expect(
@@ -1155,9 +1165,9 @@ describe('reverting a run', () => {
                     placed: true,
                 }),
             ),
-        ).toEqual({ type: 'MarkTargetClosed' });
+        ).toEqual({ type: 'Collaboration.MarkTargetClosed' });
         expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
-            type: 'RunNotRevertable',
+            type: 'Collaboration.RunNotRevertable',
             run: first.id,
         });
         // the revert is a unit of work of its own: reverted in turn, the run's changes are back
@@ -1207,7 +1217,7 @@ describe('reverting a run', () => {
         expect(error(await serverTurn(s, id))).toEqual({ type: 'NothingQueued' });
         // under way: not asked twice
         expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
-            type: 'RunNotRevertable',
+            type: 'Collaboration.RunNotRevertable',
             run: first.id,
         });
 
@@ -1233,7 +1243,7 @@ describe('reverting a run', () => {
         const reply = toAgentReply({ outcome: 'done', summary: 'Reverted.', requests: [{ request: req, status: 'done' }], questions: [], assumptions: [] });
         expect(value(await s.use.finishRun({ run: requested.run.id, token: lease.token, facts, reply })).run.state).toBe('Completed');
         expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
-            type: 'RunNotRevertable',
+            type: 'Collaboration.RunNotRevertable',
             run: first.id,
         });
     });
@@ -1297,13 +1307,13 @@ describe('reverting a run', () => {
         expect(await s.read('sales/sales.dt')).toBe(SALES_F);
         // the run counts as reverted (its changes are gone): its assumptions are closed, it is not asked again
         expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: first.id, body: revertBody }))).toEqual({
-            type: 'RunNotRevertable',
+            type: 'Collaboration.RunNotRevertable',
             run: first.id,
         });
         // a run without changes is not reverted
         const unchanged = await completed(s, id, async () => {});
         expect(error(await s.use.requestRevert({ session: id, actor: actor(facilitator), run: unchanged.id, body: revertBody }))).toEqual({
-            type: 'RunNotRevertable',
+            type: 'Collaboration.RunNotRevertable',
             run: unchanged.id,
         });
     });
@@ -1358,7 +1368,7 @@ describe('reverting a run', () => {
 });
 
 describe('who may do what (ADR 0027): the actor of every use case, the rules in the commands', () => {
-    const FACILITATOR_ONLY: C.FacilitatorOnly = { type: 'FacilitatorOnly' };
+    const FACILITATOR_ONLY: C.FacilitatorOnly = { type: 'Collaboration.FacilitatorOnly' };
 
     test('only the facilitator queues, cancels, takes, restores and closes; nothing changes on a refusal', async () => {
         const s = await session();
@@ -1379,7 +1389,9 @@ describe('who may do what (ADR 0027): the actor of every use case, the rules in 
         // the restore was refused before the workspace was read: no revision recorded on the way, nothing written
         expect(await s.read('sales/sales.dt')).toContain('state Cancelled');
         expect(await s.use.eventsAfter({ session: id, cursor: 0, limit: 1000 })).toEqual(before);
-        expect((await s.use.restoreOperations({ session: id })).map((o) => [o.by, o.result, o.reason])).toEqual([[guest, 'Refused', 'FacilitatorOnly']]);
+        expect((await s.use.restoreOperations({ session: id })).map((o) => [o.by, o.result, o.reason])).toEqual([
+            [guest, 'Refused', 'Collaboration.FacilitatorOnly'],
+        ]);
         const state = value(await s.use.sessionState({ session: id }));
         expect([state.session.state, state.runs.map((r) => r.state), state.revisions.map((r) => [r.origin.kind, r.state])]).toEqual([
             'Open',

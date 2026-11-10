@@ -845,7 +845,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (open?.state !== 'Open') throw new Error(`Session ${session} is no longer open`);
                 const at = clock.now();
                 const joined = sessionCommands.join(open, { participant, name, joinedAt: at });
-                if (!joined.ok) return joined.error.type === 'SoloSession' ? err(joined.error) : ok({ session: open, joined: false });
+                if (!joined.ok) return joined.error.type === 'Collaboration.SoloSession' ? err(joined.error) : ok({ session: open, joined: false });
                 stores.sessions.save(joined.value.Open.aggregate);
                 publish(stores, session, joined.value.Open.events, at);
                 return ok({ session: joined.value.Open.aggregate, joined: true });
@@ -882,7 +882,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 if (!stores.sessions.load(session)?.participants.some((p) => p.id === participant)) return err({ type: 'NotAParticipant', participant });
                 // a step of the guide is the facilitator's to mark and to clear (the place command refuses placing; this
                 // refuses taking off too, whoever placed it)
-                if (sign.kind === 'Done' && role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+                if (sign.kind === 'Done' && role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
                 const open = await verify.makeOpenMarkTarget(target, session);
                 if (!open.ok) return open;
                 const runs = stores.runs.listBySession(session);
@@ -903,7 +903,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                             sign,
                         )
                     )
-                        return err({ type: 'ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
+                        return err({ type: 'Collaboration.ReactionLimitReached', limit: tally(MAX_REACTION_EMOJI) });
                     // decided before anything is removed: a refused mark changes nothing
                     const decided = markCommands.place({
                         id: knownMarkId(ids.newId()),
@@ -951,12 +951,13 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 let picked: Collaboration.AlternativePick | undefined;
                 if (pick) {
                     const of = stores.runs.load(pick.pickOf)?.run;
-                    if (!of) return err({ type: 'RunNotFound', run: pick.pickOf });
-                    if (of.session !== session) return err({ type: 'RunOfAnotherSession', run: pick.pickOf });
+                    if (!of) return err({ type: 'Collaboration.RunNotFound', run: pick.pickOf });
+                    if (of.session !== session) return err({ type: 'Collaboration.RunOfAnotherSession', run: pick.pickOf });
                     const resolved = resolvePick(pick, of, requests);
                     if (!resolved.ok) return resolved;
                     // one decision per assumption: an approved one is not sent again with an alternative
-                    if (approvalOf(stores.approvals.listBySession(session), of.id, pick.assumption)) return err({ type: 'AssumptionClosed', run: of.id });
+                    if (approvalOf(stores.approvals.listBySession(session), of.id, pick.assumption))
+                        return err({ type: 'Collaboration.AssumptionClosed', run: of.id });
                     picked = resolved.value;
                 }
                 // the input is frozen once per request; a request bundled twice is the command's DuplicateRequest
@@ -1113,7 +1114,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     const report = runReport(facts, diff);
                     // the reply is checked before the result is recorded: a refused reply records nothing
                     const check = agentRunCommands.finish(r.value, { report, resultRevision: r.value.baseRevision, changed: false, reply, finishedAt: at });
-                    if (!check.ok && check.error.type === 'InvalidReply') return err(check.error);
+                    if (!check.ok && check.error.type === 'Collaboration.InvalidReply') return err(check.error);
                     const result = resultOf(stores, r.value, captured.value, at);
                     const finished = agentRunCommands.finish(r.value, {
                         report,
@@ -1218,7 +1219,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
 
         async requestRevert({ session, actor, run, body }) {
             // requestRevert and queue require the facilitator: asked first
-            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
             return uow.transaction(async (stores): Promise<Result<RevertRequested, RequestRevertError>> => {
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
@@ -1402,7 +1403,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             if (!exists) return err(notFound('Session', session));
             // `take` records every snapshot, the system's too (the session's start, a run's base and result, a restore's
             // before): who may take one by hand is this use case's to check
-            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
             const captured = await capture(deps);
             if (!captured.ok) return captured;
             return uow.transaction((stores) => ok(record(stores, session, { kind: 'Manual', takenBy: actor.participant }, captured.value, clock.now())));
@@ -1438,11 +1439,11 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
             try {
                 // the restore command requires the facilitator (facilitatorRestores): asked first, before the workspace is
                 // read or a revision recorded on the way
-                if (actor.role !== 'Facilitator') return refused<Collaboration.FacilitatorOnly>({ type: 'FacilitatorOnly' });
+                if (actor.role !== 'Facilitator') return refused<Collaboration.FacilitatorOnly>({ type: 'Collaboration.FacilitatorOnly' });
                 const busy = await uow.transaction((stores) => stores.runs.active(session, clock.now()));
                 if (busy) return refused<RunInProgress>({ type: 'RunInProgress', run: busy.run.id });
                 let restorable = await makeRestorable(revision, session);
-                if (!restorable.ok && restorable.error.type === 'ExternalChangesSinceSnapshot' && recordExternalChanges) {
+                if (!restorable.ok && restorable.error.type === 'Collaboration.ExternalChangesSinceSnapshot' && recordExternalChanges) {
                     // the two-step: the external changes become a revision of their own, then the restore goes on
                     const captured = await capture(deps);
                     if (!captured.ok) return refused(captured.error);
@@ -1525,7 +1526,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 [after, found.b],
             ] as const) {
                 if (!r) return err(notFound('Revision', id));
-                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+                if (r.session !== session) return err({ type: 'Collaboration.RevisionOfAnotherSession', revision: id });
             }
             const { a, b } = found;
             if (!a || !b) throw new Error('Both revisions were found above');
@@ -1574,7 +1575,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 [after, found.b],
             ] as const) {
                 if (!r) return err(notFound('Revision', id));
-                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+                if (r.session !== session) return err({ type: 'Collaboration.RevisionOfAnotherSession', revision: id });
             }
             const { a, b } = found;
             if (!a || !b) throw new Error('Both revisions were found above');
@@ -1619,7 +1620,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                 [after, found.b],
             ] as const) {
                 if (!r) return err(notFound('Revision', id));
-                if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+                if (r.session !== session) return err({ type: 'Collaboration.RevisionOfAnotherSession', revision: id });
             }
             const { a, b } = found;
             if (!a || !b) throw new Error('Both revisions were found above');
@@ -1640,7 +1641,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
         async stormingElements({ session, revision }) {
             const r = await uow.transaction((stores) => stores.revisions.load(revision));
             if (!r) return err(notFound('Revision', revision));
-            if (r.session !== session) return err({ type: 'RevisionOfAnotherSession', revision });
+            if (r.session !== session) return err({ type: 'Collaboration.RevisionOfAnotherSession', revision });
             const analysis = await analysisKept(r);
             // a blob missing now may be put back later: not kept
             if (!analysis.ok) {

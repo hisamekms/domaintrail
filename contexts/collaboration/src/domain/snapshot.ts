@@ -25,7 +25,7 @@ export const languageOf = (path: string): Collaboration.SourceLanguage => (isSto
  */
 export function workspacePath(raw: string): Result<WorkspacePath, Collaboration.PathOutsideRoot> {
     const made = Collaboration.makeWorkspacePath(raw);
-    return made.ok ? made : err({ type: 'PathOutsideRoot', path: raw });
+    return made.ok ? made : err({ type: 'Collaboration.PathOutsideRoot', path: raw });
 }
 
 /** A hexadecimal SHA-256 as a `ContentHash`; throws on anything else (a programming error, never input). */

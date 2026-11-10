@@ -123,11 +123,11 @@ describe('the operations reserved to the facilitator', () => {
         const target = { kind: 'QuestionOption', run: UNKNOWN, question: 'q', option: 'o' };
         expect(await answer(await api(ada, 'marks', { target, sign: { kind: 'Vote' }, placed: true }))).toEqual([
             403,
-            { error: { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." } },
+            { error: { type: 'Collaboration.FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." } },
         ]);
         expect(await answer(await api(bob, 'marks', { target, sign: { kind: 'Vote' }, placed: true }))).toEqual([
             404,
-            { error: { type: 'MarkTargetNotFound' } },
+            { error: { type: 'Collaboration.MarkTargetNotFound' } },
         ]);
         const request = await send(bob, 'Rename Order.');
         expect((await api(ada, 'marks', { target: { kind: 'Message', request }, sign: { kind: 'Reaction', emoji: '👍' }, placed: true })).status).toBe(200);
@@ -224,7 +224,10 @@ describe('the operations reserved to the facilitator', () => {
             404,
             { error: { type: 'NotFound', aggregate: 'Revision', id: UNKNOWN } },
         ]);
-        expect(await answer(await api(ada, 'runs', { requests: [UNKNOWN] }))).toEqual([404, { error: { type: 'RequestNotFound', request: UNKNOWN } }]);
+        expect(await answer(await api(ada, 'runs', { requests: [UNKNOWN] }))).toEqual([
+            404,
+            { error: { type: 'Collaboration.RequestNotFound', request: UNKNOWN } },
+        ]);
 
         const request = await send(bob, 'Add a total.');
         const queued = await api(ada, 'runs', { requests: [request] });

@@ -704,7 +704,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     ask: decide<Collaboration.AskInterviewDecision>(Collaboration.InterviewShape, {
         Asking: (interview, params) => {
-            if (Collaboration.checkAskInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'InterviewMovedOn' });
+            if (Collaboration.checkAskInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'Collaboration.InterviewMovedOn' });
             const { question, askedAt } = params;
             return ok({
                 Asking: {
@@ -726,7 +726,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     summarize: decide<Collaboration.SummarizeInterviewDecision>(Collaboration.InterviewShape, {
         Asking: (interview, params) => {
-            if (Collaboration.checkSummarizeInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'InterviewMovedOn' });
+            if (Collaboration.checkSummarizeInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'Collaboration.InterviewMovedOn' });
             const { answered, summary, briefedAt } = params;
             return ok({
                 Briefed: {
@@ -739,7 +739,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     confirm: decide<Collaboration.ConfirmInterviewDecision>(Collaboration.InterviewShape, {
         Briefed: (interview, params) => {
-            if (Collaboration.checkConfirmInterviewRequires(interview, params) === 'facilitatorConfirms') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkConfirmInterviewRequires(interview, params) === 'facilitatorConfirms') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { confirmedBy, confirmedBrief, edited, run, confirmedAt } = params;
             return ok({
                 Confirmed: {
@@ -762,7 +762,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     reject: decide<Collaboration.RejectInterviewDecision>(Collaboration.InterviewShape, {
         Briefed: (interview, params) => {
-            if (Collaboration.checkRejectInterviewRequires(interview, params) === 'facilitatorRejects') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkRejectInterviewRequires(interview, params) === 'facilitatorRejects') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { rejectedBy, note, rejectedAt } = params;
             return ok({
                 Rejected: {
@@ -791,7 +791,7 @@ function stopped(
     },
     Collaboration.NotTheInterviewer
 > {
-    if (Collaboration.checkStopInterviewRequires(interview, params) === 'starterOrFacilitatorStops') return err({ type: 'NotTheInterviewer' });
+    if (Collaboration.checkStopInterviewRequires(interview, params) === 'starterOrFacilitatorStops') return err({ type: 'Collaboration.NotTheInterviewer' });
     const { stoppedBy, stoppedAt } = params;
     return ok({
         Stopped: {

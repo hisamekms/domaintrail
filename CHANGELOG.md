@@ -9,6 +9,20 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## Unreleased
+
+### Changed
+
+- Generated domain errors now use their bounded context in the `type` tag (`Sales.EmptyOrder`), including generated
+  `Invalid…` errors from IDs and domain primitives. Error interfaces keep their names within each context module.
+
+### Upgrading
+
+- Regenerate TypeScript, then update error constructors, `type` comparisons, and error response handling from
+  `EmptyOrder` / `InvalidOrderId` to `Sales.EmptyOrder` / `Sales.InvalidOrderId` (using your context names). Generated
+  contract tests now expect these qualified tags. Domain errors in the collaboration and knowledge HTTP APIs also use
+  qualified tags on the wire; API-owned errors keep their existing tags.
+
 ## [0.11.0] - 2026-11-10
 
 ### Added

@@ -309,9 +309,9 @@ export interface WorkspaceScan {
 
 /** Why a write of a snapshot to the workspace was refused; nothing was written. */
 export type WriteRefusal =
-    | { readonly type: 'SymlinkInWorkspace'; readonly path: string }
-    | { readonly type: 'PathOutsideRoot'; readonly path: string }
-    | { readonly type: 'ExternalChangesSinceSnapshot'; readonly paths: readonly string[] };
+    | { readonly type: 'Collaboration.SymlinkInWorkspace'; readonly path: string }
+    | { readonly type: 'Collaboration.PathOutsideRoot'; readonly path: string }
+    | { readonly type: 'Collaboration.ExternalChangesSinceSnapshot'; readonly paths: readonly string[] };
 
 /** The sources of the workspace on disk. Paths are plain strings here: the application makes them `WorkspacePath`s. */
 export interface WorkspaceSnapshot {

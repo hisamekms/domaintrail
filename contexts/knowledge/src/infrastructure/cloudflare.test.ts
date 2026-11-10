@@ -68,16 +68,16 @@ describe('the cloudflare adapter', () => {
     });
 
     test('names the person a correction is by, and maps 404 and 410 to the domain’s errors', async () => {
-        reset(() => Response.json({ error: { type: 'KnowledgeItemGone', itemId: 'kn_00000001' } }, { status: 410 }));
+        reset(() => Response.json({ error: { type: 'Knowledge.KnowledgeItemGone', itemId: 'kn_00000001' } }, { status: 410 }));
         const corrected = await store().correct(project, itemId('kn_00000001'), content('fixed'), userName('山田@example.com'));
-        expect(corrected).toEqual({ ok: false, error: { type: 'KnowledgeItemGone', itemId: itemId('kn_00000001') } });
+        expect(corrected).toEqual({ ok: false, error: { type: 'Knowledge.KnowledgeItemGone', itemId: itemId('kn_00000001') } });
         expect(seen[0]).toMatchObject({ method: 'PATCH', path: '/base/v1/projects/dmcore/knowledge/kn_00000001' });
         expect(decodeURIComponent(seen[0].headers['x-knowledge-actor'])).toBe('山田@example.com');
 
-        reset(() => Response.json({ error: { type: 'KnowledgeItemNotFound', itemId: 'kn_00000001' } }, { status: 404 }));
+        reset(() => Response.json({ error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: 'kn_00000001' } }, { status: 404 }));
         expect(await store().delete(project, itemId('kn_00000001'), userName('a@example.com'))).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
         });
         expect(await store().get(project, itemId('kn_00000001'))).toBeUndefined();
     });

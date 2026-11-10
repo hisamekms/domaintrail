@@ -402,9 +402,13 @@ export function primitiveCases(s: PrimitiveSpec, options: RunOptions): TestCase[
                 const e = res.error ?? {};
                 const allowed = [...unknown, ...(first !== undefined ? [first] : [])];
                 if (!allowed.length) fail(`${name}(${show(value)}) rejected a value that holds every invariant of ${simple} (error ${show(e)}).`);
-                if (e.type !== `Invalid${simple}` || !deepEqual(e.value, value) || !allowed.includes(e.invariant as string)) {
+                if (
+                    e.type !== `${s.type.slice(0, s.type.indexOf('.'))}.Invalid${simple}` ||
+                    !deepEqual(e.value, value) ||
+                    !allowed.includes(e.invariant as string)
+                ) {
                     fail(
-                        `${name}(${show(value)}) returned the error ${show(e)}; expected { type: 'Invalid${simple}', value: ${show(value)}, invariant: ${allowed.map((a) => `'${a}'`).join(' or ')} }.`,
+                        `${name}(${show(value)}) returned the error ${show(e)}; expected { type: '${s.type.slice(0, s.type.indexOf('.'))}.Invalid${simple}', value: ${show(value)}, invariant: ${allowed.map((a) => `'${a}'`).join(' or ')} }.`,
                     );
                 }
             },

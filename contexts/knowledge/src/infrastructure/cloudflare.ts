@@ -164,11 +164,11 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
      * 410 with `KnowledgeItemGone` (deleted); `undefined` for any other answer. A 404 of another kind (no such route:
      * the URL is not the Worker's) is a failure.
      */
-    const missing = async (res: Response, what: string): Promise<'KnowledgeItemNotFound' | 'KnowledgeItemGone' | undefined> => {
+    const missing = async (res: Response, what: string): Promise<'Knowledge.KnowledgeItemNotFound' | 'Knowledge.KnowledgeItemGone' | undefined> => {
         if (res.status !== 404 && res.status !== 410) return undefined;
         const body = decodeErrorBody(await res.json().catch(() => undefined));
-        if (res.status === 404 && body?.type === 'KnowledgeItemNotFound') return body.type;
-        if (res.status === 410 && body?.type === 'KnowledgeItemGone') return body.type;
+        if (res.status === 404 && body?.type === 'Knowledge.KnowledgeItemNotFound') return body.type;
+        if (res.status === 410 && body?.type === 'Knowledge.KnowledgeItemGone') return body.type;
         throw new KnowledgeStoreError(`the knowledge store refused ${what} (HTTP ${res.status})`, res.status, body?.type);
     };
 
@@ -180,7 +180,7 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
         what: string,
     ): Promise<Result<T, Knowledge.KnowledgeItemNotFound>> => {
         const gone = await missing(res, what);
-        if (gone === 'KnowledgeItemNotFound') return err({ type: gone, itemId: id });
+        if (gone === 'Knowledge.KnowledgeItemNotFound') return err({ type: gone, itemId: id });
         if (gone) throw new KnowledgeStoreError(`the knowledge store refused ${what} (${gone})`, res.status, gone);
         return ok(await read(res, d, what));
     };
@@ -308,12 +308,12 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
             const res = await request(project, `${itemPath(id)}/retire`, { method: 'POST', json: retirement, headers: actor(by) });
             const what = `retiring ${id}`;
             const e = await refusal(res, what, [
-                'KnowledgeItemNotFound',
-                'KnowledgeItemGone',
-                'AlreadyRetired',
-                'ReplacementWithoutReason',
-                'ReplacedByItself',
-                'ProposalRefused',
+                'Knowledge.KnowledgeItemNotFound',
+                'Knowledge.KnowledgeItemGone',
+                'Knowledge.AlreadyRetired',
+                'Knowledge.ReplacementWithoutReason',
+                'Knowledge.ReplacedByItself',
+                'Knowledge.ProposalRefused',
             ] as const);
             return e ? err(e) : ok(await read(res, liveItem, what));
         },
@@ -321,14 +321,14 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
         async unretire(project, id, by) {
             const res = await request(project, `${itemPath(id)}/unretire`, { method: 'POST', headers: actor(by) });
             const what = `unretiring ${id}`;
-            const e = await refusal(res, what, ['KnowledgeItemNotFound', 'KnowledgeItemGone', 'NotRetired'] as const);
+            const e = await refusal(res, what, ['Knowledge.KnowledgeItemNotFound', 'Knowledge.KnowledgeItemGone', 'Knowledge.NotRetired'] as const);
             return e ? err(e) : ok(await read(res, liveItem, what));
         },
 
         async propose(project, candidate) {
             const res = await request(project, '/proposals', { method: 'POST', json: candidate });
             const what = `a proposal about ${candidate.item}`;
-            const e = await refusal(res, what, ['MalformedProposal', 'ProposalRefused'] as const);
+            const e = await refusal(res, what, ['Knowledge.MalformedProposal', 'Knowledge.ProposalRefused'] as const);
             return e ? err(e) : ok(await read(res, retirementProposal, what));
         },
 
@@ -339,14 +339,14 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
         async approveProposal(project, id, by) {
             const res = await request(project, `${proposalPath(id)}/approve`, { method: 'POST', headers: actor(by) });
             const what = `approving ${id}`;
-            const e = await refusal(res, what, ['ProposalNotFound', 'ProposalDecided', 'ProposalRefused'] as const);
+            const e = await refusal(res, what, ['Knowledge.ProposalNotFound', 'Knowledge.ProposalDecided', 'Knowledge.ProposalRefused'] as const);
             return e ? err(e) : ok(await read(res, approvedProposal, what));
         },
 
         async dismissProposal(project, id, by) {
             const res = await request(project, `${proposalPath(id)}/dismiss`, { method: 'POST', headers: actor(by) });
             const what = `dismissing ${id}`;
-            const e = await refusal(res, what, ['ProposalNotFound', 'ProposalDecided'] as const);
+            const e = await refusal(res, what, ['Knowledge.ProposalNotFound', 'Knowledge.ProposalDecided'] as const);
             return e ? err(e) : ok(await read(res, dismissedProposal, what));
         },
 

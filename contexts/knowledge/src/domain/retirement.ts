@@ -56,7 +56,7 @@ export interface Admitted {
     readonly event?: Knowledge.RetirementProposed;
 }
 
-const refused = (reason: Knowledge.ProposalRefusal): Result<never, ProposalRejection> => err({ type: 'ProposalRefused', reason });
+const refused = (reason: Knowledge.ProposalRefusal): Result<never, ProposalRejection> => err({ type: 'Knowledge.ProposalRefused', reason });
 
 /** Another proposal holds the ID a candidate's is derived from: never taken for it (and never overwritten). */
 export class ProposalIdCollision extends Error {
@@ -197,11 +197,11 @@ export function decideApproval(
     by: Knowledge.UserName,
     at: Date,
 ): Result<Approval, ApprovalError> {
-    if (proposal === undefined) return err({ type: 'ProposalNotFound', proposalId: id });
-    if (proposal.state !== 'Open') return err({ type: 'ProposalDecided', proposalId: id });
+    if (proposal === undefined) return err({ type: 'Knowledge.ProposalNotFound', proposalId: id });
+    if (proposal.state !== 'Open') return err({ type: 'Knowledge.ProposalDecided', proposalId: id });
     const item = lookup(proposal.item);
-    if (item === undefined || item.state !== 'Live') return err({ type: 'ProposalRefused', reason: 'itemUnavailable' });
-    if (isMoot(proposal, item)) return err({ type: 'ProposalRefused', reason: 'moot' });
+    if (item === undefined || item.state !== 'Live') return err({ type: 'Knowledge.ProposalRefused', reason: 'itemUnavailable' });
+    if (isMoot(proposal, item)) return err({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
     const approved = retirementProposalCommands.approve(proposal, { by, at });
     if (!approved.ok) throw new Error('approve refused an open proposal');
     const { aggregate, events } = approved.value.Approved;
@@ -215,7 +215,7 @@ export function decideApproval(
             by,
             at,
         });
-        if (!r.ok) return err({ type: 'ProposalRefused', reason: 'moot' });
+        if (!r.ok) return err({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
         return ok({
             proposal: aggregate,
             proposalEvent: events.RetirementProposalApproved,
@@ -224,7 +224,7 @@ export function decideApproval(
         });
     }
     const r = knowledgeItemCommands.unretire(item, { proposal: proposal.id, by, at });
-    if (!r.ok) return err({ type: 'ProposalRefused', reason: 'moot' });
+    if (!r.ok) return err({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
     return ok({
         proposal: aggregate,
         proposalEvent: events.RetirementProposalApproved,
@@ -243,8 +243,8 @@ export function decideDismissal(
     { readonly proposal: Knowledge.DismissedRetirementProposal; readonly event: Knowledge.RetirementProposalDismissed },
     Knowledge.ProposalNotFound | Knowledge.ProposalDecided
 > {
-    if (proposal === undefined) return err({ type: 'ProposalNotFound', proposalId: id });
-    if (proposal.state !== 'Open') return err({ type: 'ProposalDecided', proposalId: id });
+    if (proposal === undefined) return err({ type: 'Knowledge.ProposalNotFound', proposalId: id });
+    if (proposal.state !== 'Open') return err({ type: 'Knowledge.ProposalDecided', proposalId: id });
     const r = retirementProposalCommands.dismiss(proposal, { by, at });
     if (!r.ok) throw new Error('dismiss refused an open proposal');
     return ok({ proposal: r.value.Dismissed.aggregate, event: r.value.Dismissed.events.RetirementProposalDismissed });
@@ -265,7 +265,7 @@ export function proposalsToForget(
 
 export const retirementProposalCommands: Knowledge.RetirementProposalCommands = {
     propose: decide<Knowledge.ProposeRetirementProposalDecision>(Knowledge.RetirementProposalShape, (params) => {
-        if (Knowledge.checkProposeRetirementProposalRequires(params) !== undefined) return err({ type: 'MalformedProposal' });
+        if (Knowledge.checkProposeRetirementProposalRequires(params) !== undefined) return err({ type: 'Knowledge.MalformedProposal' });
         const { id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt } = params;
         return ok({
             Open: {

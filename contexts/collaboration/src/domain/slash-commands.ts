@@ -461,8 +461,8 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
     apply: decide<Collaboration.ApplySlashCommandDecision>(Collaboration.SlashCommandShape, {
         Listed: (command, params) => {
             const failed = Collaboration.checkApplySlashCommandRequires(command, params);
-            if (failed === 'facilitatorApplies') return err({ type: 'FacilitatorOnly' });
-            if (failed === 'chosenOfList') return err({ type: 'NoSuchCandidate' });
+            if (failed === 'facilitatorApplies') return err({ type: 'Collaboration.FacilitatorOnly' });
+            if (failed === 'chosenOfList') return err({ type: 'Collaboration.NoSuchCandidate' });
             const { appliedBy, chosen, run, appliedAt } = params;
             return ok({
                 Applied: {
@@ -491,7 +491,7 @@ function stopped(
     },
     Collaboration.NotTheStarter
 > {
-    if (Collaboration.checkStopSlashCommandRequires(command, params) === 'starterOrFacilitatorStops') return err({ type: 'NotTheStarter' });
+    if (Collaboration.checkStopSlashCommandRequires(command, params) === 'starterOrFacilitatorStops') return err({ type: 'Collaboration.NotTheStarter' });
     const { stoppedBy, stoppedAt } = params;
     return ok({
         Stopped: {

@@ -52,6 +52,38 @@ afterAll(async () => {
 });
 
 describe('generated TypeScript', () => {
+    test('same-shaped errors in different contexts have distinct type tags at runtime and narrow by type', async () => {
+        const collision = path.join(dir, 'same-error');
+        const a = await check({ 'both.dt': 'context Sales { error Conflict } context Billing { error Conflict }' });
+        expect(a.diagnostics).toEqual([]);
+        await mkdir(collision);
+        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(collision, f.path), f.content);
+        const sales = await readFile(path.join(collision, 'Sales.ts'), 'utf8');
+        const billing = await readFile(path.join(collision, 'Billing.ts'), 'utf8');
+        expect(sales).toContain("readonly type: 'Sales.Conflict';");
+        expect(billing).toContain("readonly type: 'Billing.Conflict';");
+        await writeFile(
+            path.join(collision, 'use.ts'),
+            `import type { Sales, Billing } from './index.js';
+export const sales: Sales.Conflict = { type: 'Sales.Conflict' };
+export const billing: Billing.Conflict = { type: 'Billing.Conflict' };
+export function classify(error: Sales.Conflict | Billing.Conflict): 'sales' | 'billing' {
+    if (error.type === 'Sales.Conflict') {
+        const salesOnly: Sales.Conflict = error;
+        return salesOnly.type === 'Sales.Conflict' ? 'sales' : 'billing';
+    }
+    const billingOnly: Billing.Conflict = error;
+    return billingOnly.type === 'Billing.Conflict' ? 'billing' : 'sales';
+}
+`,
+        );
+        const result = tscIn(collision, 'use.ts');
+        expect(result.output).toBe('');
+        expect(result.code).toBe(0);
+        const use = await import(path.join(collision, 'use.ts'));
+        expect([use.classify(use.sales), use.classify(use.billing)]).toEqual(['sales', 'billing']);
+    });
+
     test('the runtime compiles with noUncheckedIndexedAccess', () => {
         const r = tsc('--noUncheckedIndexedAccess', 'generated/domain/_runtime.ts');
         expect(r.output).toBe('');
@@ -94,7 +126,7 @@ export function wrongAggregate(order: Sales.DraftOrder): ConfirmResult {
 }
 export function undeclaredError(): ConfirmResult {
     // @ts-expect-error error type not declared by the command (it is cancel's)
-    return err({ type: 'NoteRequired' });
+    return err({ type: 'Sales.NoteRequired' });
 }
 export function undeclaredEvent(order: Sales.DraftOrder): ConfirmResult {
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: at };
@@ -112,7 +144,7 @@ export function twoEvents(order: Sales.DraftOrder): ConfirmResult {
     return ok({ Confirmed: { aggregate: c, events: { OrderConfirmed: [confirmedEvent(order), confirmedEvent(order)] } } });
 }
 export function declaredOnly(order: Sales.DraftOrder, when: Date): ConfirmResult {
-    if (order.items.length === 0) return err({ type: 'EmptyOrder' });
+    if (order.items.length === 0) return err({ type: 'Sales.EmptyOrder' });
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: when };
     return ok({ Confirmed: { aggregate: c, events: { OrderConfirmed: confirmedEvent(order) } } });
 }
@@ -270,7 +302,7 @@ export const commands: Tasks.WorkCommands = {
         InProgress: () => ok({ Cancelled: { set: {}, events: {} } }),
     }),
     review: decide<Tasks.ReviewWorkDecision>(Tasks.WorkShape, {
-        InProgress: (work, { at }) => (at < now ? err({ type: 'NotReady' }) : ok({ Completed: { set: { completedAt: at }, events: {} } })),
+        InProgress: (work, { at }) => (at < now ? err({ type: 'Tasks.NotReady' }) : ok({ Completed: { set: { completedAt: at }, events: {} } })),
         Draft: () => ok({ Draft: { set: {}, events: {} } }),
     }),
     step: decide<Tasks.StepWorkDecision>(Tasks.WorkShape, {
@@ -347,7 +379,7 @@ import type { Common } from '../packages/shared/src/generated/index.js';
 export const issue: Billing.InvoiceCommands['issue'] = ({ id, order, billedAmount }: { readonly id: Billing.InvoiceId; readonly order: domain.Sales.OrderId; readonly billedAmount: Common.Money }) =>
     shared.ok({ Open: { aggregate: { state: 'Open', id, order, billedAmount }, events: {} } });
 export const makeAmount: Common.MakeAmount = (value: domain.Decimal) =>
-    Number(value) >= 0 ? domain.ok(value as Common.Amount) : domain.err({ type: 'InvalidAmount', value, invariant: 'nonNegative' });
+    Number(value) >= 0 ? domain.ok(value as Common.Amount) : domain.err({ type: 'Common.InvalidAmount', value, invariant: 'nonNegative' });
 const d: shared.Decimal = '1' as domain.Decimal;
 export const back: domain.Decimal = d;
 // @ts-expect-error the brand still applies across runtimes

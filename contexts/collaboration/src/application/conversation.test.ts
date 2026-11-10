@@ -100,7 +100,7 @@ describe('the modes (decision 13)', () => {
         expect([solo.opened, solo.session.mode, solo.revision?.origin.kind]).toEqual(['started', 'Solo', 'SessionStart']);
         expect(value(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name })).opened).toBe('resumed');
         // no one else joins a Solo session
-        expect(error(await use.joinSession({ session: solo.session.id, participant: bobId, name }))).toEqual({ type: 'SoloSession' });
+        expect(error(await use.joinSession({ session: solo.session.id, participant: bobId, name }))).toEqual({ type: 'Collaboration.SoloSession' });
         const together = value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name }));
         expect([together.opened, together.session.id, together.session.mode, together.session.facilitator]).toEqual([
             'collaborated',
@@ -110,7 +110,7 @@ describe('the modes (decision 13)', () => {
         ]);
         const events = await use.eventsAfter({ session: solo.session.id, cursor: 0, limit: 100 });
         expect(events.map((e) => e.event.type)).toEqual(['SessionStarted', 'RevisionRecorded', 'SessionCollaborated']);
-        expect(error(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name }))).toEqual({ type: 'CollabSessionOpen' });
+        expect(error(await use.openSession({ mode: 'Solo', facilitator: facilitatorId, name }))).toEqual({ type: 'Collaboration.CollabSessionOpen' });
         expect(value(await use.openSession({ mode: 'Collab', facilitator: facilitatorId, name })).opened).toBe('resumed');
         expect(value(await use.joinSession({ session: solo.session.id, participant: bobId, name })).joined).toBe(true);
     });
@@ -166,7 +166,7 @@ describe('the triage and where it goes', () => {
         });
         expect(answered.triage.outcome).toEqual({ kind: 'Answer', answer: answered.answer.id, readRevision: read });
         expect(value(await use.answerJobs({ session }))).toEqual([]);
-        expect(error(await use.answerMessage({ triage, body: text('again') }))).toEqual({ type: 'TriageAlreadyConcluded' });
+        expect(error(await use.answerMessage({ triage, body: text('again') }))).toEqual({ type: 'Collaboration.TriageAlreadyConcluded' });
         expect(error(await use.answerMessage({ triage, body: text('x'.repeat(2001)) }))).toEqual({ type: 'AnswerTooLong', limit: 2000 });
         // no revision is recorded for an answer
         expect(value(await use.sessionState({ session })).revisions).toHaveLength(1);
@@ -184,21 +184,21 @@ describe('the triage and where it goes', () => {
             const proposed = value(await use.proposeChange({ triage, content: ids.length === 0 ? content(body) : withOptions(body) }));
             expect(proposed.proposal).toMatchObject({ state: 'Open', request: sent.request.id, requestedBy: bobId });
             expect(proposed.triage.outcome).toEqual({ kind: 'Proposal', proposal: proposed.proposal.id });
-            expect(error(await use.proposeChange({ triage, content: content(body) }))).toEqual({ type: 'TriageNotProposable', triage });
+            expect(error(await use.proposeChange({ triage, content: content(body) }))).toEqual({ type: 'Collaboration.TriageNotProposable', triage });
             ids.push(proposed.proposal.id);
         }
         const [plain = '' as C.ChangeProposalId, choice = '' as C.ChangeProposalId] = ids;
         expect(error(await use.approveProposals({ session, actor: bob, proposals: ids.map((proposal) => ({ proposal })) }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
         // an option the proposal does not have, or one chosen of a proposal without options: refused, nothing approved
         const third = value(C.makeProposalOptionIndex(2));
         expect(error(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: choice, option: third }] }))).toEqual({
-            type: 'NoSuchOption',
+            type: 'Collaboration.NoSuchOption',
         });
         const first = value(C.makeProposalOptionIndex(0));
         expect(error(await use.approveProposals({ session, actor: facilitator, proposals: [{ proposal: plain, option: first }] }))).toEqual({
-            type: 'NoSuchOption',
+            type: 'Collaboration.NoSuchOption',
         });
         const editedHow = value(C.makeProposalText('取り消しだけ'));
         const approved = value(
@@ -253,12 +253,12 @@ describe('the triage and where it goes', () => {
             proposals.push(value(await use.proposeChange({ triage: sent.triage?.id ?? ('' as C.TriageId), content: content(body) })).proposal.id);
         }
         const [first = '' as C.ChangeProposalId, second = '' as C.ChangeProposalId] = proposals;
-        expect(error(await use.rejectProposal({ proposal: first, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.rejectProposal({ proposal: first, actor: bob }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
         expect(value(await use.rejectProposal({ proposal: first, actor: facilitator, note: text('今回は見送り') }))).toMatchObject({
             state: 'Rejected',
             note: '今回は見送り',
         });
-        expect(error(await use.withdrawProposal({ proposal: second, actor: facilitator }))).toEqual({ type: 'NotTheRequester' });
+        expect(error(await use.withdrawProposal({ proposal: second, actor: facilitator }))).toEqual({ type: 'Collaboration.NotTheRequester' });
         expect(value(await use.withdrawProposal({ proposal: second, actor: bob })).state).toBe('Withdrawn');
         expect(error(await use.withdrawProposal({ proposal: first, actor: bob }))).toEqual({ type: 'NotAllowed', command: 'withdraw', state: 'Rejected' });
     });
@@ -273,11 +273,11 @@ describe('the triage and where it goes', () => {
 
         // 「AI に送る」 on a participant's plain message: addressed by the facilitator, then queued without a proposal (Q3)
         const plain = value(await say(use, session, bob, 'ここに返品を足したい'));
-        expect(error(await use.addressMessages({ session, actor: bob, requests: [plain.request.id] }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.addressMessages({ session, actor: bob, requests: [plain.request.id] }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
         const [addressed] = value(await use.addressMessages({ session, actor: facilitator, requests: [plain.request.id] }));
         expect(addressed).toMatchObject({ state: 'Pending', addressedBy: 'Facilitator', addressedByParticipant: facilitatorId });
         expect(error(await use.addressMessages({ session, actor: facilitator, requests: [plain.request.id] }))).toEqual({
-            type: 'RequestAlreadyAddressed',
+            type: 'Collaboration.RequestAlreadyAddressed',
             request: plain.request.id,
         });
         const sent = await triaged(use, addressed?.id ?? ('' as C.TriageId), 'ChangeRequest');
@@ -297,7 +297,7 @@ describe('the triage and where it goes', () => {
         expect(again).toMatchObject({ state: 'Decided', kind: 'Consultation', decidedBy: 'Facilitator', addressedBy: 'Facilitator' });
         const answer = value(await use.answerMessage({ triage: again?.id ?? ('' as C.TriageId), body: text('どういたしまして') })).answer;
         expect(error(await use.addressMessages({ session, actor: facilitator, requests: [answer.id] }))).toEqual({
-            type: 'RequestNotAddressable',
+            type: 'Collaboration.RequestNotAddressable',
             request: answer.id,
         });
         expect(error(await use.addressMessages({ session, actor: facilitator, requests: [] }))).toEqual({ type: 'NoRequests' });
@@ -307,7 +307,7 @@ describe('the triage and where it goes', () => {
         const { use, session } = await collab();
         const sent = value(await say(use, session, bob, '@AI[p1] どう思う？', { mentions: [AI_PARTICIPANT_ID] }));
         const triage = sent.triage?.id ?? ('' as C.TriageId);
-        expect(error(await use.recordTriageStep({ triage, step: step('Mechanical', 'Unknown') }))).toEqual({ type: 'TriageStepOutOfOrder' });
+        expect(error(await use.recordTriageStep({ triage, step: step('Mechanical', 'Unknown') }))).toEqual({ type: 'Collaboration.TriageStepOutOfOrder' });
         expect(error(await use.recordTriageStep({ triage, step: { ...step('Clef', 'Unknown'), confidence: 3 } }))).toMatchObject({
             type: 'InvalidTriageInput',
         });
@@ -345,7 +345,7 @@ describe('overrides (decision 18)', () => {
         expect(progress.proposal).toMatchObject({ state: 'Open', requestedBy: bobId });
         expect(progress.triage).toMatchObject({ kind: 'ChangeRequest', decidedBy: 'Answerer', outcome: { kind: 'Proposal' } });
         expect(error(await use.overrideTriage({ triage, step: { stage: 'Answerer', verdict: 'NotForAi', durationMs: 0 } }))).toEqual({
-            type: 'TriageNotOverridable',
+            type: 'Collaboration.TriageNotOverridable',
         });
     });
 

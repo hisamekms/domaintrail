@@ -319,8 +319,8 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
     approve: decide<Collaboration.ApproveChangeProposalDecision>(Collaboration.ChangeProposalShape, {
         Open: (proposal, params) => {
             const failed = Collaboration.checkApproveChangeProposalRequires(proposal, params);
-            if (failed === 'facilitatorApproves') return err({ type: 'FacilitatorOnly' });
-            if (failed === 'optionOfProposal') return err({ type: 'NoSuchOption' });
+            if (failed === 'facilitatorApproves') return err({ type: 'Collaboration.FacilitatorOnly' });
+            if (failed === 'optionOfProposal') return err({ type: 'Collaboration.NoSuchOption' });
             const { approvedBy, option, editedHow, run, approvedAt } = params;
             return ok({
                 Approved: {
@@ -343,7 +343,8 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
 
     reject: decide<Collaboration.RejectChangeProposalDecision>(Collaboration.ChangeProposalShape, {
         Open: (proposal, params) => {
-            if (Collaboration.checkRejectChangeProposalRequires(proposal, params) === 'facilitatorRejects') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkRejectChangeProposalRequires(proposal, params) === 'facilitatorRejects')
+                return err({ type: 'Collaboration.FacilitatorOnly' });
             const { rejectedBy, note, rejectedAt } = params;
             return ok({
                 Rejected: {
@@ -356,7 +357,8 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
 
     withdraw: decide<Collaboration.WithdrawChangeProposalDecision>(Collaboration.ChangeProposalShape, {
         Open: (proposal, params) => {
-            if (Collaboration.checkWithdrawChangeProposalRequires(proposal, params) === 'requesterWithdraws') return err({ type: 'NotTheRequester' });
+            if (Collaboration.checkWithdrawChangeProposalRequires(proposal, params) === 'requesterWithdraws')
+                return err({ type: 'Collaboration.NotTheRequester' });
             const { withdrawnBy, withdrawnAt } = params;
             return ok({
                 Withdrawn: {

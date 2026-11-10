@@ -145,7 +145,10 @@ describe('extractions', () => {
             { sticky: wire.stickyRef('Ordering.CreateSpecification', 'test'), hasItems: true, hasConflict: false },
         ]);
         expect((await store.audit(project, { item: id(1) })).items[0]?.operation).toBe('unlinkConflict');
-        expect(await store.unlinkConflict(project, id(9), id(1), user)).toEqual({ ok: false, error: { type: 'KnowledgeItemNotFound', itemId: id(9) } });
+        expect(await store.unlinkConflict(project, id(9), id(1), user)).toEqual({
+            ok: false,
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: id(9) },
+        });
     });
 
     test('reads an item without its conflict while the other side is deleted, and with it again once restored', async () => {
@@ -193,7 +196,7 @@ describe('extractions', () => {
         ]);
         expect(await store.handOverToHotspot(project, id(9), id(1), hotspot, user)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: id(9) },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: id(9) },
         });
     });
 
@@ -212,7 +215,7 @@ describe('extractions', () => {
             ]),
         );
         expect(applied.items).toEqual([]);
-        expect(applied.dropped.map((d) => d.reason)).toEqual([{ type: 'StaleOperation' }, { type: 'KnowledgeItemGone', itemId: id(2) }]);
+        expect(applied.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.StaleOperation' }, { type: 'Knowledge.KnowledgeItemGone', itemId: id(2) }]);
         expect(plain((await store.get(project, id(1)))?.item.content.text)).toBe('締めは毎月20日');
     });
 
@@ -350,10 +353,10 @@ describe('retiring (廃止)', () => {
         expect((await store.get(project, id(1)))?.item.retirement?.reason).toBe('replaced');
         await store.retire(project, id(2), {}, user);
         expect(await store.counts(project, 'Ordering')).toEqual([]);
-        expect(await store.retire(project, id(2), {}, user)).toEqual({ ok: false, error: { type: 'AlreadyRetired' } });
-        expect(await store.retire(project, id(9), {}, user)).toEqual({ ok: false, error: { type: 'KnowledgeItemNotFound', itemId: id(9) } });
+        expect(await store.retire(project, id(2), {}, user)).toEqual({ ok: false, error: { type: 'Knowledge.AlreadyRetired' } });
+        expect(await store.retire(project, id(9), {}, user)).toEqual({ ok: false, error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: id(9) } });
         expect((await store.unretire(project, id(1), user)).ok).toBe(true);
-        expect(await store.unretire(project, id(1), user)).toEqual({ ok: false, error: { type: 'NotRetired' } });
+        expect(await store.unretire(project, id(1), user)).toEqual({ ok: false, error: { type: 'Knowledge.NotRetired' } });
         expect(texts((await store.search(project, {})).items)).toEqual(['古いやり方']);
         expect((await store.audit(project, {})).items.slice(0, 3).map((e) => e.operation)).toEqual(['unretire', 'retire', 'retire']);
     });
@@ -366,7 +369,7 @@ describe('retiring (廃止)', () => {
         expect(await store.propose(project, candidate(1))).toEqual(proposed);
         expect(await store.propose(project, candidate(1, { evidence: [said('m10')] }))).toEqual({
             ok: false,
-            error: { type: 'ProposalRefused', reason: 'pending' },
+            error: { type: 'Knowledge.ProposalRefused', reason: 'pending' },
         });
         expect((await reader.proposals(project)).map((p) => p.id)).toEqual([proposed.value.id]);
         // a reading token does not propose
@@ -376,7 +379,7 @@ describe('retiring (廃止)', () => {
         expect(approved.ok && approved.value.item.retirement?.proposal).toBe(proposed.value.id);
         expect(await store.approveProposal(project, proposed.value.id, user)).toEqual({
             ok: false,
-            error: { type: 'ProposalDecided', proposalId: proposed.value.id },
+            error: { type: 'Knowledge.ProposalDecided', proposalId: proposed.value.id },
         });
         expect(await store.proposals(project)).toEqual([]);
 
@@ -385,7 +388,7 @@ describe('retiring (廃止)', () => {
         expect((await store.dismissProposal(project, second.value.id, user)).ok).toBe(true);
         expect(await store.propose(project, candidate(2, { proposedBy: { kind: 'Review', review: 'review-2' } }))).toEqual({
             ok: false,
-            error: { type: 'ProposalRefused', reason: 'dismissedBefore' },
+            error: { type: 'Knowledge.ProposalRefused', reason: 'dismissedBefore' },
         });
         expect((await store.propose(project, candidate(2, { evidence: [said('m9'), said('m12')] }))).ok).toBe(true);
         expect((await store.audit(project, {})).items.map((e) => e.operation)).toContain('dismiss');
@@ -405,7 +408,7 @@ describe('retiring (廃止)', () => {
             project,
             extraction('s2', 2, [{ kind: 'AddSource', item: id(2), base: 1, source: source('s2', 'm3'), agreed: false }]),
         );
-        expect(plain(dropped.dropped.map((d) => d.reason))).toEqual([{ type: 'RetiredItem', itemId: id(2) }]);
+        expect(plain(dropped.dropped.map((d) => d.reason))).toEqual([{ type: 'Knowledge.RetiredItem', itemId: id(2) }]);
         // the audit keeps the action and the proposal's ID only, never the explanation
         const reasons = await worker.db
             .prepare("SELECT reason FROM audit WHERE project = ?1 AND operation = 'propose'")
@@ -463,7 +466,7 @@ describe('deleting', () => {
         await store.delete(project, id(1), user);
         expect(await store.correct(project, id(1), wire.itemContent(content('x'), 'test'), user)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemGone', itemId: id(1) },
+            error: { type: 'Knowledge.KnowledgeItemGone', itemId: id(1) },
         });
         // too early for the sweep: the undo window has not passed
         await worker.scheduled(new Date());
@@ -471,7 +474,7 @@ describe('deleting', () => {
         await store.delete(project, id(1), user);
 
         await worker.scheduled(new Date(Date.now() + 10 * 60 * 1000));
-        expect(await store.restore(project, id(1), user)).toEqual({ ok: false, error: { type: 'KnowledgeItemNotFound', itemId: id(1) } });
+        expect(await store.restore(project, id(1), user)).toEqual({ ok: false, error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: id(1) } });
         expect(await store.getImage(project, image)).toBeUndefined();
         // an image another item refers to stays
         expect(await store.getImage(project, shared)).toBeDefined();

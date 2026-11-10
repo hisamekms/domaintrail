@@ -124,7 +124,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
         async startCommand({ session, actor, kind, body, language, focus, viewedAt, workspace }) {
             const spec = slashCommandSpec(kind);
             return uow.transaction(async (stores) => {
-                if (runningCommand(stores.slashCommands.listBySession(session), kind)) return err({ type: 'CommandAlreadyRunning' });
+                if (runningCommand(stores.slashCommands.listBySession(session), kind)) return err({ type: 'Collaboration.CommandAlreadyRunning' });
                 const sent = await sendIn(stores, { clock, ids }, { session, actor, targets: [], body, ...(viewedAt && { viewedAt }) });
                 if (!sent.ok) return sent;
                 const active = await storeVerifications(stores).makeActiveSession(session);
@@ -212,14 +212,14 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 const c = found.value;
                 if (c.state !== 'Listed') return err(notAllowed('apply', c.state));
                 // asked before the run is queued (which asks it too), so that the refusal is the command's
-                if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+                if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
                 const indices = chosenIndices(c.candidates, chosen);
-                if (!indices) return err({ type: 'NoSuchCandidate' });
+                if (!indices) return err({ type: 'Collaboration.NoSuchCandidate' });
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
                 const at = clock.now();
                 const [first, ...rest] = indices.map((i) => c.candidates[i]).filter((x): x is Collaboration.CommandCandidate => x !== undefined);
-                if (!first) return err({ type: 'NoSuchCandidate' });
+                if (!first) return err({ type: 'Collaboration.NoSuchCandidate' });
                 const run = await queueRequests(stores, ids, {
                     session: active.value,
                     requests: [c.opening],

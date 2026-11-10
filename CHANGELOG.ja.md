@@ -10,6 +10,20 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## 未リリース
+
+### 変更
+
+- 生成されるドメインエラーの `type` に BC 名を含めます（`Sales.EmptyOrder`）。ID やドメインプリミティブの
+  `Invalid…` エラーも対象です。エラーの TypeScript インターフェース名は各 BC のモジュール内で従来どおりです。
+
+### アップグレード手順
+
+- TypeScript を再生成し、エラー生成、`type` による判定、エラー応答の処理を `EmptyOrder` / `InvalidOrderId` から
+  `Sales.EmptyOrder` / `Sales.InvalidOrderId` のような BC 修飾名へ変更してください。生成契約テストも修飾名を
+  期待します。コラボレーション API とナレッジ API のドメインエラーも修飾名で送受信します。API 独自のエラー名は
+  従来どおりです。
+
 ## [0.11.0] - 2026-11-10
 
 ### 追加

@@ -215,11 +215,11 @@ export const markCommands: Collaboration.MarkCommands = {
     place: decide<Collaboration.PlaceMarkDecision>(Collaboration.MarkShape, (params) => {
         switch (Collaboration.checkPlaceMarkRequires(params)) {
             case 'fitsTarget':
-                return err({ type: 'MarkNotForTarget' });
+                return err({ type: 'Collaboration.MarkNotForTarget' });
             case 'participantsVote':
-                return err({ type: 'FacilitatorDoesNotVote' });
+                return err({ type: 'Collaboration.FacilitatorDoesNotVote' });
             case 'facilitatorMarksSteps':
-                return err({ type: 'FacilitatorOnly' });
+                return err({ type: 'Collaboration.FacilitatorOnly' });
         }
         const { id, session, participant, target, sign, placedAt } = params;
         return ok({

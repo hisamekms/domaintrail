@@ -193,12 +193,12 @@ describe('the commands of a triage', () => {
         const decided = value(triageCommands.record(pending, { step: step('Clef', 'ChangeRequest'), recordedAt: at })).Decided;
         expect(decided?.aggregate).toMatchObject({ state: 'Decided', kind: 'ChangeRequest', decidedBy: 'Clef' });
         expect(Object.keys(decided?.events ?? {})).toEqual(['TriageStepRecorded', 'TriageDecided']);
-        expect(error(triageCommands.record(pending, { step: step('Mechanical'), recordedAt: at }))).toEqual({ type: 'TriageStepOutOfOrder' });
+        expect(error(triageCommands.record(pending, { step: step('Mechanical'), recordedAt: at }))).toEqual({ type: 'Collaboration.TriageStepOutOfOrder' });
         expect(error(triageCommands.record(opened.aggregate, { step: step('Mechanical', 'Consultation'), recordedAt: at }))).toEqual({
-            type: 'InvalidTriageStep',
+            type: 'Collaboration.InvalidTriageStep',
         });
         expect(error(triageCommands.record(opened.aggregate, { step: step('Answerer', 'Consultation'), recordedAt: at }))).toEqual({
-            type: 'InvalidTriageStep',
+            type: 'Collaboration.InvalidTriageStep',
         });
         const model = value(triageCommands.record(pending, { step: step('Model'), recordedAt: at })).Decided;
         expect(model?.aggregate).toMatchObject({ kind: 'Consultation', decidedBy: 'Model' });
@@ -231,7 +231,7 @@ describe('the commands of a triage', () => {
             [decided('NotForAi'), step('Answerer', 'Consultation')],
             [decided('Consultation'), step('Model', 'ChangeRequest')],
         ] as const)
-            expect(error(triageCommands.override(t, { step: s, overriddenAt: at }))).toEqual({ type: 'TriageNotOverridable' });
+            expect(error(triageCommands.override(t, { step: s, overriddenAt: at }))).toEqual({ type: 'Collaboration.TriageNotOverridable' });
     });
 
     test('readdress: the facilitator sends a "neither" again as 相談, as theirs', () => {
@@ -239,10 +239,10 @@ describe('the commands of a triage', () => {
         expect(again).toMatchObject({ kind: 'Consultation', decidedBy: 'Facilitator', addressedBy: 'Facilitator', addressedByParticipant: facilitator });
         expect(again.steps.at(-1)).toMatchObject({ stage: 'Facilitator', verdict: 'Consultation' });
         expect(error(triageCommands.readdress(decided('NotForAi'), { by: guest, byRole: 'Participant', readdressedAt: at }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
         expect(error(triageCommands.readdress(decided('Consultation'), { by: facilitator, byRole: 'Facilitator', readdressedAt: at }))).toEqual({
-            type: 'RequestAlreadyAddressed',
+            type: 'Collaboration.RequestAlreadyAddressed',
             request,
         });
     });
@@ -250,10 +250,12 @@ describe('the commands of a triage', () => {
     test('conclude: once, with an outcome that fits the kind', () => {
         const run = { kind: 'Run', run: '00000000-0000-4000-8000-000000000009' } as C.TriageOutcome;
         expect(value(triageCommands.conclude(decided('ChangeRequest'), { to: run, concludedAt: at })).Decided.aggregate.outcome).toEqual(run);
-        expect(error(triageCommands.conclude(decided('ChangeRequest', run), { to: run, concludedAt: at }))).toEqual({ type: 'TriageAlreadyConcluded' });
-        expect(error(triageCommands.conclude(decided('NotForAi'), { to: run, concludedAt: at }))).toEqual({ type: 'TriageNotConcludable' });
+        expect(error(triageCommands.conclude(decided('ChangeRequest', run), { to: run, concludedAt: at }))).toEqual({
+            type: 'Collaboration.TriageAlreadyConcluded',
+        });
+        expect(error(triageCommands.conclude(decided('NotForAi'), { to: run, concludedAt: at }))).toEqual({ type: 'Collaboration.TriageNotConcludable' });
         expect(error(triageCommands.conclude(decided('ChangeRequest'), { to: { kind: 'Answer', answer: request }, concludedAt: at }))).toEqual({
-            type: 'TriageNotConcludable',
+            type: 'Collaboration.TriageNotConcludable',
         });
     });
 

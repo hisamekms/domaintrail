@@ -135,15 +135,15 @@ function cart(change: Record<string, unknown> = {}) {
         start: decide(Shop.CartShape, ({ id }: { id: string }) => ok({ Open: { set: { id, lines: [] }, events: { Opened: { type: 'Opened', cart: id } } } })),
         add: decide(Shop.CartShape, {
             Open: (c: any, { line, limit }: any) => {
-                if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Duplicate' });
-                if (!(c.lines.length < limit)) return err({ type: 'Full' });
-                if (forbidden(line.code)) return err({ type: 'Forbidden' });
+                if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Shop.Duplicate' });
+                if (!(c.lines.length < limit)) return err({ type: 'Shop.Full' });
+                if (forbidden(line.code)) return err({ type: 'Shop.Forbidden' });
                 return ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } });
             },
         }),
         close: decide(Shop.CartShape, {
             Open: (c: any) => {
-                if (c.lines.length === 0) return err({ type: 'Empty' });
+                if (c.lines.length === 0) return err({ type: 'Shop.Empty' });
                 return ok({ Closed: { set: { total: c.lines.reduce((n: number, l: any) => n + l.qty, 0) }, events: {} } });
             },
         }),
@@ -151,15 +151,15 @@ function cart(change: Record<string, unknown> = {}) {
     };
 }
 
-const makeQty = (v: number) => (v >= 1 && v <= 10 ? ok(v) : err({ type: 'InvalidQty', value: v, invariant: 'valid' }));
+const makeQty = (v: number) => (v >= 1 && v <= 10 ? ok(v) : err({ type: 'Shop.InvalidQty', value: v, invariant: 'valid' }));
 const makeCode = (v: string) => {
-    if (!/^[A-Z]{2}[0-9]$/.test(v)) return err({ type: 'InvalidCode', value: v, invariant: 'format' });
-    if (v === 'AA0') return err({ type: 'InvalidCode', value: v, invariant: 'reserved' });
-    if (v.length > 3) return err({ type: 'InvalidCode', value: v, invariant: 'short' });
+    if (!/^[A-Z]{2}[0-9]$/.test(v)) return err({ type: 'Shop.InvalidCode', value: v, invariant: 'format' });
+    if (v === 'AA0') return err({ type: 'Shop.InvalidCode', value: v, invariant: 'reserved' });
+    if (v.length > 3) return err({ type: 'Shop.InvalidCode', value: v, invariant: 'short' });
     return ok(v);
 };
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const makeCartId = (v: string) => (UUID.test(v) ? ok(v) : err({ type: 'InvalidCartId', value: v, invariant: 'uuid' }));
+const makeCartId = (v: string) => (UUID.test(v) ? ok(v) : err({ type: 'Shop.InvalidCartId', value: v, invariant: 'uuid' }));
 
 /** Runs every case of a suite: the error message of each that fails, by name; todo cases as 'todo'. */
 async function run(suite: unknown): Promise<Record<string, string | undefined>> {
@@ -247,14 +247,14 @@ describe('generated contract tests', () => {
     });
 
     test('T1 catches a constructor with an off-by-one range, and one that reports the wrong invariant', async () => {
-        const offByOne = (v: number) => (v >= 1 && v <= 11 ? ok(v) : err({ type: 'InvalidQty', value: v, invariant: 'valid' }));
+        const offByOne = (v: number) => (v >= 1 && v <= 11 ? ok(v) : err({ type: 'Shop.InvalidQty', value: v, invariant: 'valid' }));
         const r1 = await run(contract({ make: { Qty: offByOne } }));
         expect(failing(r1)).toHaveLength(1);
         expect(Object.values(r1).join()).toContain("makeQty(11) accepted a value that violates 'valid'");
-        const wrongOrder = (v: string) => (v.length > 3 ? err({ type: 'InvalidCode', value: v, invariant: 'short' }) : makeCode(v));
+        const wrongOrder = (v: string) => (v.length > 3 ? err({ type: 'Shop.InvalidCode', value: v, invariant: 'short' }) : makeCode(v));
         const r2 = await run(contract({ make: { Code: wrongOrder } }));
         expect(Object.values(r2).join()).toMatch(
-            /returned the error \{"type":"InvalidCode","value":".*","invariant":"short"\}; expected \{ type: 'InvalidCode', value: ".*", invariant: 'format' \}/,
+            /returned the error \{"type":"Shop.InvalidCode","value":".*","invariant":"short"\}; expected \{ type: 'Shop.InvalidCode', value: ".*", invariant: 'format' \}/,
         );
     });
 
@@ -262,7 +262,7 @@ describe('generated contract tests', () => {
         const r1 = await run(contract({ make: { CartId: (v: string) => ok(v) } }));
         expect(failing(r1)).toHaveLength(1);
         expect(Object.values(r1).join()).toContain("accepted a value that violates 'uuid'");
-        const lower = (v: string) => (/^[0-9a-f-]{36}$/.test(v) ? makeCartId(v) : err({ type: 'InvalidCartId', value: v, invariant: 'uuid' }));
+        const lower = (v: string) => (/^[0-9a-f-]{36}$/.test(v) ? makeCartId(v) : err({ type: 'Shop.InvalidCartId', value: v, invariant: 'uuid' }));
         expect(failing(await run(contract({ make: { CartId: lower } })))).toHaveLength(1);
         expect(failing(await run(contract({ make: { CartId: makeCartId } })))).toEqual([]);
     });
@@ -271,20 +271,22 @@ describe('generated contract tests', () => {
         const name = 'Shop > Cart > Cart.add returns the error of the first requirement that does not hold, and none of their errors when all hold';
         const add = (body: (c: any, params: any) => unknown) => cart({ add: decide(Shop.CartShape, { Open: body }) });
         const swapped = add((c, { line, limit }) => {
-            if (!(c.lines.length < limit)) return err({ type: 'Full' });
-            if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Duplicate' });
+            if (!(c.lines.length < limit)) return err({ type: 'Shop.Full' });
+            if (c.lines.some((l: any) => l.code === line.code)) return err({ type: 'Shop.Duplicate' });
             return ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } });
         });
-        expect((await run(contract({ Cart: swapped })))[name]).toContain("requirement 'fresh' is the first that does not hold: expected Duplicate");
+        expect((await run(contract({ Cart: swapped })))[name]).toContain("requirement 'fresh' is the first that does not hold: expected Shop.Duplicate");
         const missing = add((c, { line }) => ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 2) } }));
         expect((await run(contract({ Cart: missing })))[name]).toContain('succeeded, but requirement');
-        const strict = add((c) => (c.lines.length > 2 ? err({ type: 'Full' }) : ok({ Open: { set: { lines: c.lines }, events: added(c, 2) } })));
+        const strict = add((c) => (c.lines.length > 2 ? err({ type: 'Shop.Full' }) : ok({ Open: { set: { lines: c.lines }, events: added(c, 2) } })));
         expect((await run(contract({ Cart: strict })))[name]).toBeDefined();
     });
 
     test('T3 catches an aggregate that violates the invariants of its target state', async () => {
         const zero = cart({
-            close: decide(Shop.CartShape, { Open: (c: any) => (c.lines.length ? ok({ Closed: { set: { total: 0 }, events: {} } }) : err({ type: 'Empty' })) }),
+            close: decide(Shop.CartShape, {
+                Open: (c: any) => (c.lines.length ? ok({ Closed: { set: { total: 0 }, events: {} } }) : err({ type: 'Shop.Empty' })),
+            }),
         });
         const r = await run(contract({ Cart: zero }));
         expect(failing(r)).toEqual(['Shop > Cart > Cart.close makes an aggregate that holds the invariants of its state']);
@@ -296,11 +298,11 @@ describe('generated contract tests', () => {
             add: decide(Shop.CartShape, {
                 Open: (c: any, { line, limit }: any) =>
                     c.lines.some((l: any) => l.code === line.code)
-                        ? err({ type: 'Duplicate' })
+                        ? err({ type: 'Shop.Duplicate' })
                         : c.lines.length >= limit
-                          ? err({ type: 'Full' })
+                          ? err({ type: 'Shop.Full' })
                           : forbidden(line.code)
-                            ? err({ type: 'Forbidden' })
+                            ? err({ type: 'Shop.Forbidden' })
                             : ok({ Open: { set: { lines: [...c.lines, line] }, events: added(c, 1) } }),
             }),
         });
@@ -326,7 +328,7 @@ describe('generated contract tests', () => {
         const mutating = cart({
             close: decide(Shop.CartShape, {
                 Open: (c: any) => {
-                    if (c.lines.length === 0) return err({ type: 'Empty' });
+                    if (c.lines.length === 0) return err({ type: 'Shop.Empty' });
                     c.lines.push(c.lines[0]);
                     return ok({ Closed: { set: { total: 1 }, events: {} } });
                 },

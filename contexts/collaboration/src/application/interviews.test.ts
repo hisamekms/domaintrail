@@ -136,13 +136,13 @@ describe('interviews', () => {
         const state = value(await use.sessionState({ session }));
         expect(state.triages).toEqual([]);
         expect(value(await use.interviewJobs({ session })).map((j) => [j.request.id, j.transcript.length])).toEqual([[started.request.id, 1]]);
-        expect(error(await start(use, session))).toEqual({ type: 'InterviewAlreadyRunning' });
+        expect(error(await start(use, session))).toEqual({ type: 'Collaboration.InterviewAlreadyRunning' });
 
         // a participant starts one too; then it is the one running
         const c = await collab();
         const bobs = value(await start(c.use, c.session, bob));
         expect(bobs.interview).toMatchObject({ state: 'Asking', startedBy: bobId });
-        expect(error(await start(c.use, c.session))).toEqual({ type: 'InterviewAlreadyRunning' });
+        expect(error(await start(c.use, c.session))).toEqual({ type: 'Collaboration.InterviewAlreadyRunning' });
     });
 
     test('while it runs the starter answers it without triage; the others are triaged as usual', async () => {
@@ -165,7 +165,7 @@ describe('interviews', () => {
         // a question to a message the interview no longer waits for writes nothing
         const again = value(await say(use, session, facilitator, 'やっぱり交換も'));
         expect(error(await use.askInInterview({ interview: started.interview.id, answered: answer.request.id, question: text('?') }))).toEqual({
-            type: 'InterviewMovedOn',
+            type: 'Collaboration.InterviewMovedOn',
         });
         expect(value(await use.interviewJobs({ session })).map((j) => j.request.id)).toEqual([again.request.id]);
     });
@@ -190,12 +190,12 @@ describe('interviews', () => {
         const started = value(await start(use, session));
         const briefed = value(await use.briefInterview({ interview: started.interview.id, answered: started.request.id, brief: brief() }));
         expect(briefed).toMatchObject({ state: 'Briefed', answered: started.request.id });
-        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
         // a line without a known head is refused: nothing typed is lost
         expect(
             error(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: value(C.makeBriefText('目的: x\nほか: y')) })),
         ).toMatchObject({
-            type: 'InvalidBriefText',
+            type: 'Collaboration.InvalidBriefText',
         });
         expect(journeys.text()).toBeUndefined();
         const edited = value(C.makeBriefText('目的: 返金を3日以内に\n範囲: 申請から返金まで\n参加者: 窓口担当、経理'));
@@ -386,8 +386,8 @@ describe('an interview a participant started', () => {
 
     test('its brief waits for the facilitator: the starter cannot confirm it; the facilitator approves it (edited)', async () => {
         const { use, session, started, answer } = await briefedByBob();
-        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
-        expect(error(await use.rejectInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.confirmInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
+        expect(error(await use.rejectInterview({ interview: started.interview.id, actor: bob }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
         expect(value(await use.sessionSoFar({ session })).open).toContainEqual(expect.stringContaining("awaits the facilitator's confirmation"));
         const edited = value(C.makeBriefText('目的: 返金を3日以内に'));
         const approved = value(await use.confirmInterview({ interview: started.interview.id, actor: facilitator, text: edited }));
@@ -431,7 +431,7 @@ describe('an interview a participant started', () => {
     test('stop: its starter or the facilitator, no one else', async () => {
         const { use, session } = await collab();
         const started = value(await start(use, session, bob));
-        expect(error(await use.stopInterview({ interview: started.interview.id, actor: carol }))).toEqual({ type: 'NotTheInterviewer' });
+        expect(error(await use.stopInterview({ interview: started.interview.id, actor: carol }))).toEqual({ type: 'Collaboration.NotTheInterviewer' });
         expect(value(await use.stopInterview({ interview: started.interview.id, actor: facilitator }))).toMatchObject({
             state: 'Stopped',
             stoppedBy: facilitatorId,

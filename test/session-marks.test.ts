@@ -211,8 +211,12 @@ describe('setting marks', () => {
                 answer: { answerTo: run, answer: { answers: [{ question: 'q1', options: ['a'] }] } },
             }),
         );
-        expect(error(await f.use.setMark({ session: f.id, actor: actor(bob), target, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
-        expect(error(await f.use.setMark({ session: f.id, actor: actor(ann), target, sign: VOTE, placed: false }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, actor: actor(bob), target, sign: VOTE, placed: true }))).toEqual({
+            type: 'Collaboration.MarkTargetClosed',
+        });
+        expect(error(await f.use.setMark({ session: f.id, actor: actor(ann), target, sign: VOTE, placed: false }))).toEqual({
+            type: 'Collaboration.MarkTargetClosed',
+        });
         expect(value(await f.use.sessionState({ session: f.id })).marks).toHaveLength(1);
     });
 
@@ -224,7 +228,9 @@ describe('setting marks', () => {
         value(await f.use.setMark({ session: f.id, actor: actor(ann), target: keep, sign: VOTE, placed: true }));
         expect(value(await f.use.setMark({ session: f.id, actor: actor(ann), target: all, sign: VOTE, placed: true })).removed).toHaveLength(1);
         value(await f.use.queueRun({ session: f.id, requests: [f.message], actor: actor(facilitator), note: text('前提「Only drafts.」は採らず…') }));
-        expect(error(await f.use.setMark({ session: f.id, actor: actor(bob), target: keep, sign: VOTE, placed: true }))).toEqual({ type: 'MarkTargetClosed' });
+        expect(error(await f.use.setMark({ session: f.id, actor: actor(bob), target: keep, sign: VOTE, placed: true }))).toEqual({
+            type: 'Collaboration.MarkTargetClosed',
+        });
     });
 
     test('refused: the facilitator voting, a sign that does not fit, a target not in the session, a stranger, a closed session', async () => {
@@ -233,12 +239,12 @@ describe('setting marks', () => {
         const target: C.MarkTarget = { kind: 'QuestionOption', run, question: key('q1'), option: key('a') };
         const set = (participant: C.ParticipantId, t: C.MarkTarget, sign: C.MarkSign) =>
             f.use.setMark({ session: f.id, actor: actor(participant), target: t, sign, placed: true });
-        expect(error(await set(facilitator, target, VOTE))).toEqual({ type: 'FacilitatorDoesNotVote' });
-        expect(error(await set(ann, target, react('👍')))).toEqual({ type: 'MarkNotForTarget' });
-        expect(error(await set(ann, { kind: 'Message', request: f.message }, VOTE))).toEqual({ type: 'MarkNotForTarget' });
-        expect(error(await set(ann, { ...target, option: key('zz') }, VOTE))).toEqual({ type: 'MarkTargetNotFound' });
+        expect(error(await set(facilitator, target, VOTE))).toEqual({ type: 'Collaboration.FacilitatorDoesNotVote' });
+        expect(error(await set(ann, target, react('👍')))).toEqual({ type: 'Collaboration.MarkNotForTarget' });
+        expect(error(await set(ann, { kind: 'Message', request: f.message }, VOTE))).toEqual({ type: 'Collaboration.MarkNotForTarget' });
+        expect(error(await set(ann, { ...target, option: key('zz') }, VOTE))).toEqual({ type: 'Collaboration.MarkTargetNotFound' });
         expect(error(await set(ann, { kind: 'Turn', run: knownAgentRunId('00000000-0000-4000-8000-0000000000ff') }, react('❤️')))).toEqual({
-            type: 'MarkTargetNotFound',
+            type: 'Collaboration.MarkTargetNotFound',
         });
         expect(error(await set(value(C.makeParticipantId('stranger')), { kind: 'Message', request: f.message }, react('❤️')))).toMatchObject({
             type: 'NotAParticipant',
@@ -249,7 +255,7 @@ describe('setting marks', () => {
         value(await set(ann, { kind: 'Turn', run }, react('🤔')));
         expect(value(await f.use.sessionState({ session: f.id })).marks.map((m) => signKey(m.sign))).toEqual(['👍', '👀', '🤔']);
         value(await f.use.closeSession({ session: f.id, actor: actor(facilitator) }));
-        expect(error(await set(ann, { kind: 'Message', request: f.message }, react('❤️')))).toEqual({ type: 'SessionAlreadyClosed' });
+        expect(error(await set(ann, { kind: 'Message', request: f.message }, react('❤️')))).toEqual({ type: 'Collaboration.SessionAlreadyClosed' });
     });
 
     test(`a message holds at most ${MAX_REACTION_EMOJI} different emoji: the next new one is refused, one already there is not`, async () => {
@@ -258,7 +264,7 @@ describe('setting marks', () => {
         const set = (participant: C.ParticipantId, emoji: string) =>
             f.use.setMark({ session: f.id, actor: actor(participant), target: message, sign: react(emoji), placed: true });
         for (const [i, e] of TWENTY.entries()) value(await set(i % 2 === 0 ? ann : bob, e));
-        expect(error(await set(ann, '🙃'))).toEqual({ type: 'ReactionLimitReached', limit: value(C.makeTally(MAX_REACTION_EMOJI)) });
+        expect(error(await set(ann, '🙃'))).toEqual({ type: 'Collaboration.ReactionLimitReached', limit: value(C.makeTally(MAX_REACTION_EMOJI)) });
         // joining an emoji there is fine; taking one off makes room
         value(await set(ann, '😁'));
         value(await f.use.setMark({ session: f.id, actor: actor(ann), target: message, sign: react('😀'), placed: false }));
@@ -429,8 +435,8 @@ describe('the marks route and its broadcast', () => {
         expect(await bad({ target: { kind: 'Turn', run: 'x' }, sign: like, placed: true })).toEqual([400, 'target.run']);
         expect(await bad({ target: { kind: 'Turn', run, extra: 1 }, sign: like, placed: true })).toEqual([400, 'target.extra']);
         expect(await bad({ target: turn, sign: like })).toEqual([400, 'placed']);
-        expect(await bad({ target: turn, sign: { kind: 'Vote' }, placed: true })).toEqual([400, 'MarkNotForTarget']);
-        expect(await bad({ target: { kind: 'Turn', run: crypto.randomUUID() }, sign: like, placed: true })).toEqual([404, 'MarkTargetNotFound']);
+        expect(await bad({ target: turn, sign: { kind: 'Vote' }, placed: true })).toEqual([400, 'Collaboration.MarkNotForTarget']);
+        expect(await bad({ target: { kind: 'Turn', run: crypto.randomUUID() }, sign: like, placed: true })).toEqual([404, 'Collaboration.MarkTargetNotFound']);
         // a ZWJ sequence, a skin tone, a flag and a keycap are one emoji each
         for (const emoji of ['👨‍👩‍👧‍👦', '👍🏽', '🇯🇵', '1️⃣'])
             expect((await api(bob, 'marks', { target: turn, sign: { kind: 'Reaction', emoji }, placed: true })).status).toBe(200);
@@ -440,7 +446,7 @@ describe('the marks route and its broadcast', () => {
         expect((await api(ada, 'runs', { requests: [request], answerTo: run, answer: { answers: [{ question: 'q1', options: ['b'] }] } })).status).toBe(201);
         expect(await bad({ target: { kind: 'QuestionOption', run, question: 'q1', option: 'a' }, sign: { kind: 'Vote' }, placed: true })).toEqual([
             409,
-            'MarkTargetClosed',
+            'Collaboration.MarkTargetClosed',
         ]);
     });
 });

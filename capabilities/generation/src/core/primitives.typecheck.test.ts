@@ -59,7 +59,7 @@ export const sku: Sales.Sku = 'x' as Common.EmailAddress;
 export const n: number = item.quantity; // a Quantity can be read as its base value
 export const bad: Common.MakeEmailAddress = (value) =>
     // @ts-expect-error only declared invariant names can be reported
-    err({ type: 'InvalidEmailAddress', value, invariant: 'tooShort' });
+    err({ type: 'Common.InvalidEmailAddress', value, invariant: 'tooShort' });
 export const amount: Decimal = price.amount; // Decimal-based values keep their brand
 `,
         );

@@ -133,8 +133,8 @@ export function soloIdentities(deps: SoloIdentitiesDeps): SessionIdentities {
             }
             return signIn.signedIn(headers) ? who : undefined;
         },
-        signIn: async () => err({ type: 'SoloSession' }),
-        signInFacilitator: async () => err({ type: 'SoloSession' }),
+        signIn: async () => err({ type: 'Collaboration.SoloSession' }),
+        signInFacilitator: async () => err({ type: 'Collaboration.SoloSession' }),
         remove: async () => err({ type: 'NotRemovable' }),
         signOut: async () => undefined,
         claimFacilitator: async () => err({ type: 'LinkInvalid' }),

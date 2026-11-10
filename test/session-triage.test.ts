@@ -253,7 +253,7 @@ describe('addressing, what each role sees, and presence', () => {
         expect(addressed.status).toBe(201);
         expect(((await addressed.json()) as { triages: unknown[] }).triages).toMatchObject([{ addressedBy: 'Facilitator', request: talk }]);
         const again = await ctx.api(ctx.ada, 'requests/address', { requests: [talk] });
-        expect([again.status, ((await again.json()) as { error: { type: string } }).error.type]).toEqual([409, 'RequestAlreadyAddressed']);
+        expect([again.status, ((await again.json()) as { error: { type: string } }).error.type]).toEqual([409, 'Collaboration.RequestAlreadyAddressed']);
         // an acknowledgement is "neither" at stage 1: nothing waits for the AI
         const thanks = await say(ctx, ctx.bob, 'ありがとう！', { ai: true });
         expect(triageOf(await ctx.state(), thanks)).toMatchObject({ state: 'Decided', kind: 'NotForAi', decidedBy: 'Mechanical' });

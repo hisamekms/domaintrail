@@ -611,7 +611,7 @@ class TestsEmitter {
             `    input: () => ${input},`,
             `    examples: options.examples?.${agg.name}?.commands?.${c.name} ?? [],`,
             `    factory: ${c.factory},`,
-            `    requires: [${c.requires.map((r) => `{ name: '${r.name}', error: '${simple(r.error)}' }`).join(', ')}],`,
+            `    requires: [${c.requires.map((r) => `{ name: '${r.name}', error: '${r.error}' }`).join(', ')}],`,
             `    declaredRequires: [${declaredReqs.join(', ')}],`,
             ...(c.requires.length
                 ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`]
@@ -668,7 +668,7 @@ class TestsEmitter {
             `    input: () => ${input},`,
             `    examples: options.examples?.${agg.name}?.commands?.${c.name} ?? [],`,
             `    factory: ${c.factory},`,
-            `    requires: [${requirements.map((x) => `{ name: '${x.key}', error: '${x.requirement.error.slice(x.requirement.error.indexOf('.') + 1)}' }`).join(', ')}],`,
+            `    requires: [${requirements.map((x) => `{ name: '${x.key}', error: '${x.requirement.error}' }`).join(', ')}],`,
             `    declaredRequires: [${declaredReqs.join(', ')}],`,
             ...(requirements.length
                 ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`]

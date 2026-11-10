@@ -363,7 +363,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             name: options.facilitatorName ?? (mode === 'Solo' ? await soloName(options.root) : FACILITATOR_NAME),
         });
         if (!openedSession.ok) {
-            if (openedSession.error.type === 'CollabSessionOpen')
+            if (openedSession.error.type === 'Collaboration.CollabSessionOpen')
                 throw new SessionError(
                     'This workspace has an open collab session: resume it with `dt collab`, or end it from its collab menu before `dt open`.',
                 );
