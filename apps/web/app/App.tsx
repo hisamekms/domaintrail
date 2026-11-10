@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 import { Blocks, StickyNote, type LucideIcon } from 'lucide-react';
 import type { Diagnostic } from '@domaintrail/kernel';
 import type { DomainModel } from '@domaintrail/modeling';
@@ -39,8 +40,9 @@ import { linkedElement } from '../stickies/link';
 import { currentReturn, RETURN_STATE, type ReturnPoint } from '../stickies/return';
 import { isMac } from '../stickies/registry';
 import { highlightElement } from '../view/canvas';
-import { KnowledgeList, KnowledgeMarks, KnowledgeNotice, StickyKnowledge } from '../knowledge/panel';
+import { KnowledgeList, KnowledgeMarks, KnowledgeNotice, KnowledgeWorkspace, StickyKnowledge } from '../knowledge/panel';
 import { KnowledgeContext, useKnowledge } from '../knowledge/useKnowledge';
+import type { Order } from '../knowledge/model';
 import { CopySteps } from '../view/lines';
 
 const WORLD_ICONS: Record<World, LucideIcon> = { model: Blocks, storming: StickyNote };
@@ -79,6 +81,14 @@ export function App() {
     // a session's page opens on its chat (useSessionPage): from the first frame when the server said there is one
     const panes = usePanes(preferences.uiScale, boot?.session !== undefined);
     const { setExplorerOpen, showInspector, showLeft, legends } = panes;
+    const [knowledgeWorkspaceOpen, setKnowledgeWorkspaceOpen] = useState(false);
+    const [knowledgeSelected, setKnowledgeSelected] = useState<string | undefined>();
+    const [knowledgeOrder, setKnowledgeOrder] = useState<Order>('newest');
+    const knowledgeExpand = useRef<HTMLButtonElement | null>(null);
+    const closeKnowledgeWorkspace = (): void => {
+        flushSync(() => setKnowledgeWorkspaceOpen(false));
+        knowledgeExpand.current?.focus();
+    };
     const { inspectorTab, setInspectorTab, openInspector } = panes;
     /** The button the baseline menu was opened from (it opens next to it), or null while closed. */
     const [baselineAnchor, setBaselineAnchor] = useState<HTMLElement | null>(null);
@@ -458,7 +468,18 @@ export function App() {
                             knowledge: {
                                 count: knowledge.proposals.length,
                                 badge: knowledge.proposals.length > 0 ? <span className="activity-badge">{knowledge.proposals.length}</span> : undefined,
-                                content: <KnowledgeList onClose={() => setExplorerOpen(false)} closeLabel={t.closeExplorer} />,
+                                content: (
+                                    <KnowledgeList
+                                        onClose={() => setExplorerOpen(false)}
+                                        closeLabel={t.closeExplorer}
+                                        onExpand={(button) => {
+                                            knowledgeExpand.current = button;
+                                            setKnowledgeWorkspaceOpen(true);
+                                        }}
+                                        selection={{ id: knowledgeSelected, onChange: setKnowledgeSelected }}
+                                        sort={{ order: knowledgeOrder, onChange: setKnowledgeOrder }}
+                                    />
+                                ),
                             },
                         }),
                         changes: {
@@ -503,6 +524,18 @@ export function App() {
                         />
                     }
                     {...((session.conversation ?? boot?.session) && { conversation: session.conversation ?? PENDING_CONVERSATION })}
+                    screen={
+                        knowledgeWorkspaceOpen ? (
+                            <KnowledgeWorkspace
+                                selected={knowledgeSelected}
+                                onSelect={setKnowledgeSelected}
+                                order={knowledgeOrder}
+                                onOrder={setKnowledgeOrder}
+                                onBack={closeKnowledgeWorkspace}
+                                onLeave={() => setKnowledgeWorkspaceOpen(false)}
+                            />
+                        ) : undefined
+                    }
                     inspector={
                         <Inspector
                             model={model}

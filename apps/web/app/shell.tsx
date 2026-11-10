@@ -99,6 +99,8 @@ export function AppShell(props: {
     inspector: ReactNode;
     /** Composition point for the conversation pillar; nothing under `dt view` (yet). */
     conversation?: Conversation;
+    /** A separate page over the canvas, with the underlying view kept mounted for return. */
+    screen?: ReactNode;
     /** Popups placed over the page (e.g. the baseline menu). */
     overlays: ReactNode;
 }) {
@@ -138,7 +140,7 @@ export function AppShell(props: {
 
     return (
         <div className={`app motion-${motion}`}>
-            <header className="app-bar">
+            <header className="app-bar" inert={props.screen !== undefined} aria-hidden={props.screen !== undefined}>
                 <span className="app-bar-brand">
                     <BrandLogo />
                     <span className="brand">DomainTrail</span>
@@ -157,7 +159,7 @@ export function AppShell(props: {
                     {sessionSpace !== null && <span className="app-bar-session-pending" style={{ width: sessionSpace }} aria-hidden />}
                 </div>
             </header>
-            <div className="app-body">
+            <div className="app-body" inert={props.screen !== undefined} aria-hidden={props.screen !== undefined}>
                 <div className={`left${leftOpen ? ' open' : ''}`} style={{ width: leftWidth }}>
                     <div className="left-main">
                         <div className="activity-bar" role="tablist" aria-orientation="vertical" aria-label={t.listsLabel}>
@@ -269,6 +271,7 @@ export function AppShell(props: {
                     </>
                 )}
             </div>
+            {props.screen}
             {props.overlays}
             <Tooltips />
         </div>

@@ -7,8 +7,23 @@
 // mark on the canvas, the stickies an opened item lights up, and the session's extraction switch in the app bar
 // (section 3). A retired item (廃止, section 12) is hidden from the lists unless 廃止も表示, then faded, with its reason
 // and the item that replaced it; the AI's 廃止の候補 head the ナレッジ list, each approved or dismissed by a person.
-import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
-import { Archive, ArchiveRestore, Bookmark, Bot, CircleAlert, ImagePlus, Lightbulb, LightbulbOff, PanelLeftClose, Pencil, Search, Trash2 } from 'lucide-react';
+import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
+import {
+    Archive,
+    ArchiveRestore,
+    Bookmark,
+    Bot,
+    CircleAlert,
+    Expand,
+    ImagePlus,
+    Lightbulb,
+    LightbulbOff,
+    PanelLeftClose,
+    Pencil,
+    Search,
+    Trash2,
+} from 'lucide-react';
 import { latestRevision } from '../session/state';
 import { sessionApi } from '../session/api';
 import { AI_NAME } from '../session/ai';
@@ -29,6 +44,7 @@ import {
     NO_FILTERS,
     isRetired,
     ordered,
+    onlyLabel,
     ORIGINS,
     RETIREMENT_REASONS,
     pairKey,
@@ -46,7 +62,7 @@ import {
     type Order,
 } from './model';
 import { KnowledgeMarkdown, KnowledgePlain } from './text';
-import { useKnowledgeView, type KnowledgeView } from './useKnowledge';
+import { KnowledgeContext, useKnowledgeView, type KnowledgeView } from './useKnowledge';
 import type { Knowledge, PastVersion } from '@domaintrail/knowledge';
 
 const failure = (e: unknown): string => (e instanceof Error ? e.message : String(e));
@@ -338,7 +354,7 @@ function SourceLine({ source }: { source: KnowledgeItem['sources'][number] }): R
  * An item opened, under its title: its text as Markdown (with its images), its labels as chips, its sources, the other
  * stickies, its versions, and its actions; 直す puts the form in their place.
  */
-function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefined }): ReactElement {
+export function ItemDetail({ item, from }: { item: KnowledgeItem; from: string | undefined }): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
@@ -695,16 +711,25 @@ function SideDetail({ item, from, open }: { item: KnowledgeItem; from: string | 
 function useOpened(
     view: KnowledgeView | undefined,
     items: readonly KnowledgeItem[],
+    selection?: { readonly id: string | undefined; readonly onChange: (id: string | undefined) => void },
+    lightCanvas = true,
 ): { isOpen: (id: string) => boolean; toggle: (item: KnowledgeItem) => void; open: (id: string) => void } {
-    const [opened, setOpened] = useState<string | undefined>();
+    const [local, setLocal] = useState<string | undefined>();
+    const opened = selection ? selection.id : local;
+    const setOpened = (id: string | undefined): void => (selection ? selection.onChange(id) : setLocal(id));
     const item = items.find((i) => i.id === opened);
     const setLit = view?.setLit;
     const about = item?.content.about.join(',') ?? '';
     useEffect(() => {
-        setLit?.(about ? about.split(',') : []);
-    }, [about, setLit]);
-    useEffect(() => () => setLit?.([]), [setLit]);
-    return { isOpen: (id) => id === opened, toggle: (i) => setOpened((o) => (o === i.id ? undefined : i.id)), open: setOpened };
+        if (lightCanvas) setLit?.(about ? about.split(',') : []);
+    }, [about, setLit, lightCanvas]);
+    useEffect(
+        () => () => {
+            if (lightCanvas) setLit?.([]);
+        },
+        [setLit, lightCanvas],
+    );
+    return { isOpen: (id) => id === opened, toggle: (i) => setOpened(opened === i.id ? undefined : i.id), open: setOpened };
 }
 
 /**
@@ -793,7 +818,21 @@ function ChipRow<V extends string>({
 }
 
 /** The ナレッジ list of the left column: every item, with search and the filters by when, kind and origin. */
-export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; closeLabel: string }): ReactElement {
+export function KnowledgeList({
+    onClose,
+    closeLabel,
+    onExpand,
+    selection,
+    sort,
+    layout = 'sidebar',
+}: {
+    onClose: () => void;
+    closeLabel: string;
+    onExpand?: (button: HTMLButtonElement) => void;
+    selection?: { readonly id: string | undefined; readonly onChange: (id: string | undefined) => void };
+    sort?: { readonly order: Order; readonly onChange: (order: Order) => void };
+    layout?: 'sidebar' | 'workspace';
+}): ReactElement {
     const t = useT().knowledge;
     const view = useKnowledgeView();
     const api = useKnowledgeApi();
@@ -801,7 +840,9 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
     const [ownFilters, setOwnFilters] = useState<Filters>(NO_FILTERS);
     const filters = view?.filters ?? ownFilters;
     const setFilters = view?.setFilters ?? setOwnFilters;
-    const [order, setOrder] = useState<Order>('newest');
+    const [localOrder, setLocalOrder] = useState<Order>('newest');
+    const order = sort?.order ?? localOrder;
+    const setOrder = sort?.onChange ?? setLocalOrder;
     const [items, setItems] = useState<readonly KnowledgeItem[]>([]);
     const [next, setNext] = useState<string | undefined>();
     const version = view?.version ?? 0;
@@ -829,7 +870,7 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
         setItems((old) => [...old, ...p.items]);
         setNext(p.next);
     };
-    const opened = useOpened(view, items);
+    const opened = useOpened(view, items, selection, layout === 'sidebar');
     /** An item linked from another (its replacement, a proposal's): opened in the list, fetched when it is not listed. */
     const openItem = async (id: string): Promise<void> => {
         if (!items.some((i) => i.id === id)) {
@@ -841,13 +882,27 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
     };
     return (
         <OpenItemContext.Provider value={(id) => void openItem(id)}>
-            <div className="list knowledge-list">
+            <div className={`list knowledge-list${layout === 'workspace' ? ' knowledge-workspace-list' : ''}`}>
                 <div className="list-head">
                     <span className="list-title">{t.title}</span>
-                    <OrderSwitch order={order} onOrder={setOrder} />
-                    <button className="icon-button" onClick={onClose} data-tooltip={closeLabel} aria-label={closeLabel}>
-                        <PanelLeftClose size={16} aria-hidden />
-                    </button>
+                    {layout === 'workspace' && <OrderSwitch order={order} onOrder={setOrder} />}
+                    {onExpand && (
+                        <button
+                            type="button"
+                            className="knowledge-expand"
+                            onClick={(event) => onExpand(event.currentTarget)}
+                            data-tooltip={t.openWorkspace}
+                            aria-label={t.openWorkspace}
+                        >
+                            <Expand size={14} aria-hidden />
+                            <span>{t.openWorkspace}</span>
+                        </button>
+                    )}
+                    {layout === 'sidebar' && (
+                        <button type="button" className="icon-button" onClick={onClose} data-tooltip={closeLabel} aria-label={closeLabel}>
+                            <PanelLeftClose size={16} aria-hidden />
+                        </button>
+                    )}
                 </div>
                 <div className="list-body knowledge-list-body">
                     <label className="knowledge-search">
@@ -860,6 +915,11 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
                             onChange={(e) => setFilters({ ...filters, q: e.target.value })}
                         />
                     </label>
+                    {layout === 'sidebar' && (
+                        <div className="knowledge-sidebar-order">
+                            <OrderSwitch order={order} onOrder={setOrder} />
+                        </div>
+                    )}
                     <Proposals />
                     <div className="knowledge-filters">
                         <ChipRow
@@ -926,9 +986,28 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
                         <p className="muted">{t.noMatch}</p>
                     ) : (
                         <ul className="knowledge-items">
-                            {ordered(items, order).map((i) => (
-                                <ItemRow key={i.id} item={i} from={undefined} open={opened.isOpen(i.id)} onToggle={() => opened.toggle(i)} />
-                            ))}
+                            {ordered(items, order).map((i) =>
+                                layout === 'workspace' ? (
+                                    <li key={i.id} className="knowledge-workspace-row">
+                                        <button
+                                            type="button"
+                                            className="knowledge-workspace-row-button"
+                                            aria-current={opened.isOpen(i.id) ? 'true' : undefined}
+                                            onClick={() => opened.open(i.id)}
+                                        >
+                                            <span className="knowledge-kind">{t.kinds[i.content.labels.kind]}</span>
+                                            <span className="knowledge-item-title">{i.content.title}</span>
+                                            {i.bookmarked && <Bookmark size={14} fill="currentColor" aria-label={t.bookmark} />}
+                                            {i.conflictsWith.length > 0 && <CircleAlert size={14} aria-label={t.conflict} />}
+                                            <span className="knowledge-workspace-row-meta">
+                                                <Meta item={i} />
+                                            </span>
+                                        </button>
+                                    </li>
+                                ) : (
+                                    <ItemRow key={i.id} item={i} from={undefined} open={opened.isOpen(i.id)} onToggle={() => opened.toggle(i)} />
+                                ),
+                            )}
                         </ul>
                     )}
                     {next !== undefined && (
@@ -939,6 +1018,142 @@ export function KnowledgeList({ onClose, closeLabel }: { onClose: () => void; cl
                 </div>
             </div>
         </OpenItemContext.Provider>
+    );
+}
+
+/** A roomier place to read and manage an item. The canvas and chat stay mounted behind this screen. */
+export function KnowledgeWorkspace({
+    selected,
+    onSelect,
+    order,
+    onOrder,
+    onBack,
+    onLeave,
+}: {
+    selected: string | undefined;
+    onSelect: (id: string | undefined) => void;
+    order: Order;
+    onOrder: (order: Order) => void;
+    onBack: () => void;
+    onLeave: () => void;
+}): ReactElement {
+    const t = useT().knowledge;
+    const view = useKnowledgeView();
+    const api = useKnowledgeApi();
+    const [item, setItem] = useState<KnowledgeItem | null | undefined>();
+    const [showDetail, setShowDetail] = useState(selected !== undefined);
+    const backButton = useRef<HTMLButtonElement>(null);
+    const detailPane = useRef<HTMLElement>(null);
+    const listPane = useRef<HTMLElement>(null);
+    useLayoutEffect(() => {
+        backButton.current?.focus();
+    }, []);
+    const version = view?.version ?? 0;
+    useEffect(() => {
+        if (!selected) return;
+        let stale = false;
+        api.get(selected).then(
+            (got) => !stale && setItem(got?.item ?? null),
+            () => !stale && setItem(null),
+        );
+        return () => {
+            stale = true;
+        };
+    }, [api, selected, version]);
+    const choose = (id: string | undefined): void => {
+        const mobile = window.matchMedia('(max-width: 700px)').matches;
+        if (mobile && id)
+            flushSync(() => {
+                onSelect(id);
+                setShowDetail(true);
+            });
+        else onSelect(id);
+        if (id) {
+            setItem(undefined);
+            setShowDetail(true);
+            if (mobile) detailPane.current?.focus();
+        }
+    };
+    const contextualView: KnowledgeView | undefined = view && {
+        ...view,
+        select: (sticky) => {
+            onLeave();
+            view.select(sticky);
+        },
+        filterByLabel: (chip) => view.setFilters(onlyLabel(chip)),
+        ...(view.messageOf && {
+            messageOf: (session: string, message: string) => {
+                const source = view.messageOf?.(session, message);
+                return (
+                    source && {
+                        ...source,
+                        open: () => {
+                            onLeave();
+                            source.open();
+                        },
+                    }
+                );
+            },
+        }),
+    };
+    return (
+        <KnowledgeContext.Provider value={contextualView}>
+            <section className="knowledge-workspace" aria-label={t.title} data-mobile-detail={showDetail}>
+                <header className="knowledge-workspace-header">
+                    <button type="button" className="knowledge-workspace-back" ref={backButton} onClick={onBack}>
+                        {t.backToCanvas}
+                    </button>
+                    <h1>{t.title}</h1>
+                </header>
+                <div className="knowledge-workspace-columns">
+                    <aside className="knowledge-workspace-list-pane" aria-label={t.listLabel} ref={listPane}>
+                        <KnowledgeList
+                            onClose={onBack}
+                            closeLabel={t.backToCanvas}
+                            layout="workspace"
+                            selection={{ id: selected, onChange: choose }}
+                            sort={{ order, onChange: onOrder }}
+                        />
+                    </aside>
+                    <main className="knowledge-workspace-detail-pane" aria-label={t.detailLabel} ref={detailPane} tabIndex={-1}>
+                        {showDetail && (
+                            <button
+                                type="button"
+                                className="knowledge-workspace-list-back"
+                                onClick={() => {
+                                    flushSync(() => setShowDetail(false));
+                                    listPane.current?.querySelector<HTMLButtonElement>('[aria-current="true"]')?.focus();
+                                }}
+                            >
+                                {t.backToList}
+                            </button>
+                        )}
+                        {!selected ? (
+                            <p className="muted">{t.chooseItem}</p>
+                        ) : item === undefined ? (
+                            <p className="muted" role="status">
+                                {t.loadingItem}
+                            </p>
+                        ) : item === null ? (
+                            <p className="muted" role="status">
+                                {t.missingItem}
+                            </p>
+                        ) : (
+                            <OpenItemContext.Provider value={choose}>
+                                <article className="knowledge-workspace-detail" key={item.id}>
+                                    <div className="knowledge-workspace-detail-heading">
+                                        <span className="knowledge-kind">{t.kinds[item.content.labels.kind]}</span>
+                                        <h2>{item.content.title}</h2>
+                                    </div>
+                                    <Meta item={item} />
+                                    <ItemDetail item={item} from={undefined} />
+                                </article>
+                            </OpenItemContext.Provider>
+                        )}
+                    </main>
+                </div>
+            </section>
+        </KnowledgeContext.Provider>
     );
 }
 
