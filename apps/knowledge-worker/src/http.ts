@@ -6,6 +6,7 @@
 // | DELETE /knowledge?session=         | deleteSession     | delete  |
 // | GET /knowledge/:id[?history=1]     | get               | read    |
 // | PATCH /knowledge/:id               | correct           | correct |
+// | POST /knowledge/:id/bookmark        | setBookmark       | correct |
 // | DELETE /knowledge/:id              | delete            | delete  |
 // | POST /knowledge/:id/restore        | restore (元に戻す) | delete  |
 // | POST /knowledge/:id/unlink         | unlinkConflict    | correct |
@@ -50,6 +51,7 @@ import {
     type DomainError,
     imageId,
     itemContent,
+    bookmarkBody,
     itemId,
     knowledgeQueryOf,
     unlinkBody,
@@ -202,6 +204,13 @@ async function route(
                 const denied = allow('delete');
                 if (denied) return denied;
                 const r = await store.restore(project, item, actor());
+                return r.ok ? json(r.value) : itemError(r.error);
+            }
+            if (sub === 'bookmark' && method === 'POST') {
+                const denied = allow('correct');
+                if (denied) return denied;
+                const bookmarked = bookmarkBody(await body(), 'body');
+                const r = await store.setBookmark(project, item, bookmarked, actor());
                 return r.ok ? json(r.value) : itemError(r.error);
             }
             if (sub === 'unlink' && method === 'POST') {

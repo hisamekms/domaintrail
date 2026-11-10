@@ -90,6 +90,7 @@ export interface ItemRow {
     readonly deleted_by: string | null;
     readonly deleted_at: string | null;
     readonly retirement: string | null;
+    readonly bookmarked: number;
     readonly rev: number;
 }
 
@@ -124,6 +125,7 @@ export function itemOf(row: ItemRow): Knowledge.KnowledgeItem {
             ...(row.deleted_by !== null && { deletedBy: row.deleted_by }),
             ...(row.deleted_at !== null && { deletedAt: row.deleted_at }),
             ...(row.retirement !== null && { retirement: JSON.parse(row.retirement) }),
+            ...(row.bookmarked === 1 && { bookmarked: true }),
         },
         `items[${row.id}]`,
     );
@@ -278,6 +280,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
         if (query.session !== undefined) where.push(`i.created_in = ${bind(query.session)}`);
         if (query.retired === undefined) where.push('i.retirement IS NULL');
         else if (query.retired === 'only') where.push('i.retirement IS NOT NULL');
+        if (query.bookmarked) where.push('i.bookmarked = 1');
         const terms = (query.q ?? '').split(/\s+/).filter(Boolean).slice(0, 10);
         if (terms.length > 0)
             where.push(`i.seq IN (SELECT rowid FROM item_search WHERE ${terms.map((t) => `body LIKE ${bind(likeTerm(t))} ESCAPE '\\'`).join(' AND ')})`);
@@ -431,6 +434,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 deletedBy: i.state === 'Deleted' ? i.deletedBy : null,
                 deletedAt: i.state === 'Deleted' ? i.deletedAt : null,
                 retirement: i.retirement ?? null,
+                bookmarked: i.bookmarked === true ? 1 : 0,
                 body: searchBody(i),
                 images: imagesIn(i.content.text),
             })),
@@ -440,17 +444,18 @@ export class D1KnowledgeStore implements KnowledgeStore {
             this.db
                 .prepare(
                     `INSERT INTO items (project, id, state, version, title, text, when_label, kind, origin, perspective, about, sources, conflicts_with,
-                                        created_in, created_at, updated_at, deleted_by, deleted_at, retirement, rev)
+                                        created_in, created_at, updated_at, deleted_by, deleted_at, retirement, bookmarked, rev)
                      SELECT ?1, j.value ->> 'id', j.value ->> 'state', j.value ->> 'version', j.value ->> 'title', j.value ->> 'text', j.value ->> 'when',
                             j.value ->> 'kind', j.value ->> 'origin', j.value ->> 'perspective', j.value -> 'about', j.value -> 'sources',
                             j.value -> 'conflictsWith', j.value ->> 'createdIn', j.value ->> 'createdAt', j.value ->> 'updatedAt',
-                            j.value ->> 'deletedBy', j.value ->> 'deletedAt', j.value ->> 'retirement', 1
+                            j.value ->> 'deletedBy', j.value ->> 'deletedAt', j.value ->> 'retirement', COALESCE(j.value ->> 'bookmarked', 0), 1
                      FROM json_each(?2) j WHERE true
                      ON CONFLICT (project, id) DO UPDATE SET
                        state = excluded.state, version = excluded.version, title = excluded.title, text = excluded.text, when_label = excluded.when_label,
                        kind = excluded.kind, origin = excluded.origin, perspective = excluded.perspective, about = excluded.about,
                        sources = excluded.sources, conflicts_with = excluded.conflicts_with, updated_at = excluded.updated_at,
-                       deleted_by = excluded.deleted_by, deleted_at = excluded.deleted_at, retirement = excluded.retirement, rev = items.rev + 1`,
+                       deleted_by = excluded.deleted_by, deleted_at = excluded.deleted_at, retirement = excluded.retirement,
+                       bookmarked = excluded.bookmarked, rev = items.rev + 1`,
                 )
                 .bind(project, rows),
             this.db.prepare("DELETE FROM item_about WHERE project = ?1 AND item IN (SELECT j.value ->> 'id' FROM json_each(?2) j)").bind(project, rows),
@@ -604,9 +609,30 @@ export class D1KnowledgeStore implements KnowledgeStore {
         return { items, dropped, replayed: true };
     }
 
-    // Implemented with the bookmark route and D1 migration in the dependent Worker PR.
-    async setBookmark(): Promise<never> {
-        throw new Error('Bookmark support requires the Worker bookmark migration.');
+    async setBookmark(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        bookmarked: boolean,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> {
+        return this.decideAndWrite<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>(
+            project,
+            [id],
+            async (rows) => {
+                const row = rows.get(id);
+                if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+                const item = itemOf(row);
+                if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+                if ((item.bookmarked === true) === bookmarked) return { statements: [], value: ok(item) };
+                const r = knowledgeItemCommands.setBookmark(item, { bookmarked, by, at: this.now() });
+                if (!r.ok) throw new Error('setBookmark refused a live item');
+                const next = r.value.Live.aggregate;
+                return {
+                    statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeBookmarkChanged)]),
+                    value: ok(next),
+                };
+            },
+        );
     }
 
     async correct(

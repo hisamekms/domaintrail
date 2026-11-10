@@ -239,6 +239,36 @@ describe('extractions', () => {
     });
 });
 
+describe('shared bookmarks', () => {
+    test('filters before pagination, survives content changes and retirement, clears on deletion, and audits changes once', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, 'one'), add(2, 'two')]));
+        const first = await store.setBookmark(project, id(1), true, user);
+        expect(first.ok && first.value).toMatchObject({ bookmarked: true, version: 1 });
+        await store.setBookmark(project, id(1), true, user);
+        expect((await store.audit(project, { item: id(1) })).items.map((a) => a.operation)).toEqual(['bookmark', 'add']);
+        const page = await store.search(project, { bookmarked: true, limit: 1 });
+        expect(page.items.map((i) => i.id)).toEqual([id(1)]);
+        expect(page.next).toBeUndefined();
+        await store.applyExtraction(project, extraction('s1', 2, [{ kind: 'AddSource', item: id(1), base: 1, source: source('s1', 'later'), agreed: false }]));
+        expect((await store.get(project, id(1)))?.item.bookmarked).toBe(true);
+        await store.correct(project, id(1), wire.itemContent(content('corrected'), 'test'), user);
+        expect((await store.get(project, id(1)))?.item.bookmarked).toBe(true);
+        await store.retire(project, id(1), {}, user);
+        expect((await store.search(project, { bookmarked: true })).items).toEqual([]);
+        expect((await store.search(project, { bookmarked: true, retired: 'include' })).items.map((i) => i.id)).toEqual([id(1)]);
+        await store.unretire(project, id(1), user);
+        expect((await store.search(project, { bookmarked: true })).items.map((i) => i.id)).toEqual([id(1)]);
+        await store.setBookmark(project, id(1), false, user);
+        expect((await store.get(project, id(1)))?.item.bookmarked).toBeUndefined();
+        await store.setBookmark(project, id(1), true, user);
+        await store.delete(project, id(1), user);
+        const restored = await store.restore(project, id(1), user);
+        expect(restored.ok && restored.value.bookmarked).toBeUndefined();
+        expect((await store.audit(project, { item: id(1) })).items.map((a) => a.operation)).toContain('unbookmark');
+    });
+});
+
 describe('reading', () => {
     test('filters by stickies, labels, session and full text (Japanese, two characters too), newest first, a page at a time', async () => {
         const project = newProject();
@@ -468,6 +498,24 @@ describe('who may call', () => {
         expect((await reader.search(project, {})).items).toHaveLength(1);
         expect(await thrown(reader.applyExtraction(project, extraction('s1', 2, [add(2, 'more')])))).toMatchObject({ status: 403, type: 'Forbidden' });
         expect(await thrown(reader.delete(project, id(1), user))).toMatchObject({ status: 403 });
+        expect(await thrown(reader.setBookmark(project, id(1), true, user))).toMatchObject({ status: 403, type: 'Forbidden' });
+    });
+
+    test('a person may bookmark a project item and malformed bodies are rejected', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, 'a finding')]));
+        const path = `${worker.url}${wire.projectPath(project)}/knowledge/${id(1)}/bookmark`;
+        const headers = { 'Cf-Access-Authenticated-User-Email': 'reader@example.com', 'Content-Type': 'application/json' };
+        const bookmarked = await fetch(path, { method: 'POST', headers, body: JSON.stringify({ bookmarked: true }) });
+        expect(bookmarked.status).toBe(200);
+        expect((await bookmarked.json()) as Knowledge.LiveKnowledgeItem).toMatchObject({ bookmarked: true, version: 1 });
+        expect((await store.search(project, { bookmarked: true })).items.map((i) => i.id)).toEqual([id(1)]);
+        expect((await store.audit(project, { item: id(1) })).items[0]).toMatchObject({
+            operation: 'bookmark',
+            actor: { kind: 'Person', user: 'reader@example.com' },
+        });
+        const bad = await fetch(path, { method: 'POST', headers, body: JSON.stringify({ bookmarked: 'yes' }) });
+        expect(bad.status).toBe(400);
     });
 
     test('a call without an identity is refused; a person acts as itself, and the audit records the caller', async () => {
@@ -553,10 +601,45 @@ test('migration 2: the items from before titles are removed, and a new row must 
                 ),
         ).toBe('refused');
         await migrate('0003_retirement.sql');
+        await migrate('0004_bookmark.sql');
         await s.applyExtraction(project, extraction('s1', 1, [add(3, '新しい', 's1', { title: '新しい見出し' })]));
         expect((await s.search(project, {})).items.map((i) => i.content.title)).toEqual([
             wire.itemContent(content('x', { title: '新しい見出し' }), 'test').title,
         ]);
+    } finally {
+        await bare.dispose();
+    }
+});
+
+test('migration 4: existing items start without a bookmark and remain readable', async () => {
+    const bare = await startWorker({ INSECURE_SKIP_ACCESS_CHECK: 'true', ACCESS_TEAM_DOMAIN: '', ACCESS_AUD: '', WRITER_TOKENS: WRITER }, { migrate: false });
+    try {
+        for (const file of ['0001_init.sql', '0002_item_title.sql', '0003_retirement.sql']) {
+            const sql = await Bun.file(`${import.meta.dir}/../template/migrations/${file}`).text();
+            await bare.db.batch(statementsOf(sql).map((statement) => bare.db.prepare(statement)));
+        }
+        const project = newProject();
+        await bare.db
+            .prepare(
+                `INSERT INTO items (project, id, state, version, title, text, when_label, kind, origin, about, sources, conflicts_with,
+                                    created_at, updated_at, rev)
+                 VALUES (?1, ?2, 'Live', 1, '既存の発見', '既存の発見', 'as_is', 'rule', 'said', '[]', '[]', '[]',
+                         '2026-11-05T09:00:00.000Z', '2026-11-05T09:00:00.000Z', 1)`,
+            )
+            .bind(project, id(1))
+            .run();
+        const sql = await Bun.file(`${import.meta.dir}/../template/migrations/0004_bookmark.sql`).text();
+        await bare.db.batch(statementsOf(sql).map((statement) => bare.db.prepare(statement)));
+        const migrated = await bare.db
+            .prepare('SELECT bookmarked FROM items WHERE project = ?1 AND id = ?2')
+            .bind(project, id(1))
+            .first<{ bookmarked: number }>();
+        expect(migrated).toEqual({ bookmarked: 0 });
+        const upgraded = cloudflareKnowledgeStore({ url: bare.url, serviceToken: { clientId: WRITER, clientSecret: 'x' } });
+        expect((await upgraded.get(project, id(1)))?.item.bookmarked).toBeUndefined();
+        expect((await upgraded.search(project, { bookmarked: true })).items).toEqual([]);
+        expect((await upgraded.setBookmark(project, id(1), true, user)).ok).toBe(true);
+        expect((await upgraded.search(project, { bookmarked: true })).items.map((item) => item.id)).toEqual([id(1)]);
     } finally {
         await bare.dispose();
     }
