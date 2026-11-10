@@ -6850,7 +6850,8 @@ button.add-to-request.added:hover {
    every row. Its actions float over its top right (.chat-actions), so that they take no room from the header or the
    body */
 .chat-row,
-.chat-item-card > .run-card {
+.chat-item-card > .run-card,
+.chat-ai-slot > .run-card {
     position: relative;
     /* within the item's width, so that long chips are cut short instead of widening the bubble */
     min-width: 0;
@@ -6865,7 +6866,8 @@ button.add-to-request.added:hover {
     gap: 6px;
     flex-wrap: wrap;
 }
-.chat-item-card > .run-card:hover {
+.chat-item-card > .run-card:hover,
+.chat-ai-slot > .run-card:hover {
     background-image: linear-gradient(var(--row-hover), var(--row-hover));
 }
 /* jumped to: the row's box flashes, not the item inside the stream's padding */
