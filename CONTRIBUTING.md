@@ -22,6 +22,24 @@ bun test                   # all the tests: unit tests next to the code, integra
 bun run build              # dist/: the CLI bundled for Node, the Live View page, domaintrail/testing (needed by `open`, examples/shop and the tests)
 ```
 
+### Git hooks
+
+Install [prek](https://prek.j178.dev/), then run `prek install` in this checkout after `bun install` and
+`bun run langium:generate`. This installs the `pre-commit` and `commit-msg` hooks for this checkout. Run
+`prek run --all-files` to check the repository on demand; `bun run commitlint --from HEAD~1 --to HEAD` checks the last
+commit message.
+
+The pre-commit hooks check staged text for trailing whitespace, a final newline and conflict markers; validate staged
+JSON, YAML and TOML; reject newly added files over 2 MiB; run `oxfmt --check` on changed code/config files and
+`dt fmt --check` on changed `.dt`/`.dtes` files. The formatter hooks only check; the whitespace and final-newline hooks
+may make a small fix before stopping the commit. JSONC is formatted by oxfmt, not parsed as JSON. The commit-msg hook
+runs commitlint with the same types and lowercase subject convention as the PR title rule below. A hook that fails
+should be fixed and the affected files staged again.
+
+Keep the full build, type check, type-aware lint and test suite in CI and run them before opening a PR when relevant.
+They check the whole workspace, require generated outputs or take longer than a staged-file commit check. Git hooks are
+local feedback; CI remains the required check.
+
 Try the CLI on the example:
 
 ```bash
