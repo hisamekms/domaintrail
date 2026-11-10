@@ -1471,8 +1471,8 @@ another context by its simple name) and typed by its multiplicity:
 
 The JSDoc says the same in words, one `@emits` line per entry (`@emits WorkCompleted — exactly once when it ends in
 Completed`). Return the value with `ok`, which takes its type from the contract, so that the compiler checks the
-object exactly: a missing event is reported as `Property 'WorkCompleted' is missing …`, an event the outcome does not
-emit as `… 'WorkCompleted' does not exist in type …`:
+object exactly: a missing event is reported as `Property 'Sales.WorkCompleted' is missing …`, an event the outcome does not
+emit as `… 'Sales.WorkCompleted' does not exist in type …`:
 
 ```ts
 return ok({ Confirmed: { aggregate: confirmed, events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
