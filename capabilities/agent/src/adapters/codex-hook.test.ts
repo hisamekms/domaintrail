@@ -31,6 +31,12 @@ test('Codex Hook permits role tools and rejects shell, non-DSL edits, and path e
         expect(allowed('run', 'Bash', "rg -n '^' -- 'policy.cjs'")).toBe(false);
         expect(allowed('run', 'Bash', "rg -n '^' -- model.dt; echo unsafe")).toBe(false);
         expect(allowed('run', 'Bash', 'dt check')).toBe(true);
+        expect(allowed('run', 'Bash', 'dt check --no-knowledge')).toBe(true);
+        expect(allowed('run', 'Bash', 'dt check --scope dtes')).toBe(true);
+        expect(allowed('run', 'Bash', 'dt check --no-knowledge --scope dtes')).toBe(true);
+        expect(allowed('run', 'Bash', 'dt check --scope dtes --storming-level=design-level --storming Orders')).toBe(true);
+        expect(allowed('run', 'Bash', 'dt check --scope dtes; echo unsafe')).toBe(false);
+        expect(allowed('run', 'Bash', 'dt check --scope ../dtes')).toBe(false);
         expect(allowed('run', 'Bash', 'dt check --storming-level=design-level')).toBe(true);
         expect(allowed('run', 'Bash', 'dt check --storming-level=design-level --storming Orders --timeline Normal')).toBe(true);
         expect(allowed('run', 'Bash', 'dt check --storming-level=design-level --timeline Normal')).toBe(false);

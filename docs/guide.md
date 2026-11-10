@@ -97,7 +97,11 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
 - `dt migrate dtes` — rewrite `.dtes` files of earlier versions (v0.1: `actor`, `target` in a command → `by`,
   `handledBy`; 0.8: the `reads` of a command a policy issues → that policy's `reads`).
-- `dt check` — check the model and its stormings (`.dtes`); exit 0 when there are no errors (`--format json` for JSON).
+- `dt check` — check the model, its stormings (`.dtes`), journey and file knowledge; exit 0 when there are no errors
+  (`--format json` for JSON). `--no-knowledge` skips file knowledge diagnostics only. `--scope dtes` reports only
+  storming diagnostics, while still reading `.dt` to resolve `ref`s; it excludes journey and knowledge, so combining it
+  with `--no-knowledge` adds nothing. An unparseable `.dt` model makes this focused check fail because refs were not
+  checked. Use the default check for a complete workspace result.
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
@@ -144,6 +148,8 @@ in one example, `dt guide dtes-quick` the `.dtes` syntax.
 ```bash
 dt fmt                          # format every *.dt and *.dtes file below the current directory in place
 dt check                        # every *.dt and *.dtes file below the current directory
+dt check --no-knowledge         # model, storming and journey; no file knowledge diagnostics
+dt check --scope dtes           # storming diagnostics only; read *.dt to resolve refs
 dt -r domain check              # below domain/ (or as configured by a domaintrail.jsonc found there or above)
 dt generate ts                  # into <root>/generated/domain
 dt generate ts --out src/domain/generated

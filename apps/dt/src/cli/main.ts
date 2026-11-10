@@ -141,7 +141,7 @@ async function runCheck(
     io: CliIO,
     deps: CliDeps,
     report?: JsonReport,
-    options: { forGeneration?: boolean; target?: 'ts'; advice?: { storming?: string; timeline?: string } } = {},
+    options: { forGeneration?: boolean; target?: 'ts'; advice?: { storming?: string; timeline?: string }; scope?: 'dtes'; noKnowledge?: boolean } = {},
 ): Promise<Analysis> {
     const root = config.root;
     const sources = await deps.loadWorkspace(root, config.sources, config.respectGitignore);
@@ -157,20 +157,36 @@ async function runCheck(
               ok: analyzed.ok && !gateDiagnostics.some((d) => d.severity === 'error'),
           }
         : analyzed;
-    const checked = await journeyCheck(root, gated);
+    // Keep the .dt model as input for .dtes ref linking, while reporting only the selected sources.
+    const scoped: Analysis =
+        options.scope === 'dtes'
+            ? {
+                  ...gated,
+                  files: gated.stormings.files,
+                  diagnostics: gated.stormings.diagnostics,
+                  ok: gated.stormings.syntaxOk && !gated.stormings.diagnostics.some((d) => d.severity === 'error'),
+              }
+            : gated;
+    const checked = options.scope === 'dtes' ? scoped : await journeyCheck(root, scoped);
     // the items' files are the `files` store's: with `cloudflare` the workspace has none to check
-    const base = config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
-    const analysis = options.advice
+    const base = options.scope !== 'dtes' && !options.noKnowledge && config.knowledge.store === 'files' ? await knowledgeCheck(root, checked) : checked;
+    const incomplete =
+        options.scope === 'dtes' && sources.some((s) => !isStormingFile(s.path)) && !analyzed.syntaxOk
+            ? 'The .dtes ref check is incomplete because the .dt model could not be parsed. Fix the .dt syntax errors and run dt check again.'
+            : undefined;
+    const withAdvice = options.advice
         ? { ...base, diagnostics: [...base.diagnostics, ...designLevelAdvice(base.stormings.stormings, options.advice)].sort(compareDiagnostics) }
         : base;
+    const analysis = incomplete ? { ...withAdvice, ok: false } : withAdvice;
     const errors = analysis.diagnostics.filter((d) => d.severity === 'error').length;
     const warnings = analysis.diagnostics.filter((d) => d.severity === 'warning').length;
     const infos = analysis.diagnostics.filter((d) => d.severity === 'info').length;
-    const noFiles = noSourcesMessage(config);
+    const noFiles = options.scope === 'dtes' ? `No .dtes files found under ${root} (sources: ${config.sources.join(', ')}).` : noSourcesMessage(config);
     if (report) {
         report.diagnostics = analysis.diagnostics.map(jsonDiagnostic);
-        report.summary = { files: sources.length, errors, warnings, ...(infos > 0 && { infos }) };
-        if (sources.length === 0) report.error = noFiles;
+        report.summary = { files: analysis.files.length, errors, warnings, ...(infos > 0 && { infos }) };
+        if (analysis.files.length === 0) report.error = noFiles;
+        else if (incomplete) report.error = incomplete;
         return analysis;
     }
     for (const d of analysis.diagnostics) {
@@ -179,9 +195,12 @@ async function runCheck(
     // the gaps an open hotspot keeps open (ADR 0032): not errors, but not to be forgotten
     const gaps = analysis.stormings.stormings.flatMap((s) => openGaps(s).map((g) => `${s.id}/${g.elementId}`));
     if (gaps.length) io.out(`${gaps.length} element(s) incomplete under open hotspots: ${gaps.join(', ')}.`);
-    const summary = `${sources.length} file(s) checked: ${errors} error(s), ${warnings} warning(s)${infos ? `, ${infos} info(s)` : ''}.`;
-    if (sources.length === 0) io.err(noFiles);
-    else (errors ? io.err : io.out)(summary);
+    const summary = `${analysis.files.length} file(s) checked: ${errors} error(s), ${warnings} warning(s)${infos ? `, ${infos} info(s)` : ''}.`;
+    if (analysis.files.length === 0) io.err(noFiles);
+    else {
+        if (incomplete) io.err(incomplete);
+        (errors || incomplete ? io.err : io.out)(summary);
+    }
     return analysis;
 }
 
@@ -277,6 +296,8 @@ Examples:
         .command('check')
         .description('Validate syntax, references, types and DDD rules.')
         .option('--for-generation', 'also reject decisions that code generation cannot enforce')
+        .option('--no-knowledge', 'skip checks of the files knowledge store')
+        .addOption(new Option('--scope <scope>', 'report diagnostics only for this source scope').choices(['all', 'dtes']).default('all'))
         .addHelpText(
             'after',
             `
@@ -287,12 +308,18 @@ Checks the Event Storming files (.dtes) too, their \`ref\`s against the .dt mode
 (on stdout) only informs; the gaps of a storming that open hotspots keep undecided are listed before the summary.
 Checks the knowledge items' files (knowledge/kn_*.md) when there are any and the knowledge store is \`files\`; their
 rules start with K.
+\`--no-knowledge\` skips only knowledge file diagnostics; model, storming and journey checks still run.
+\`--scope dtes\` checks only .dtes files, using .dt files to resolve their refs. It omits journey and knowledge
+diagnostics (so \`--no-knowledge\` adds nothing), and fails if no .dtes file is found or a broken .dt model prevents
+the ref check. \`--for-generation\` cannot be combined with \`--scope dtes\`.
 Exits 0 when there are no errors, 1 on errors or when no .dt or .dtes file is found, 2 on an invalid config.
 
 Examples:
   dt check
   dt check --format json
   dt check --for-generation
+  dt check --no-knowledge
+  dt check --scope dtes --format json
   dt check --storming-level design-level --storming OrderToCash --timeline Normal
   dt -r domain check
   dt -c config/domaintrail.jsonc check`,
@@ -301,17 +328,30 @@ Examples:
         .addOption(new Option('--storming-level <level>', 'include explicit storming-level exploration advice').choices(['design-level']))
         .option('--storming <id>', 'limit Design Level advice to one storming ID')
         .option('--timeline <id>', 'limit Design Level advice to one timeline ID (use with --storming)')
-        .action(async (opts: { format: Format; forGeneration?: boolean; stormingLevel?: 'design-level'; storming?: string; timeline?: string }) => {
-            if ((opts.storming || opts.timeline) && !opts.stormingLevel)
-                throw new CliError('--storming and --timeline require --storming-level design-level.', 2);
-            if (opts.timeline && !opts.storming) throw new CliError('--timeline requires --storming <id>.', 2);
-            if (opts.format === 'json') report = {};
-            const a = await runCheck(await config(), io, deps, report, {
-                forGeneration: opts.forGeneration,
-                advice: opts.stormingLevel ? { storming: opts.storming, timeline: opts.timeline } : undefined,
-            });
-            exitCode = a.ok && a.files.length > 0 ? 0 : 1;
-        });
+        .action(
+            async (opts: {
+                format: Format;
+                forGeneration?: boolean;
+                knowledge?: boolean;
+                scope: 'all' | 'dtes';
+                stormingLevel?: 'design-level';
+                storming?: string;
+                timeline?: string;
+            }) => {
+                if (opts.format === 'json') report = {};
+                if (opts.scope === 'dtes' && opts.forGeneration) throw new CliError('--for-generation cannot be combined with --scope dtes.', 2);
+                if ((opts.storming || opts.timeline) && !opts.stormingLevel)
+                    throw new CliError('--storming and --timeline require --storming-level design-level.', 2);
+                if (opts.timeline && !opts.storming) throw new CliError('--timeline requires --storming <id>.', 2);
+                const a = await runCheck(await config(), io, deps, report, {
+                    forGeneration: opts.forGeneration,
+                    noKnowledge: opts.knowledge === false,
+                    scope: opts.scope === 'dtes' ? 'dtes' : undefined,
+                    advice: opts.stormingLevel ? { storming: opts.storming, timeline: opts.timeline } : undefined,
+                });
+                exitCode = a.ok && a.files.length > 0 ? 0 : 1;
+            },
+        );
 
     program
         .command('generate')
