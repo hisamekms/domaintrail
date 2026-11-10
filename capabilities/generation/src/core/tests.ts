@@ -593,7 +593,6 @@ class TestsEmitter {
         const declaredReqs = c.requires.filter((r) => !r.expr).map((r) => `'${r.name}'`);
         const invs = aggregateInvariants(agg);
         const declaredInvs = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
-        const simple = (q: string): string => q.slice(q.indexOf('.') + 1);
         const emits = c.emits.filter(counted).map((e) => {
             const parts = [
                 `key: '${e.event}'`,
