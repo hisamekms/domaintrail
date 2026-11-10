@@ -52,6 +52,12 @@ afterAll(async () => {
 });
 
 describe('generated TypeScript', () => {
+    test('the runtime compiles with noUncheckedIndexedAccess', () => {
+        const r = tsc('--noUncheckedIndexedAccess', 'generated/domain/_runtime.ts');
+        expect(r.output).toBe('');
+        expect(r.code).toBe(0);
+    });
+
     test('the generated code and the example implementation compile', async () => {
         // the domain layer of the example: it imports only the generated code (the rest is checked in contract-tests)
         const files = (await readdir(path.join(EXAMPLES, 'src', 'domain'))).map((f) => path.join('src', 'domain', f));
