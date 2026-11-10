@@ -64,7 +64,7 @@ describe('the status of each error type', () => {
     test('every error of the collaboration model and of the routes', async () => {
         const declared: string[] = [];
         for (const file of (await readdir(MODEL)).filter((f) => f.endsWith('.dt')).sort()) {
-            for (const m of (await readFile(path.join(MODEL, file), 'utf8')).matchAll(/^\s*error\s+(\w+)/gm)) declared.push(m[1]);
+            for (const m of (await readFile(path.join(MODEL, file), 'utf8')).matchAll(/^\s*error\s+(\w+)/gm)) declared.push(`Collaboration.${m[1]}`);
         }
         expect(declared.length).toBeGreaterThan(0);
         const types = [...new Set([...declared, ...ROUTE_ERRORS])].sort();

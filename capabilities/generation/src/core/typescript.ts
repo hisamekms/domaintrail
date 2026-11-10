@@ -454,7 +454,7 @@ class ContextEmitter {
                 case 'event':
                 case 'error':
                     this.jsdoc([...describedLines(el), ...(el.kind === 'event' && el.persistent ? [PERSISTENT_LINE] : []), seeLine(el.location)]);
-                    this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.name}';`], ownFields(el));
+                    this.iface(el.name, this.fieldSets(el), [`readonly ${EVENT_TAG}: '${el.kind === 'error' ? el.id : el.name}';`], ownFields(el));
                     break;
                 case 'aggregate':
                     this.aggregate(el);
@@ -597,7 +597,7 @@ class ContextEmitter {
         }
         this.jsdoc([`A value that violates an invariant of ${p.name}.`, seeLine(p.location)]);
         this.line(`export interface ${invalidTypeName(p)} {`);
-        this.line(`    readonly type: '${invalidTypeName(p)}';`);
+        this.line(`    readonly type: '${this.ctx}.${invalidTypeName(p)}';`);
         this.line(`    readonly value: ${base};`);
         this.line(`    /** The violated invariant. */`);
         this.line(`    readonly invariant: ${invariants.map((i) => `'${i.name}'`).join(' | ')};`);

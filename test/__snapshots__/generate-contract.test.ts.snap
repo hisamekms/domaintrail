@@ -67,7 +67,7 @@ export type InvoiceId = string & { readonly __domain: 'Billing.InvoiceId' };
  * @see billing/invoice.dt:2
  */
 export interface InvalidInvoiceId {
-    readonly type: 'InvalidInvoiceId';
+    readonly type: 'Billing.InvalidInvoiceId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -96,7 +96,7 @@ export function checkInvoiceId(value: string): readonly InvalidInvoiceId['invari
 export const makeInvoiceId: MakeInvoiceId = (value) => {
     const [invariant] = checkInvoiceId(value);
     if (invariant === undefined) return ok(value as InvoiceId);
-    return err({ type: 'InvalidInvoiceId', value, invariant });
+    return err({ type: 'Billing.InvalidInvoiceId', value, invariant });
 };
 
 /**
@@ -327,7 +327,7 @@ export type Amount = Decimal & { readonly __domain: 'Common.Amount' };
  * @see common/context.dt:11
  */
 export interface InvalidAmount {
-    readonly type: 'InvalidAmount';
+    readonly type: 'Common.InvalidAmount';
     readonly value: Decimal;
     /** The violated invariant. */
     readonly invariant: 'nonNegative';
@@ -356,7 +356,7 @@ export function checkAmount(value: Decimal): readonly InvalidAmount['invariant']
 export const makeAmount: MakeAmount = (value) => {
     const [invariant] = checkAmount(value);
     if (invariant === undefined) return ok(value as Amount);
-    return err({ type: 'InvalidAmount', value, invariant });
+    return err({ type: 'Common.InvalidAmount', value, invariant });
 };
 
 /**
@@ -392,7 +392,7 @@ export type EmailAddress = string & { readonly __domain: 'Common.EmailAddress' }
  * @see common/context.dt:20
  */
 export interface InvalidEmailAddress {
-    readonly type: 'InvalidEmailAddress';
+    readonly type: 'Common.InvalidEmailAddress';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'format' | 'maxLength';
@@ -422,7 +422,7 @@ export function checkEmailAddress(value: string): readonly InvalidEmailAddress['
 export const makeEmailAddress: MakeEmailAddress = (value) => {
     const [invariant] = checkEmailAddress(value);
     if (invariant === undefined) return ok(value as EmailAddress);
-    return err({ type: 'InvalidEmailAddress', value, invariant });
+    return err({ type: 'Common.InvalidEmailAddress', value, invariant });
 };
 "
 `;
@@ -447,7 +447,7 @@ export type CustomerId = string & { readonly __domain: 'Sales.CustomerId' };
  * @see sales/customer.dt:2
  */
 export interface InvalidCustomerId {
-    readonly type: 'InvalidCustomerId';
+    readonly type: 'Sales.InvalidCustomerId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -476,7 +476,7 @@ export function checkCustomerId(value: string): readonly InvalidCustomerId['inva
 export const makeCustomerId: MakeCustomerId = (value) => {
     const [invariant] = checkCustomerId(value);
     if (invariant === undefined) return ok(value as CustomerId);
-    return err({ type: 'InvalidCustomerId', value, invariant });
+    return err({ type: 'Sales.InvalidCustomerId', value, invariant });
 };
 
 /**
@@ -690,7 +690,7 @@ export interface CustomerRegistered {
  * @see sales/customer.dt:25
  */
 export interface EmailTaken {
-    readonly type: 'EmailTaken';
+    readonly type: 'Sales.EmailTaken';
     /** メールアドレス */
     readonly email: Common.EmailAddress;
 }
@@ -708,7 +708,7 @@ export type OrderId = string & { readonly __domain: 'Sales.OrderId' };
  * @see sales/order.dt:2
  */
 export interface InvalidOrderId {
-    readonly type: 'InvalidOrderId';
+    readonly type: 'Sales.InvalidOrderId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -737,7 +737,7 @@ export function checkOrderId(value: string): readonly InvalidOrderId['invariant'
 export const makeOrderId: MakeOrderId = (value) => {
     const [invariant] = checkOrderId(value);
     if (invariant === undefined) return ok(value as OrderId);
-    return err({ type: 'InvalidOrderId', value, invariant });
+    return err({ type: 'Sales.InvalidOrderId', value, invariant });
 };
 
 /**
@@ -753,7 +753,7 @@ export type OrderItemId = string & { readonly __domain: 'Sales.OrderItemId' };
  * @see sales/order.dt:3
  */
 export interface InvalidOrderItemId {
-    readonly type: 'InvalidOrderItemId';
+    readonly type: 'Sales.InvalidOrderItemId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -782,7 +782,7 @@ export function checkOrderItemId(value: string): readonly InvalidOrderItemId['in
 export const makeOrderItemId: MakeOrderItemId = (value) => {
     const [invariant] = checkOrderItemId(value);
     if (invariant === undefined) return ok(value as OrderItemId);
-    return err({ type: 'InvalidOrderItemId', value, invariant });
+    return err({ type: 'Sales.InvalidOrderItemId', value, invariant });
 };
 
 /**
@@ -806,7 +806,7 @@ export type Quantity = number & { readonly __domain: 'Sales.Quantity' };
  * @see sales/order.dt:7
  */
 export interface InvalidQuantity {
-    readonly type: 'InvalidQuantity';
+    readonly type: 'Sales.InvalidQuantity';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -835,7 +835,7 @@ export function checkQuantity(value: number): readonly InvalidQuantity['invarian
 export const makeQuantity: MakeQuantity = (value) => {
     const [invariant] = checkQuantity(value);
     if (invariant === undefined) return ok(value as Quantity);
-    return err({ type: 'InvalidQuantity', value, invariant });
+    return err({ type: 'Sales.InvalidQuantity', value, invariant });
 };
 
 /**
@@ -852,7 +852,7 @@ export type Sku = string & { readonly __domain: 'Sales.Sku' };
  * @see sales/order.dt:10
  */
 export interface InvalidSku {
-    readonly type: 'InvalidSku';
+    readonly type: 'Sales.InvalidSku';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -881,7 +881,7 @@ export function checkSku(value: string): readonly InvalidSku['invariant'][] {
 export const makeSku: MakeSku = (value) => {
     const [invariant] = checkSku(value);
     if (invariant === undefined) return ok(value as Sku);
-    return err({ type: 'InvalidSku', value, invariant });
+    return err({ type: 'Sales.InvalidSku', value, invariant });
 };
 
 /**
@@ -1417,7 +1417,7 @@ export interface NoteChanged {
  * @see sales/order.dt:105
  */
 export interface EmptyOrder {
-    readonly type: 'EmptyOrder';
+    readonly type: 'Sales.EmptyOrder';
 }
 
 /**
@@ -1426,7 +1426,7 @@ export interface EmptyOrder {
  * @see sales/order.dt:108
  */
 export interface DuplicateSku {
-    readonly type: 'DuplicateSku';
+    readonly type: 'Sales.DuplicateSku';
     /** 商品コード */
     readonly sku: Sku;
 }
@@ -1437,7 +1437,7 @@ export interface DuplicateSku {
  * @see sales/order.dt:113
  */
 export interface CurrencyMismatch {
-    readonly type: 'CurrencyMismatch';
+    readonly type: 'Sales.CurrencyMismatch';
 }
 
 /**
@@ -1446,7 +1446,7 @@ export interface CurrencyMismatch {
  * @see sales/order.dt:116
  */
 export interface NoteRequired {
-    readonly type: 'NoteRequired';
+    readonly type: 'Sales.NoteRequired';
 }
 
 /** Events of Sales that are persisted (declared \`persistent\`). */
@@ -2105,7 +2105,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(fc.oneof(a.DraftOrder), fc.record({ item: a.OrderItem })),
                 examples: options.examples?.Order?.commands?.addItem ?? [],
                 factory: false,
-                requires: [{ name: 'newSku', error: 'DuplicateSku' }, { name: 'sameCurrency', error: 'CurrencyMismatch' }],
+                requires: [{ name: 'newSku', error: 'Sales.DuplicateSku' }, { name: 'sameCurrency', error: 'Sales.CurrencyMismatch' }],
                 declaredRequires: [],
                 firstFailing: () => Sales.checkAddItemOrderRequires,
                 invariants: () => Sales.checkOrder,
@@ -2119,7 +2119,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(fc.oneof(a.DraftOrder), fc.record({ at: testing.cast<Date>(scalar.Timestamp) })),
                 examples: options.examples?.Order?.commands?.confirm ?? [],
                 factory: false,
-                requires: [{ name: 'hasItems', error: 'EmptyOrder' }],
+                requires: [{ name: 'hasItems', error: 'Sales.EmptyOrder' }],
                 declaredRequires: [],
                 firstFailing: () => Sales.checkConfirmOrderRequires,
                 invariants: () => Sales.checkOrder,
@@ -2133,7 +2133,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
                 input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), fc.record({ reason: a.CancelReason })),
                 examples: options.examples?.Order?.commands?.cancel ?? [],
                 factory: false,
-                requires: [{ name: 'noteForOther', error: 'NoteRequired' }],
+                requires: [{ name: 'noteForOther', error: 'Sales.NoteRequired' }],
                 declaredRequires: [],
                 firstFailing: () => Sales.checkCancelOrderRequires,
                 invariants: () => Sales.checkOrder,

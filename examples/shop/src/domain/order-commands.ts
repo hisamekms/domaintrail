@@ -22,9 +22,9 @@ export const orderCommands: Sales.OrderCommands = {
             const { item } = params;
             switch (Sales.checkAddItemOrderRequires(order, params)) {
                 case 'newSku':
-                    return err({ type: 'DuplicateSku', sku: item.sku });
+                    return err({ type: 'Sales.DuplicateSku', sku: item.sku });
                 case 'sameCurrency':
-                    return err({ type: 'CurrencyMismatch' });
+                    return err({ type: 'Sales.CurrencyMismatch' });
             }
             return ok({ Draft: { set: { items: [...order.items, item] }, events: {} } });
         },
@@ -33,7 +33,7 @@ export const orderCommands: Sales.OrderCommands = {
     // Changes no common field: only `confirmedAt`, new in Confirmed, is set.
     confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
         Draft: (order, params) => {
-            if (Sales.checkConfirmOrderRequires(order, params) === 'hasItems') return err({ type: 'EmptyOrder' });
+            if (Sales.checkConfirmOrderRequires(order, params) === 'hasItems') return err({ type: 'Sales.EmptyOrder' });
             const { at } = params;
             return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
         },
@@ -42,12 +42,12 @@ export const orderCommands: Sales.OrderCommands = {
     // The events depend on the input state (`RefundRequested when Confirmed ->`); `confirmedAt` is dropped by `decide`.
     cancel: decide<Sales.CancelOrderDecision>(Sales.OrderShape, {
         Draft: (order, params) => {
-            if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'NoteRequired' });
+            if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
             const { reason } = params;
             return ok({ Cancelled: { set: { reason }, events: { OrderCancelled: { type: 'OrderCancelled', orderId: order.id, reason } } } });
         },
         Confirmed: (order, params) => {
-            if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'NoteRequired' });
+            if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
             const { reason } = params;
             return ok({
                 Cancelled: {

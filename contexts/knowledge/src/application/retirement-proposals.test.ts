@@ -81,8 +81,8 @@ describe("the review's proposals", () => {
         const outcomes = await proposeRetirements(proposing, project, candidates);
         // the test item is AS-IS: a sticky's change alone does not retire it
         expect(outcomes.map((o) => (o.result.ok ? 'proposed' : o.result.error))).toEqual([
-            { type: 'ProposalRefused', reason: 'asIsAgainstStickies' },
-            { type: 'ProposalRefused', reason: 'itemUnavailable' },
+            { type: 'Knowledge.ProposalRefused', reason: 'asIsAgainstStickies' },
+            { type: 'Knowledge.ProposalRefused', reason: 'itemUnavailable' },
         ]);
     });
 });

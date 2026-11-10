@@ -16,9 +16,9 @@ export interface SnapshotScan {
 }
 
 export type SnapshotWriteRefusal =
-    | { readonly type: 'SymlinkInWorkspace'; readonly path: string }
-    | { readonly type: 'PathOutsideRoot'; readonly path: string }
-    | { readonly type: 'ExternalChangesSinceSnapshot'; readonly paths: readonly string[] };
+    | { readonly type: 'Collaboration.SymlinkInWorkspace'; readonly path: string }
+    | { readonly type: 'Collaboration.PathOutsideRoot'; readonly path: string }
+    | { readonly type: 'Collaboration.ExternalChangesSinceSnapshot'; readonly paths: readonly string[] };
 
 export interface WorkspaceSnapshotFiles {
     read(): Promise<SnapshotScan>;
@@ -94,24 +94,24 @@ export function createWorkspaceSnapshot(root: string, selection: SourceSelection
         read,
 
         async write(files, expected) {
-            for (const f of files) if (inside(f.path) === undefined) return { ok: false, error: { type: 'PathOutsideRoot', path: f.path } };
+            for (const f of files) if (inside(f.path) === undefined) return { ok: false, error: { type: 'Collaboration.PathOutsideRoot', path: f.path } };
             for (const f of files) {
                 const link = await linkOnTheWay(f.path);
-                if (link !== undefined) return { ok: false, error: { type: 'SymlinkInWorkspace', path: link } };
+                if (link !== undefined) return { ok: false, error: { type: 'Collaboration.SymlinkInWorkspace', path: link } };
             }
             const now = await read();
             const [link] = now.symlinks;
-            if (link !== undefined) return { ok: false, error: { type: 'SymlinkInWorkspace', path: link } };
+            if (link !== undefined) return { ok: false, error: { type: 'Collaboration.SymlinkInWorkspace', path: link } };
             const was = new Map(expected.map((f) => [f.path, f.hash]));
             const is = new Map(now.files.map((f) => [f.path, f.hash]));
             const changed = [...new Set([...was.keys(), ...is.keys()])].filter((p) => was.get(p) !== is.get(p)).sort();
-            if (changed.length) return { ok: false, error: { type: 'ExternalChangesSinceSnapshot', paths: changed } };
+            if (changed.length) return { ok: false, error: { type: 'Collaboration.ExternalChangesSinceSnapshot', paths: changed } };
 
             const keep = new Set(files.map((f) => f.path));
             for (const f of files) {
                 if (is.get(f.path) === sha256(f.bytes)) continue;
                 const full = inside(f.path);
-                if (full === undefined) return { ok: false, error: { type: 'PathOutsideRoot', path: f.path } };
+                if (full === undefined) return { ok: false, error: { type: 'Collaboration.PathOutsideRoot', path: f.path } };
                 // the directories on the way, one at a time, none of them a link (checked above, and again when made)
                 const parts = f.path.split('/').slice(0, -1);
                 for (let i = 1; i <= parts.length; i++) {
@@ -119,7 +119,7 @@ export function createWorkspaceSnapshot(root: string, selection: SourceSelection
                     const stat = await lstatOrAbsent(dir);
                     if (!stat) await mkdir(dir);
                     else if (stat.isSymbolicLink() || !stat.isDirectory())
-                        return { ok: false, error: { type: 'SymlinkInWorkspace', path: parts.slice(0, i).join('/') } };
+                        return { ok: false, error: { type: 'Collaboration.SymlinkInWorkspace', path: parts.slice(0, i).join('/') } };
                 }
                 // a rename replaces whatever is at the target (a link included) instead of writing through it
                 const temp = path.join(path.dirname(full), `.${path.basename(full)}.${process.pid}.${++temps}.restore.tmp`);

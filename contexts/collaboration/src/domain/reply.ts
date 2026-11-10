@@ -624,12 +624,12 @@ export function resolvePick(
     run: Collaboration.AgentRun,
     requests: readonly Collaboration.RequestId[],
 ): Result<Collaboration.AlternativePick, Collaboration.RunNotPickable | Collaboration.AlternativeNotFound | Collaboration.PickMismatch> {
-    if (run.state !== 'Completed' || !run.reply || run.reply.assumptions.length === 0) return err({ type: 'RunNotPickable', run: run.id });
+    if (run.state !== 'Completed' || !run.reply || run.reply.assumptions.length === 0) return err({ type: 'Collaboration.RunNotPickable', run: run.id });
     const assumption = run.reply.assumptions[pick.assumption];
     const alternative = assumption?.alternatives.find((a) => a.id === pick.alternative);
-    if (!assumption || !alternative) return err({ type: 'AlternativeNotFound', run: run.id });
+    if (!assumption || !alternative) return err({ type: 'Collaboration.AlternativeNotFound', run: run.id });
     const own = new Set(run.input.requests.map((r) => r.request));
     const again = new Set(requests);
-    if (again.size !== own.size || [...again].some((r) => !own.has(r))) return err({ type: 'PickMismatch', run: run.id });
+    if (again.size !== own.size || [...again].some((r) => !own.has(r))) return err({ type: 'Collaboration.PickMismatch', run: run.id });
     return ok({ pickOf: run.id, assumption: pick.assumption, text: assumption.text, alternative });
 }

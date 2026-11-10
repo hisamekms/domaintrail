@@ -103,7 +103,7 @@ describe('changes in the generated TypeScript', () => {
 export const work: Tasks.WorkCommands = {
     open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, ({ id, title }) => ok({ Draft: { set: { updatedAt: undefined, id, title, note: undefined, tags: [], draftNo: 1 }, events: {} } })),
     rename: decide<Tasks.RenameWorkDecision>(Tasks.WorkShape, {
-        Draft: (w, { newTitle, at }) => (newTitle === '' ? err({ type: 'NotReady' }) : ok({ Draft: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } })),
+        Draft: (w, { newTitle, at }) => (newTitle === '' ? err({ type: 'Tasks.NotReady' }) : ok({ Draft: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } })),
         Review: (w, { newTitle, at }) => ok({ Review: { set: { title: newTitle, updatedAt: at }, events: { Renamed: { type: 'Renamed', workId: w.id } } } }),
     }),
     submit: decide<Tasks.SubmitWorkDecision>(Tasks.WorkShape, { Draft: (w, { reviewer }) => ok({ Review: { set: { reviewer }, events: {} } }) }),

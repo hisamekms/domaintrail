@@ -88,7 +88,7 @@ const ev = <T extends string>(type: T, work: Tasks.Work) => ({ type, workId: wor
 export const commands: Tasks.WorkCommands = {
     open: ({ id }) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { WorkOpened: { type: 'WorkOpened', workId: id }, ItemAdded: [] } } }),
     progress: (work, { at }) => {
-        if (at.getTime() < 0) return err({ type: 'NotReady' });
+        if (at.getTime() < 0) return err({ type: 'Tasks.NotReady' });
         if (at.getTime() === 0) return ok({ InProgress: { aggregate: work, events: { StepRecorded: ev('StepRecorded', work) } } });
         return ok({
             Completed: {

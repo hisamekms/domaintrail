@@ -17,7 +17,7 @@ export type AgentRunId = string & { readonly __domain: 'Collaboration.AgentRunId
  * @see contexts/collaboration/model/agent-run.dt:3
  */
 export interface InvalidAgentRunId {
-    readonly type: 'InvalidAgentRunId';
+    readonly type: 'Collaboration.InvalidAgentRunId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -46,7 +46,7 @@ export function checkAgentRunId(value: string): readonly InvalidAgentRunId['inva
 export const makeAgentRunId: MakeAgentRunId = (value) => {
     const [invariant] = checkAgentRunId(value);
     if (invariant === undefined) return ok(value as AgentRunId);
-    return err({ type: 'InvalidAgentRunId', value, invariant });
+    return err({ type: 'Collaboration.InvalidAgentRunId', value, invariant });
 };
 
 /**
@@ -232,7 +232,7 @@ export type ReplyKey = string & { readonly __domain: 'Collaboration.ReplyKey' };
  * @see contexts/collaboration/model/agent-run.dt:77
  */
 export interface InvalidReplyKey {
-    readonly type: 'InvalidReplyKey';
+    readonly type: 'Collaboration.InvalidReplyKey';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -261,7 +261,7 @@ export function checkReplyKey(value: string): readonly InvalidReplyKey['invarian
 export const makeReplyKey: MakeReplyKey = (value) => {
     const [invariant] = checkReplyKey(value);
     if (invariant === undefined) return ok(value as ReplyKey);
-    return err({ type: 'InvalidReplyKey', value, invariant });
+    return err({ type: 'Collaboration.InvalidReplyKey', value, invariant });
 };
 
 /**
@@ -2045,7 +2045,7 @@ export interface RunCancelled {
  * @see contexts/collaboration/model/agent-run.dt:579
  */
 export interface DuplicateRequest {
-    readonly type: 'DuplicateRequest';
+    readonly type: 'Collaboration.DuplicateRequest';
 }
 
 /**
@@ -2054,7 +2054,7 @@ export interface DuplicateRequest {
  * @see contexts/collaboration/model/agent-run.dt:582
  */
 export interface InputMismatch {
-    readonly type: 'InputMismatch';
+    readonly type: 'Collaboration.InputMismatch';
 }
 
 /**
@@ -2063,7 +2063,7 @@ export interface InputMismatch {
  * @see contexts/collaboration/model/agent-run.dt:585
  */
 export interface ChangedMismatch {
-    readonly type: 'ChangedMismatch';
+    readonly type: 'Collaboration.ChangedMismatch';
 }
 
 /**
@@ -2072,7 +2072,7 @@ export interface ChangedMismatch {
  * @see contexts/collaboration/model/agent-run.dt:588
  */
 export interface ReportRequired {
-    readonly type: 'ReportRequired';
+    readonly type: 'Collaboration.ReportRequired';
 }
 
 /**
@@ -2081,7 +2081,7 @@ export interface ReportRequired {
  * @see contexts/collaboration/model/agent-run.dt:591
  */
 export interface RunNotPickable {
-    readonly type: 'RunNotPickable';
+    readonly type: 'Collaboration.RunNotPickable';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -2092,7 +2092,7 @@ export interface RunNotPickable {
  * @see contexts/collaboration/model/agent-run.dt:596
  */
 export interface AlternativeNotFound {
-    readonly type: 'AlternativeNotFound';
+    readonly type: 'Collaboration.AlternativeNotFound';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -2103,7 +2103,7 @@ export interface AlternativeNotFound {
  * @see contexts/collaboration/model/agent-run.dt:601
  */
 export interface PickMismatch {
-    readonly type: 'PickMismatch';
+    readonly type: 'Collaboration.PickMismatch';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -2114,7 +2114,7 @@ export interface PickMismatch {
  * @see contexts/collaboration/model/agent-run.dt:606
  */
 export interface InvalidReply {
-    readonly type: 'InvalidReply';
+    readonly type: 'Collaboration.InvalidReply';
 }
 
 /**
@@ -2131,7 +2131,7 @@ export type AssumptionApprovalId = string & { readonly __domain: 'Collaboration.
  * @see contexts/collaboration/model/approval.dt:3
  */
 export interface InvalidAssumptionApprovalId {
-    readonly type: 'InvalidAssumptionApprovalId';
+    readonly type: 'Collaboration.InvalidAssumptionApprovalId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -2160,7 +2160,7 @@ export function checkAssumptionApprovalId(value: string): readonly InvalidAssump
 export const makeAssumptionApprovalId: MakeAssumptionApprovalId = (value) => {
     const [invariant] = checkAssumptionApprovalId(value);
     if (invariant === undefined) return ok(value as AssumptionApprovalId);
-    return err({ type: 'InvalidAssumptionApprovalId', value, invariant });
+    return err({ type: 'Collaboration.InvalidAssumptionApprovalId', value, invariant });
 };
 
 /**
@@ -2365,7 +2365,7 @@ export interface AssumptionApproved {
  * @see contexts/collaboration/model/approval.dt:45
  */
 export interface RunNotApprovable {
-    readonly type: 'RunNotApprovable';
+    readonly type: 'Collaboration.RunNotApprovable';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -2376,7 +2376,7 @@ export interface RunNotApprovable {
  * @see contexts/collaboration/model/approval.dt:50
  */
 export interface AssumptionNotFound {
-    readonly type: 'AssumptionNotFound';
+    readonly type: 'Collaboration.AssumptionNotFound';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -2387,7 +2387,7 @@ export interface AssumptionNotFound {
  * @see contexts/collaboration/model/approval.dt:55
  */
 export interface AssumptionClosed {
-    readonly type: 'AssumptionClosed';
+    readonly type: 'Collaboration.AssumptionClosed';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -2406,7 +2406,7 @@ export type SlashCommandId = string & { readonly __domain: 'Collaboration.SlashC
  * @see contexts/collaboration/model/command.dt:3
  */
 export interface InvalidSlashCommandId {
-    readonly type: 'InvalidSlashCommandId';
+    readonly type: 'Collaboration.InvalidSlashCommandId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -2435,7 +2435,7 @@ export function checkSlashCommandId(value: string): readonly InvalidSlashCommand
 export const makeSlashCommandId: MakeSlashCommandId = (value) => {
     const [invariant] = checkSlashCommandId(value);
     if (invariant === undefined) return ok(value as SlashCommandId);
-    return err({ type: 'InvalidSlashCommandId', value, invariant });
+    return err({ type: 'Collaboration.InvalidSlashCommandId', value, invariant });
 };
 
 /**
@@ -2528,7 +2528,7 @@ export type CandidateLabel = string & { readonly __domain: 'Collaboration.Candid
  * @see contexts/collaboration/model/command.dt:45
  */
 export interface InvalidCandidateLabel {
-    readonly type: 'InvalidCandidateLabel';
+    readonly type: 'Collaboration.InvalidCandidateLabel';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -2557,7 +2557,7 @@ export function checkCandidateLabel(value: string): readonly InvalidCandidateLab
 export const makeCandidateLabel: MakeCandidateLabel = (value) => {
     const [invariant] = checkCandidateLabel(value);
     if (invariant === undefined) return ok(value as CandidateLabel);
-    return err({ type: 'InvalidCandidateLabel', value, invariant });
+    return err({ type: 'Collaboration.InvalidCandidateLabel', value, invariant });
 };
 
 /**
@@ -2574,7 +2574,7 @@ export type CandidateIndex = number & { readonly __domain: 'Collaboration.Candid
  * @see contexts/collaboration/model/command.dt:48
  */
 export interface InvalidCandidateIndex {
-    readonly type: 'InvalidCandidateIndex';
+    readonly type: 'Collaboration.InvalidCandidateIndex';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -2603,7 +2603,7 @@ export function checkCandidateIndex(value: number): readonly InvalidCandidateInd
 export const makeCandidateIndex: MakeCandidateIndex = (value) => {
     const [invariant] = checkCandidateIndex(value);
     if (invariant === undefined) return ok(value as CandidateIndex);
-    return err({ type: 'InvalidCandidateIndex', value, invariant });
+    return err({ type: 'Collaboration.InvalidCandidateIndex', value, invariant });
 };
 
 /**
@@ -3186,7 +3186,7 @@ export interface SlashCommandStopped {
  * @see contexts/collaboration/model/command.dt:185
  */
 export interface NotTheStarter {
-    readonly type: 'NotTheStarter';
+    readonly type: 'Collaboration.NotTheStarter';
 }
 
 /**
@@ -3195,7 +3195,7 @@ export interface NotTheStarter {
  * @see contexts/collaboration/model/command.dt:188
  */
 export interface NoSuchCandidate {
-    readonly type: 'NoSuchCandidate';
+    readonly type: 'Collaboration.NoSuchCandidate';
 }
 
 /**
@@ -3204,7 +3204,7 @@ export interface NoSuchCandidate {
  * @see contexts/collaboration/model/command.dt:191
  */
 export interface CommandAlreadyRunning {
-    readonly type: 'CommandAlreadyRunning';
+    readonly type: 'Collaboration.CommandAlreadyRunning';
 }
 
 /**
@@ -3221,7 +3221,7 @@ export type Text = string & { readonly __domain: 'Collaboration.Text' };
  * @see contexts/collaboration/model/context.dt:15
  */
 export interface InvalidText {
-    readonly type: 'InvalidText';
+    readonly type: 'Collaboration.InvalidText';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3250,7 +3250,7 @@ export function checkText(value: string): readonly InvalidText['invariant'][] {
 export const makeText: MakeText = (value) => {
     const [invariant] = checkText(value);
     if (invariant === undefined) return ok(value as Text);
-    return err({ type: 'InvalidText', value, invariant });
+    return err({ type: 'Collaboration.InvalidText', value, invariant });
 };
 
 /**
@@ -3267,7 +3267,7 @@ export type LineNumber = number & { readonly __domain: 'Collaboration.LineNumber
  * @see contexts/collaboration/model/context.dt:18
  */
 export interface InvalidLineNumber {
-    readonly type: 'InvalidLineNumber';
+    readonly type: 'Collaboration.InvalidLineNumber';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3296,7 +3296,7 @@ export function checkLineNumber(value: number): readonly InvalidLineNumber['inva
 export const makeLineNumber: MakeLineNumber = (value) => {
     const [invariant] = checkLineNumber(value);
     if (invariant === undefined) return ok(value as LineNumber);
-    return err({ type: 'InvalidLineNumber', value, invariant });
+    return err({ type: 'Collaboration.InvalidLineNumber', value, invariant });
 };
 
 /**
@@ -3313,7 +3313,7 @@ export type ColumnNumber = number & { readonly __domain: 'Collaboration.ColumnNu
  * @see contexts/collaboration/model/context.dt:21
  */
 export interface InvalidColumnNumber {
-    readonly type: 'InvalidColumnNumber';
+    readonly type: 'Collaboration.InvalidColumnNumber';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3342,7 +3342,7 @@ export function checkColumnNumber(value: number): readonly InvalidColumnNumber['
 export const makeColumnNumber: MakeColumnNumber = (value) => {
     const [invariant] = checkColumnNumber(value);
     if (invariant === undefined) return ok(value as ColumnNumber);
-    return err({ type: 'InvalidColumnNumber', value, invariant });
+    return err({ type: 'Collaboration.InvalidColumnNumber', value, invariant });
 };
 
 /**
@@ -3359,7 +3359,7 @@ export type Tally = number & { readonly __domain: 'Collaboration.Tally' };
  * @see contexts/collaboration/model/context.dt:24
  */
 export interface InvalidTally {
-    readonly type: 'InvalidTally';
+    readonly type: 'Collaboration.InvalidTally';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3388,7 +3388,7 @@ export function checkTally(value: number): readonly InvalidTally['invariant'][] 
 export const makeTally: MakeTally = (value) => {
     const [invariant] = checkTally(value);
     if (invariant === undefined) return ok(value as Tally);
-    return err({ type: 'InvalidTally', value, invariant });
+    return err({ type: 'Collaboration.InvalidTally', value, invariant });
 };
 
 /**
@@ -3405,7 +3405,7 @@ export type ContentHash = string & { readonly __domain: 'Collaboration.ContentHa
  * @see contexts/collaboration/model/context.dt:27
  */
 export interface InvalidContentHash {
-    readonly type: 'InvalidContentHash';
+    readonly type: 'Collaboration.InvalidContentHash';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3434,7 +3434,7 @@ export function checkContentHash(value: string): readonly InvalidContentHash['in
 export const makeContentHash: MakeContentHash = (value) => {
     const [invariant] = checkContentHash(value);
     if (invariant === undefined) return ok(value as ContentHash);
-    return err({ type: 'InvalidContentHash', value, invariant });
+    return err({ type: 'Collaboration.InvalidContentHash', value, invariant });
 };
 
 /**
@@ -3452,7 +3452,7 @@ export type WorkspacePath = string & { readonly __domain: 'Collaboration.Workspa
  * @see contexts/collaboration/model/context.dt:30
  */
 export interface InvalidWorkspacePath {
-    readonly type: 'InvalidWorkspacePath';
+    readonly type: 'Collaboration.InvalidWorkspacePath';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'relative' | 'noDotSegment';
@@ -3482,7 +3482,7 @@ export function checkWorkspacePath(value: string): readonly InvalidWorkspacePath
 export const makeWorkspacePath: MakeWorkspacePath = (value) => {
     const [invariant] = checkWorkspacePath(value);
     if (invariant === undefined) return ok(value as WorkspacePath);
-    return err({ type: 'InvalidWorkspacePath', value, invariant });
+    return err({ type: 'Collaboration.InvalidWorkspacePath', value, invariant });
 };
 
 /**
@@ -3509,7 +3509,7 @@ export type GuideStepKey = string & { readonly __domain: 'Collaboration.GuideSte
  * @see contexts/collaboration/model/guide.dt:4
  */
 export interface InvalidGuideStepKey {
-    readonly type: 'InvalidGuideStepKey';
+    readonly type: 'Collaboration.InvalidGuideStepKey';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3538,7 +3538,7 @@ export function checkGuideStepKey(value: string): readonly InvalidGuideStepKey['
 export const makeGuideStepKey: MakeGuideStepKey = (value) => {
     const [invariant] = checkGuideStepKey(value);
     if (invariant === undefined) return ok(value as GuideStepKey);
-    return err({ type: 'InvalidGuideStepKey', value, invariant });
+    return err({ type: 'Collaboration.InvalidGuideStepKey', value, invariant });
 };
 
 /**
@@ -3556,7 +3556,7 @@ export type GuideJourneyKey = string & { readonly __domain: 'Collaboration.Guide
  * @see contexts/collaboration/model/guide.dt:8
  */
 export interface InvalidGuideJourneyKey {
-    readonly type: 'InvalidGuideJourneyKey';
+    readonly type: 'Collaboration.InvalidGuideJourneyKey';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3585,7 +3585,7 @@ export function checkGuideJourneyKey(value: string): readonly InvalidGuideJourne
 export const makeGuideJourneyKey: MakeGuideJourneyKey = (value) => {
     const [invariant] = checkGuideJourneyKey(value);
     if (invariant === undefined) return ok(value as GuideJourneyKey);
-    return err({ type: 'InvalidGuideJourneyKey', value, invariant });
+    return err({ type: 'Collaboration.InvalidGuideJourneyKey', value, invariant });
 };
 
 /**
@@ -3792,7 +3792,7 @@ export type InterviewId = string & { readonly __domain: 'Collaboration.Interview
  * @see contexts/collaboration/model/interview.dt:3
  */
 export interface InvalidInterviewId {
-    readonly type: 'InvalidInterviewId';
+    readonly type: 'Collaboration.InvalidInterviewId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -3821,7 +3821,7 @@ export function checkInterviewId(value: string): readonly InvalidInterviewId['in
 export const makeInterviewId: MakeInterviewId = (value) => {
     const [invariant] = checkInterviewId(value);
     if (invariant === undefined) return ok(value as InterviewId);
-    return err({ type: 'InvalidInterviewId', value, invariant });
+    return err({ type: 'Collaboration.InvalidInterviewId', value, invariant });
 };
 
 /**
@@ -3858,7 +3858,7 @@ export type BriefName = string & { readonly __domain: 'Collaboration.BriefName' 
  * @see contexts/collaboration/model/interview.dt:17
  */
 export interface InvalidBriefName {
-    readonly type: 'InvalidBriefName';
+    readonly type: 'Collaboration.InvalidBriefName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3887,7 +3887,7 @@ export function checkBriefName(value: string): readonly InvalidBriefName['invari
 export const makeBriefName: MakeBriefName = (value) => {
     const [invariant] = checkBriefName(value);
     if (invariant === undefined) return ok(value as BriefName);
-    return err({ type: 'InvalidBriefName', value, invariant });
+    return err({ type: 'Collaboration.InvalidBriefName', value, invariant });
 };
 
 /**
@@ -3904,7 +3904,7 @@ export type BriefLabel = string & { readonly __domain: 'Collaboration.BriefLabel
  * @see contexts/collaboration/model/interview.dt:20
  */
 export interface InvalidBriefLabel {
-    readonly type: 'InvalidBriefLabel';
+    readonly type: 'Collaboration.InvalidBriefLabel';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3933,7 +3933,7 @@ export function checkBriefLabel(value: string): readonly InvalidBriefLabel['inva
 export const makeBriefLabel: MakeBriefLabel = (value) => {
     const [invariant] = checkBriefLabel(value);
     if (invariant === undefined) return ok(value as BriefLabel);
-    return err({ type: 'InvalidBriefLabel', value, invariant });
+    return err({ type: 'Collaboration.InvalidBriefLabel', value, invariant });
 };
 
 /**
@@ -3951,7 +3951,7 @@ export type BriefText = string & { readonly __domain: 'Collaboration.BriefText' 
  * @see contexts/collaboration/model/interview.dt:24
  */
 export interface InvalidBriefText {
-    readonly type: 'InvalidBriefText';
+    readonly type: 'Collaboration.InvalidBriefText';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -3980,7 +3980,7 @@ export function checkBriefText(value: string): readonly InvalidBriefText['invari
 export const makeBriefText: MakeBriefText = (value) => {
     const [invariant] = checkBriefText(value);
     if (invariant === undefined) return ok(value as BriefText);
-    return err({ type: 'InvalidBriefText', value, invariant });
+    return err({ type: 'Collaboration.InvalidBriefText', value, invariant });
 };
 
 /**
@@ -3997,7 +3997,7 @@ export type BriefField = string & { readonly __domain: 'Collaboration.BriefField
  * @see contexts/collaboration/model/interview.dt:27
  */
 export interface InvalidBriefField {
-    readonly type: 'InvalidBriefField';
+    readonly type: 'Collaboration.InvalidBriefField';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -4026,7 +4026,7 @@ export function checkBriefField(value: string): readonly InvalidBriefField['inva
 export const makeBriefField: MakeBriefField = (value) => {
     const [invariant] = checkBriefField(value);
     if (invariant === undefined) return ok(value as BriefField);
-    return err({ type: 'InvalidBriefField', value, invariant });
+    return err({ type: 'Collaboration.InvalidBriefField', value, invariant });
 };
 
 /**
@@ -4043,7 +4043,7 @@ export type RoleName = string & { readonly __domain: 'Collaboration.RoleName' };
  * @see contexts/collaboration/model/interview.dt:30
  */
 export interface InvalidRoleName {
-    readonly type: 'InvalidRoleName';
+    readonly type: 'Collaboration.InvalidRoleName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -4072,7 +4072,7 @@ export function checkRoleName(value: string): readonly InvalidRoleName['invarian
 export const makeRoleName: MakeRoleName = (value) => {
     const [invariant] = checkRoleName(value);
     if (invariant === undefined) return ok(value as RoleName);
-    return err({ type: 'InvalidRoleName', value, invariant });
+    return err({ type: 'Collaboration.InvalidRoleName', value, invariant });
 };
 
 /**
@@ -4089,7 +4089,7 @@ export type JourneyName = string & { readonly __domain: 'Collaboration.JourneyNa
  * @see contexts/collaboration/model/interview.dt:33
  */
 export interface InvalidJourneyName {
-    readonly type: 'InvalidJourneyName';
+    readonly type: 'Collaboration.InvalidJourneyName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -4118,7 +4118,7 @@ export function checkJourneyName(value: string): readonly InvalidJourneyName['in
 export const makeJourneyName: MakeJourneyName = (value) => {
     const [invariant] = checkJourneyName(value);
     if (invariant === undefined) return ok(value as JourneyName);
-    return err({ type: 'InvalidJourneyName', value, invariant });
+    return err({ type: 'Collaboration.InvalidJourneyName', value, invariant });
 };
 
 /**
@@ -4135,7 +4135,7 @@ export type ShortDescription = string & { readonly __domain: 'Collaboration.Shor
  * @see contexts/collaboration/model/interview.dt:36
  */
 export interface InvalidShortDescription {
-    readonly type: 'InvalidShortDescription';
+    readonly type: 'Collaboration.InvalidShortDescription';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -4164,7 +4164,7 @@ export function checkShortDescription(value: string): readonly InvalidShortDescr
 export const makeShortDescription: MakeShortDescription = (value) => {
     const [invariant] = checkShortDescription(value);
     if (invariant === undefined) return ok(value as ShortDescription);
-    return err({ type: 'InvalidShortDescription', value, invariant });
+    return err({ type: 'Collaboration.InvalidShortDescription', value, invariant });
 };
 
 /**
@@ -4264,7 +4264,7 @@ export type AnswerChoice = string & { readonly __domain: 'Collaboration.AnswerCh
  * @see contexts/collaboration/model/interview.dt:86
  */
 export interface InvalidAnswerChoice {
-    readonly type: 'InvalidAnswerChoice';
+    readonly type: 'Collaboration.InvalidAnswerChoice';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -4293,7 +4293,7 @@ export function checkAnswerChoice(value: string): readonly InvalidAnswerChoice['
 export const makeAnswerChoice: MakeAnswerChoice = (value) => {
     const [invariant] = checkAnswerChoice(value);
     if (invariant === undefined) return ok(value as AnswerChoice);
-    return err({ type: 'InvalidAnswerChoice', value, invariant });
+    return err({ type: 'Collaboration.InvalidAnswerChoice', value, invariant });
 };
 
 /**
@@ -5057,7 +5057,7 @@ export interface InterviewRejected {
  * @see contexts/collaboration/model/interview.dt:269
  */
 export interface NotTheInterviewer {
-    readonly type: 'NotTheInterviewer';
+    readonly type: 'Collaboration.NotTheInterviewer';
 }
 
 /**
@@ -5066,7 +5066,7 @@ export interface NotTheInterviewer {
  * @see contexts/collaboration/model/interview.dt:272
  */
 export interface InterviewMovedOn {
-    readonly type: 'InterviewMovedOn';
+    readonly type: 'Collaboration.InterviewMovedOn';
 }
 
 /**
@@ -5075,7 +5075,7 @@ export interface InterviewMovedOn {
  * @see contexts/collaboration/model/interview.dt:275
  */
 export interface InterviewAlreadyRunning {
-    readonly type: 'InterviewAlreadyRunning';
+    readonly type: 'Collaboration.InterviewAlreadyRunning';
 }
 
 /**
@@ -5092,7 +5092,7 @@ export type MarkId = string & { readonly __domain: 'Collaboration.MarkId' };
  * @see contexts/collaboration/model/mark.dt:3
  */
 export interface InvalidMarkId {
-    readonly type: 'InvalidMarkId';
+    readonly type: 'Collaboration.InvalidMarkId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -5121,7 +5121,7 @@ export function checkMarkId(value: string): readonly InvalidMarkId['invariant'][
 export const makeMarkId: MakeMarkId = (value) => {
     const [invariant] = checkMarkId(value);
     if (invariant === undefined) return ok(value as MarkId);
-    return err({ type: 'InvalidMarkId', value, invariant });
+    return err({ type: 'Collaboration.InvalidMarkId', value, invariant });
 };
 
 /**
@@ -5141,7 +5141,7 @@ export type Emoji = string & { readonly __domain: 'Collaboration.Emoji' };
  * @see contexts/collaboration/model/mark.dt:8
  */
 export interface InvalidEmoji {
-    readonly type: 'InvalidEmoji';
+    readonly type: 'Collaboration.InvalidEmoji';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'bounded' | 'singleEmoji';
@@ -5181,7 +5181,7 @@ export const makeEmojiWith = (checks: EmojiDeclaredChecks): MakeEmoji => {
     return (value) => {
         const [invariant] = check(value);
         if (invariant === undefined) return ok(value as Emoji);
-        return err({ type: 'InvalidEmoji', value, invariant });
+        return err({ type: 'Collaboration.InvalidEmoji', value, invariant });
     };
 };
 
@@ -5610,7 +5610,7 @@ export interface MarkRemoved {
  * @see contexts/collaboration/model/mark.dt:120
  */
 export interface MarkTargetNotFound {
-    readonly type: 'MarkTargetNotFound';
+    readonly type: 'Collaboration.MarkTargetNotFound';
 }
 
 /**
@@ -5619,7 +5619,7 @@ export interface MarkTargetNotFound {
  * @see contexts/collaboration/model/mark.dt:123
  */
 export interface MarkTargetClosed {
-    readonly type: 'MarkTargetClosed';
+    readonly type: 'Collaboration.MarkTargetClosed';
 }
 
 /**
@@ -5628,7 +5628,7 @@ export interface MarkTargetClosed {
  * @see contexts/collaboration/model/mark.dt:126
  */
 export interface MarkNotForTarget {
-    readonly type: 'MarkNotForTarget';
+    readonly type: 'Collaboration.MarkNotForTarget';
 }
 
 /**
@@ -5637,7 +5637,7 @@ export interface MarkNotForTarget {
  * @see contexts/collaboration/model/mark.dt:129
  */
 export interface FacilitatorDoesNotVote {
-    readonly type: 'FacilitatorDoesNotVote';
+    readonly type: 'Collaboration.FacilitatorDoesNotVote';
 }
 
 /**
@@ -5647,7 +5647,7 @@ export interface FacilitatorDoesNotVote {
  * @see contexts/collaboration/model/mark.dt:133
  */
 export interface ReactionLimitReached {
-    readonly type: 'ReactionLimitReached';
+    readonly type: 'Collaboration.ReactionLimitReached';
     /** 上限 */
     readonly limit: Tally;
 }
@@ -5666,7 +5666,7 @@ export type ChangeProposalId = string & { readonly __domain: 'Collaboration.Chan
  * @see contexts/collaboration/model/proposal.dt:3
  */
 export interface InvalidChangeProposalId {
-    readonly type: 'InvalidChangeProposalId';
+    readonly type: 'Collaboration.InvalidChangeProposalId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -5695,7 +5695,7 @@ export function checkChangeProposalId(value: string): readonly InvalidChangeProp
 export const makeChangeProposalId: MakeChangeProposalId = (value) => {
     const [invariant] = checkChangeProposalId(value);
     if (invariant === undefined) return ok(value as ChangeProposalId);
-    return err({ type: 'InvalidChangeProposalId', value, invariant });
+    return err({ type: 'Collaboration.InvalidChangeProposalId', value, invariant });
 };
 
 /**
@@ -5713,7 +5713,7 @@ export type ProposalText = string & { readonly __domain: 'Collaboration.Proposal
  * @see contexts/collaboration/model/proposal.dt:7
  */
 export interface InvalidProposalText {
-    readonly type: 'InvalidProposalText';
+    readonly type: 'Collaboration.InvalidProposalText';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -5742,7 +5742,7 @@ export function checkProposalText(value: string): readonly InvalidProposalText['
 export const makeProposalText: MakeProposalText = (value) => {
     const [invariant] = checkProposalText(value);
     if (invariant === undefined) return ok(value as ProposalText);
-    return err({ type: 'InvalidProposalText', value, invariant });
+    return err({ type: 'Collaboration.InvalidProposalText', value, invariant });
 };
 
 /**
@@ -5759,7 +5759,7 @@ export type ProposalLabel = string & { readonly __domain: 'Collaboration.Proposa
  * @see contexts/collaboration/model/proposal.dt:10
  */
 export interface InvalidProposalLabel {
-    readonly type: 'InvalidProposalLabel';
+    readonly type: 'Collaboration.InvalidProposalLabel';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -5788,7 +5788,7 @@ export function checkProposalLabel(value: string): readonly InvalidProposalLabel
 export const makeProposalLabel: MakeProposalLabel = (value) => {
     const [invariant] = checkProposalLabel(value);
     if (invariant === undefined) return ok(value as ProposalLabel);
-    return err({ type: 'InvalidProposalLabel', value, invariant });
+    return err({ type: 'Collaboration.InvalidProposalLabel', value, invariant });
 };
 
 /**
@@ -5805,7 +5805,7 @@ export type ProposalOptionIndex = number & { readonly __domain: 'Collaboration.P
  * @see contexts/collaboration/model/proposal.dt:13
  */
 export interface InvalidProposalOptionIndex {
-    readonly type: 'InvalidProposalOptionIndex';
+    readonly type: 'Collaboration.InvalidProposalOptionIndex';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -5834,7 +5834,7 @@ export function checkProposalOptionIndex(value: number): readonly InvalidProposa
 export const makeProposalOptionIndex: MakeProposalOptionIndex = (value) => {
     const [invariant] = checkProposalOptionIndex(value);
     if (invariant === undefined) return ok(value as ProposalOptionIndex);
-    return err({ type: 'InvalidProposalOptionIndex', value, invariant });
+    return err({ type: 'Collaboration.InvalidProposalOptionIndex', value, invariant });
 };
 
 /**
@@ -6431,7 +6431,7 @@ export interface ProposalWithdrawn {
  * @see contexts/collaboration/model/proposal.dt:155
  */
 export interface NotTheRequester {
-    readonly type: 'NotTheRequester';
+    readonly type: 'Collaboration.NotTheRequester';
 }
 
 /**
@@ -6440,7 +6440,7 @@ export interface NotTheRequester {
  * @see contexts/collaboration/model/proposal.dt:158
  */
 export interface NoSuchOption {
-    readonly type: 'NoSuchOption';
+    readonly type: 'Collaboration.NoSuchOption';
 }
 
 /**
@@ -6457,7 +6457,7 @@ export type SessionRecordId = string & { readonly __domain: 'Collaboration.Sessi
  * @see contexts/collaboration/model/record.dt:3
  */
 export interface InvalidSessionRecordId {
-    readonly type: 'InvalidSessionRecordId';
+    readonly type: 'Collaboration.InvalidSessionRecordId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -6486,7 +6486,7 @@ export function checkSessionRecordId(value: string): readonly InvalidSessionReco
 export const makeSessionRecordId: MakeSessionRecordId = (value) => {
     const [invariant] = checkSessionRecordId(value);
     if (invariant === undefined) return ok(value as SessionRecordId);
-    return err({ type: 'InvalidSessionRecordId', value, invariant });
+    return err({ type: 'Collaboration.InvalidSessionRecordId', value, invariant });
 };
 
 /**
@@ -6503,7 +6503,7 @@ export type JourneyRequestId = string & { readonly __domain: 'Collaboration.Jour
  * @see contexts/collaboration/model/record.dt:6
  */
 export interface InvalidJourneyRequestId {
-    readonly type: 'InvalidJourneyRequestId';
+    readonly type: 'Collaboration.InvalidJourneyRequestId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -6532,7 +6532,7 @@ export function checkJourneyRequestId(value: string): readonly InvalidJourneyReq
 export const makeJourneyRequestId: MakeJourneyRequestId = (value) => {
     const [invariant] = checkJourneyRequestId(value);
     if (invariant === undefined) return ok(value as JourneyRequestId);
-    return err({ type: 'InvalidJourneyRequestId', value, invariant });
+    return err({ type: 'Collaboration.InvalidJourneyRequestId', value, invariant });
 };
 
 /**
@@ -6549,7 +6549,7 @@ export type JourneyLabel = string & { readonly __domain: 'Collaboration.JourneyL
  * @see contexts/collaboration/model/record.dt:9
  */
 export interface InvalidJourneyLabel {
-    readonly type: 'InvalidJourneyLabel';
+    readonly type: 'Collaboration.InvalidJourneyLabel';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -6578,7 +6578,7 @@ export function checkJourneyLabel(value: string): readonly InvalidJourneyLabel['
 export const makeJourneyLabel: MakeJourneyLabel = (value) => {
     const [invariant] = checkJourneyLabel(value);
     if (invariant === undefined) return ok(value as JourneyLabel);
-    return err({ type: 'InvalidJourneyLabel', value, invariant });
+    return err({ type: 'Collaboration.InvalidJourneyLabel', value, invariant });
 };
 
 /**
@@ -7125,7 +7125,7 @@ export type RequestId = string & { readonly __domain: 'Collaboration.RequestId' 
  * @see contexts/collaboration/model/request.dt:3
  */
 export interface InvalidRequestId {
-    readonly type: 'InvalidRequestId';
+    readonly type: 'Collaboration.InvalidRequestId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -7154,7 +7154,7 @@ export function checkRequestId(value: string): readonly InvalidRequestId['invari
 export const makeRequestId: MakeRequestId = (value) => {
     const [invariant] = checkRequestId(value);
     if (invariant === undefined) return ok(value as RequestId);
-    return err({ type: 'InvalidRequestId', value, invariant });
+    return err({ type: 'Collaboration.InvalidRequestId', value, invariant });
 };
 
 /**
@@ -7933,7 +7933,7 @@ export interface RequestDismissed {
  * @see contexts/collaboration/model/request.dt:198
  */
 export interface RequestNotFound {
-    readonly type: 'RequestNotFound';
+    readonly type: 'Collaboration.RequestNotFound';
     /** 依頼ID */
     readonly request: RequestId;
 }
@@ -7944,7 +7944,7 @@ export interface RequestNotFound {
  * @see contexts/collaboration/model/request.dt:203
  */
 export interface RequestOfAnotherSession {
-    readonly type: 'RequestOfAnotherSession';
+    readonly type: 'Collaboration.RequestOfAnotherSession';
     /** 依頼ID */
     readonly request: RequestId;
 }
@@ -7955,7 +7955,7 @@ export interface RequestOfAnotherSession {
  * @see contexts/collaboration/model/request.dt:208
  */
 export interface RequestAlreadyDismissed {
-    readonly type: 'RequestAlreadyDismissed';
+    readonly type: 'Collaboration.RequestAlreadyDismissed';
     /** 依頼ID */
     readonly request: RequestId;
 }
@@ -7966,7 +7966,7 @@ export interface RequestAlreadyDismissed {
  * @see contexts/collaboration/model/request.dt:213
  */
 export interface MentionedNotAParticipant {
-    readonly type: 'MentionedNotAParticipant';
+    readonly type: 'Collaboration.MentionedNotAParticipant';
     /** 参加者 */
     readonly participant: ParticipantId;
 }
@@ -7977,7 +7977,7 @@ export interface MentionedNotAParticipant {
  * @see contexts/collaboration/model/request.dt:218
  */
 export interface RunNotFound {
-    readonly type: 'RunNotFound';
+    readonly type: 'Collaboration.RunNotFound';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -7988,7 +7988,7 @@ export interface RunNotFound {
  * @see contexts/collaboration/model/request.dt:223
  */
 export interface RunOfAnotherSession {
-    readonly type: 'RunOfAnotherSession';
+    readonly type: 'Collaboration.RunOfAnotherSession';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -7999,7 +7999,7 @@ export interface RunOfAnotherSession {
  * @see contexts/collaboration/model/request.dt:228
  */
 export interface RunNotReplyable {
-    readonly type: 'RunNotReplyable';
+    readonly type: 'Collaboration.RunNotReplyable';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -8010,7 +8010,7 @@ export interface RunNotReplyable {
  * @see contexts/collaboration/model/request.dt:233
  */
 export interface RunNotRevertable {
-    readonly type: 'RunNotRevertable';
+    readonly type: 'Collaboration.RunNotRevertable';
     /** エージェント実行ID */
     readonly run: AgentRunId;
 }
@@ -8021,7 +8021,7 @@ export interface RunNotRevertable {
  * @see contexts/collaboration/model/request.dt:238
  */
 export interface TooManyMentions {
-    readonly type: 'TooManyMentions';
+    readonly type: 'Collaboration.TooManyMentions';
 }
 
 /**
@@ -8030,7 +8030,7 @@ export interface TooManyMentions {
  * @see contexts/collaboration/model/request.dt:241
  */
 export interface DuplicateMention {
-    readonly type: 'DuplicateMention';
+    readonly type: 'Collaboration.DuplicateMention';
 }
 
 /**
@@ -8039,7 +8039,7 @@ export interface DuplicateMention {
  * @see contexts/collaboration/model/request.dt:244
  */
 export interface TooManyTargets {
-    readonly type: 'TooManyTargets';
+    readonly type: 'Collaboration.TooManyTargets';
 }
 
 /**
@@ -8048,7 +8048,7 @@ export interface TooManyTargets {
  * @see contexts/collaboration/model/request.dt:247
  */
 export interface DuplicateTarget {
-    readonly type: 'DuplicateTarget';
+    readonly type: 'Collaboration.DuplicateTarget';
 }
 
 /**
@@ -8057,7 +8057,7 @@ export interface DuplicateTarget {
  * @see contexts/collaboration/model/request.dt:250
  */
 export interface WorkspaceTarget {
-    readonly type: 'WorkspaceTarget';
+    readonly type: 'Collaboration.WorkspaceTarget';
 }
 
 /**
@@ -8074,7 +8074,7 @@ export type RevisionId = string & { readonly __domain: 'Collaboration.RevisionId
  * @see contexts/collaboration/model/revision.dt:3
  */
 export interface InvalidRevisionId {
-    readonly type: 'InvalidRevisionId';
+    readonly type: 'Collaboration.InvalidRevisionId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -8103,7 +8103,7 @@ export function checkRevisionId(value: string): readonly InvalidRevisionId['inva
 export const makeRevisionId: MakeRevisionId = (value) => {
     const [invariant] = checkRevisionId(value);
     if (invariant === undefined) return ok(value as RevisionId);
-    return err({ type: 'InvalidRevisionId', value, invariant });
+    return err({ type: 'Collaboration.InvalidRevisionId', value, invariant });
 };
 
 /**
@@ -8581,7 +8581,7 @@ export interface RevisionRestored {
  * @see contexts/collaboration/model/revision.dt:108
  */
 export interface RevisionNotFound {
-    readonly type: 'RevisionNotFound';
+    readonly type: 'Collaboration.RevisionNotFound';
     /** リビジョンID */
     readonly revision: RevisionId;
 }
@@ -8592,7 +8592,7 @@ export interface RevisionNotFound {
  * @see contexts/collaboration/model/revision.dt:113
  */
 export interface RevisionOfAnotherSession {
-    readonly type: 'RevisionOfAnotherSession';
+    readonly type: 'Collaboration.RevisionOfAnotherSession';
     /** リビジョンID */
     readonly revision: RevisionId;
 }
@@ -8603,7 +8603,7 @@ export interface RevisionOfAnotherSession {
  * @see contexts/collaboration/model/revision.dt:118
  */
 export interface SymlinkInWorkspace {
-    readonly type: 'SymlinkInWorkspace';
+    readonly type: 'Collaboration.SymlinkInWorkspace';
     /** ワークスペース内パス */
     readonly path: WorkspacePath;
 }
@@ -8614,7 +8614,7 @@ export interface SymlinkInWorkspace {
  * @see contexts/collaboration/model/revision.dt:123
  */
 export interface PathOutsideRoot {
-    readonly type: 'PathOutsideRoot';
+    readonly type: 'Collaboration.PathOutsideRoot';
     readonly path: string;
 }
 
@@ -8624,7 +8624,7 @@ export interface PathOutsideRoot {
  * @see contexts/collaboration/model/revision.dt:128
  */
 export interface ExternalChangesSinceSnapshot {
-    readonly type: 'ExternalChangesSinceSnapshot';
+    readonly type: 'Collaboration.ExternalChangesSinceSnapshot';
     /** ワークスペース内パス */
     readonly paths: readonly [WorkspacePath, ...WorkspacePath[]];
 }
@@ -8635,7 +8635,7 @@ export interface ExternalChangesSinceSnapshot {
  * @see contexts/collaboration/model/revision.dt:133
  */
 export interface ContentHashMismatch {
-    readonly type: 'ContentHashMismatch';
+    readonly type: 'Collaboration.ContentHashMismatch';
 }
 
 /**
@@ -8644,7 +8644,7 @@ export interface ContentHashMismatch {
  * @see contexts/collaboration/model/revision.dt:136
  */
 export interface RestoreNeedsCheck {
-    readonly type: 'RestoreNeedsCheck';
+    readonly type: 'Collaboration.RestoreNeedsCheck';
 }
 
 /**
@@ -8661,7 +8661,7 @@ export type SessionId = string & { readonly __domain: 'Collaboration.SessionId' 
  * @see contexts/collaboration/model/session.dt:3
  */
 export interface InvalidSessionId {
-    readonly type: 'InvalidSessionId';
+    readonly type: 'Collaboration.InvalidSessionId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -8690,7 +8690,7 @@ export function checkSessionId(value: string): readonly InvalidSessionId['invari
 export const makeSessionId: MakeSessionId = (value) => {
     const [invariant] = checkSessionId(value);
     if (invariant === undefined) return ok(value as SessionId);
-    return err({ type: 'InvalidSessionId', value, invariant });
+    return err({ type: 'Collaboration.InvalidSessionId', value, invariant });
 };
 
 /**
@@ -8707,7 +8707,7 @@ export type ParticipantId = string & { readonly __domain: 'Collaboration.Partici
  * @see contexts/collaboration/model/session.dt:6
  */
 export interface InvalidParticipantId {
-    readonly type: 'InvalidParticipantId';
+    readonly type: 'Collaboration.InvalidParticipantId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -8736,7 +8736,7 @@ export function checkParticipantId(value: string): readonly InvalidParticipantId
 export const makeParticipantId: MakeParticipantId = (value) => {
     const [invariant] = checkParticipantId(value);
     if (invariant === undefined) return ok(value as ParticipantId);
-    return err({ type: 'InvalidParticipantId', value, invariant });
+    return err({ type: 'Collaboration.InvalidParticipantId', value, invariant });
 };
 
 /**
@@ -8753,7 +8753,7 @@ export type DisplayName = string & { readonly __domain: 'Collaboration.DisplayNa
  * @see contexts/collaboration/model/session.dt:9
  */
 export interface InvalidDisplayName {
-    readonly type: 'InvalidDisplayName';
+    readonly type: 'Collaboration.InvalidDisplayName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -8782,7 +8782,7 @@ export function checkDisplayName(value: string): readonly InvalidDisplayName['in
 export const makeDisplayName: MakeDisplayName = (value) => {
     const [invariant] = checkDisplayName(value);
     if (invariant === undefined) return ok(value as DisplayName);
-    return err({ type: 'InvalidDisplayName', value, invariant });
+    return err({ type: 'Collaboration.InvalidDisplayName', value, invariant });
 };
 
 /**
@@ -9325,7 +9325,7 @@ export interface SessionClosed {
  * @see contexts/collaboration/model/session.dt:123
  */
 export interface AlreadyJoined {
-    readonly type: 'AlreadyJoined';
+    readonly type: 'Collaboration.AlreadyJoined';
     /** 参加者 */
     readonly participant: ParticipantId;
 }
@@ -9336,7 +9336,7 @@ export interface AlreadyJoined {
  * @see contexts/collaboration/model/session.dt:128
  */
 export interface SoloSession {
-    readonly type: 'SoloSession';
+    readonly type: 'Collaboration.SoloSession';
 }
 
 /**
@@ -9345,7 +9345,7 @@ export interface SoloSession {
  * @see contexts/collaboration/model/session.dt:131
  */
 export interface NotSolo {
-    readonly type: 'NotSolo';
+    readonly type: 'Collaboration.NotSolo';
 }
 
 /**
@@ -9355,7 +9355,7 @@ export interface NotSolo {
  * @see contexts/collaboration/model/session.dt:135
  */
 export interface CollabSessionOpen {
-    readonly type: 'CollabSessionOpen';
+    readonly type: 'Collaboration.CollabSessionOpen';
 }
 
 /**
@@ -9364,7 +9364,7 @@ export interface CollabSessionOpen {
  * @see contexts/collaboration/model/session.dt:138
  */
 export interface FacilitatorOnly {
-    readonly type: 'FacilitatorOnly';
+    readonly type: 'Collaboration.FacilitatorOnly';
 }
 
 /**
@@ -9373,7 +9373,7 @@ export interface FacilitatorOnly {
  * @see contexts/collaboration/model/session.dt:141
  */
 export interface SessionNotFound {
-    readonly type: 'SessionNotFound';
+    readonly type: 'Collaboration.SessionNotFound';
 }
 
 /**
@@ -9382,7 +9382,7 @@ export interface SessionNotFound {
  * @see contexts/collaboration/model/session.dt:144
  */
 export interface SessionAlreadyClosed {
-    readonly type: 'SessionAlreadyClosed';
+    readonly type: 'Collaboration.SessionAlreadyClosed';
 }
 
 /**
@@ -9399,7 +9399,7 @@ export type ElementName = string & { readonly __domain: 'Collaboration.ElementNa
  * @see contexts/collaboration/model/target.dt:3
  */
 export interface InvalidElementName {
-    readonly type: 'InvalidElementName';
+    readonly type: 'Collaboration.InvalidElementName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9428,7 +9428,7 @@ export function checkElementName(value: string): readonly InvalidElementName['in
 export const makeElementName: MakeElementName = (value) => {
     const [invariant] = checkElementName(value);
     if (invariant === undefined) return ok(value as ElementName);
-    return err({ type: 'InvalidElementName', value, invariant });
+    return err({ type: 'Collaboration.InvalidElementName', value, invariant });
 };
 
 /**
@@ -9445,7 +9445,7 @@ export type StormingName = string & { readonly __domain: 'Collaboration.Storming
  * @see contexts/collaboration/model/target.dt:6
  */
 export interface InvalidStormingName {
-    readonly type: 'InvalidStormingName';
+    readonly type: 'Collaboration.InvalidStormingName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9474,7 +9474,7 @@ export function checkStormingName(value: string): readonly InvalidStormingName['
 export const makeStormingName: MakeStormingName = (value) => {
     const [invariant] = checkStormingName(value);
     if (invariant === undefined) return ok(value as StormingName);
-    return err({ type: 'InvalidStormingName', value, invariant });
+    return err({ type: 'Collaboration.InvalidStormingName', value, invariant });
 };
 
 /**
@@ -9491,7 +9491,7 @@ export type StormingLocalName = string & { readonly __domain: 'Collaboration.Sto
  * @see contexts/collaboration/model/target.dt:9
  */
 export interface InvalidStormingLocalName {
-    readonly type: 'InvalidStormingLocalName';
+    readonly type: 'Collaboration.InvalidStormingLocalName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9520,7 +9520,7 @@ export function checkStormingLocalName(value: string): readonly InvalidStormingL
 export const makeStormingLocalName: MakeStormingLocalName = (value) => {
     const [invariant] = checkStormingLocalName(value);
     if (invariant === undefined) return ok(value as StormingLocalName);
-    return err({ type: 'InvalidStormingLocalName', value, invariant });
+    return err({ type: 'Collaboration.InvalidStormingLocalName', value, invariant });
 };
 
 /**
@@ -9537,7 +9537,7 @@ export type TimelineName = string & { readonly __domain: 'Collaboration.Timeline
  * @see contexts/collaboration/model/target.dt:12
  */
 export interface InvalidTimelineName {
-    readonly type: 'InvalidTimelineName';
+    readonly type: 'Collaboration.InvalidTimelineName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9566,7 +9566,7 @@ export function checkTimelineName(value: string): readonly InvalidTimelineName['
 export const makeTimelineName: MakeTimelineName = (value) => {
     const [invariant] = checkTimelineName(value);
     if (invariant === undefined) return ok(value as TimelineName);
-    return err({ type: 'InvalidTimelineName', value, invariant });
+    return err({ type: 'Collaboration.InvalidTimelineName', value, invariant });
 };
 
 /**
@@ -9583,7 +9583,7 @@ export type StormingEventName = string & { readonly __domain: 'Collaboration.Sto
  * @see contexts/collaboration/model/target.dt:15
  */
 export interface InvalidStormingEventName {
-    readonly type: 'InvalidStormingEventName';
+    readonly type: 'Collaboration.InvalidStormingEventName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9612,7 +9612,7 @@ export function checkStormingEventName(value: string): readonly InvalidStormingE
 export const makeStormingEventName: MakeStormingEventName = (value) => {
     const [invariant] = checkStormingEventName(value);
     if (invariant === undefined) return ok(value as StormingEventName);
-    return err({ type: 'InvalidStormingEventName', value, invariant });
+    return err({ type: 'Collaboration.InvalidStormingEventName', value, invariant });
 };
 
 /**
@@ -9629,7 +9629,7 @@ export type OccurrencePath = string & { readonly __domain: 'Collaboration.Occurr
  * @see contexts/collaboration/model/target.dt:18
  */
 export interface InvalidOccurrencePath {
-    readonly type: 'InvalidOccurrencePath';
+    readonly type: 'Collaboration.InvalidOccurrencePath';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9658,7 +9658,7 @@ export function checkOccurrencePath(value: string): readonly InvalidOccurrencePa
 export const makeOccurrencePath: MakeOccurrencePath = (value) => {
     const [invariant] = checkOccurrencePath(value);
     if (invariant === undefined) return ok(value as OccurrencePath);
-    return err({ type: 'InvalidOccurrencePath', value, invariant });
+    return err({ type: 'Collaboration.InvalidOccurrencePath', value, invariant });
 };
 
 /**
@@ -9836,7 +9836,7 @@ export type TriageId = string & { readonly __domain: 'Collaboration.TriageId' };
  * @see contexts/collaboration/model/triage.dt:3
  */
 export interface InvalidTriageId {
-    readonly type: 'InvalidTriageId';
+    readonly type: 'Collaboration.InvalidTriageId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'uuid';
@@ -9865,7 +9865,7 @@ export function checkTriageId(value: string): readonly InvalidTriageId['invarian
 export const makeTriageId: MakeTriageId = (value) => {
     const [invariant] = checkTriageId(value);
     if (invariant === undefined) return ok(value as TriageId);
-    return err({ type: 'InvalidTriageId', value, invariant });
+    return err({ type: 'Collaboration.InvalidTriageId', value, invariant });
 };
 
 /**
@@ -9882,7 +9882,7 @@ export type Confidence = Decimal & { readonly __domain: 'Collaboration.Confidenc
  * @see contexts/collaboration/model/triage.dt:6
  */
 export interface InvalidConfidence {
-    readonly type: 'InvalidConfidence';
+    readonly type: 'Collaboration.InvalidConfidence';
     readonly value: Decimal;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9911,7 +9911,7 @@ export function checkConfidence(value: Decimal): readonly InvalidConfidence['inv
 export const makeConfidence: MakeConfidence = (value) => {
     const [invariant] = checkConfidence(value);
     if (invariant === undefined) return ok(value as Confidence);
-    return err({ type: 'InvalidConfidence', value, invariant });
+    return err({ type: 'Collaboration.InvalidConfidence', value, invariant });
 };
 
 /**
@@ -9928,7 +9928,7 @@ export type Milliseconds = number & { readonly __domain: 'Collaboration.Millisec
  * @see contexts/collaboration/model/triage.dt:9
  */
 export interface InvalidMilliseconds {
-    readonly type: 'InvalidMilliseconds';
+    readonly type: 'Collaboration.InvalidMilliseconds';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -9957,7 +9957,7 @@ export function checkMilliseconds(value: number): readonly InvalidMilliseconds['
 export const makeMilliseconds: MakeMilliseconds = (value) => {
     const [invariant] = checkMilliseconds(value);
     if (invariant === undefined) return ok(value as Milliseconds);
-    return err({ type: 'InvalidMilliseconds', value, invariant });
+    return err({ type: 'Collaboration.InvalidMilliseconds', value, invariant });
 };
 
 /**
@@ -10683,7 +10683,7 @@ export interface TriageConcluded {
  * @see contexts/collaboration/model/triage.dt:210
  */
 export interface InvalidTriageStep {
-    readonly type: 'InvalidTriageStep';
+    readonly type: 'Collaboration.InvalidTriageStep';
 }
 
 /**
@@ -10692,7 +10692,7 @@ export interface InvalidTriageStep {
  * @see contexts/collaboration/model/triage.dt:213
  */
 export interface TriageStepOutOfOrder {
-    readonly type: 'TriageStepOutOfOrder';
+    readonly type: 'Collaboration.TriageStepOutOfOrder';
 }
 
 /**
@@ -10701,7 +10701,7 @@ export interface TriageStepOutOfOrder {
  * @see contexts/collaboration/model/triage.dt:216
  */
 export interface TriageNotOverridable {
-    readonly type: 'TriageNotOverridable';
+    readonly type: 'Collaboration.TriageNotOverridable';
 }
 
 /**
@@ -10710,7 +10710,7 @@ export interface TriageNotOverridable {
  * @see contexts/collaboration/model/triage.dt:219
  */
 export interface TriageAlreadyConcluded {
-    readonly type: 'TriageAlreadyConcluded';
+    readonly type: 'Collaboration.TriageAlreadyConcluded';
 }
 
 /**
@@ -10719,7 +10719,7 @@ export interface TriageAlreadyConcluded {
  * @see contexts/collaboration/model/triage.dt:222
  */
 export interface TriageNotConcludable {
-    readonly type: 'TriageNotConcludable';
+    readonly type: 'Collaboration.TriageNotConcludable';
 }
 
 /**
@@ -10728,7 +10728,7 @@ export interface TriageNotConcludable {
  * @see contexts/collaboration/model/triage.dt:225
  */
 export interface RequestNotAddressable {
-    readonly type: 'RequestNotAddressable';
+    readonly type: 'Collaboration.RequestNotAddressable';
     /** 依頼ID */
     readonly request: RequestId;
 }
@@ -10739,7 +10739,7 @@ export interface RequestNotAddressable {
  * @see contexts/collaboration/model/triage.dt:230
  */
 export interface RequestAlreadyAddressed {
-    readonly type: 'RequestAlreadyAddressed';
+    readonly type: 'Collaboration.RequestAlreadyAddressed';
     /** 依頼ID */
     readonly request: RequestId;
 }
@@ -10750,7 +10750,7 @@ export interface RequestAlreadyAddressed {
  * @see contexts/collaboration/model/triage.dt:235
  */
 export interface TriageNotFound {
-    readonly type: 'TriageNotFound';
+    readonly type: 'Collaboration.TriageNotFound';
     /** 仕分けID */
     readonly triage: TriageId;
 }
@@ -10761,7 +10761,7 @@ export interface TriageNotFound {
  * @see contexts/collaboration/model/triage.dt:240
  */
 export interface TriageOfAnotherSession {
-    readonly type: 'TriageOfAnotherSession';
+    readonly type: 'Collaboration.TriageOfAnotherSession';
     /** 仕分けID */
     readonly triage: TriageId;
 }
@@ -10772,7 +10772,7 @@ export interface TriageOfAnotherSession {
  * @see contexts/collaboration/model/triage.dt:245
  */
 export interface TriageNotProposable {
-    readonly type: 'TriageNotProposable';
+    readonly type: 'Collaboration.TriageNotProposable';
     /** 仕分けID */
     readonly triage: TriageId;
 }
@@ -10791,7 +10791,7 @@ export type ContextName = string & { readonly __domain: 'Collaboration.ContextNa
  * @see contexts/collaboration/model/view.dt:3
  */
 export interface InvalidContextName {
-    readonly type: 'InvalidContextName';
+    readonly type: 'Collaboration.InvalidContextName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -10820,7 +10820,7 @@ export function checkContextName(value: string): readonly InvalidContextName['in
 export const makeContextName: MakeContextName = (value) => {
     const [invariant] = checkContextName(value);
     if (invariant === undefined) return ok(value as ContextName);
-    return err({ type: 'InvalidContextName', value, invariant });
+    return err({ type: 'Collaboration.InvalidContextName', value, invariant });
 };
 
 /**
@@ -10837,7 +10837,7 @@ export type StageName = string & { readonly __domain: 'Collaboration.StageName' 
  * @see contexts/collaboration/model/view.dt:6
  */
 export interface InvalidStageName {
-    readonly type: 'InvalidStageName';
+    readonly type: 'Collaboration.InvalidStageName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -10866,7 +10866,7 @@ export function checkStageName(value: string): readonly InvalidStageName['invari
 export const makeStageName: MakeStageName = (value) => {
     const [invariant] = checkStageName(value);
     if (invariant === undefined) return ok(value as StageName);
-    return err({ type: 'InvalidStageName', value, invariant });
+    return err({ type: 'Collaboration.InvalidStageName', value, invariant });
 };
 
 /**
@@ -10883,7 +10883,7 @@ export type CatalogQuery = string & { readonly __domain: 'Collaboration.CatalogQ
  * @see contexts/collaboration/model/view.dt:9
  */
 export interface InvalidCatalogQuery {
-    readonly type: 'InvalidCatalogQuery';
+    readonly type: 'Collaboration.InvalidCatalogQuery';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -10912,7 +10912,7 @@ export function checkCatalogQuery(value: string): readonly InvalidCatalogQuery['
 export const makeCatalogQuery: MakeCatalogQuery = (value) => {
     const [invariant] = checkCatalogQuery(value);
     if (invariant === undefined) return ok(value as CatalogQuery);
-    return err({ type: 'InvalidCatalogQuery', value, invariant });
+    return err({ type: 'Collaboration.InvalidCatalogQuery', value, invariant });
 };
 
 /**
@@ -10929,7 +10929,7 @@ export type CatalogSection = string & { readonly __domain: 'Collaboration.Catalo
  * @see contexts/collaboration/model/view.dt:12
  */
 export interface InvalidCatalogSection {
-    readonly type: 'InvalidCatalogSection';
+    readonly type: 'Collaboration.InvalidCatalogSection';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -10958,7 +10958,7 @@ export function checkCatalogSection(value: string): readonly InvalidCatalogSecti
 export const makeCatalogSection: MakeCatalogSection = (value) => {
     const [invariant] = checkCatalogSection(value);
     if (invariant === undefined) return ok(value as CatalogSection);
-    return err({ type: 'InvalidCatalogSection', value, invariant });
+    return err({ type: 'Collaboration.InvalidCatalogSection', value, invariant });
 };
 
 /**

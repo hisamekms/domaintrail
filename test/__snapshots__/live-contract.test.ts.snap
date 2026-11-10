@@ -49,14 +49,14 @@ exports[`the Live View server pushes the same payload shape as /api/state, with 
 
 exports[`dt generate ts writes the same files with the same contents for the example 1`] = `
 {
-  "Billing.ts": "a5806831bbb4ad7a40851380e05edbb8ef9a8e556d01f52151f9a5a8a27c8774",
-  "Common.ts": "9bb02fd7b396dc02bb2b57991dcd0181dfada05a3af546c3e6828e1074c288f5",
-  "Sales.ts": "4080eea017eab9114cee3baf60f61eeabb3b5b8f96e78464f83df3cf31ed53c1",
+  "Billing.ts": "91346a452bd6e27203b865fb2095f34ee61404d7c19ea0639f040256ec4802ec",
+  "Common.ts": "ff827cbf80b315494c052998627355e8088a33c98f1fe18d94510dbe1a40d8c7",
+  "Sales.ts": "98c5da5311c5704da881e45045c498d1842f178fc50d61b562fb4c0865a425ab",
   "_runtime.ts": "997cb832dc47db2465ddd13dd0dafb7b82281ca2f0b26dc7406312b794b2d955",
   "index.ts": "4d3e88b042004cc4639047a0b4d04eef324ade013e3303a74d8497a3049c2baa",
   "tests/Billing.ts": "87862ef5565e505dafbe6d7d15b86d6e21cedd3bac827a49a9201f1e1a9802bc",
   "tests/Common.ts": "8691d4b52229a36b0f6d91290425c77257a9f4b0b42dc87b4d3ba4e67638bfe1",
-  "tests/Sales.ts": "c07a0470c6d0e4a7f5bb5de7ef28f7ff70b67d9980d9d54a18adbf0eb9d6c83f",
+  "tests/Sales.ts": "b2d4ea26f65fce5324007cd550b436e63f776589d3ede95dc452b27cb4088259",
   "tests/_register.ts": "a4759a058cdfd7a6f1acf7894c28e6aaf9531db54e4d08c3a9d12e19be14a377",
   "tests/index.ts": "1613702e388ac1b39f57bc7fa3163ac494d673b2ae4418274d1a1ca25303e005",
 }

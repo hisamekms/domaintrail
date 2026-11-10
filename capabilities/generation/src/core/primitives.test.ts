@@ -50,12 +50,12 @@ describe('generated TypeScript for domain primitives', () => {
         expect(sales).toContain("export type Quantity = number & { readonly __domain: 'Sales.Quantity' };");
         const common = await readFile(path.join(dir, 'generated', 'domain', 'Common.ts'), 'utf8');
         expect(common).toContain(
-            "    readonly type: 'InvalidEmailAddress';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'format' | 'maxLength';",
+            "    readonly type: 'Common.InvalidEmailAddress';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'format' | 'maxLength';",
         );
         expect(common).toContain('export type MakeEmailAddress = (value: string) => Result<EmailAddress, InvalidEmailAddress>;');
         // an ID on UUID checks the form: the invariant 'uuid'
         expect(sales).toContain(
-            "export interface InvalidOrderId {\n    readonly type: 'InvalidOrderId';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'uuid';\n}",
+            "export interface InvalidOrderId {\n    readonly type: 'Sales.InvalidOrderId';\n    readonly value: string;\n    /** The violated invariant. */\n    readonly invariant: 'uuid';\n}",
         );
         expect(sales).toContain('export type MakeOrderId = (value: string) => Result<OrderId, InvalidOrderId>;');
         expect(sales).toContain(' * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version');

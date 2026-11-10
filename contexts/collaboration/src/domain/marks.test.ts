@@ -86,7 +86,7 @@ describe('one emoji (a reaction)', () => {
 
     test('❤ and ❤️ are the same reaction: only the kept form is an Emoji', () => {
         expect(readEmoji('❤')).toBe('❤️');
-        expect(error(makeEmoji('❤'))).toMatchObject({ type: 'InvalidEmoji', invariant: 'singleEmoji' });
+        expect(error(makeEmoji('❤'))).toMatchObject({ type: 'Collaboration.InvalidEmoji', invariant: 'singleEmoji' });
         expect(error(makeEmoji('x'.repeat(65)))).toMatchObject({ invariant: 'bounded' });
     });
 
@@ -237,11 +237,11 @@ describe('the rules of marks', () => {
             option: value(C.makeReplyKey('a')),
         };
         expect(error(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: open(target), sign: VOTE, placedAt: at }))).toEqual({
-            type: 'FacilitatorDoesNotVote',
+            type: 'Collaboration.FacilitatorDoesNotVote',
         });
         expect(
             error(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: react('❤️'), placedAt: at })),
-        ).toEqual({ type: 'MarkNotForTarget' });
+        ).toEqual({ type: 'Collaboration.MarkNotForTarget' });
         const placed = value(markCommands.place({ id, session, participant: who, role: 'Participant', target: open(target), sign: VOTE, placedAt: at })).Placed;
         expect(placed.aggregate).toMatchObject({ state: 'Placed', sign: VOTE, target });
         expect(placed.events.MarkPlaced).toMatchObject({ type: 'MarkPlaced', markId: id, participant: who });
@@ -256,10 +256,10 @@ describe('the rules of marks', () => {
         // a step of the guide is done by the facilitator only
         const step = open({ kind: 'GuideStep', journey: value(C.makeGuideJourneyKey('j')), step: value(C.makeGuideStepKey('bcSplit')) });
         expect(error(markCommands.place({ id, session, participant: who, role: 'Participant', target: step, sign: DONE, placedAt: at }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
         expect(error(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: step, sign: VOTE, placedAt: at }))).toEqual({
-            type: 'MarkNotForTarget',
+            type: 'Collaboration.MarkNotForTarget',
         });
         expect(
             value(markCommands.place({ id, session, participant: who, role: 'Facilitator', target: step, sign: DONE, placedAt: at })).Placed.aggregate.sign,

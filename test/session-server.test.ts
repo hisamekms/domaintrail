@@ -617,7 +617,7 @@ describe('the agent API', () => {
             ...facts,
             reply: { ...reply, requests: [{ request: crypto.randomUUID(), status: 'done' }] },
         });
-        expect([stranger.status, ((await stranger.json()) as { error: { type: string } }).error.type]).toEqual([400, 'InvalidReply']);
+        expect([stranger.status, ((await stranger.json()) as { error: { type: string } }).error.type]).toEqual([400, 'Collaboration.InvalidReply']);
         const finished = await agent(cred, `runs/${run.id}/finish`, { ...facts, reply });
         expect(finished.status).toBe(200);
         const body = (await finished.json()) as { run: { state: string; changed: boolean }; replayed: boolean };
@@ -840,7 +840,7 @@ describe('the watcher hold (for a restore, S7)', () => {
             const refusedRestore = await api(server, ada, `revisions/${first}/restore`, {});
             expect([refusedRestore.status, ((await refusedRestore.json()) as { error: { type: string } }).error.type]).toEqual([
                 409,
-                'ExternalChangesSinceSnapshot',
+                'Collaboration.ExternalChangesSinceSnapshot',
             ]);
             expect((await api(server, ada, 'revisions', {})).status).toBe(201);
             const restored = await api(server, ada, `revisions/${first}/restore`, {});
@@ -953,7 +953,7 @@ describe('revisions: comparison and restore (S7)', () => {
             await writeFile(path.join(root, 'shop.dt'), byHand);
             await Bun.sleep(200);
             const refused = await api(server, ada, `revisions/${first.id}/restore`, {});
-            expect([refused.status, await errorOf(refused)]).toEqual([409, { type: 'ExternalChangesSinceSnapshot', paths: ['shop.dt'] }]);
+            expect([refused.status, await errorOf(refused)]).toEqual([409, { type: 'Collaboration.ExternalChangesSinceSnapshot', paths: ['shop.dt'] }]);
             expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toBe(byHand);
             const invalid = await api(server, ada, `revisions/${first.id}/restore`, { recordExternalChanges: 'yes' });
             expect([invalid.status, (await errorOf(invalid)).type]).toEqual([400, 'InvalidInput']);
@@ -970,7 +970,7 @@ describe('revisions: comparison and restore (S7)', () => {
             const ops = await server.collaboration.restoreOperations({ session: server.session });
             expect(ops.map((o) => [o.result, o.reason, o.by, o.identity?.provider])).toEqual([
                 ['Restored', undefined, 'local:facilitator', 'dev'],
-                ['Refused', 'ExternalChangesSinceSnapshot', 'local:facilitator', 'dev'],
+                ['Refused', 'Collaboration.ExternalChangesSinceSnapshot', 'local:facilitator', 'dev'],
                 ['Restored', undefined, 'local:facilitator', 'dev'],
             ]);
             for (const page of pages) page.ws.close();
@@ -1008,7 +1008,7 @@ describe('revisions: comparison and restore (S7)', () => {
             // cancelled: the lease ends; the agent's edits are external to the run's base, so the two-step keeps them
             expect((await api(server, ada, `runs/${run.id}/cancel`, {})).status).toBe(200);
             const external = await api(server, ada, `revisions/${first.id}/restore`, {});
-            expect([external.status, (await errorOf(external)).type]).toEqual([409, 'ExternalChangesSinceSnapshot']);
+            expect([external.status, (await errorOf(external)).type]).toEqual([409, 'Collaboration.ExternalChangesSinceSnapshot']);
             expect((await api(server, ada, `revisions/${first.id}/restore`, { recordExternalChanges: true })).status).toBe(200);
             expect(await readFile(path.join(root, 'shop.dt'), 'utf8')).toBe(DT);
             expect((await revisions(server, ada)).map((r) => r.origin.kind)).toEqual(['SessionStart', 'RunBase', 'Manual', 'PreRestore', 'Restored']);

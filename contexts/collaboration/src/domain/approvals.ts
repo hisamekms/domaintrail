@@ -38,7 +38,7 @@ export function assumptionStatus(
 /** The command of an approval, checked against the generated contracts as the other aggregates' (`commands.ts`). */
 export const approvalCommands: Collaboration.AssumptionApprovalCommands = {
     approve: decide<Collaboration.ApproveAssumptionApprovalDecision>(Collaboration.AssumptionApprovalShape, (params) => {
-        if (Collaboration.checkApproveAssumptionApprovalRequires(params) === 'facilitatorApproves') return err({ type: 'FacilitatorOnly' });
+        if (Collaboration.checkApproveAssumptionApprovalRequires(params) === 'facilitatorApproves') return err({ type: 'Collaboration.FacilitatorOnly' });
         const { id, session, approvedBy, approvedAt } = params;
         // the reference without its evidence: the aggregate stores the base type
         const assumption: Collaboration.AssumptionRef = { run: params.assumption.run, assumption: params.assumption.assumption };

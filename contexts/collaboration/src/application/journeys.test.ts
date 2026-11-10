@@ -95,7 +95,7 @@ describe('the acts on the journey file', () => {
     test('Collab: the facilitator changes the goal, the state, a mark; a participant is refused (the server asks the facilitator)', async () => {
         const { use, journeys } = await open('Collab');
         expect(error(await use.actOnJourney({ actor: bob, act: { kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' } }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
         expect(readJourney(journeys.text() ?? '').file.stormings.Issue?.level).toBe('BigPicture');
         value(await use.actOnJourney({ actor: facilitator, act: { kind: 'goal', journey: 'es:Issue', goal: 'DesignLevel' } }));
@@ -162,7 +162,7 @@ describe('the current journey', () => {
     test('Collab: the facilitator chooses it (none: the default), a participant is refused; Solo: the person', async () => {
         const { use, session } = await open('Collab');
         const all = value(C.makeGuideJourneyKey('all'));
-        expect(error(await use.chooseJourney({ session, actor: bob, journey: all }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.chooseJourney({ session, actor: bob, journey: all }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
         expect(value(await use.chooseJourney({ session, actor: facilitator, journey: all })).currentJourney as string | undefined).toBe('all');
         expect(value(await use.sessionState({ session })).session.currentJourney as string | undefined).toBe('all');
         expect(value(await use.chooseJourney({ session, actor: facilitator })).currentJourney).toBeUndefined();

@@ -32,7 +32,7 @@ describe('add', () => {
             by: extraction('s1', 1),
             at,
         });
-        expect(error(r)).toEqual({ type: 'DuplicateSource' });
+        expect(error(r)).toEqual({ type: 'Knowledge.DuplicateSource' });
     });
 });
 
@@ -109,7 +109,7 @@ describe('update', () => {
                 commands.update(item, { revised: content('more precise'), newSources: [source('s1', 'm-new')], base: version(1), by: extraction('s1', 3), at }),
             ),
         ).toEqual({
-            type: 'StaleOperation',
+            type: 'Knowledge.StaleOperation',
         });
     });
 });
@@ -136,7 +136,7 @@ describe('addSource', () => {
     test('refuses a message already among the sources', () => {
         const item = liveItem('kn_00000001', { sources: [source('s2', 'm9')] });
         expect(error(commands.addSource(item, { source: source('s2', 'm9', 'other words'), agreed: false, base: version(1), by, at }))).toEqual({
-            type: 'DuplicateSource',
+            type: 'Knowledge.DuplicateSource',
         });
     });
 });
@@ -159,9 +159,11 @@ describe('a conflict', () => {
 
     test('needs a source on the older side, and is not with the item itself', () => {
         const unsourced = liveItem('kn_00000001', { sources: [] });
-        expect(error(commands.linkConflict(unsourced, { other: itemId('kn_00000002'), base: version(1), by, at }))).toEqual({ type: 'ConflictWithoutSource' });
+        expect(error(commands.linkConflict(unsourced, { other: itemId('kn_00000002'), base: version(1), by, at }))).toEqual({
+            type: 'Knowledge.ConflictWithoutSource',
+        });
         const older = liveItem('kn_00000001');
-        expect(error(commands.linkConflict(older, { other: older.id, base: version(1), by, at }))).toEqual({ type: 'ConflictWithItself' });
+        expect(error(commands.linkConflict(older, { other: older.id, base: version(1), by, at }))).toEqual({ type: 'Knowledge.ConflictWithItself' });
     });
 });
 
@@ -216,7 +218,9 @@ describe('unlinkConflict', () => {
 
     test('refuses the item itself', () => {
         const item = liveItem('kn_00000001');
-        expect(error(commands.unlinkConflict(item, { other: item.id, by: userName('alice@example.com'), at: later }))).toEqual({ type: 'ConflictWithItself' });
+        expect(error(commands.unlinkConflict(item, { other: item.id, by: userName('alice@example.com'), at: later }))).toEqual({
+            type: 'Knowledge.ConflictWithItself',
+        });
     });
 });
 
@@ -256,7 +260,7 @@ describe('handOverToHotspot', () => {
     test('refuses the item itself', () => {
         const item = liveItem('kn_00000001');
         expect(error(commands.handOverToHotspot(item, { hotspot, other: item.id, by: userName('a@example.com'), at: later }))).toEqual({
-            type: 'ConflictWithItself',
+            type: 'Knowledge.ConflictWithItself',
         });
     });
 });

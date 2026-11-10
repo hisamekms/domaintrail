@@ -507,7 +507,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                     return ok({ session: started.value.session, opened: 'started', revision: started.value.revision });
                 }
                 case 'refuse':
-                    return err({ type: 'CollabSessionOpen' });
+                    return err({ type: 'Collaboration.CollabSessionOpen' });
                 case 'resume':
                     if (!current) throw new Error('A session to resume is open');
                     return ok({ session: current, opened: 'resumed' });
@@ -563,7 +563,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
         },
 
         async addressMessages({ session, actor, requests }) {
-            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
             if (requests.length === 0) return err({ type: 'NoRequests' });
             return uow.transaction(async (stores) => {
                 const verify = storeVerifications(stores);
@@ -675,15 +675,15 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
         async proposeChange({ triage, content }) {
             return uow.transaction(async (stores) => {
                 const t = stores.triages.load(triage);
-                if (!t) return err({ type: 'TriageNotFound', triage });
-                if (t.state !== 'Decided') return err({ type: 'TriageNotProposable', triage });
+                if (!t) return err({ type: 'Collaboration.TriageNotFound', triage });
+                if (t.state !== 'Decided') return err({ type: 'Collaboration.TriageNotProposable', triage });
                 return propose(stores, t, content, clock.now());
             });
         },
 
         async approveProposals({ session, actor, proposals, note }) {
             // approve and queue require the facilitator: asked first
-            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
             if (proposals.length === 0) return err({ type: 'NoRequests' });
             return uow.transaction(async (stores) => {
                 const active = await storeVerifications(stores).makeActiveSession(session);
@@ -702,7 +702,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                     // no option given of a proposal with options: the one the AI recommends
                     const option = given ?? recommendedOption(p.content);
                     const instruction = instructionOf(p.content, option, editedHow);
-                    if (!instruction) return err({ type: 'NoSuchOption' });
+                    if (!instruction) return err({ type: 'Collaboration.NoSuchOption' });
                     open.push({ proposal: p, option, editedHow, instruction });
                 }
                 const [first, ...rest] = open.map(({ proposal, instruction }) => ({ proposal: proposal.id, request: proposal.request, instruction }));

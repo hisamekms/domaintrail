@@ -156,28 +156,28 @@ export function statusOf(type: string): number {
     switch (type) {
         case 'InvalidInput':
         case 'InvalidTarget':
-        case 'TooManyTargets':
-        case 'DuplicateTarget':
-        case 'WorkspaceTarget':
-        case 'TooManyMentions':
-        case 'DuplicateMention':
-        case 'MentionedNotAParticipant':
+        case 'Collaboration.TooManyTargets':
+        case 'Collaboration.DuplicateTarget':
+        case 'Collaboration.WorkspaceTarget':
+        case 'Collaboration.TooManyMentions':
+        case 'Collaboration.DuplicateMention':
+        case 'Collaboration.MentionedNotAParticipant':
         case 'NoRequests':
         case 'UnknownRevision':
-        case 'InvalidReply':
+        case 'Collaboration.InvalidReply':
         case 'InvalidAnswer':
-        case 'AlternativeNotFound':
-        case 'AssumptionNotFound':
-        case 'PickMismatch':
-        case 'MarkNotForTarget':
-        case 'InvalidTriageStep':
+        case 'Collaboration.AlternativeNotFound':
+        case 'Collaboration.AssumptionNotFound':
+        case 'Collaboration.PickMismatch':
+        case 'Collaboration.MarkNotForTarget':
+        case 'Collaboration.InvalidTriageStep':
         case 'InvalidTriageInput':
         case 'AnswerTooLong':
         case 'InvalidProposal':
-        case 'NoSuchOption':
-        case 'NoSuchCandidate':
+        case 'Collaboration.NoSuchOption':
+        case 'Collaboration.NoSuchCandidate':
         case 'WrongCommandType':
-        case 'InvalidBriefText':
+        case 'Collaboration.InvalidBriefText':
         case 'NotAJourneyGoal':
         case 'NotAJourneyMark':
         case 'NotAJourneyBrief':
@@ -187,32 +187,34 @@ export function statusOf(type: string): number {
         case 'WrongStickyKind':
         case 'NothingToChange':
             return 400;
-        case 'NotTheInterviewer':
-        case 'NotTheStarter':
+        case 'Collaboration.NotTheInterviewer':
+        case 'Collaboration.NotTheStarter':
             return 403;
-        case 'InterviewAlreadyRunning':
-        case 'InterviewMovedOn':
-        case 'CommandAlreadyRunning':
+        case 'Collaboration.InterviewAlreadyRunning':
+        case 'Collaboration.InterviewMovedOn':
+        case 'Collaboration.CommandAlreadyRunning':
             return 409;
         case 'Unauthenticated':
             return 401;
         case 'Forbidden':
         case 'FacilitatorOnly':
+        case 'Collaboration.FacilitatorOnly':
         case 'NotYourRequest':
         case 'NotAParticipant':
         case 'FacilitatorDoesNotVote':
-        case 'NotTheRequester':
+        case 'Collaboration.FacilitatorDoesNotVote':
+        case 'Collaboration.NotTheRequester':
             return 403;
         case 'NotFound':
-        case 'SessionNotFound':
-        case 'RequestNotFound':
-        case 'RevisionNotFound':
-        case 'RevisionOfAnotherSession':
-        case 'MarkTargetNotFound':
-        case 'RunNotFound':
-        case 'RunOfAnotherSession':
-        case 'TriageNotFound':
-        case 'TriageOfAnotherSession':
+        case 'Collaboration.SessionNotFound':
+        case 'Collaboration.RequestNotFound':
+        case 'Collaboration.RevisionNotFound':
+        case 'Collaboration.RevisionOfAnotherSession':
+        case 'Collaboration.MarkTargetNotFound':
+        case 'Collaboration.RunNotFound':
+        case 'Collaboration.RunOfAnotherSession':
+        case 'Collaboration.TriageNotFound':
+        case 'Collaboration.TriageOfAnotherSession':
         case 'JourneyNotFound':
         case 'NoJourneyFile':
         case 'StickyNotFound':
@@ -231,7 +233,8 @@ export function statusOf(type: string): number {
 const FACILITATOR_ONLY = 'Only the facilitator may do this.';
 
 /** The message of an error that has none of its own: the domain's refusals read as the routes' always did. */
-const defaultMessage = (type: string): string | undefined => (type === 'FacilitatorOnly' ? FACILITATOR_ONLY : undefined);
+const defaultMessage = (type: string): string | undefined =>
+    type === 'FacilitatorOnly' || type === 'Collaboration.FacilitatorOnly' ? FACILITATOR_ONLY : undefined;
 
 /** The status and the body of an error of the use cases (and of this layer). */
 export function errorAnswer(error: { readonly type: string; readonly message?: string }): { status: number; body: { error: object } } {
@@ -945,9 +948,12 @@ export function createSessionHttp(deps: SessionHttpDeps): SessionSurface {
                         message: "The guide's marks are kept in the journey file: POST /api/session/journey/acts.",
                     });
                 if (sign.kind === 'Vote' && me.role === 'facilitator')
-                    return fail(res, { type: 'FacilitatorDoesNotVote', message: "The facilitator's answer is the decision: the facilitator does not vote." });
+                    return fail(res, {
+                        type: 'FacilitatorDoesNotVote',
+                        message: "The facilitator's answer is the decision: the facilitator does not vote.",
+                    });
                 const set = await use.setMark({ session, actor: me.actor, target, sign, placed: raw.placed });
-                if (!set.ok && set.error.type === 'ReactionLimitReached')
+                if (!set.ok && set.error.type === 'Collaboration.ReactionLimitReached')
                     return fail(res, {
                         ...set.error,
                         message: `A message or a turn holds at most ${set.error.limit} different emoji: add one already there, or take one off first.`,

@@ -165,7 +165,7 @@ describe('the commands of a change proposal', () => {
                     approvedAt: at,
                 }),
             ),
-        ).toEqual({ type: 'FacilitatorOnly' });
+        ).toEqual({ type: 'Collaboration.FacilitatorOnly' });
     });
 
     test('with options, approved with one of them: the run gets its label, its targets and its how (or the edited one)', () => {
@@ -185,9 +185,9 @@ describe('the commands of a change proposal', () => {
             how: 'Only the aggregate.',
         } as unknown as C.ProposalInstruction);
         // no option chosen of a proposal with options, an option it does not have, an option of one without options
-        expect(error(approve(withChoices, undefined))).toEqual({ type: 'NoSuchOption' });
-        expect(error(approve(withChoices, 2))).toEqual({ type: 'NoSuchOption' });
-        expect(error(approve(open, 0))).toEqual({ type: 'NoSuchOption' });
+        expect(error(approve(withChoices, undefined))).toEqual({ type: 'Collaboration.NoSuchOption' });
+        expect(error(approve(withChoices, 2))).toEqual({ type: 'Collaboration.NoSuchOption' });
+        expect(error(approve(open, 0))).toEqual({ type: 'Collaboration.NoSuchOption' });
     });
 
     test('rejected by the facilitator with a note; withdrawn by its requester only', () => {
@@ -199,10 +199,10 @@ describe('the commands of a change proposal', () => {
             note,
         });
         expect(error(proposalCommands.reject(open, { rejectedBy: guest, rejectedByRole: 'Participant', note: undefined, rejectedAt: at }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
         expect(value(proposalCommands.withdraw(open, { withdrawnBy: guest, withdrawnAt: at })).Withdrawn.aggregate.state).toBe('Withdrawn');
-        expect(error(proposalCommands.withdraw(open, { withdrawnBy: facilitator, withdrawnAt: at }))).toEqual({ type: 'NotTheRequester' });
+        expect(error(proposalCommands.withdraw(open, { withdrawnBy: facilitator, withdrawnAt: at }))).toEqual({ type: 'Collaboration.NotTheRequester' });
     });
 });
 

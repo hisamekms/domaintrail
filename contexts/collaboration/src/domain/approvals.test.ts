@@ -85,7 +85,7 @@ describe('the approve command', () => {
 
     test('a participant does not approve', () => {
         expect(error(approvalCommands.approve({ id, session, assumption, approvedBy: who, approvedByRole: 'Participant', approvedAt: at }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
     });
 });

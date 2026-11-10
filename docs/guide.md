@@ -1196,7 +1196,7 @@ export function verifications(customers: CustomerRepository): Verifications {
         async makeAvailableEmail(email, customer) {
             const holder = await customers.find((c) => c.email === email && c.id !== customer);
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
-            return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
+            return holder ? err({ type: 'Sales.EmailTaken', email }) : ok(email as Sales.AvailableEmail);
         },
     };
 }
@@ -1365,7 +1365,10 @@ Per context a module (`Sales.ts`, …) with ID brands, enums, value objects, ent
 stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types with a `type` tag, a function type per
 command and an `<Aggregate>Commands` interface to implement, a decision type per command and a shape constant per
 aggregate for `decide` (see [Decisions and `decide`](#decisions-and-decide)), plus `index.ts` and `_runtime.ts`. A
-domain primitive gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`;
+generated error's `type` is qualified by its context (`Sales.EmptyOrder`, `Sales.InvalidOrderId`), so equal names in
+different contexts remain distinct when their results are combined. Its TypeScript interface keeps the simple name
+inside the context module (`Sales.EmptyOrder`). A domain primitive gets a branded type, a constructor contract
+`Make<Name>` and a generated constructor `make<Name>`;
 a verified type its base with a property of its own and the contract of its factory `Make<Name>`, which you write (see
 [Verified types](#verified-types)); invariants and requirements get check functions (see
 [Generated checks](#generated-checks)); a policy the type of its handler and the input of its command (see
@@ -1576,7 +1579,7 @@ export const changeNote: Sales.OrderCommands['changeNote'] = decide<Sales.Change
 
 export const confirm: Sales.OrderCommands['confirm'] = decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
     Draft: (order, { at }) => {
-        if (order.items.length === 0) return err({ type: 'EmptyOrder' });
+        if (order.items.length === 0) return err({ type: 'Sales.EmptyOrder' });
         return ok({ Confirmed: { set: { confirmedAt: at }, events: { OrderConfirmed: { type: 'OrderConfirmed', orderId: order.id, confirmedAt: at } } } });
     },
 });
@@ -1658,7 +1661,7 @@ import { err, ok, type Sales } from '../generated/domain/index.js';
 
 export const makeQuantity: Sales.MakeQuantity = (value) =>
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory: the check is on this line
-    Number.isInteger(value) && value >= 1 && value <= 999 ? ok(value as Sales.Quantity) : err({ type: 'InvalidQuantity', value, invariant: 'valid' });
+    Number.isInteger(value) && value >= 1 && value <= 999 ? ok(value as Sales.Quantity) : err({ type: 'Sales.InvalidQuantity', value, invariant: 'valid' });
 ```
 
 Do not edit generated files: change the `.dt` sources and generate again. Adding properties or methods to generated

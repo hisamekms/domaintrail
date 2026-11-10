@@ -103,11 +103,11 @@ describe('candidate commands', () => {
         expect(started.command).toMatchObject({ state: 'Working', kind: 'EsExceptions', scope: 'Orders', opening: started.request.id });
         expect(value(await use.sessionState({ session })).triages).toEqual([]);
         expect(value(await use.commandJobs({ session })).map((j) => j.request.id)).toEqual([started.request.id]);
-        expect(error(await start(use, session))).toEqual({ type: 'CommandAlreadyRunning' });
+        expect(error(await start(use, session))).toEqual({ type: 'Collaboration.CommandAlreadyRunning' });
 
         const c = await collab();
         expect(value(await start(c.use, c.session, bob)).command).toMatchObject({ state: 'Working', startedBy: bobId });
-        expect(error(await start(c.use, c.session))).toEqual({ type: 'CommandAlreadyRunning' });
+        expect(error(await start(c.use, c.session))).toEqual({ type: 'Collaboration.CommandAlreadyRunning' });
     });
 
     test('no storming in view: no candidates at once, no job; its starter closes it', async () => {
@@ -127,9 +127,9 @@ describe('candidate commands', () => {
         const listed = value(await use.listCandidates({ command: id, candidates: ['A', 'B', 'C'].map(candidate) }));
         expect(listed).toMatchObject({ state: 'Listed' });
         expect(value(await use.commandJobs({ session }))).toEqual([]);
-        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'FacilitatorOnly' });
-        expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [3] }))).toEqual({ type: 'NoSuchCandidate' });
-        expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [] }))).toEqual({ type: 'NoSuchCandidate' });
+        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
+        expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [3] }))).toEqual({ type: 'Collaboration.NoSuchCandidate' });
+        expect(error(await use.applyCandidates({ command: id, actor: facilitator, chosen: [] }))).toEqual({ type: 'Collaboration.NoSuchCandidate' });
         const applied = value(await use.applyCandidates({ command: id, actor: facilitator, chosen: [2, 0, 2] }));
         expect(applied.command).toMatchObject({ state: 'Applied', chosen: [0, 2], appliedBy: facilitatorId, run: applied.run.id });
         expect(applied.run.input.requests.map((r) => r.request)).toEqual([started.request.id]);
@@ -168,8 +168,8 @@ describe('a candidate command a participant started', () => {
         const id = started.command.id;
         value(await use.listCandidates({ command: id, candidates: ['A', 'B'].map(candidate) }));
         expect(value(await use.sessionSoFar({ session })).open).toContainEqual(expect.stringContaining("await the facilitator's choice"));
-        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'FacilitatorOnly' });
-        expect(error(await use.applyCandidates({ command: id, actor: carol, chosen: [0] }))).toEqual({ type: 'FacilitatorOnly' });
+        expect(error(await use.applyCandidates({ command: id, actor: bob, chosen: [0] }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
+        expect(error(await use.applyCandidates({ command: id, actor: carol, chosen: [0] }))).toEqual({ type: 'Collaboration.FacilitatorOnly' });
         const applied = value(await use.applyCandidates({ command: id, actor: facilitator, chosen: [1] }));
         expect(applied.command).toMatchObject({ state: 'Applied', startedBy: bobId, appliedBy: facilitatorId, chosen: [1] });
         expect(applied.run).toMatchObject({ queuedBy: facilitatorId });
@@ -181,7 +181,7 @@ describe('a candidate command a participant started', () => {
     test('stop: its starter or the facilitator, no one else', async () => {
         const { use, session } = await collab();
         const first = value(await start(use, session, bob));
-        expect(error(await use.stopCommand({ command: first.command.id, actor: carol }))).toEqual({ type: 'NotTheStarter' });
+        expect(error(await use.stopCommand({ command: first.command.id, actor: carol }))).toEqual({ type: 'Collaboration.NotTheStarter' });
         expect(value(await use.stopCommand({ command: first.command.id, actor: facilitator }))).toMatchObject({ state: 'Stopped', stoppedBy: facilitatorId });
         const second = value(await start(use, session, bob));
         value(await use.listCandidates({ command: second.command.id, candidates: [candidate('A')] }));
@@ -231,7 +231,7 @@ describe('answer commands', () => {
         expect(started.command).toMatchObject({ state: 'Working', kind: 'Guide' });
         expect(value(await use.commandJobs({ session })).map((j) => j.command.id)).toEqual([started.command.id]);
         expect(error(await use.startCommand({ session, actor: bob, kind: 'Guide', body: text('ガイド'), language: 'Ja' }))).toEqual({
-            type: 'CommandAlreadyRunning',
+            type: 'Collaboration.CommandAlreadyRunning',
         });
         expect(value(await use.stopCommand({ command: started.command.id, actor: bob }))).toMatchObject({ state: 'Stopped' });
     });

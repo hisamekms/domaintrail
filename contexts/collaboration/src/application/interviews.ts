@@ -44,7 +44,7 @@ export interface InterviewStarted {
 
 /** A brief's text edited so that its why cannot be read back (a line without a known head, no purpose). */
 export interface InvalidBriefText {
-    readonly type: 'InvalidBriefText';
+    readonly type: 'Collaboration.InvalidBriefText';
     readonly path: string;
     readonly message: string;
 }
@@ -179,7 +179,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
     return {
         async startInterview({ session, actor, command, body, language, focus, viewedAt }) {
             return uow.transaction(async (stores) => {
-                if (runningInterview(stores.interviews.listBySession(session))) return err({ type: 'InterviewAlreadyRunning' });
+                if (runningInterview(stores.interviews.listBySession(session))) return err({ type: 'Collaboration.InterviewAlreadyRunning' });
                 const sent = await sendIn(stores, { clock, ids }, { session, actor, targets: [], body, ...(viewedAt && { viewedAt }) });
                 if (!sent.ok) return sent;
                 const active = await storeVerifications(stores).makeActiveSession(session);
@@ -266,13 +266,13 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                     if (!found.ok) return found;
                     const i = found.value;
                     if (i.state !== 'Briefed') return err(notAllowed('confirm', i.state));
-                    if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' as const });
+                    if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' as const });
                     const active = await storeVerifications(stores).makeActiveSession(i.session);
                     if (!active.ok) return active;
                     const edited = text !== undefined && text !== i.brief.text;
                     if (!edited) return ok({ i, brief: i.brief, edited });
                     const read = withEditedText(i.brief, text);
-                    if (!read.ok) return err({ type: 'InvalidBriefText' as const, ...read.error });
+                    if (!read.ok) return err({ type: 'Collaboration.InvalidBriefText' as const, ...read.error });
                     return ok({ i, brief: read.value, edited });
                 },
             );

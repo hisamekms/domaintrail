@@ -17,7 +17,7 @@ export type KnowledgeItemId = string & { readonly __domain: 'Knowledge.Knowledge
  * @see contexts/knowledge/model/context.dt:11
  */
 export interface InvalidKnowledgeItemId {
-    readonly type: 'InvalidKnowledgeItemId';
+    readonly type: 'Knowledge.InvalidKnowledgeItemId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -46,7 +46,7 @@ export function checkKnowledgeItemId(value: string): readonly InvalidKnowledgeIt
 export const makeKnowledgeItemId: MakeKnowledgeItemId = (value) => {
     const [invariant] = checkKnowledgeItemId(value);
     if (invariant === undefined) return ok(value as KnowledgeItemId);
-    return err({ type: 'InvalidKnowledgeItemId', value, invariant });
+    return err({ type: 'Knowledge.InvalidKnowledgeItemId', value, invariant });
 };
 
 /**
@@ -63,7 +63,7 @@ export type ImageId = string & { readonly __domain: 'Knowledge.ImageId' };
  * @see contexts/knowledge/model/context.dt:14
  */
 export interface InvalidImageId {
-    readonly type: 'InvalidImageId';
+    readonly type: 'Knowledge.InvalidImageId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -92,7 +92,7 @@ export function checkImageId(value: string): readonly InvalidImageId['invariant'
 export const makeImageId: MakeImageId = (value) => {
     const [invariant] = checkImageId(value);
     if (invariant === undefined) return ok(value as ImageId);
-    return err({ type: 'InvalidImageId', value, invariant });
+    return err({ type: 'Knowledge.InvalidImageId', value, invariant });
 };
 
 /**
@@ -109,7 +109,7 @@ export type ProjectName = string & { readonly __domain: 'Knowledge.ProjectName' 
  * @see contexts/knowledge/model/context.dt:17
  */
 export interface InvalidProjectName {
-    readonly type: 'InvalidProjectName';
+    readonly type: 'Knowledge.InvalidProjectName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -138,7 +138,7 @@ export function checkProjectName(value: string): readonly InvalidProjectName['in
 export const makeProjectName: MakeProjectName = (value) => {
     const [invariant] = checkProjectName(value);
     if (invariant === undefined) return ok(value as ProjectName);
-    return err({ type: 'InvalidProjectName', value, invariant });
+    return err({ type: 'Knowledge.InvalidProjectName', value, invariant });
 };
 
 /**
@@ -155,7 +155,7 @@ export type ItemTitle = string & { readonly __domain: 'Knowledge.ItemTitle' };
  * @see contexts/knowledge/model/context.dt:20
  */
 export interface InvalidItemTitle {
-    readonly type: 'InvalidItemTitle';
+    readonly type: 'Knowledge.InvalidItemTitle';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -184,7 +184,7 @@ export function checkItemTitle(value: string): readonly InvalidItemTitle['invari
 export const makeItemTitle: MakeItemTitle = (value) => {
     const [invariant] = checkItemTitle(value);
     if (invariant === undefined) return ok(value as ItemTitle);
-    return err({ type: 'InvalidItemTitle', value, invariant });
+    return err({ type: 'Knowledge.InvalidItemTitle', value, invariant });
 };
 
 /**
@@ -201,7 +201,7 @@ export type ItemText = string & { readonly __domain: 'Knowledge.ItemText' };
  * @see contexts/knowledge/model/context.dt:23
  */
 export interface InvalidItemText {
-    readonly type: 'InvalidItemText';
+    readonly type: 'Knowledge.InvalidItemText';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -230,7 +230,7 @@ export function checkItemText(value: string): readonly InvalidItemText['invarian
 export const makeItemText: MakeItemText = (value) => {
     const [invariant] = checkItemText(value);
     if (invariant === undefined) return ok(value as ItemText);
-    return err({ type: 'InvalidItemText', value, invariant });
+    return err({ type: 'Knowledge.InvalidItemText', value, invariant });
 };
 
 /**
@@ -247,7 +247,7 @@ export type Quote = string & { readonly __domain: 'Knowledge.Quote' };
  * @see contexts/knowledge/model/context.dt:26
  */
 export interface InvalidQuote {
-    readonly type: 'InvalidQuote';
+    readonly type: 'Knowledge.InvalidQuote';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -276,7 +276,7 @@ export function checkQuote(value: string): readonly InvalidQuote['invariant'][] 
 export const makeQuote: MakeQuote = (value) => {
     const [invariant] = checkQuote(value);
     if (invariant === undefined) return ok(value as Quote);
-    return err({ type: 'InvalidQuote', value, invariant });
+    return err({ type: 'Knowledge.InvalidQuote', value, invariant });
 };
 
 /**
@@ -293,7 +293,7 @@ export type Perspective = string & { readonly __domain: 'Knowledge.Perspective' 
  * @see contexts/knowledge/model/context.dt:29
  */
 export interface InvalidPerspective {
-    readonly type: 'InvalidPerspective';
+    readonly type: 'Knowledge.InvalidPerspective';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -322,7 +322,7 @@ export function checkPerspective(value: string): readonly InvalidPerspective['in
 export const makePerspective: MakePerspective = (value) => {
     const [invariant] = checkPerspective(value);
     if (invariant === undefined) return ok(value as Perspective);
-    return err({ type: 'InvalidPerspective', value, invariant });
+    return err({ type: 'Knowledge.InvalidPerspective', value, invariant });
 };
 
 /**
@@ -339,7 +339,7 @@ export type Reason = string & { readonly __domain: 'Knowledge.Reason' };
  * @see contexts/knowledge/model/context.dt:32
  */
 export interface InvalidReason {
-    readonly type: 'InvalidReason';
+    readonly type: 'Knowledge.InvalidReason';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -368,7 +368,7 @@ export function checkReason(value: string): readonly InvalidReason['invariant'][
 export const makeReason: MakeReason = (value) => {
     const [invariant] = checkReason(value);
     if (invariant === undefined) return ok(value as Reason);
-    return err({ type: 'InvalidReason', value, invariant });
+    return err({ type: 'Knowledge.InvalidReason', value, invariant });
 };
 
 /**
@@ -385,7 +385,7 @@ export type StickyRef = string & { readonly __domain: 'Knowledge.StickyRef' };
  * @see contexts/knowledge/model/context.dt:35
  */
 export interface InvalidStickyRef {
-    readonly type: 'InvalidStickyRef';
+    readonly type: 'Knowledge.InvalidStickyRef';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -414,7 +414,7 @@ export function checkStickyRef(value: string): readonly InvalidStickyRef['invari
 export const makeStickyRef: MakeStickyRef = (value) => {
     const [invariant] = checkStickyRef(value);
     if (invariant === undefined) return ok(value as StickyRef);
-    return err({ type: 'InvalidStickyRef', value, invariant });
+    return err({ type: 'Knowledge.InvalidStickyRef', value, invariant });
 };
 
 /**
@@ -431,7 +431,7 @@ export type SessionRef = string & { readonly __domain: 'Knowledge.SessionRef' };
  * @see contexts/knowledge/model/context.dt:38
  */
 export interface InvalidSessionRef {
-    readonly type: 'InvalidSessionRef';
+    readonly type: 'Knowledge.InvalidSessionRef';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -460,7 +460,7 @@ export function checkSessionRef(value: string): readonly InvalidSessionRef['inva
 export const makeSessionRef: MakeSessionRef = (value) => {
     const [invariant] = checkSessionRef(value);
     if (invariant === undefined) return ok(value as SessionRef);
-    return err({ type: 'InvalidSessionRef', value, invariant });
+    return err({ type: 'Knowledge.InvalidSessionRef', value, invariant });
 };
 
 /**
@@ -477,7 +477,7 @@ export type MessageRef = string & { readonly __domain: 'Knowledge.MessageRef' };
  * @see contexts/knowledge/model/context.dt:41
  */
 export interface InvalidMessageRef {
-    readonly type: 'InvalidMessageRef';
+    readonly type: 'Knowledge.InvalidMessageRef';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -506,7 +506,7 @@ export function checkMessageRef(value: string): readonly InvalidMessageRef['inva
 export const makeMessageRef: MakeMessageRef = (value) => {
     const [invariant] = checkMessageRef(value);
     if (invariant === undefined) return ok(value as MessageRef);
-    return err({ type: 'InvalidMessageRef', value, invariant });
+    return err({ type: 'Knowledge.InvalidMessageRef', value, invariant });
 };
 
 /**
@@ -523,7 +523,7 @@ export type UserName = string & { readonly __domain: 'Knowledge.UserName' };
  * @see contexts/knowledge/model/context.dt:44
  */
 export interface InvalidUserName {
-    readonly type: 'InvalidUserName';
+    readonly type: 'Knowledge.InvalidUserName';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -552,7 +552,7 @@ export function checkUserName(value: string): readonly InvalidUserName['invarian
 export const makeUserName: MakeUserName = (value) => {
     const [invariant] = checkUserName(value);
     if (invariant === undefined) return ok(value as UserName);
-    return err({ type: 'InvalidUserName', value, invariant });
+    return err({ type: 'Knowledge.InvalidUserName', value, invariant });
 };
 
 /**
@@ -569,7 +569,7 @@ export type ItemVersion = number & { readonly __domain: 'Knowledge.ItemVersion' 
  * @see contexts/knowledge/model/context.dt:47
  */
 export interface InvalidItemVersion {
-    readonly type: 'InvalidItemVersion';
+    readonly type: 'Knowledge.InvalidItemVersion';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -598,7 +598,7 @@ export function checkItemVersion(value: number): readonly InvalidItemVersion['in
 export const makeItemVersion: MakeItemVersion = (value) => {
     const [invariant] = checkItemVersion(value);
     if (invariant === undefined) return ok(value as ItemVersion);
-    return err({ type: 'InvalidItemVersion', value, invariant });
+    return err({ type: 'Knowledge.InvalidItemVersion', value, invariant });
 };
 
 /**
@@ -615,7 +615,7 @@ export type ExtractionNumber = number & { readonly __domain: 'Knowledge.Extracti
  * @see contexts/knowledge/model/context.dt:50
  */
 export interface InvalidExtractionNumber {
-    readonly type: 'InvalidExtractionNumber';
+    readonly type: 'Knowledge.InvalidExtractionNumber';
     readonly value: number;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -644,7 +644,7 @@ export function checkExtractionNumber(value: number): readonly InvalidExtraction
 export const makeExtractionNumber: MakeExtractionNumber = (value) => {
     const [invariant] = checkExtractionNumber(value);
     if (invariant === undefined) return ok(value as ExtractionNumber);
-    return err({ type: 'InvalidExtractionNumber', value, invariant });
+    return err({ type: 'Knowledge.InvalidExtractionNumber', value, invariant });
 };
 
 /**
@@ -2251,7 +2251,7 @@ export interface KnowledgeItemUnretired {
  * @see contexts/knowledge/model/item.dt:255
  */
 export interface StaleOperation {
-    readonly type: 'StaleOperation';
+    readonly type: 'Knowledge.StaleOperation';
 }
 
 /**
@@ -2260,7 +2260,7 @@ export interface StaleOperation {
  * @see contexts/knowledge/model/item.dt:258
  */
 export interface DuplicateSource {
-    readonly type: 'DuplicateSource';
+    readonly type: 'Knowledge.DuplicateSource';
 }
 
 /**
@@ -2269,7 +2269,7 @@ export interface DuplicateSource {
  * @see contexts/knowledge/model/item.dt:261
  */
 export interface ConflictWithoutSource {
-    readonly type: 'ConflictWithoutSource';
+    readonly type: 'Knowledge.ConflictWithoutSource';
 }
 
 /**
@@ -2278,7 +2278,7 @@ export interface ConflictWithoutSource {
  * @see contexts/knowledge/model/item.dt:264
  */
 export interface ConflictWithItself {
-    readonly type: 'ConflictWithItself';
+    readonly type: 'Knowledge.ConflictWithItself';
 }
 
 /**
@@ -2287,7 +2287,7 @@ export interface ConflictWithItself {
  * @see contexts/knowledge/model/item.dt:267
  */
 export interface KnowledgeItemNotFound {
-    readonly type: 'KnowledgeItemNotFound';
+    readonly type: 'Knowledge.KnowledgeItemNotFound';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
 }
@@ -2298,7 +2298,7 @@ export interface KnowledgeItemNotFound {
  * @see contexts/knowledge/model/item.dt:272
  */
 export interface KnowledgeItemExists {
-    readonly type: 'KnowledgeItemExists';
+    readonly type: 'Knowledge.KnowledgeItemExists';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
 }
@@ -2309,7 +2309,7 @@ export interface KnowledgeItemExists {
  * @see contexts/knowledge/model/item.dt:277
  */
 export interface AlreadyRetired {
-    readonly type: 'AlreadyRetired';
+    readonly type: 'Knowledge.AlreadyRetired';
 }
 
 /**
@@ -2318,7 +2318,7 @@ export interface AlreadyRetired {
  * @see contexts/knowledge/model/item.dt:280
  */
 export interface NotRetired {
-    readonly type: 'NotRetired';
+    readonly type: 'Knowledge.NotRetired';
 }
 
 /**
@@ -2327,7 +2327,7 @@ export interface NotRetired {
  * @see contexts/knowledge/model/item.dt:283
  */
 export interface ReplacementWithoutReason {
-    readonly type: 'ReplacementWithoutReason';
+    readonly type: 'Knowledge.ReplacementWithoutReason';
 }
 
 /**
@@ -2336,7 +2336,7 @@ export interface ReplacementWithoutReason {
  * @see contexts/knowledge/model/item.dt:286
  */
 export interface ReplacedByItself {
-    readonly type: 'ReplacedByItself';
+    readonly type: 'Knowledge.ReplacedByItself';
 }
 
 /**
@@ -2345,7 +2345,7 @@ export interface ReplacedByItself {
  * @see contexts/knowledge/model/item.dt:289
  */
 export interface RetiredItem {
-    readonly type: 'RetiredItem';
+    readonly type: 'Knowledge.RetiredItem';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
 }
@@ -2356,7 +2356,7 @@ export interface RetiredItem {
  * @see contexts/knowledge/model/item.dt:294
  */
 export interface KnowledgeItemGone {
-    readonly type: 'KnowledgeItemGone';
+    readonly type: 'Knowledge.KnowledgeItemGone';
     /** ナレッジID */
     readonly itemId: KnowledgeItemId;
 }
@@ -2375,7 +2375,7 @@ export type RetirementProposalId = string & { readonly __domain: 'Knowledge.Reti
  * @see contexts/knowledge/model/retirement.dt:3
  */
 export interface InvalidRetirementProposalId {
-    readonly type: 'InvalidRetirementProposalId';
+    readonly type: 'Knowledge.InvalidRetirementProposalId';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -2404,7 +2404,7 @@ export function checkRetirementProposalId(value: string): readonly InvalidRetire
 export const makeRetirementProposalId: MakeRetirementProposalId = (value) => {
     const [invariant] = checkRetirementProposalId(value);
     if (invariant === undefined) return ok(value as RetirementProposalId);
-    return err({ type: 'InvalidRetirementProposalId', value, invariant });
+    return err({ type: 'Knowledge.InvalidRetirementProposalId', value, invariant });
 };
 
 /**
@@ -2421,7 +2421,7 @@ export type ReviewRef = string & { readonly __domain: 'Knowledge.ReviewRef' };
  * @see contexts/knowledge/model/retirement.dt:6
  */
 export interface InvalidReviewRef {
-    readonly type: 'InvalidReviewRef';
+    readonly type: 'Knowledge.InvalidReviewRef';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -2450,7 +2450,7 @@ export function checkReviewRef(value: string): readonly InvalidReviewRef['invari
 export const makeReviewRef: MakeReviewRef = (value) => {
     const [invariant] = checkReviewRef(value);
     if (invariant === undefined) return ok(value as ReviewRef);
-    return err({ type: 'InvalidReviewRef', value, invariant });
+    return err({ type: 'Knowledge.InvalidReviewRef', value, invariant });
 };
 
 /**
@@ -2467,7 +2467,7 @@ export type EvidenceNote = string & { readonly __domain: 'Knowledge.EvidenceNote
  * @see contexts/knowledge/model/retirement.dt:9
  */
 export interface InvalidEvidenceNote {
-    readonly type: 'InvalidEvidenceNote';
+    readonly type: 'Knowledge.InvalidEvidenceNote';
     readonly value: string;
     /** The violated invariant. */
     readonly invariant: 'valid';
@@ -2496,7 +2496,7 @@ export function checkEvidenceNote(value: string): readonly InvalidEvidenceNote['
 export const makeEvidenceNote: MakeEvidenceNote = (value) => {
     const [invariant] = checkEvidenceNote(value);
     if (invariant === undefined) return ok(value as EvidenceNote);
-    return err({ type: 'InvalidEvidenceNote', value, invariant });
+    return err({ type: 'Knowledge.InvalidEvidenceNote', value, invariant });
 };
 
 /**
@@ -3040,7 +3040,7 @@ export interface RetirementProposalDismissed {
  * @see contexts/knowledge/model/retirement.dt:152
  */
 export interface MalformedProposal {
-    readonly type: 'MalformedProposal';
+    readonly type: 'Knowledge.MalformedProposal';
 }
 
 /**
@@ -3049,7 +3049,7 @@ export interface MalformedProposal {
  * @see contexts/knowledge/model/retirement.dt:155
  */
 export interface ProposalRefused {
-    readonly type: 'ProposalRefused';
+    readonly type: 'Knowledge.ProposalRefused';
     /** 理由 */
     readonly reason: ProposalRefusal;
 }
@@ -3074,7 +3074,7 @@ export type ProposalRefusal =
  * @see contexts/knowledge/model/retirement.dt:178
  */
 export interface ProposalNotFound {
-    readonly type: 'ProposalNotFound';
+    readonly type: 'Knowledge.ProposalNotFound';
     /** 廃止の候補ID */
     readonly proposalId: RetirementProposalId;
 }
@@ -3085,7 +3085,7 @@ export interface ProposalNotFound {
  * @see contexts/knowledge/model/retirement.dt:183
  */
 export interface ProposalDecided {
-    readonly type: 'ProposalDecided';
+    readonly type: 'Knowledge.ProposalDecided';
     /** 廃止の候補ID */
     readonly proposalId: RetirementProposalId;
 }

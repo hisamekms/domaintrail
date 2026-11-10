@@ -1008,7 +1008,7 @@ describe('reverting a run', () => {
             // asked again: it is reverted already
             const again = await revert(ctx, ids[0]);
             expect(again.status).toBe(409);
-            expect(((await again.json()) as { error: { type: string } }).error.type).toBe('RunNotRevertable');
+            expect(((await again.json()) as { error: { type: string } }).error.type).toBe('Collaboration.RunNotRevertable');
         },
     );
 

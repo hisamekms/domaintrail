@@ -94,41 +94,41 @@ export interface ErrorBody {
 
 /** The domain's errors an answer may carry, by their type (`domainErrorStatus` gives their status). */
 export type DomainErrorType =
-    | 'KnowledgeItemNotFound'
-    | 'KnowledgeItemGone'
-    | 'AlreadyRetired'
-    | 'NotRetired'
-    | 'ReplacementWithoutReason'
-    | 'ReplacedByItself'
-    | 'MalformedProposal'
-    | 'ProposalRefused'
-    | 'ProposalNotFound'
-    | 'ProposalDecided';
+    | 'Knowledge.KnowledgeItemNotFound'
+    | 'Knowledge.KnowledgeItemGone'
+    | 'Knowledge.AlreadyRetired'
+    | 'Knowledge.NotRetired'
+    | 'Knowledge.ReplacementWithoutReason'
+    | 'Knowledge.ReplacedByItself'
+    | 'Knowledge.MalformedProposal'
+    | 'Knowledge.ProposalRefused'
+    | 'Knowledge.ProposalNotFound'
+    | 'Knowledge.ProposalDecided';
 
 export const DOMAIN_ERROR_TYPES: readonly DomainErrorType[] = [
-    'KnowledgeItemNotFound',
-    'KnowledgeItemGone',
-    'AlreadyRetired',
-    'NotRetired',
-    'ReplacementWithoutReason',
-    'ReplacedByItself',
-    'MalformedProposal',
-    'ProposalRefused',
-    'ProposalNotFound',
-    'ProposalDecided',
+    'Knowledge.KnowledgeItemNotFound',
+    'Knowledge.KnowledgeItemGone',
+    'Knowledge.AlreadyRetired',
+    'Knowledge.NotRetired',
+    'Knowledge.ReplacementWithoutReason',
+    'Knowledge.ReplacedByItself',
+    'Knowledge.MalformedProposal',
+    'Knowledge.ProposalRefused',
+    'Knowledge.ProposalNotFound',
+    'Knowledge.ProposalDecided',
 ];
 
 /** The status of a domain's error: 404 for what is not there, 410 for a deleted item, 409 for a state that refuses, 400 for a malformed request. */
 export function domainErrorStatus(type: DomainErrorType): number {
     switch (type) {
-        case 'KnowledgeItemNotFound':
-        case 'ProposalNotFound':
+        case 'Knowledge.KnowledgeItemNotFound':
+        case 'Knowledge.ProposalNotFound':
             return 404;
-        case 'KnowledgeItemGone':
+        case 'Knowledge.KnowledgeItemGone':
             return 410;
-        case 'ReplacementWithoutReason':
-        case 'ReplacedByItself':
-        case 'MalformedProposal':
+        case 'Knowledge.ReplacementWithoutReason':
+        case 'Knowledge.ReplacedByItself':
+        case 'Knowledge.MalformedProposal':
             return 400;
         default:
             return 409;
@@ -602,24 +602,24 @@ export const proposalRefusal: Decoder<Knowledge.ProposalRefusal> = oneOf(PROPOSA
 export const dropReason: Decoder<DropReason> = (v, at) => {
     const o = obj(v, at);
     const type = oneOf([
-        'KnowledgeItemNotFound',
-        'KnowledgeItemGone',
-        'KnowledgeItemExists',
-        'StaleOperation',
-        'DuplicateSource',
-        'ConflictWithoutSource',
-        'ConflictWithItself',
-        'RetiredItem',
-        'MalformedProposal',
-        'ProposalRefused',
+        'Knowledge.KnowledgeItemNotFound',
+        'Knowledge.KnowledgeItemGone',
+        'Knowledge.KnowledgeItemExists',
+        'Knowledge.StaleOperation',
+        'Knowledge.DuplicateSource',
+        'Knowledge.ConflictWithoutSource',
+        'Knowledge.ConflictWithItself',
+        'Knowledge.RetiredItem',
+        'Knowledge.MalformedProposal',
+        'Knowledge.ProposalRefused',
     ] as const)(o.type, `${at}.type`);
     switch (type) {
-        case 'KnowledgeItemNotFound':
-        case 'KnowledgeItemGone':
-        case 'KnowledgeItemExists':
-        case 'RetiredItem':
+        case 'Knowledge.KnowledgeItemNotFound':
+        case 'Knowledge.KnowledgeItemGone':
+        case 'Knowledge.KnowledgeItemExists':
+        case 'Knowledge.RetiredItem':
             return { type, itemId: itemId(o.itemId, `${at}.itemId`) };
-        case 'ProposalRefused':
+        case 'Knowledge.ProposalRefused':
             return { type, reason: proposalRefusal(o.reason, `${at}.reason`) };
         default:
             return { type };
@@ -753,19 +753,19 @@ export function domainErrorOf(body: ErrorBody['error'] | undefined): DomainError
     if (body === undefined) return undefined;
     try {
         switch (body.type) {
-            case 'KnowledgeItemNotFound':
-            case 'KnowledgeItemGone':
+            case 'Knowledge.KnowledgeItemNotFound':
+            case 'Knowledge.KnowledgeItemGone':
                 return { type: body.type, itemId: itemId(body.itemId, 'error.itemId') };
-            case 'ProposalNotFound':
-            case 'ProposalDecided':
+            case 'Knowledge.ProposalNotFound':
+            case 'Knowledge.ProposalDecided':
                 return { type: body.type, proposalId: proposalId(body.proposalId, 'error.proposalId') };
-            case 'ProposalRefused':
+            case 'Knowledge.ProposalRefused':
                 return { type: body.type, reason: proposalRefusal(body.reason, 'error.reason') };
-            case 'AlreadyRetired':
-            case 'NotRetired':
-            case 'ReplacementWithoutReason':
-            case 'ReplacedByItself':
-            case 'MalformedProposal':
+            case 'Knowledge.AlreadyRetired':
+            case 'Knowledge.NotRetired':
+            case 'Knowledge.ReplacementWithoutReason':
+            case 'Knowledge.ReplacedByItself':
+            case 'Knowledge.MalformedProposal':
                 return { type: body.type };
             default:
                 return undefined;

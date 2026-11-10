@@ -134,7 +134,7 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
     const { store, project } = deps;
 
     const itemError = (res: ServerResponse, e: Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone): void =>
-        e.type === 'KnowledgeItemNotFound'
+        e.type === 'Knowledge.KnowledgeItemNotFound'
             ? sendError(res, 404, e.type, 'No such knowledge item.', { itemId: e.itemId })
             : sendError(res, 410, e.type, 'The knowledge item is deleted.', { itemId: e.itemId });
 
@@ -221,7 +221,7 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
         if (action === undefined) {
             if (method !== 'GET') return sendError(res, 405, 'MethodNotAllowed', 'Use GET.');
             const found = await store.get(project, id, { history: q.get('history') === '1' });
-            return found ? sendJson(res, 200, found) : itemError(res, { type: 'KnowledgeItemNotFound', itemId: id });
+            return found ? sendJson(res, 200, found) : itemError(res, { type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
         }
         if (method !== 'POST') return sendError(res, 405, 'MethodNotAllowed', 'Use POST.');
         const by = actorOf(who);
@@ -270,7 +270,7 @@ export function createKnowledgeRoutes(deps: KnowledgeRoutesDeps): KnowledgeRoute
                 const bytes = await readBytes(req, MAX_IMAGE_BYTES);
                 if (bytes.byteLength === 0) return sendError(res, 400, 'BadRequest', 'An empty image.');
                 const found = await store.get(project, id);
-                if (!found) return itemError(res, { type: 'KnowledgeItemNotFound', itemId: id });
+                if (!found) return itemError(res, { type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                 const image = await store.putImage(project, { mediaType: type, bytes });
                 const text = Knowledge.makeItemText(`${found.item.content.text.trimEnd()}\n\n${imageLine(image)}\n`);
                 if (!text.ok) return sendError(res, 413, 'ImageRejected', 'The text has no room for another image.');

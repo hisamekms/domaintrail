@@ -165,14 +165,14 @@ function liveAt(
     itemId: Knowledge.KnowledgeItemId,
 ): Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | Knowledge.RetiredItem> {
     const item = current(itemId);
-    if (item === undefined) return { ok: false, error: { type: 'KnowledgeItemNotFound', itemId } };
-    if (item.state === 'Deleted') return { ok: false, error: { type: 'KnowledgeItemGone', itemId } };
-    if (isRetired(item)) return { ok: false, error: { type: 'RetiredItem', itemId } };
+    if (item === undefined) return { ok: false, error: { type: 'Knowledge.KnowledgeItemNotFound', itemId } };
+    if (item.state === 'Deleted') return { ok: false, error: { type: 'Knowledge.KnowledgeItemGone', itemId } };
+    if (isRetired(item)) return { ok: false, error: { type: 'Knowledge.RetiredItem', itemId } };
     return { ok: true, value: item };
 }
 
 const absent = (current: ItemLookup, itemId: Knowledge.KnowledgeItemId): Result<undefined, Knowledge.KnowledgeItemExists> =>
-    current(itemId) === undefined ? { ok: true, value: undefined } : { ok: false, error: { type: 'KnowledgeItemExists', itemId } };
+    current(itemId) === undefined ? { ok: true, value: undefined } : { ok: false, error: { type: 'Knowledge.KnowledgeItemExists', itemId } };
 
 function applyOperation(
     operation: Exclude<Knowledge.Operation, { readonly kind: 'ProposeRetire' | 'ProposeUnretire' }>,
