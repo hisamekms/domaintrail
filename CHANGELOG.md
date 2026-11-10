@@ -9,6 +9,33 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.11.0] - 2026-11-10
+
+### Added
+
+- `dt check --no-knowledge` skips diagnostics for the files knowledge store while keeping model, storming and journey
+  checks. `dt check --scope dtes` reports only Event Storming diagnostics; it still reads the `.dt` model to resolve
+  `ref`s and fails if model syntax prevents that check or no `.dtes` file is found. Both options also work with JSON
+  output, so an AI agent can ask for findings relevant to its current edit.
+
+### Changed
+
+- Repository maintenance: added commitlint and prek hooks for commit messages and staged files, and updated `ws`.
+
+### Fixed
+
+- Generated `_runtime.ts` now type-checks with `strict` and `noUncheckedIndexedAccess`, including choice, list and
+  decimal helpers.
+- Contract tests generated into separate context packages now type-check when one context uses another context's
+  arbitraries and the referenced context has `@externalCheck` declarations. The required external checks for
+  `contract` remain required.
+
+### Upgrading
+
+- If you disabled `noUncheckedIndexedAccess` or excluded generated contract tests from TypeScript checking to work
+  around these errors, update domaintrail, run `dt generate ts` again, then restore those checks. Run the generated
+  contract tests after supplying the declared external checks your model requires.
+
 ## [0.10.0] - 2026-11-10
 
 ### Added
@@ -965,6 +992,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/hisamekms/domaintrail/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/hisamekms/domaintrail/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/hisamekms/domaintrail/compare/v0.8.0...v0.8.1
