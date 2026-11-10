@@ -1,6 +1,6 @@
 // The session's part of the page (ADR 0026): computed on every page, shown only in a session. Under `dt view` no
 // `session.state` ever arrives, so `useSessionPage` gives nothing to draw, sends nothing and calls no session API.
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { firstDeclarations } from '@domaintrail/storming';
 import { type DisplayMode, LEVEL_KINDS } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
@@ -246,17 +246,19 @@ export function useSessionPage(input: {
     // caret in its text; what already is a chip is not added again
     const [focusPending, setFocusPending] = useState(false);
     const onFocused = useCallback(() => setFocusPending(false), []);
-    const composerValue = composer.value;
-    const setComposerValue = useCallback((v: ComposerValue) => composer.setValue(v), [composer]);
+    // Only target chips affect buttons outside the chat. Text edits leave this snapshot unchanged, so the canvas and
+    // the chat stream do not render for every character typed into the composer.
+    const composerChips = useSyncExternalStore(composer.subscribe, composer.chipsSnapshot, composer.chipsSnapshot);
+    const composerTargets: ComposerValue = { text: '', chips: composerChips, people: [] };
     const { conversationOpen, setConversationOpen } = panes;
     const confirm = useCallback(
         (targets: readonly TargetDraft[]) => {
             if (targets.length === 0) return;
-            setComposerValue(confirmSelection(composerValue, targets).value);
+            composer.setValue(confirmSelection(composer.value, targets).value);
             setConversationOpen(true);
             setFocusPending(true);
         },
-        [composerValue, setComposerValue, setConversationOpen],
+        [composer, setConversationOpen],
     );
     const live = session?.status === 'live' && session.state.session.state === 'Open';
     useEffect(() => {
@@ -274,7 +276,7 @@ export function useSessionPage(input: {
     const addAction = (targets: readonly TargetDraft[]): AddAction | undefined =>
         live && targets.length > 0
             ? {
-                  added: isAdded(composerValue, targets),
+                  added: isAdded(composerTargets, targets),
                   label: t.session.chat.addToRequest('C'),
                   addedLabel: t.session.chat.addedToRequest,
                   onAdd: () => confirm(targets),
@@ -301,11 +303,11 @@ export function useSessionPage(input: {
             const target = targetOfSelection({ selected: elementId, model, stormings, sources: sources ?? [] });
             if (!target) return;
             const mention = selectedOf(target, candidates)?.mention ?? target.label ?? elementId;
-            setComposerValue(beginMessage(composerValue, target, mention, write));
+            composer.setValue(beginMessage(composer.value, target, mention, write));
             setConversationOpen(true);
             setFocusPending(true);
         },
-        [model, stormings, sources, candidates, composerValue, setComposerValue, setConversationOpen],
+        [model, stormings, sources, candidates, composer, setConversationOpen],
     );
 
     // the chat is the session's first place: the conversation opens when the page joins a session
@@ -459,7 +461,7 @@ export function useSessionPage(input: {
         inspectorAction: inspectorAdd && <AddButton action={inspectorAdd} />,
         stickies: {
             live,
-            chat: { added: isAdded(composerValue, selectionTargets), add: () => confirm(selectionTargets) },
+            chat: { added: isAdded(composerTargets, selectionTargets), add: () => confirm(selectionTargets) },
             edit: editSticky,
             renamed: renamedHotspots(session.state.runs),
         },
