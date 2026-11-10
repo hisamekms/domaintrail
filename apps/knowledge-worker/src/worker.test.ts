@@ -243,8 +243,14 @@ describe('shared bookmarks', () => {
     test('filters before pagination, survives content changes and retirement, clears on deletion, and audits changes once', async () => {
         const project = newProject();
         await store.applyExtraction(project, extraction('s1', 1, [add(1, 'one'), add(2, 'two')]));
+        const before = await store.search(project, {});
+        const existing = (await store.get(project, id(1)))?.item;
+        if (!existing) throw new Error('expected the item');
         const first = await store.setBookmark(project, id(1), true, user);
-        expect(first.ok && first.value).toMatchObject({ bookmarked: true, version: 1 });
+        if (!first.ok) throw new Error('expected bookmark to be set');
+        expect(first.value).toMatchObject({ bookmarked: true, version: 1 });
+        expect(first.value.updatedAt.toISOString()).toBe(existing.updatedAt.toISOString());
+        expect((await store.search(project, {})).items.map((i) => i.id)).toEqual(before.items.map((i) => i.id));
         await store.setBookmark(project, id(1), true, user);
         expect((await store.audit(project, { item: id(1) })).items.map((a) => a.operation)).toEqual(['bookmark', 'add']);
         const page = await store.search(project, { bookmarked: true, limit: 1 });
