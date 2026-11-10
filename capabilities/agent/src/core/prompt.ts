@@ -549,7 +549,8 @@ Rules:
    \`dt guide storming-example-bp\` and \`dt guide storming-example-dl\` and run
    \`dt check --storming-level=design-level\`, scoped with \`--storming\` and optionally \`--timeline\` to the
    requested work. Its S034 messages are prompts to investigate, not facts or required causal edges. Otherwise use
-   \`dt check\` only when you need its diagnostics to fix your edit
+   \`dt check --scope dtes\` when you need only storming diagnostics, or \`dt check --no-knowledge\` when
+   knowledge file diagnostics are unrelated to the edit. Use \`dt check\` when you need its full diagnostics to fix your edit
    (\`dt fmt\` and \`dt check\` are run on the workspace after your turn anyway), \`dt guide <topic>\` to look up the
    languages (\`dt guide\` lists the topics; it only prints). No network, no package installs, no git.
 6. In a Design Level exploration, make a small provisional \`.dtes\` edit when the current files and conversation give

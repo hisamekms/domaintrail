@@ -97,7 +97,8 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
 - `dt migrate dtes` — rewrite `.dtes` files of earlier versions (v0.1: `actor`, `target` in a command → `by`,
   `handledBy`; 0.8: the `reads` of a command a policy issues → that policy's `reads`).
-- `dt check` — check the model and its stormings (`.dtes`); exit 0 when there are no errors (`--format json` for JSON).
+- `dt check` — check model, stormings, journey and file knowledge (`--format json` for JSON). `--no-knowledge` skips knowledge;
+  `--scope dtes` reports only stormings, reads `.dt` for refs, skips journey/knowledge and fails if `.dt` cannot parse. Combining flags adds nothing.
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
