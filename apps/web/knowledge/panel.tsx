@@ -887,16 +887,16 @@ export function KnowledgeList({
                     <span className="list-title">{t.title}</span>
                     {layout === 'workspace' && <OrderSwitch order={order} onOrder={setOrder} />}
                     {onExpand && (
-                        <button
-                            type="button"
+                        <Act
+                            kind="open"
                             className="knowledge-expand"
                             onClick={(event) => onExpand(event.currentTarget)}
                             data-tooltip={t.openWorkspace}
                             aria-label={t.openWorkspace}
+                            icon={<Expand size={14} aria-hidden />}
                         >
-                            <Expand size={14} aria-hidden />
                             <span>{t.openWorkspace}</span>
-                        </button>
+                        </Act>
                     )}
                     {layout === 'sidebar' && (
                         <button type="button" className="icon-button" onClick={onClose} data-tooltip={closeLabel} aria-label={closeLabel}>
@@ -1100,9 +1100,9 @@ export function KnowledgeWorkspace({
         <KnowledgeContext.Provider value={contextualView}>
             <section className="knowledge-workspace" aria-label={t.title} data-mobile-detail={showDetail}>
                 <header className="knowledge-workspace-header">
-                    <button type="button" className="knowledge-workspace-back" ref={backButton} onClick={onBack}>
+                    <Act kind="see" className="knowledge-workspace-back" ref={backButton} onClick={onBack}>
                         {t.backToCanvas}
-                    </button>
+                    </Act>
                     <h1>{t.title}</h1>
                 </header>
                 <div className="knowledge-workspace-columns">
@@ -1117,8 +1117,8 @@ export function KnowledgeWorkspace({
                     </aside>
                     <main className="knowledge-workspace-detail-pane" aria-label={t.detailLabel} ref={detailPane} tabIndex={-1}>
                         {showDetail && (
-                            <button
-                                type="button"
+                            <Act
+                                kind="see"
                                 className="knowledge-workspace-list-back"
                                 onClick={() => {
                                     flushSync(() => setShowDetail(false));
@@ -1126,7 +1126,7 @@ export function KnowledgeWorkspace({
                                 }}
                             >
                                 {t.backToList}
-                            </button>
+                            </Act>
                         )}
                         {!selected ? (
                             <p className="muted">{t.chooseItem}</p>

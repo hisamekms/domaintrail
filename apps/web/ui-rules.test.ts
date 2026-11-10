@@ -121,6 +121,10 @@ const RAW_BUTTONS: Readonly<Record<string, { readonly count: number; readonly re
         count: 1,
         reason: "a knowledge item's head (kind, title) that opens it: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the row's, not a button's",
     },
+    'knowledge/panel.tsx knowledge-workspace-row-button': {
+        count: 1,
+        reason: 'a knowledge item in the wide list: its entire row (kind, title and labels) selects the detail, so its layout follows the list row rather than an action button',
+    },
     'knowledge/panel.tsx knowledge-side': {
         count: 1,
         reason: "a side of a knowledge conflict (kind, title, labels) that opens it under the pair: a row or card whose whole box is the target (a list's row, a disclosure head): its layout is the card's, not a button's",

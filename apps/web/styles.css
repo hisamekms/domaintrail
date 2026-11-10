@@ -10044,25 +10044,11 @@ button.knowledge-link:hover {
     gap: var(--gap-inside);
     padding: var(--space-2) var(--space-3);
 }
-.knowledge-expand {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
+.list-head > .knowledge-expand {
     margin-left: auto;
-    padding: 3px 6px;
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-    font-size: var(--fs-small);
-    cursor: pointer;
 }
-.knowledge-expand:hover {
-    background: var(--hover);
-}
-.knowledge-expand + .icon-button {
-    margin-left: 0 !important;
+.list-head > .knowledge-expand + .icon-button {
+    margin-left: 0;
 }
 .knowledge-sidebar-order {
     display: flex;
@@ -10094,20 +10080,6 @@ button.knowledge-link:hover {
     margin: 0;
     font-size: 1rem;
 }
-.knowledge-workspace-back,
-.knowledge-workspace-list-back {
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--border-strong);
-    border-radius: 6px;
-    background: var(--surface);
-    color: var(--text);
-    font: inherit;
-    cursor: pointer;
-}
-.knowledge-workspace-back:hover,
-.knowledge-workspace-list-back:hover {
-    background: var(--hover);
-}
 .knowledge-workspace-columns {
     flex: 1;
     display: flex;
@@ -10127,7 +10099,7 @@ button.knowledge-link:hover {
     flex: 1;
     min-width: 0;
     overflow: auto;
-    padding: var(--space-5) clamp(var(--space-4), 5vw, 64px);
+    padding: var(--space-5);
     box-sizing: border-box;
 }
 .knowledge-workspace-detail {
@@ -10178,7 +10150,7 @@ button.knowledge-link:hover {
     grid-column: 2 / -1;
     min-width: 0;
 }
-.knowledge-workspace-list-back {
+button.act.knowledge-workspace-list-back {
     display: none;
 }
 @media (max-width: 700px) {
@@ -10196,8 +10168,8 @@ button.knowledge-link:hover {
     .knowledge-workspace[data-mobile-detail='true'] .knowledge-workspace-detail-pane {
         display: block;
     }
-    .knowledge-workspace-list-back {
-        display: block;
+    button.act.knowledge-workspace-list-back {
+        display: inline-flex;
         margin-bottom: var(--space-4);
     }
 }

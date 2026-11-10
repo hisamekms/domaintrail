@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { renderToStaticMarkup } from 'react-dom/server';
+import type { ReactNode } from 'react';
 import { I18nProvider } from '../i18n';
 import { SearchButton } from '../search/entry';
 import type { Panes } from './panes';
@@ -41,7 +42,7 @@ const html = renderToStaticMarkup(
         />
     </I18nProvider>,
 );
-const appBar = html.slice(html.indexOf('<header class="app-bar">'), html.indexOf('</header>'));
+const appBar = html.slice(html.indexOf('<header class="app-bar"'), html.indexOf('</header>'));
 
 describe('the app bar', () => {
     test('the brand and the workspace, the world switch, 探す in the middle, then 問題 and the session’s place at the right end', () => {
@@ -82,7 +83,7 @@ describe('the app bar', () => {
 });
 
 /** The page with the left column on `leftView`, the tree folded or not. */
-const shellWith = (over: Partial<Panes>): string =>
+const shellWith = (over: Partial<Panes>, screen?: ReactNode): string =>
     renderToStaticMarkup(
         <I18nProvider lang="ja">
             <AppShell
@@ -101,11 +102,20 @@ const shellWith = (over: Partial<Panes>): string =>
                 banners={null}
                 workspace={null}
                 inspector={<div className="inspector-slot" />}
+                screen={screen}
                 overlays={null}
             />
         </I18nProvider>,
     );
 const leftOf = (page: string): string => page.slice(page.indexOf('<div class="left open"'), page.indexOf('<div class="main">'));
+
+test('a separate screen keeps the canvas mounted but makes its controls inert and hidden from assistive technology', () => {
+    const page = shellWith({ leftView: 'tree' }, <div className="screen-slot" />);
+    expect(page).toMatch(/<header class="app-bar" inert="" aria-hidden="true">/);
+    expect(page).toMatch(/<div class="app-body" inert="" aria-hidden="true">/);
+    expect(page).toContain('class="screen-slot"');
+    expect(page).toContain('class="canvas-pane"');
+});
 
 describe('the left column', () => {
     const left = leftOf(shellWith({ leftView: 'tree' }));
