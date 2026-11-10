@@ -104,7 +104,7 @@ context Knowledge {
     /// 人が共有ブックマークを付け外しする。中身と版は変えない。
     command setBookmark(bookmarked: Bool, by: UserName, at: Timestamp) "ブックマークを変える"
       Live -> Live
-      changes bookmarked, updatedAt
+      changes bookmarked
       emits KnowledgeBookmarkChanged
 
     /// 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。

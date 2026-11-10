@@ -1717,7 +1717,7 @@ export interface SetBookmarkKnowledgeItemParams {
  * KnowledgeItem.setBookmark (Live -> Live)
  * ブックマークを変える
  * 人が共有ブックマークを付け外しする。中身と版は変えない。
- * @changes bookmarked, updatedAt
+ * @changes bookmarked
  * @emits KnowledgeBookmarkChanged — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:105
  */
@@ -1734,15 +1734,15 @@ export type SetBookmarkKnowledgeItem = (
 /**
  * KnowledgeItem.setBookmark, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes bookmarked, updatedAt
- * Live -> Live — set: updatedAt, bookmarked; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, retirement
+ * @changes bookmarked
+ * Live -> Live — set: bookmarked; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, updatedAt, retirement
  * @see contexts/knowledge/model/item.dt:105
  */
 export type SetBookmarkKnowledgeItemDecision = {
     /** @emits KnowledgeBookmarkChanged — exactly once when the command succeeds */
     readonly Live: (knowledgeItem: LiveKnowledgeItem, params: SetBookmarkKnowledgeItemParams) => Result<{
         readonly Live: {
-            readonly set: { readonly updatedAt: Timestamp; readonly bookmarked: boolean | undefined };
+            readonly set: { readonly bookmarked: boolean | undefined };
             readonly events: { readonly KnowledgeBookmarkChanged: KnowledgeBookmarkChanged };
         };
     }, never>;

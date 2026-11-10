@@ -58,7 +58,9 @@ describe('the files store', () => {
         const id = itemId('kn_00000001');
         const initial = (await store.get(project, id))?.item;
         expect(initial?.bookmarked).toBeUndefined();
+        tick(1_000);
         expect(await store.setBookmark(project, id, true, alice)).toMatchObject({ ok: true, value: { bookmarked: true, version: 1 } });
+        expect((await store.get(project, id))?.item.updatedAt).toEqual(initial?.updatedAt);
         await store.setBookmark(project, id, true, alice);
         const filtered = await store.search(project, { bookmarked: true, limit: 1 });
         expect(ids(filtered.items)).toEqual([id]);
@@ -73,8 +75,11 @@ describe('the files store', () => {
         expect(ids((await store.search(project, { bookmarked: true, retired: 'include' })).items)).toEqual([id]);
         await store.unretire(project, id, alice);
         expect(ids((await store.search(project, { bookmarked: true })).items)).toEqual([id]);
+        const beforeUnbookmark = (await store.get(project, id))?.item.updatedAt;
+        tick(1_000);
         await store.setBookmark(project, id, false, alice);
         expect((await store.get(project, id))?.item.bookmarked).toBeUndefined();
+        expect((await store.get(project, id))?.item.updatedAt).toEqual(beforeUnbookmark);
         expect((await store.search(project, { bookmarked: true })).items).toEqual([]);
         expect((await store.audit(project, { item: id })).items.map((e) => e.operation)).toContain('unbookmark');
         await store.setBookmark(project, id, true, alice);

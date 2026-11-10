@@ -274,7 +274,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         Live: (item, { bookmarked, by, at }) =>
             ok({
                 Live: {
-                    set: { bookmarked: bookmarked ? true : undefined, updatedAt: at },
+                    set: { bookmarked: bookmarked ? true : undefined },
                     events: {
                         KnowledgeBookmarkChanged: {
                             type: 'KnowledgeBookmarkChanged',
