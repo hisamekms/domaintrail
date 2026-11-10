@@ -1,0 +1,45 @@
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  - repo: builtin
+    hooks:
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+        stages: [pre-commit]
+      - id: end-of-file-fixer
+        stages: [pre-commit]
+      - id: check-merge-conflict
+        args: [--assume-in-merge]
+        stages: [pre-commit]
+      - id: check-json
+        files: \.json$
+        stages: [pre-commit]
+      - id: check-yaml
+        files: \.ya?ml$
+        stages: [pre-commit]
+      - id: check-toml
+        files: \.toml$
+        stages: [pre-commit]
+      - id: check-added-large-files
+        args: [--maxkb=2048]
+        stages: [pre-commit]
+
+  - repo: local
+    hooks:
+      - id: oxfmt
+        name: oxfmt staged files
+        language: system
+        entry: bun run fmt:check
+        files: \.(?:[cm]?[jt]sx?|jsonc?|css|toml)$
+        stages: [pre-commit]
+      - id: dt-fmt
+        name: dt fmt staged DSL files
+        language: system
+        entry: bun run dt fmt --check
+        files: \.dt(?:es)?$
+        stages: [pre-commit]
+      - id: commitlint
+        name: commitlint
+        language: system
+        entry: bun run commitlint --edit
+        stages: [commit-msg]

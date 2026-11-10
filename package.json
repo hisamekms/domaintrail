@@ -53,6 +53,7 @@
     "build": "bun run langium:generate && bun ./scripts/build.ts",
     "typecheck": "bun check -p tsconfig.json",
     "lint": "oxlint --type-aware --deny-warnings",
+    "commitlint": "commitlint",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "test": "bun test",
@@ -87,6 +88,8 @@
     }
   },
   "devDependencies": {
+    "@commitlint/cli": "21.2.4",
+    "@commitlint/config-conventional": "21.2.4",
     "@domaintrail/agent": "workspace:*",
     "@domaintrail/analysis": "workspace:*",
     "@domaintrail/collaboration": "workspace:*",
