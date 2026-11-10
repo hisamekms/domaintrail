@@ -39,8 +39,9 @@ page):
 ```markdown
 ## Domain model (DomainTrail)
 
-The domain model is in `domain/**/*.dt` (DomainTrail DSL). It is the single source of truth for the domain's
-structure and contracts; `generated/domain` is generated from it.
+The `.dt` sources in `domaintrail.jsonc` are the single source of truth for the domain's structure and contracts.
+Read that config before adding `.dt` or `.dtes` files or changing generated TypeScript. Run `npx dt init --format json`
+to see this project's layout and unresolved decisions.
 
 - Before working on the model, run `npx dt guide` and read it. Run `npx dt guide <topic>` (e.g. `npx dt guide requires`)
   for the details of what you are about to write.
@@ -124,6 +125,7 @@ DomainTrail needs Node.js 22.13 or later. Install it into your project:
 
 ```bash
 npm i -D domaintrail
+npx dt init --format json  # inspect the project; use --apply to create a new config when the plan is ready
 ```
 
 The package installs the same command under two names, `dt` and `domaintrail` (for when `dt` clashes with another
@@ -134,6 +136,9 @@ installing.
 
 A `domaintrail.jsonc` at the root of the project tells `dt` where the model is. Every key is optional; without the file,
 every `.dt` file below the current directory is part of the model.
+`dt init` proposes a project-aware layout without prompts and never changes existing sources or config. Its JSON plan
+reports evidence, unresolved ownership decisions and the next commands. The tutorial below uses `domain/`, which
+remains valid; new single-package projects initialized by `dt init --apply` use `model/` and `stormings/`.
 
 ```jsonc
 {
