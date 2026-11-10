@@ -605,6 +605,7 @@ body,
 }
 
 .app {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -10042,6 +10043,135 @@ button.knowledge-link:hover {
     flex-direction: column;
     gap: var(--gap-inside);
     padding: var(--space-2) var(--space-3);
+}
+.list-head > .knowledge-expand {
+    margin-left: auto;
+}
+.list-head > .knowledge-expand + .icon-button {
+    margin-left: 0;
+}
+.knowledge-sidebar-order {
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* The full knowledge screen keeps the canvas and chat mounted underneath for a seamless return. */
+.knowledge-workspace {
+    position: absolute;
+    inset: 0;
+    z-index: 800;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    background: var(--bg);
+}
+.knowledge-workspace-header {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: var(--space-4);
+    height: 52px;
+    box-sizing: border-box;
+    padding: 0 var(--space-4);
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+}
+.knowledge-workspace-header h1 {
+    margin: 0;
+    font-size: 1rem;
+}
+.knowledge-workspace-columns {
+    flex: 1;
+    display: flex;
+    min-height: 0;
+}
+.knowledge-workspace-list-pane {
+    flex: none;
+    width: clamp(300px, 32vw, 440px);
+    min-height: 0;
+    border-right: 1px solid var(--border);
+    background: var(--panel);
+}
+.knowledge-workspace-list {
+    height: 100%;
+}
+.knowledge-workspace-detail-pane {
+    flex: 1;
+    min-width: 0;
+    overflow: auto;
+    padding: var(--space-5);
+    box-sizing: border-box;
+}
+.knowledge-workspace-detail {
+    max-width: 900px;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+.knowledge-workspace-detail-heading {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-2);
+}
+.knowledge-workspace-detail-heading h2 {
+    margin: 0;
+    font-size: 1.4rem;
+    overflow-wrap: anywhere;
+}
+.knowledge-workspace-row + .knowledge-workspace-row {
+    border-top: 1px solid var(--border);
+}
+.knowledge-workspace-row-button {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) auto auto;
+    gap: var(--space-1) var(--space-2);
+    width: 100%;
+    padding: var(--space-2);
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    text-align: left;
+    font: inherit;
+    cursor: pointer;
+}
+.knowledge-workspace-row-button:hover {
+    background: var(--row-hover);
+}
+.knowledge-workspace-row-button[aria-current='true'] {
+    background: var(--selected-bg);
+    box-shadow: inset 0 0 0 1px var(--action);
+}
+.knowledge-workspace-row-button > svg {
+    align-self: center;
+    color: var(--action);
+}
+.knowledge-workspace-row-meta {
+    grid-column: 2 / -1;
+    min-width: 0;
+}
+button.act.knowledge-workspace-list-back {
+    display: none;
+}
+@media (max-width: 700px) {
+    .knowledge-workspace-list-pane {
+        width: 100%;
+    }
+    .knowledge-workspace-detail-pane {
+        display: none;
+        width: 100%;
+        padding: var(--space-4);
+    }
+    .knowledge-workspace[data-mobile-detail='true'] .knowledge-workspace-list-pane {
+        display: none;
+    }
+    .knowledge-workspace[data-mobile-detail='true'] .knowledge-workspace-detail-pane {
+        display: block;
+    }
+    button.act.knowledge-workspace-list-back {
+        display: inline-flex;
+        margin-bottom: var(--space-4);
+    }
 }
 .knowledge-search {
     display: flex;

@@ -736,6 +736,11 @@ dt only (`/api/session/knowledge`):
   marks attention, not confirmation; it leaves the item's content version alone and survives correction and retirement.
   A retired item stays out of the ordinary list, but appears with 廃止も表示; deleting it clears its bookmark. The filters
   stay while the tab is closed. Opening an item rings its stickies on the canvas.
+- The ナレッジ sidebar stays beside the canvas for quick reference. Its 広く見る action opens a separate knowledge screen:
+  the same searchable list on the left, and the selected item's full text, sources, history and actions on the right.
+  The selection, filters and order carry between the two views. キャンバスに戻る restores the canvas and chat as they were;
+  a sticky or this session's source message opened from the knowledge screen also returns to its context. At a narrow
+  width, selecting an item switches from the list to its detail, with 一覧に戻る to choose another.
 - **Retiring** (廃止, [ADR 0031](adr/0031-knowledge.md#12-retiring-an-item) section 12): an opened item has 廃止する,
   which offers the reasons 置き換わった (then the newer item, chosen among the others), 当てはまらなくなった and 誤り, one
   or none, and retires it at once with 元に戻す for 10 seconds, as 消す does. A retired item keeps its text, sources and
