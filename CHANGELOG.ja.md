@@ -10,7 +10,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
-## 未リリース
+## [0.12.0] - 2026-11-11
 
 ### 変更
 
@@ -1009,6 +1009,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/hisamekms/domaintrail/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/hisamekms/domaintrail/compare/v0.8.1...v0.9.0
