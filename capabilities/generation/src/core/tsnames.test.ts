@@ -16,6 +16,12 @@ const ORDER = `
 `;
 
 describe('generated TypeScript names (M011)', () => {
+    test('collision with the command error catalog', async () => {
+        const a = await checkSales(`${ORDER} value commandErrors`);
+        expect(only(a, 'M011').map((d) => d.message)).toEqual([
+            "Generated TypeScript name 'commandErrors' for the command error catalog collides with value object 'commandErrors'.",
+        ]);
+    });
     test('collision between a generated command type and a declared type', async () => {
         const a = await checkSales(`${ORDER} value FinishOrder`);
         expect(only(a, 'M011')[0].message).toBe("Generated TypeScript name 'FinishOrder' for value object 'FinishOrder' collides with command 'Order.finish'.");

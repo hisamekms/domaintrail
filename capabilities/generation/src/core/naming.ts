@@ -30,6 +30,8 @@ export const RUNTIME_NAMES = [
 
 /** Discriminant property of generated event / error types. */
 export const EVENT_TAG = 'type';
+/** Runtime-readable errors returned by each command's decision, per context. */
+export const COMMAND_ERRORS_NAME = 'commandErrors';
 /**
  * Start of the property that marks a verified type, followed by its qualified name: `'verified:Sales.AvailableEmail'`.
  * One property per verified type, so that a value verified twice has both and a value verified once lacks the other.
@@ -227,6 +229,8 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
     if (aggregate) out.push({ name: AGGREGATE_TYPE, origin: 'the union of the aggregates', at: aggregate.nameAt });
     const policy = elements.find((el) => el.kind === 'policy');
     if (policy) out.push({ name: policyHandlersName(ctx), origin: 'the handlers of the policies', at: policy.nameAt });
+    const firstCommand = elements.filter((el) => el.kind === 'aggregate').flatMap((agg) => written.commandsOf(agg))[0];
+    if (firstCommand) out.push({ name: COMMAND_ERRORS_NAME, origin: 'the command error catalog', at: firstCommand.nameAt });
     return out;
 }
 

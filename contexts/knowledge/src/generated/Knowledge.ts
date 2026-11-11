@@ -3098,3 +3098,23 @@ export type DomainEvent = KnowledgeItemAdded | KnowledgeSourceAdded | KnowledgeI
 
 /** Aggregates of Knowledge. */
 export type Aggregate = KnowledgeItem | RetirementProposal;
+
+/** Error `type` values each command decision can return, as declared by the model. */
+export const commandErrors = {
+    'KnowledgeItem.add': ['Knowledge.DuplicateSource'],
+    'KnowledgeItem.addConflicting': ['Knowledge.DuplicateSource', 'Knowledge.ConflictWithItself'],
+    'KnowledgeItem.addSource': ['Knowledge.StaleOperation', 'Knowledge.DuplicateSource'],
+    'KnowledgeItem.update': ['Knowledge.StaleOperation'],
+    'KnowledgeItem.linkConflict': ['Knowledge.StaleOperation', 'Knowledge.ConflictWithItself', 'Knowledge.ConflictWithoutSource'],
+    'KnowledgeItem.unlinkConflict': ['Knowledge.ConflictWithItself'],
+    'KnowledgeItem.handOverToHotspot': ['Knowledge.ConflictWithItself'],
+    'KnowledgeItem.correct': [],
+    'KnowledgeItem.setBookmark': [],
+    'KnowledgeItem.retire': ['Knowledge.AlreadyRetired', 'Knowledge.ReplacementWithoutReason', 'Knowledge.ReplacedByItself'],
+    'KnowledgeItem.unretire': ['Knowledge.NotRetired'],
+    'KnowledgeItem.delete': [],
+    'KnowledgeItem.restore': [],
+    'RetirementProposal.propose': ['Knowledge.MalformedProposal'],
+    'RetirementProposal.approve': [],
+    'RetirementProposal.dismiss': [],
+} as const;

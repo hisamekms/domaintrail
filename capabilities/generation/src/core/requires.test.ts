@@ -51,6 +51,7 @@ describe('requires in the generated TypeScript', () => {
         );
         expect(code).toContain('    }, Blocked | Conflict | NotApprover>;');
         expect(code).not.toContain('Blocked | Conflict | NotApprover | Blocked');
+        expect(code).toContain("    'Review.accept': ['Review.Blocked', 'Review.Conflict', 'Review.NotApprover'],");
     });
 
     test('a command without errors gets the errors of its requirements', async () => {
@@ -58,5 +59,6 @@ describe('requires in the generated TypeScript', () => {
         const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
         expect(code).toContain(' * @requires x else Blocked: blockers == 0\n');
         expect(code).toContain('}, Blocked>;');
+        expect(code).toContain("    'Review.accept': ['Review.Blocked'],");
     });
 });

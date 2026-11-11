@@ -296,6 +296,12 @@ export interface BillingPolicyHandlers {
     /** 確定した注文に請求する */
     readonly BillConfirmedOrder: BillConfirmedOrderPolicy;
 }
+
+/** Error \`type\` values each command decision can return, as declared by the model. */
+export const commandErrors = {
+    'Invoice.issue': [],
+    'Invoice.pay': [],
+} as const;
 "
 `;
 
@@ -1457,6 +1463,18 @@ export type DomainEvent = CustomerRegistered | OrderPlaced | OrderConfirmed | Or
 
 /** Aggregates of Sales. */
 export type Aggregate = Customer | Order;
+
+/** Error \`type\` values each command decision can return, as declared by the model. */
+export const commandErrors = {
+    'Customer.register': [],
+    'Customer.rename': [],
+    'Customer.changeEmail': [],
+    'Order.place': [],
+    'Order.addItem': ['Sales.DuplicateSku', 'Sales.CurrencyMismatch'],
+    'Order.confirm': ['Sales.EmptyOrder'],
+    'Order.cancel': ['Sales.NoteRequired'],
+    'Order.changeNote': [],
+} as const;
 "
 `;
 
