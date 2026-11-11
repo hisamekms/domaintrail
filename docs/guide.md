@@ -1365,7 +1365,13 @@ Per context a module (`Sales.ts`, …) with ID brands, enums, value objects, ent
 stateful aggregate (`DraftOrder | ConfirmedOrder | …`), event / error types with a `type` tag, a function type per
 command and an `<Aggregate>Commands` interface to implement, a decision type per command and a shape constant per
 aggregate for `decide` (see [Decisions and `decide`](#decisions-and-decide)), plus `index.ts` and `_runtime.ts`. A
-domain primitive gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`;
+context with commands also exports `commandErrors`: a read-only map from `'<Aggregate>.<command>'` to the error
+`type` values its decision may return. It includes an empty array for a command with no declared errors. The entries
+come from the command's `errors` and its `requires … else` declarations; they do not include errors from primitive
+constructors or verified factories. For example, `Sales.commandErrors['Order.confirm']` can feed documentation without
+parsing TypeScript types.
+
+A domain primitive gets a branded type, a constructor contract `Make<Name>` and a generated constructor `make<Name>`;
 a verified type its base with a property of its own and the contract of its factory `Make<Name>`, which you write (see
 [Verified types](#verified-types)); invariants and requirements get check functions (see
 [Generated checks](#generated-checks)); a policy the type of its handler and the input of its command (see

@@ -19,10 +19,11 @@ import type {
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { applicableOutcomes, contextNames, elementOf, elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
-import { CheckWriter, primitiveInvariants, type DomainPrimitive } from './checks.js';
+import { CheckWriter, primitiveInvariants, quote, type DomainPrimitive } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
 import {
     AGGREGATE_TYPE,
+    COMMAND_ERRORS_NAME,
     DOMAIN_EVENT_TYPE,
     EVENT_TAG,
     PERSISTENT_EVENT_TYPE,
@@ -468,6 +469,7 @@ class ContextEmitter {
         this.persistentEvents();
         this.unions();
         this.policyHandlers();
+        this.commandErrors();
         const body = this.out.join('\n');
         const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(body);
         const runtime = ['Decimal', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
@@ -482,6 +484,22 @@ class ContextEmitter {
             ]),
         ];
         return [HEADER, ...imports, '', body].join('\n');
+    }
+
+    /** Declared decision errors, keyed by aggregate and command, including commands that cannot return an error. */
+    private commandErrors(): void {
+        const commands = elementsIn(this.model, this.ctx)
+            .filter((el): el is AggregateModel => el.kind === 'aggregate')
+            .flatMap((agg) => agg.commands.map((command) => ({ agg, command })));
+        if (!commands.length) return;
+        this.line('/** Error `type` values each command decision can return, as declared by the model. */');
+        this.line(`export const ${COMMAND_ERRORS_NAME} = {`);
+        for (const { agg, command } of commands) {
+            const errors = command.errors.map((name) => quote(name.slice(name.indexOf('.') + 1))).join(', ');
+            this.line(`    ${quote(`${agg.name}.${command.name}`)}: [${errors}],`);
+        }
+        this.line('} as const;');
+        this.out.push('');
     }
 
     /** The events of the context that are persisted, so that code storing events can name exactly them. */

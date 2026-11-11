@@ -52,6 +52,14 @@ describe('generated TypeScript', () => {
         expect(sales).toContain(') => Result<{\n    readonly Customer: {\n        readonly aggregate: Customer;\n');
         expect(sales).toContain(' * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness.');
     });
+
+    test('command error catalog contains actual type values and empty decisions', async () => {
+        const sales = await readFile(path.join(dir, 'generated', 'domain', 'Sales.ts'), 'utf8');
+        expect(sales).toContain('export const commandErrors = {');
+        expect(sales).toContain("    'Order.confirm': ['EmptyOrder'],");
+        expect(sales).toContain("    'Order.changeNote': [],");
+        expect(sales).toContain('} as const;');
+    });
 });
 
 describe('commands with several transitions', () => {
@@ -290,7 +298,7 @@ describe('links to the DSL', () => {
             });
         }
         // the unions of a context come from no single declaration
-        expect([...new Set(unlinked)].sort()).toEqual(['Aggregate', 'DomainEvent', 'PersistentEvent']);
+        expect([...new Set(unlinked)].sort()).toEqual(['Aggregate', 'DomainEvent', 'PersistentEvent', 'commandErrors']);
         const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
         const target = (name: string): string => {
             const [, file, line] = new RegExp(`@see (\\S+):(\\d+)\\n \\*/\\nexport type ${name} `).exec(sales)!;
