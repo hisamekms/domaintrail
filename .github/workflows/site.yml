@@ -26,7 +26,7 @@ jobs:
           node-version: 24
 
       - id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       # the dt CLI the figures are drawn with
       - run: bun install --frozen-lockfile
