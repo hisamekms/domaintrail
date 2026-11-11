@@ -190,7 +190,7 @@ describe('replying to a run', () => {
             const reply = await f.send('Thanks', run);
             expect(reply.replyTo).toEqual({ kind: 'Run', run });
             const event = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 1000, f.id))).at(-1)?.event;
-            expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: { kind: 'Run', run } });
+            expect(event).toMatchObject({ type: 'Collaboration.RequestSent', requestId: reply.id, replyTo: { kind: 'Run', run } });
         }
         // a message that replies to nothing has no replyTo, in the request and its event
         const plain = await f.send('Hello');
@@ -203,21 +203,21 @@ describe('replying to a run', () => {
         const reply = (to: C.AgentRunId) =>
             f.use.sendRequest({ session: f.id, actor: actor(ann), targets: [], body: text('And?'), replyTo: { kind: 'Run', run: to } });
         const asked = await runTo(f, [(await f.send('a')).id], 'clarification');
-        expect(error(await reply(asked))).toEqual({ type: 'RunNotReplyable', run: asked });
+        expect(error(await reply(asked))).toEqual({ type: 'Collaboration.RunNotReplyable', run: asked });
         const queued = await runTo(f, [(await f.send('b')).id], 'queued');
-        expect(error(await reply(queued))).toEqual({ type: 'RunNotReplyable', run: queued });
+        expect(error(await reply(queued))).toEqual({ type: 'Collaboration.RunNotReplyable', run: queued });
         const { lease } = value(await f.use.claimNextRun({ session: f.id, owner: 'agent', leaseMs: 30_000 }));
         value(await f.use.startRun({ run: queued, token: lease.token }));
-        expect(error(await reply(queued))).toEqual({ type: 'RunNotReplyable', run: queued });
+        expect(error(await reply(queued))).toEqual({ type: 'Collaboration.RunNotReplyable', run: queued });
         const unknown = knownAgentRunId('00000000-0000-4000-8000-0000000000ff');
-        expect(error(await reply(unknown))).toEqual({ type: 'RunNotFound', run: unknown });
+        expect(error(await reply(unknown))).toEqual({ type: 'Collaboration.RunNotFound', run: unknown });
 
         // a run of another session (a session started later in the same workspace)
         const other = value(await f.use.startSession({ facilitator, name })).session;
         const elsewhere = value(await f.use.sendRequest({ session: other.id, actor: actor(facilitator), targets: [], body: text('x') }));
         const theirs = value(await f.use.queueRun({ session: other.id, requests: [elsewhere.id], actor: actor(facilitator) }));
         value(await f.use.cancelRun({ run: theirs.id, actor: actor(facilitator) }));
-        expect(error(await reply(theirs.id))).toEqual({ type: 'RunOfAnotherSession', run: theirs.id });
+        expect(error(await reply(theirs.id))).toEqual({ type: 'Collaboration.RunOfAnotherSession', run: theirs.id });
         // nothing was sent
         expect(value(await f.use.sessionState({ session: f.id })).requests.filter((r) => r.replyTo !== undefined)).toEqual([]);
     });
@@ -279,17 +279,17 @@ describe('replying to a message', () => {
         const reply = await f.send('Same here.', to);
         expect(reply.replyTo).toEqual(to);
         const event = (await f.deps.uow.transaction((s) => s.outbox.readAfter(0, 1000, f.id))).at(-1)?.event;
-        expect(event).toMatchObject({ type: 'RequestSent', requestId: reply.id, replyTo: to });
+        expect(event).toMatchObject({ type: 'Collaboration.RequestSent', requestId: reply.id, replyTo: to });
         // one's own, and a reply to a reply
         expect((await f.send('And I mean it.', { kind: 'Message', request: reply.id })).replyTo).toEqual({ kind: 'Message', request: reply.id });
 
         const send = (request: C.RequestId) =>
             f.use.sendRequest({ session: f.id, actor: actor(ann), targets: [], body: text('?'), replyTo: { kind: 'Message', request } });
         const unknown = knownRequestId('00000000-0000-4000-8000-0000000000ff');
-        expect(error(await send(unknown))).toEqual({ type: 'RequestNotFound', request: unknown });
+        expect(error(await send(unknown))).toEqual({ type: 'Collaboration.RequestNotFound', request: unknown });
         const other = value(await f.use.startSession({ facilitator, name })).session;
         const elsewhere = value(await f.use.sendRequest({ session: other.id, actor: actor(facilitator), targets: [], body: text('x') }));
-        expect(error(await send(elsewhere.id))).toEqual({ type: 'RequestOfAnotherSession', request: elsewhere.id });
+        expect(error(await send(elsewhere.id))).toEqual({ type: 'Collaboration.RequestOfAnotherSession', request: elsewhere.id });
     });
 
     test("a run freezes the original's author and body; it continues no run", async () => {
@@ -387,7 +387,7 @@ describe('the requests route and the agent API with replies', () => {
         };
         const toRun = { kind: 'Run', run };
         // running: not yet
-        expect(await bad({ targets: [], body: 'And?', replyTo: toRun })).toEqual([409, 'RunNotReplyable']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: toRun })).toEqual([409, 'Collaboration.RunNotReplyable']);
         expect((await agent(`runs/${run}/finish`, { token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
 
         expect(await bad({ targets: [], body: 'And?', replyTo: 'nope' })).toEqual([400, 'replyTo']);
@@ -396,7 +396,7 @@ describe('the requests route and the agent API with replies', () => {
         expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Turn', run } })).toEqual([400, 'replyTo']);
         expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run: 'nope' } })).toEqual([400, 'replyTo.run']);
         expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run, request } })).toEqual([400, 'replyTo.request']);
-        expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run: crypto.randomUUID() } })).toEqual([404, 'RunNotFound']);
+        expect(await bad({ targets: [], body: 'And?', replyTo: { kind: 'Run', run: crypto.randomUUID() } })).toEqual([404, 'Collaboration.RunNotFound']);
         const sent = await api(bob, 'requests', { targets: [], body: 'Only drafts.', replyTo: toRun });
         expect(sent.status).toBe(201);
         const reply = ((await sent.json()) as { request: { id: string; replyTo: unknown } }).request;
@@ -438,7 +438,10 @@ describe('the requests route and the agent API with replies', () => {
         };
         expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: 'nope' } })).toEqual([400, 'replyTo.request']);
         expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: original, run: original } })).toEqual([400, 'replyTo.run']);
-        expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: crypto.randomUUID() } })).toEqual([404, 'RequestNotFound']);
+        expect(await bad({ targets: [], body: 'x', replyTo: { kind: 'Message', request: crypto.randomUUID() } })).toEqual([
+            404,
+            'Collaboration.RequestNotFound',
+        ]);
         const toMessage = { kind: 'Message', request: original };
         const sentMessage = (await (await api(ada, 'requests', { targets: [], body: 'Draft and confirmed.', replyTo: toMessage })).json()) as {
             request: { id: string; replyTo: unknown };
@@ -490,11 +493,11 @@ describe('the requests route and the agent API with replies', () => {
         expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: run, assumption: 0, alternative: 'net', extra: 1 } })).toEqual([400, 'pick.extra']);
         expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: crypto.randomUUID(), assumption: 0, alternative: 'net' } })).toEqual([
             404,
-            'RunNotFound',
+            'Collaboration.RunNotFound',
         ]);
-        expect(await refused(ada, pick(0, 'gross'))).toEqual([400, 'AlternativeNotFound']);
+        expect(await refused(ada, pick(0, 'gross'))).toEqual([400, 'Collaboration.AlternativeNotFound']);
         const other = ((await (await api(bob, 'requests', { targets: [], body: 'And a subtotal.' })).json()) as { request: { id: string } }).request.id;
-        expect(await refused(ada, pick(0, 'net', [request, other]))).toEqual([400, 'PickMismatch']);
+        expect(await refused(ada, pick(0, 'net', [request, other]))).toEqual([400, 'Collaboration.PickMismatch']);
 
         const queued = await api(ada, 'runs', pick(0, 'net'));
         expect(queued.status).toBe(201);
@@ -504,7 +507,10 @@ describe('the requests route and the agent API with replies', () => {
             pick: { pickOf: run, assumption: 0, text: 'The total includes tax', alternative: { id: 'net', label: 'Without tax' } },
         });
         // a run that is not completed has nothing to pick
-        expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: picked.id, assumption: 0, alternative: 'net' } })).toEqual([409, 'RunNotPickable']);
+        expect(await refused(ada, { ...pick(0, 'net'), pick: { pickOf: picked.id, assumption: 0, alternative: 'net' } })).toEqual([
+            409,
+            'Collaboration.RunNotPickable',
+        ]);
         const next = await start(picked.id);
         expect(next.started.previousRuns.map((p) => [p.run.id, p.run.state])).toEqual([[run, 'Completed']]);
         expect((await agent(`runs/${picked.id}/finish`, { token: next.token, exitCode: 0, formatted: true, checked: true })).status).toBe(200);
@@ -519,7 +525,7 @@ describe('the requests route and the agent API with replies', () => {
             return [res.status, e.field ?? e.type];
         };
         // queued: not completed
-        expect(await refused(ada, { run, assumption: 0 })).toEqual([409, 'RunNotApprovable']);
+        expect(await refused(ada, { run, assumption: 0 })).toEqual([409, 'Collaboration.RunNotApprovable']);
         const { token } = await start(run);
         const reply = {
             outcome: 'done',
@@ -533,8 +539,8 @@ describe('the requests route and the agent API with replies', () => {
         expect(await refused(ada, { run: 'nope', assumption: 0 })).toEqual([400, 'run']);
         expect(await refused(ada, { run, assumption: -1 })).toEqual([400, 'assumption']);
         expect(await refused(ada, { run, assumption: 0, extra: 1 })).toEqual([400, 'extra']);
-        expect(await refused(ada, { run: crypto.randomUUID(), assumption: 0 })).toEqual([404, 'RunNotFound']);
-        expect(await refused(ada, { run, assumption: 1 })).toEqual([400, 'AssumptionNotFound']);
+        expect(await refused(ada, { run: crypto.randomUUID(), assumption: 0 })).toEqual([404, 'Collaboration.RunNotFound']);
+        expect(await refused(ada, { run, assumption: 1 })).toEqual([400, 'Collaboration.AssumptionNotFound']);
 
         const runsBefore = ((await (await api(ada, 'state')).json()) as { runs: unknown[] }).runs.length;
         const res = await api(ada, 'approvals', { run, assumption: 0 });
@@ -545,14 +551,14 @@ describe('the requests route and the agent API with replies', () => {
         expect(state.approvals.map((a) => a.id)).toEqual([approval.id]);
         expect(state.runs).toHaveLength(runsBefore);
         // decided: not approved again, not sent again with an alternative, its votes closed
-        expect(await refused(ada, { run, assumption: 0 })).toEqual([409, 'AssumptionClosed']);
+        expect(await refused(ada, { run, assumption: 0 })).toEqual([409, 'Collaboration.AssumptionClosed']);
         expect(await refused(ada, { requests: [request], pick: { pickOf: run, assumption: 0, alternative: 'amount' } }, 'runs')).toEqual([
             409,
-            'AssumptionClosed',
+            'Collaboration.AssumptionClosed',
         ]);
         expect(await refused(bob, { target: { kind: 'AssumptionChoice', run, assumption: 0 }, sign: { kind: 'Vote' }, placed: true }, 'marks')).toEqual([
             409,
-            'MarkTargetClosed',
+            'Collaboration.MarkTargetClosed',
         ]);
     });
 });

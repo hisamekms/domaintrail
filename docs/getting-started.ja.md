@@ -461,7 +461,7 @@ export const reservationCommands: Booking.ReservationCommands = {
         ok({
             Requested: {
                 set: { id, room, slot, attendees },
-                events: { ReservationRequested: { type: 'ReservationRequested', reservationId: id, room, slot } },
+                events: { 'Booking.ReservationRequested': { type: 'Booking.ReservationRequested', reservationId: id, room, slot } },
             },
         }),
     ),
@@ -469,12 +469,12 @@ export const reservationCommands: Booking.ReservationCommands = {
     confirm: decide<Booking.ConfirmReservationDecision>(Booking.ReservationShape, {
         Requested: (reservation, params) => {
             // 要件の式は DSL のものを使う: 生成されたチェックが評価する
-            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'RoomTooSmall' });
+            if (Booking.checkConfirmReservationRequires(reservation, params)) return err({ type: 'Booking.RoomTooSmall' });
             const { at } = params;
             return ok({
                 Confirmed: {
                     set: { confirmedAt: at },
-                    events: { ReservationConfirmed: { type: 'ReservationConfirmed', reservationId: reservation.id, confirmedAt: at } },
+                    events: { 'Booking.ReservationConfirmed': { type: 'Booking.ReservationConfirmed', reservationId: reservation.id, confirmedAt: at } },
                 },
             });
         },
@@ -550,7 +550,7 @@ $ npx vitest run
 加えます）。もし `confirm` が要件の確認を忘れていたら、テストは縮小した反例を添えてそう伝えます。
 
 ```text
-Got error: Reservation.confirm({"state":"Requested",…,"attendees":2}, 1, new Date("2000-01-01T00:00:00.000Z")) succeeded, but requirement 'roomFits' does not hold: expected the error RoomTooSmall.
+Got error: Reservation.confirm({"state":"Requested",…,"attendees":2}, 1, new Date("2000-01-01T00:00:00.000Z")) succeeded, but requirement 'roomFits' does not hold: expected the error Booking.RoomTooSmall.
 ```
 
 コマンドの周り——読み込み、保存、イベントの発行——は生成されたテストの範囲外で、自分のテストで確かめます
@@ -594,7 +594,7 @@ export function verifications(customers: CustomerRepository): Verifications {
         async makeAvailableEmail(email, customer) {
             const holder = await customers.find((c) => c.email === email && c.id !== customer);
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
-            return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
+            return holder ? err({ type: 'Sales.EmailTaken', email }) : ok(email as Sales.AvailableEmail);
         },
     };
 }

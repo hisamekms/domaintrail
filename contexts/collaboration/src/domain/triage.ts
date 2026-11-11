@@ -213,7 +213,17 @@ export const triageCommands: Collaboration.TriageCommands = {
         return ok({
             Pending: {
                 set: { id, session, request, addressedBy, addressedByParticipant, steps: [], openedAt },
-                events: { TriageOpened: { type: 'TriageOpened', triageId: id, session, request, addressedBy, addressedByParticipant, openedAt } },
+                events: {
+                    'Collaboration.TriageOpened': {
+                        type: 'Collaboration.TriageOpened',
+                        triageId: id,
+                        session,
+                        request,
+                        addressedBy,
+                        addressedByParticipant,
+                        openedAt,
+                    },
+                },
             },
         });
     }),
@@ -224,21 +234,27 @@ export const triageCommands: Collaboration.TriageCommands = {
         switch (check(triage, params)) {
             case 'cascadeStage':
             case 'mechanicalDecidesNeither':
-                return err({ type: 'InvalidTriageStep' });
+                return err({ type: 'Collaboration.InvalidTriageStep' });
             case 'inOrder':
-                return err({ type: 'TriageStepOutOfOrder' });
+                return err({ type: 'Collaboration.TriageStepOutOfOrder' });
         }
         const { step, recordedAt } = params;
         const steps = [...triage.steps, step];
-        const recorded: Collaboration.TriageStepRecorded = { type: 'TriageStepRecorded', triageId: triage.id, step };
+        const recorded: Collaboration.TriageStepRecorded = { type: 'Collaboration.TriageStepRecorded', triageId: triage.id, step };
         const kind = decisionOf(step);
-        if (kind === undefined) return ok({ Pending: { set: { steps }, events: { TriageStepRecorded: recorded } } });
+        if (kind === undefined) return ok({ Pending: { set: { steps }, events: { 'Collaboration.TriageStepRecorded': recorded } } });
         return ok({
             Decided: {
                 set: { steps, kind, decidedBy: step.stage, decidedAt: recordedAt, outcome: undefined },
                 events: {
-                    TriageStepRecorded: recorded,
-                    TriageDecided: { type: 'TriageDecided', triageId: triage.id, kind, decidedBy: step.stage, decidedAt: recordedAt },
+                    'Collaboration.TriageStepRecorded': recorded,
+                    'Collaboration.TriageDecided': {
+                        type: 'Collaboration.TriageDecided',
+                        triageId: triage.id,
+                        kind,
+                        decidedBy: step.stage,
+                        decidedAt: recordedAt,
+                    },
                 },
             },
         });
@@ -246,12 +262,12 @@ export const triageCommands: Collaboration.TriageCommands = {
 
     override: decide<Collaboration.OverrideTriageDecision>(Collaboration.TriageShape, {
         Decided: (triage, params) => {
-            if (Collaboration.checkOverrideTriageRequires(triage, params) === 'overridable') return err({ type: 'TriageNotOverridable' });
+            if (Collaboration.checkOverrideTriageRequires(triage, params) === 'overridable') return err({ type: 'Collaboration.TriageNotOverridable' });
             const { step, overriddenAt } = params;
             return ok({
                 Decided: {
                     set: { steps: [...triage.steps, step], kind: step.verdict, decidedBy: step.stage, decidedAt: overriddenAt },
-                    events: { TriageOverridden: { type: 'TriageOverridden', triageId: triage.id, step, kind: step.verdict } },
+                    events: { 'Collaboration.TriageOverridden': { type: 'Collaboration.TriageOverridden', triageId: triage.id, step, kind: step.verdict } },
                 },
             });
         },
@@ -263,9 +279,9 @@ export const triageCommands: Collaboration.TriageCommands = {
         Decided: (triage, params) => {
             switch (Collaboration.checkReaddressTriageRequires(triage, params)) {
                 case 'facilitatorReaddresses':
-                    return err({ type: 'FacilitatorOnly' });
+                    return err({ type: 'Collaboration.FacilitatorOnly' });
                 case 'decidedNotForAi':
-                    return err({ type: 'RequestAlreadyAddressed', request: triage.request });
+                    return err({ type: 'Collaboration.RequestAlreadyAddressed', request: triage.request });
             }
             const { by, readdressedAt } = params;
             const step: Collaboration.TriageStep = { stage: 'Facilitator', verdict: 'Consultation', durationMs: zeroMs, at: readdressedAt };
@@ -279,7 +295,7 @@ export const triageCommands: Collaboration.TriageCommands = {
                         decidedBy: 'Facilitator',
                         decidedAt: readdressedAt,
                     },
-                    events: { TriageReaddressed: { type: 'TriageReaddressed', triageId: triage.id, by, readdressedAt } },
+                    events: { 'Collaboration.TriageReaddressed': { type: 'Collaboration.TriageReaddressed', triageId: triage.id, by, readdressedAt } },
                 },
             });
         },
@@ -289,12 +305,17 @@ export const triageCommands: Collaboration.TriageCommands = {
         Decided: (triage, params) => {
             switch (Collaboration.checkConcludeTriageRequires(triage, params)) {
                 case 'noOutcomeYet':
-                    return err({ type: 'TriageAlreadyConcluded' });
+                    return err({ type: 'Collaboration.TriageAlreadyConcluded' });
                 case 'outcomeFits':
-                    return err({ type: 'TriageNotConcludable' });
+                    return err({ type: 'Collaboration.TriageNotConcludable' });
             }
             const { to, concludedAt } = params;
-            return ok({ Decided: { set: { outcome: to }, events: { TriageConcluded: { type: 'TriageConcluded', triageId: triage.id, to, concludedAt } } } });
+            return ok({
+                Decided: {
+                    set: { outcome: to },
+                    events: { 'Collaboration.TriageConcluded': { type: 'Collaboration.TriageConcluded', triageId: triage.id, to, concludedAt } },
+                },
+            });
         },
     }),
 };

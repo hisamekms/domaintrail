@@ -132,7 +132,7 @@ describe('the files store', () => {
         // a stale base is dropped, the item stands
         const stale = await apply('s2', 2, { kind: 'Update', item: itemId('kn_00000001'), base: version(1), revised: content('stale'), sources: own });
         expect(stale.items).toEqual([]);
-        expect(stale.dropped.map((d) => d.reason.type)).toEqual(['StaleOperation']);
+        expect(stale.dropped.map((d) => d.reason.type)).toEqual(['Knowledge.StaleOperation']);
         expect((await store.get(project, itemId('kn_00000001')))?.item.content.text).toBe(content('later still').text);
     });
 
@@ -193,7 +193,7 @@ describe('the files store', () => {
         ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.AuditOperation][]);
         expect(await store.unlinkConflict(project, itemId('kn_00000009'), itemId('kn_00000001'), alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
         });
     });
 
@@ -228,7 +228,7 @@ describe('the files store', () => {
         ] as unknown as [Knowledge.KnowledgeItemId, Knowledge.AuditOperation, Knowledge.Actor, Knowledge.Reason][]);
         expect(await store.handOverToHotspot(project, itemId('kn_00000009'), itemId('kn_00000001'), hotspot, alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
         });
     });
 
@@ -238,12 +238,12 @@ describe('the files store', () => {
         expect(r.ok && [r.value.version, r.value.content.text]).toEqual([version(2), content('corrected').text]);
         expect(await store.correct(project, itemId('kn_00000009'), content('x'), alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
         });
         await store.delete(project, itemId('kn_00000001'), alice);
         expect(await store.correct(project, itemId('kn_00000001'), content('x'), alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemGone', itemId: itemId('kn_00000001') },
+            error: { type: 'Knowledge.KnowledgeItemGone', itemId: itemId('kn_00000001') },
         });
     });
 
@@ -265,10 +265,10 @@ describe('the files store', () => {
             source: source('s1', 'm-3'),
             agreed: false,
         });
-        expect(meanwhile.dropped.map((x) => x.reason.type)).toEqual(['KnowledgeItemGone']);
+        expect(meanwhile.dropped.map((x) => x.reason.type)).toEqual(['Knowledge.KnowledgeItemGone']);
         expect(await store.delete(project, itemId('kn_00000001'), alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
         });
         tick(10_000);
         const restored = await store.restore(project, itemId('kn_00000001'), alice);
@@ -291,7 +291,7 @@ describe('the files store', () => {
         await store.sweep();
         expect(await store.restore(project, itemId('kn_00000001'), alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
         });
         expect(await store.getImage(project, only)).toBeUndefined();
         expect(await store.getImage(project, kept)).toEqual({ mediaType: 'image/png', bytes: new Uint8Array([1, 2]) });
@@ -400,7 +400,7 @@ describe('the files store', () => {
             source: source('s1', 'm-5'),
             agreed: false,
         });
-        expect(r.dropped.map((d) => d.reason.type)).toEqual(['KnowledgeItemExists', 'KnowledgeItemNotFound']);
+        expect(r.dropped.map((d) => d.reason.type)).toEqual(['Knowledge.KnowledgeItemExists', 'Knowledge.KnowledgeItemNotFound']);
         expect(await readFile(path.join(dir, 'kn_00000002.md'), 'utf8')).toBe('---\nid: kn_00000002\n---\n');
         expect((await readKnowledgeFiles(dir, root)).map((f) => f.path)).toEqual(['knowledge/kn_00000001.md', 'knowledge/kn_00000002.md']);
     });
@@ -472,14 +472,14 @@ describe('retiring in the files store (廃止)', () => {
         await apply('s1', 1, add('kn_00000001'), add('kn_00000002'));
         expect(await store.retire(project, itemId('kn_00000001'), { reason: 'replaced', replacedBy: itemId('kn_00000009') }, alice)).toEqual({
             ok: false,
-            error: { type: 'ProposalRefused', reason: 'replacementUnavailable' },
+            error: { type: 'Knowledge.ProposalRefused', reason: 'replacementUnavailable' },
         });
         await store.retire(project, itemId('kn_00000001'), {}, alice);
-        expect(await store.retire(project, itemId('kn_00000001'), {}, alice)).toEqual({ ok: false, error: { type: 'AlreadyRetired' } });
-        expect(await store.unretire(project, itemId('kn_00000002'), alice)).toEqual({ ok: false, error: { type: 'NotRetired' } });
+        expect(await store.retire(project, itemId('kn_00000001'), {}, alice)).toEqual({ ok: false, error: { type: 'Knowledge.AlreadyRetired' } });
+        expect(await store.unretire(project, itemId('kn_00000002'), alice)).toEqual({ ok: false, error: { type: 'Knowledge.NotRetired' } });
         expect(await store.retire(project, itemId('kn_00000009'), {}, alice)).toEqual({
             ok: false,
-            error: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
+            error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000009') },
         });
     });
 
@@ -493,7 +493,7 @@ describe('retiring in the files store (廃止)', () => {
         expect(await store.propose(project, candidate('kn_00000001'))).toEqual(proposed);
         expect(await store.propose(project, candidate('kn_00000001', { evidence: [said('m10')] }))).toEqual({
             ok: false,
-            error: { type: 'ProposalRefused', reason: 'pending' },
+            error: { type: 'Knowledge.ProposalRefused', reason: 'pending' },
         });
 
         const approved = await store.approveProposal(project, proposed.value.id, alice);
@@ -507,12 +507,12 @@ describe('retiring in the files store (廃止)', () => {
         expect(dismissed.ok && dismissed.value.state).toBe('Dismissed');
         expect(await store.dismissProposal(project, second.value.id, alice)).toEqual({
             ok: false,
-            error: { type: 'ProposalDecided', proposalId: second.value.id },
+            error: { type: 'Knowledge.ProposalDecided', proposalId: second.value.id },
         });
         // the same reason on the same evidence, by the extractor this time: not again; with a new message: again
         expect(await store.propose(project, candidate('kn_00000002', { proposedBy: { kind: 'Extraction', extraction: extraction('s3', 1) } }))).toEqual({
             ok: false,
-            error: { type: 'ProposalRefused', reason: 'dismissedBefore' },
+            error: { type: 'Knowledge.ProposalRefused', reason: 'dismissedBefore' },
         });
         expect((await store.propose(project, candidate('kn_00000002', { evidence: [said('m9'), said('m11')] }))).ok).toBe(true);
 
@@ -535,7 +535,7 @@ describe('retiring in the files store (廃止)', () => {
         expect((await store.proposals(project)).map((p) => p.item)).toEqual(['kn_00000001'] as Knowledge.KnowledgeItemId[]);
         await store.retire(project, itemId('kn_00000001'), {}, alice);
         const dropped = await apply('s2', 2, { kind: 'AddSource', item: itemId('kn_00000001'), base: version(1), source: source('s2', 'm2'), agreed: false });
-        expect(dropped.dropped.map((d) => d.reason)).toEqual([{ type: 'RetiredItem', itemId: itemId('kn_00000001') }]);
+        expect(dropped.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.RetiredItem', itemId: itemId('kn_00000001') }]);
         // moot now: no longer listed
         expect(await store.proposals(project)).toEqual([]);
     });

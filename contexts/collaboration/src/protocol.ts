@@ -183,54 +183,54 @@ export type ClientMessage =
 
 /** The message type of each persistent event of the model. */
 export const EVENT_MESSAGE_TYPES = {
-    SessionStarted: 'session.started',
-    ParticipantJoined: 'session.participant_joined',
-    SessionClosed: 'session.closed',
-    SessionCollaborated: 'session.collaborated',
-    JourneyChosen: 'session.journey_chosen',
-    RequestSent: 'request.sent',
-    RequestDismissed: 'request.dismissed',
-    RunQueued: 'run.queued',
-    RunStarted: 'run.started',
-    RunCompleted: 'run.completed',
-    RunNeedsClarification: 'run.needs_clarification',
-    RunDeclined: 'run.declined',
-    RunFailed: 'run.failed',
-    RunCancelled: 'run.cancelled',
-    RunReverted: 'run.reverted',
-    RevertLeftToAgent: 'run.revert_left_to_agent',
-    RunEdited: 'run.edited',
-    RunEditConflicted: 'run.edit_conflicted',
-    RunHotspotNamed: 'run.hotspot_named',
-    RevisionRecorded: 'revision.recorded',
-    RevisionRestored: 'revision.restored',
-    MarkPlaced: 'mark.placed',
-    MarkRemoved: 'mark.removed',
-    AssumptionApproved: 'assumption.approved',
-    TriageOpened: 'triage.opened',
-    TriageStepRecorded: 'triage.step_recorded',
-    TriageDecided: 'triage.decided',
-    TriageOverridden: 'triage.overridden',
-    TriageReaddressed: 'triage.readdressed',
-    TriageConcluded: 'triage.concluded',
-    ChangeProposed: 'proposal.proposed',
-    ProposalApproved: 'proposal.approved',
-    ProposalRejected: 'proposal.rejected',
-    ProposalWithdrawn: 'proposal.withdrawn',
-    InterviewStarted: 'interview.started',
-    InterviewAnswered: 'interview.answered',
-    InterviewQuestionAsked: 'interview.question_asked',
-    InterviewBriefed: 'interview.briefed',
-    InterviewConfirmed: 'interview.confirmed',
-    InterviewStopped: 'interview.stopped',
-    InterviewRejected: 'interview.rejected',
-    SlashCommandStarted: 'command.started',
-    CandidatesListed: 'command.candidates_listed',
-    SlashCommandAnswered: 'command.answered',
-    CandidatesApplied: 'command.candidates_applied',
-    SlashCommandStopped: 'command.stopped',
-    RecordWritten: 'record.written',
-    RecordRevised: 'record.revised',
+    'Collaboration.SessionStarted': 'session.started',
+    'Collaboration.ParticipantJoined': 'session.participant_joined',
+    'Collaboration.SessionClosed': 'session.closed',
+    'Collaboration.SessionCollaborated': 'session.collaborated',
+    'Collaboration.JourneyChosen': 'session.journey_chosen',
+    'Collaboration.RequestSent': 'request.sent',
+    'Collaboration.RequestDismissed': 'request.dismissed',
+    'Collaboration.RunQueued': 'run.queued',
+    'Collaboration.RunStarted': 'run.started',
+    'Collaboration.RunCompleted': 'run.completed',
+    'Collaboration.RunNeedsClarification': 'run.needs_clarification',
+    'Collaboration.RunDeclined': 'run.declined',
+    'Collaboration.RunFailed': 'run.failed',
+    'Collaboration.RunCancelled': 'run.cancelled',
+    'Collaboration.RunReverted': 'run.reverted',
+    'Collaboration.RevertLeftToAgent': 'run.revert_left_to_agent',
+    'Collaboration.RunEdited': 'run.edited',
+    'Collaboration.RunEditConflicted': 'run.edit_conflicted',
+    'Collaboration.RunHotspotNamed': 'run.hotspot_named',
+    'Collaboration.RevisionRecorded': 'revision.recorded',
+    'Collaboration.RevisionRestored': 'revision.restored',
+    'Collaboration.MarkPlaced': 'mark.placed',
+    'Collaboration.MarkRemoved': 'mark.removed',
+    'Collaboration.AssumptionApproved': 'assumption.approved',
+    'Collaboration.TriageOpened': 'triage.opened',
+    'Collaboration.TriageStepRecorded': 'triage.step_recorded',
+    'Collaboration.TriageDecided': 'triage.decided',
+    'Collaboration.TriageOverridden': 'triage.overridden',
+    'Collaboration.TriageReaddressed': 'triage.readdressed',
+    'Collaboration.TriageConcluded': 'triage.concluded',
+    'Collaboration.ChangeProposed': 'proposal.proposed',
+    'Collaboration.ProposalApproved': 'proposal.approved',
+    'Collaboration.ProposalRejected': 'proposal.rejected',
+    'Collaboration.ProposalWithdrawn': 'proposal.withdrawn',
+    'Collaboration.InterviewStarted': 'interview.started',
+    'Collaboration.InterviewAnswered': 'interview.answered',
+    'Collaboration.InterviewQuestionAsked': 'interview.question_asked',
+    'Collaboration.InterviewBriefed': 'interview.briefed',
+    'Collaboration.InterviewConfirmed': 'interview.confirmed',
+    'Collaboration.InterviewStopped': 'interview.stopped',
+    'Collaboration.InterviewRejected': 'interview.rejected',
+    'Collaboration.SlashCommandStarted': 'command.started',
+    'Collaboration.CandidatesListed': 'command.candidates_listed',
+    'Collaboration.SlashCommandAnswered': 'command.answered',
+    'Collaboration.CandidatesApplied': 'command.candidates_applied',
+    'Collaboration.SlashCommandStopped': 'command.stopped',
+    'Collaboration.RecordWritten': 'record.written',
+    'Collaboration.RecordRevised': 'record.revised',
 } as const satisfies Record<Collaboration.PersistentEvent['type'], string>;
 
 type EventType = Collaboration.PersistentEvent['type'];
@@ -318,12 +318,17 @@ export type ParticipantTriageMessage =
     | {
           readonly type: 'triage.decided';
           readonly seq: number;
-          readonly event: { readonly type: 'TriageDecided'; readonly triageId: string; readonly kind: Collaboration.TriageVerdict; readonly decidedAt: string };
+          readonly event: {
+              readonly type: 'Collaboration.TriageDecided';
+              readonly triageId: string;
+              readonly kind: Collaboration.TriageVerdict;
+              readonly decidedAt: string;
+          };
       }
     | {
           readonly type: 'triage.overridden';
           readonly seq: number;
-          readonly event: { readonly type: 'TriageOverridden'; readonly triageId: string; readonly kind: Collaboration.TriageVerdict };
+          readonly event: { readonly type: 'Collaboration.TriageOverridden'; readonly triageId: string; readonly kind: Collaboration.TriageVerdict };
       };
 
 /** The agents connected to a session, per role, and the work waiting for one (ADR 0030; the chat header's AI status). */
@@ -675,20 +680,20 @@ export type { ElementChange };
  * on), `run.revert_left_to_agent` when it is left to the agent — both mean a run may now be claimed.
  */
 export const AGENT_EVENT_TYPES = {
-    RunQueued: 'run.queued',
-    RunReverted: 'run.reverted',
-    RevertLeftToAgent: 'run.revert_left_to_agent',
-    RunEdited: 'run.edited',
-    RunEditConflicted: 'run.edit_conflicted',
-    RunStarted: 'run.started',
-    RunCompleted: 'run.completed',
-    RunNeedsClarification: 'run.needs_clarification',
-    RunDeclined: 'run.declined',
-    RunFailed: 'run.failed',
-    RunCancelled: 'run.cancel_requested',
+    'Collaboration.RunQueued': 'run.queued',
+    'Collaboration.RunReverted': 'run.reverted',
+    'Collaboration.RevertLeftToAgent': 'run.revert_left_to_agent',
+    'Collaboration.RunEdited': 'run.edited',
+    'Collaboration.RunEditConflicted': 'run.edit_conflicted',
+    'Collaboration.RunStarted': 'run.started',
+    'Collaboration.RunCompleted': 'run.completed',
+    'Collaboration.RunNeedsClarification': 'run.needs_clarification',
+    'Collaboration.RunDeclined': 'run.declined',
+    'Collaboration.RunFailed': 'run.failed',
+    'Collaboration.RunCancelled': 'run.cancel_requested',
     // a warm agent forgets its conversation: the files it remembers were replaced
-    RevisionRestored: 'revision.restored',
-    SessionClosed: 'session.closed',
+    'Collaboration.RevisionRestored': 'revision.restored',
+    'Collaboration.SessionClosed': 'session.closed',
 } as const satisfies Partial<Record<EventType, string>>;
 
 export type AgentEventType = (typeof AGENT_EVENT_TYPES)[keyof typeof AGENT_EVENT_TYPES];

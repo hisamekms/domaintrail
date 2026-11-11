@@ -81,8 +81,8 @@ function memoryStore(): KnowledgeStore & { readonly extractions: Knowledge.Extra
         correct: unused,
         setBookmark: async (_p, id, bookmarked) => {
             const item = items.get(id);
-            if (!item) return { ok: false, error: { type: 'KnowledgeItemNotFound' as const, itemId: id } };
-            if (item.state !== 'Live') return { ok: false, error: { type: 'KnowledgeItemGone' as const, itemId: id } };
+            if (!item) return { ok: false, error: { type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id } };
+            if (item.state !== 'Live') return { ok: false, error: { type: 'Knowledge.KnowledgeItemGone' as const, itemId: id } };
             const next = { ...item, bookmarked };
             items.set(id, next);
             return { ok: true, value: next };

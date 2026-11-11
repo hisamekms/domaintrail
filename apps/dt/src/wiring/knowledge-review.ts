@@ -113,7 +113,7 @@ export async function proposeReviewRetirements(
         else {
             refused++;
             log(
-                `knowledge: run ${run}: a retirement not proposed (${o.result.error.type === 'ProposalRefused' ? o.result.error.reason : o.result.error.type})`,
+                `knowledge: run ${run}: a retirement not proposed (${o.result.error.type === 'Knowledge.ProposalRefused' ? o.result.error.reason : o.result.error.type})`,
             );
         }
     }

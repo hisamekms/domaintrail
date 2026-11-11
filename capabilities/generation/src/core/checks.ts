@@ -720,7 +720,7 @@ export class CheckWriter {
                 `(value) => {`,
                 `    const [invariant] = ${check}(value);`,
                 `    if (invariant === undefined) return ok(value as ${type});`,
-                `    return err({ type: '${invalidTypeName(p)}', value, invariant });`,
+                `    return err({ type: '${this.env.ctx}.${invalidTypeName(p)}', value, invariant });`,
                 `}`,
             ].map((l, i) => (i === 0 ? l : `${indent}${l}`));
         if (!declared) {

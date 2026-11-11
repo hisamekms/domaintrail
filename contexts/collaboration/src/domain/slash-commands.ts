@@ -419,8 +419,8 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
             Working: {
                 set: { id, session, kind, startedBy, opening, scope, language, startedAt, guide },
                 events: {
-                    SlashCommandStarted: {
-                        type: 'SlashCommandStarted',
+                    'Collaboration.SlashCommandStarted': {
+                        type: 'Collaboration.SlashCommandStarted',
                         commandId: id,
                         session,
                         kind,
@@ -441,7 +441,7 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
             ok({
                 Listed: {
                     set: { candidates, listedAt },
-                    events: { CandidatesListed: { type: 'CandidatesListed', commandId: command.id, candidates, listedAt } },
+                    events: { 'Collaboration.CandidatesListed': { type: 'Collaboration.CandidatesListed', commandId: command.id, candidates, listedAt } },
                 },
             }),
     }),
@@ -452,7 +452,13 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
                 Answered: {
                     set: { answer, next, answeredAt },
                     events: {
-                        SlashCommandAnswered: { type: 'SlashCommandAnswered', commandId: command.id, answer, ...(next && { next }), answeredAt },
+                        'Collaboration.SlashCommandAnswered': {
+                            type: 'Collaboration.SlashCommandAnswered',
+                            commandId: command.id,
+                            answer,
+                            ...(next && { next }),
+                            answeredAt,
+                        },
                     },
                 },
             }),
@@ -461,13 +467,22 @@ export const slashCommandCommands: Collaboration.SlashCommandCommands = {
     apply: decide<Collaboration.ApplySlashCommandDecision>(Collaboration.SlashCommandShape, {
         Listed: (command, params) => {
             const failed = Collaboration.checkApplySlashCommandRequires(command, params);
-            if (failed === 'facilitatorApplies') return err({ type: 'FacilitatorOnly' });
-            if (failed === 'chosenOfList') return err({ type: 'NoSuchCandidate' });
+            if (failed === 'facilitatorApplies') return err({ type: 'Collaboration.FacilitatorOnly' });
+            if (failed === 'chosenOfList') return err({ type: 'Collaboration.NoSuchCandidate' });
             const { appliedBy, chosen, run, appliedAt } = params;
             return ok({
                 Applied: {
                     set: { chosen, appliedBy, run, appliedAt },
-                    events: { CandidatesApplied: { type: 'CandidatesApplied', commandId: command.id, chosen, appliedBy, run, appliedAt } },
+                    events: {
+                        'Collaboration.CandidatesApplied': {
+                            type: 'Collaboration.CandidatesApplied',
+                            commandId: command.id,
+                            chosen,
+                            appliedBy,
+                            run,
+                            appliedAt,
+                        },
+                    },
                 },
             });
         },
@@ -486,17 +501,17 @@ function stopped(
     {
         readonly Stopped: {
             readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Date };
-            readonly events: { readonly SlashCommandStopped: Collaboration.SlashCommandStopped };
+            readonly events: { readonly 'Collaboration.SlashCommandStopped': Collaboration.SlashCommandStopped };
         };
     },
     Collaboration.NotTheStarter
 > {
-    if (Collaboration.checkStopSlashCommandRequires(command, params) === 'starterOrFacilitatorStops') return err({ type: 'NotTheStarter' });
+    if (Collaboration.checkStopSlashCommandRequires(command, params) === 'starterOrFacilitatorStops') return err({ type: 'Collaboration.NotTheStarter' });
     const { stoppedBy, stoppedAt } = params;
     return ok({
         Stopped: {
             set: { stoppedBy, stoppedAt },
-            events: { SlashCommandStopped: { type: 'SlashCommandStopped', commandId: command.id, stoppedBy, stoppedAt } },
+            events: { 'Collaboration.SlashCommandStopped': { type: 'Collaboration.SlashCommandStopped', commandId: command.id, stoppedBy, stoppedAt } },
         },
     });
 }

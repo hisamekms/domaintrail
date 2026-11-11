@@ -76,18 +76,18 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
     const session = (s: SessionJson): SessionStateBody => ({ ...at, session: s });
     const e = message.event;
     switch (e.type) {
-        case 'SessionStarted':
+        case 'Collaboration.SessionStarted':
             return { state: at, refetch: false };
-        case 'ParticipantJoined': {
+        case 'Collaboration.ParticipantJoined': {
             const s = state.session;
             if (s.participants.some((p) => p.id === e.participant)) return { state: at, refetch: false };
             const joined = { id: e.participant, name: e.name, role: 'Participant' as const, joinedAt: e.joinedAt };
             const [first, ...rest] = s.participants;
             return { state: session({ ...s, participants: [first, ...rest, joined] }), refetch: false };
         }
-        case 'SessionClosed':
+        case 'Collaboration.SessionClosed':
             return { state: state.session.state === 'Closed' ? at : session({ ...state.session, state: 'Closed', closedAt: e.closedAt }), refetch: false };
-        case 'RequestSent': {
+        case 'Collaboration.RequestSent': {
             if (state.requests.some((r) => r.id === e.requestId)) return { state: at, refetch: false };
             const request: RequestJson = {
                 id: e.requestId,
@@ -104,7 +104,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, requests: [...state.requests, request] }, refetch: false };
         }
-        case 'RequestDismissed':
+        case 'Collaboration.RequestDismissed':
             return {
                 state: {
                     ...at,
@@ -114,15 +114,15 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 },
                 refetch: false,
             };
-        case 'RunQueued':
+        case 'Collaboration.RunQueued':
             // the run's frozen input and note are not in the event
             return { state: at, refetch: !state.runs.some((r) => r.id === e.runId) };
-        case 'RunStarted':
+        case 'Collaboration.RunStarted':
             return {
                 state: runs((r) => (r.state === 'Queued' ? { ...r, state: 'Running', baseRevision: e.baseRevision, startedAt: e.startedAt } : r), e.runId),
                 refetch: false,
             };
-        case 'RunReverted': {
+        case 'Collaboration.RunReverted': {
             // a queued revert the server reverted (or found nothing left to revert)
             const run = state.runs.find((r) => r.id === e.runId);
             if (run?.state !== 'Queued') return { state: at, refetch: run === undefined };
@@ -140,30 +140,30 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: runs(() => reverted, e.runId), refetch: false };
         }
-        case 'RunEdited':
+        case 'Collaboration.RunEdited':
             // a person's edit of a sticky (ADR 0033): its frozen input is not in the event
             return { state: at, refetch: !state.runs.some((r) => r.id === e.runId) };
-        case 'RunHotspotNamed':
+        case 'Collaboration.RunHotspotNamed':
             // the AI's name of a hotspot a person added, over its provisional one (ADR 0033)
             return {
                 state: runs((r) => (r.state === 'Edited' ? { ...r, hotspotName: e.hotspotName, resultRevision: e.resultRevision } : r), e.runId),
                 refetch: !state.runs.some((r) => r.id === e.runId) || !state.revisions.some((r) => r.id === e.resultRevision),
             };
-        case 'RunEditConflicted':
+        case 'Collaboration.RunEditConflicted':
             return {
                 state: runs((r) => (r.state === 'Edited' ? { ...r, conflict: e.conflict } : r), e.runId),
                 refetch: !state.runs.some((r) => r.id === e.runId),
             };
-        case 'RevertLeftToAgent':
+        case 'Collaboration.RevertLeftToAgent':
             // still queued, now for the agent, with why
             return {
                 state: runs((r) => (r.state === 'Queued' ? { ...r, revertObstacle: e.obstacle } : r), e.runId),
                 refetch: !state.runs.some((r) => r.id === e.runId),
             };
-        case 'RunCompleted':
+        case 'Collaboration.RunCompleted':
             // the report is not in the event
             return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Completed' };
-        case 'RunNeedsClarification': {
+        case 'Collaboration.RunNeedsClarification': {
             const run = state.runs.find((r) => r.id === e.runId);
             return {
                 state: runs(
@@ -177,17 +177,17 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 refetch: run?.state === 'Running' || run === undefined,
             };
         }
-        case 'RunDeclined':
+        case 'Collaboration.RunDeclined':
             // the agent's reply (its reason) is not in the event
             return { state: at, refetch: state.runs.find((r) => r.id === e.runId)?.state !== 'Declined' };
-        case 'RunFailed': {
+        case 'Collaboration.RunFailed': {
             const run = state.runs.find((r) => r.id === e.runId);
             if (run?.state !== 'Running') return { state: at, refetch: run === undefined };
             // the report of a run that did not meet the rule is not in the event
             const failed: RunJson = { ...run, state: 'Failed', reason: e.reason, finishedAt: e.finishedAt };
             return { state: runs(() => failed, e.runId), refetch: e.reason === 'RuleNotMet' };
         }
-        case 'RunCancelled':
+        case 'Collaboration.RunCancelled':
             return {
                 state: runs((r) => {
                     if (r.state === 'Queued') return { ...r, state: 'Cancelled', cancelledBy: e.cancelledBy, cancelledAt: e.cancelledAt };
@@ -207,11 +207,11 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
                 }, e.runId),
                 refetch: false,
             };
-        case 'RevisionRecorded':
-        case 'RevisionRestored':
+        case 'Collaboration.RevisionRecorded':
+        case 'Collaboration.RevisionRestored':
             // the revision's files are not in the event
             return { state: at, refetch: !state.revisions.some((r) => r.id === e.revisionId) };
-        case 'MarkPlaced': {
+        case 'Collaboration.MarkPlaced': {
             // a state from before marks were sent has none
             const marks = state.marks ?? [];
             if (marks.some((m) => m.id === e.markId)) return { state: at, refetch: false };
@@ -226,9 +226,9 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, marks: [...marks, mark] }, refetch: false };
         }
-        case 'MarkRemoved':
+        case 'Collaboration.MarkRemoved':
             return { state: { ...at, marks: (state.marks ?? []).filter((m) => m.id !== e.markId) }, refetch: false };
-        case 'AssumptionApproved': {
+        case 'Collaboration.AssumptionApproved': {
             // a state from before approvals were sent has none
             const approvals = state.approvals ?? [];
             if (approvals.some((a) => a.id === e.approvalId)) return { state: at, refetch: false };
@@ -242,41 +242,41 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, approvals: [...approvals, approval] }, refetch: false };
         }
-        case 'SessionCollaborated':
+        case 'Collaboration.SessionCollaborated':
             return { state: session({ ...state.session, mode: 'Collab' }), refetch: false };
-        case 'JourneyChosen': {
+        case 'Collaboration.JourneyChosen': {
             const { currentJourney: _was, ...rest } = state.session;
             return { state: session(e.journey === undefined ? rest : { ...rest, currentJourney: e.journey }), refetch: false };
         }
         // the triages and proposals (ADR 0030): the state is fetched again to hold them (a participant's page gets the
         // triages' events without their records, and an event does not carry the triage or the proposal whole)
-        case 'TriageOpened':
-        case 'TriageStepRecorded':
-        case 'TriageDecided':
-        case 'TriageOverridden':
-        case 'TriageReaddressed':
-        case 'TriageConcluded':
-        case 'ChangeProposed':
-        case 'ProposalApproved':
-        case 'ProposalRejected':
-        case 'ProposalWithdrawn':
+        case 'Collaboration.TriageOpened':
+        case 'Collaboration.TriageStepRecorded':
+        case 'Collaboration.TriageDecided':
+        case 'Collaboration.TriageOverridden':
+        case 'Collaboration.TriageReaddressed':
+        case 'Collaboration.TriageConcluded':
+        case 'Collaboration.ChangeProposed':
+        case 'Collaboration.ProposalApproved':
+        case 'Collaboration.ProposalRejected':
+        case 'Collaboration.ProposalWithdrawn':
         // the interviews of the `/` commands: the state holds them whole
-        case 'InterviewStarted':
-        case 'InterviewAnswered':
-        case 'InterviewQuestionAsked':
-        case 'InterviewBriefed':
-        case 'InterviewConfirmed':
-        case 'InterviewStopped':
-        case 'InterviewRejected':
+        case 'Collaboration.InterviewStarted':
+        case 'Collaboration.InterviewAnswered':
+        case 'Collaboration.InterviewQuestionAsked':
+        case 'Collaboration.InterviewBriefed':
+        case 'Collaboration.InterviewConfirmed':
+        case 'Collaboration.InterviewStopped':
+        case 'Collaboration.InterviewRejected':
         // the candidate and answer commands of the `/` list: the state holds them whole
-        case 'SlashCommandStarted':
-        case 'CandidatesListed':
-        case 'SlashCommandAnswered':
-        case 'CandidatesApplied':
-        case 'SlashCommandStopped':
+        case 'Collaboration.SlashCommandStarted':
+        case 'Collaboration.CandidatesListed':
+        case 'Collaboration.SlashCommandAnswered':
+        case 'Collaboration.CandidatesApplied':
+        case 'Collaboration.SlashCommandStopped':
             return { state: at, refetch: true };
         // the records carry themselves whole: a new one added, one written again (marks merged, a request's outcome)
-        case 'RecordWritten': {
+        case 'Collaboration.RecordWritten': {
             const records = state.records ?? [];
             if (records.some((r) => r.id === e.recordId)) return { state: at, refetch: false };
             const record: RecordJson = {
@@ -290,7 +290,7 @@ export function applyEvent(state: SessionStateBody, message: EventMessage): { st
             };
             return { state: { ...at, records: [...records, record] }, refetch: false };
         }
-        case 'RecordRevised': {
+        case 'Collaboration.RecordRevised': {
             const records = state.records ?? [];
             if (!records.some((r) => r.id === e.recordId)) return { state: at, refetch: true };
             return { state: { ...at, records: replaceById(records, e.recordId, (r) => ({ ...r, fact: e.fact, revisedAt: e.revisedAt })) }, refetch: false };

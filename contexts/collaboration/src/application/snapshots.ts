@@ -76,7 +76,7 @@ export async function analysisOf(
 
 /** A refusal of the workspace's writer as the model's error. */
 export function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinceSnapshot | Collaboration.SymlinkInWorkspace | Collaboration.PathOutsideRoot {
-    if (e.type === 'ExternalChangesSinceSnapshot') {
+    if (e.type === 'Collaboration.ExternalChangesSinceSnapshot') {
         const paths: Collaboration.WorkspacePath[] = [];
         for (const raw of e.paths) {
             const p = workspacePath(raw);
@@ -85,11 +85,11 @@ export function writeRefusal(e: WriteRefusal): Collaboration.ExternalChangesSinc
         }
         const changed = nonEmpty(paths);
         if (!changed) throw new Error('The workspace adapter refused a write for external changes without naming a path');
-        return { type: 'ExternalChangesSinceSnapshot', paths: changed };
+        return { type: 'Collaboration.ExternalChangesSinceSnapshot', paths: changed };
     }
-    if (e.type === 'SymlinkInWorkspace') {
+    if (e.type === 'Collaboration.SymlinkInWorkspace') {
         const p = workspacePath(e.path);
-        return p.ok ? { type: 'SymlinkInWorkspace', path: p.value } : p.error;
+        return p.ok ? { type: 'Collaboration.SymlinkInWorkspace', path: p.value } : p.error;
     }
-    return { type: 'PathOutsideRoot', path: e.path };
+    return { type: 'Collaboration.PathOutsideRoot', path: e.path };
 }

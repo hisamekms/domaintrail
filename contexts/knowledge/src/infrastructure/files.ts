@@ -415,7 +415,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
 
     /** Why an item cannot be acted on: missing, or deleted. */
     async function unavailable(id: Knowledge.KnowledgeItemId): Promise<Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone> {
-        return (await deletedOne(id)) ? { type: 'KnowledgeItemGone', itemId: id } : { type: 'KnowledgeItemNotFound', itemId: id };
+        return (await deletedOne(id)) ? { type: 'Knowledge.KnowledgeItemGone', itemId: id } : { type: 'Knowledge.KnowledgeItemNotFound', itemId: id };
     }
 
     // ---- writing
@@ -497,7 +497,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         const { aggregate, events } = known(knowledgeItemCommands.delete(item, { by, at: now() })).Deleted;
         await writeItems([aggregate], deletedDir);
         await rm(path.join(dir, itemFileName(item.id)), { force: true });
-        await appendAudit([auditOf(events.KnowledgeItemDeleted)]);
+        await appendAudit([auditOf(events['Knowledge.KnowledgeItemDeleted'])]);
         return { items: [item.id], messages: sourceMessages(item) };
     }
 
@@ -578,7 +578,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 if ((item.bookmarked === true) === bookmarked) return ok(item);
                 const { aggregate, events } = known(knowledgeItemCommands.setBookmark(item, { bookmarked, by, at: now() })).Live;
                 await writeItems([aggregate], dir);
-                await appendAudit([auditOf(events.KnowledgeBookmarkChanged)]);
+                await appendAudit([auditOf(events['Knowledge.KnowledgeBookmarkChanged'])]);
                 return ok(aggregate);
             });
         },
@@ -655,10 +655,12 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             return exclusive(async (): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
                 const item = await liveOne(id);
                 if (item === undefined)
-                    return (await deletedOne(id)) ? err({ type: 'KnowledgeItemGone', itemId: id }) : err({ type: 'KnowledgeItemNotFound', itemId: id });
+                    return (await deletedOne(id))
+                        ? err({ type: 'Knowledge.KnowledgeItemGone', itemId: id })
+                        : err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                 const { aggregate, events } = known(knowledgeItemCommands.correct(item, { corrected, by, at: now() })).Live;
                 await writeItems([aggregate], dir);
-                await appendAudit([auditOf(events.KnowledgeItemCorrected)]);
+                await appendAudit([auditOf(events['Knowledge.KnowledgeItemCorrected'])]);
                 return ok(aggregate);
             });
         },
@@ -669,7 +671,9 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 async (): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
                     const item = await liveOne(id);
                     if (item === undefined)
-                        return (await deletedOne(id)) ? err({ type: 'KnowledgeItemGone', itemId: id }) : err({ type: 'KnowledgeItemNotFound', itemId: id });
+                        return (await deletedOne(id))
+                            ? err({ type: 'Knowledge.KnowledgeItemGone', itemId: id })
+                            : err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                     if (other === id) return ok([item]);
                     const at = now();
                     const sides = [item, await liveOne(other)].filter((i): i is Knowledge.LiveKnowledgeItem => i !== undefined);
@@ -682,7 +686,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                         unlinked.map((u) => u.aggregate),
                         dir,
                     );
-                    await appendAudit(unlinked.map((u) => auditOf(u.events.KnowledgeConflictUnlinked)));
+                    await appendAudit(unlinked.map((u) => auditOf(u.events['Knowledge.KnowledgeConflictUnlinked'])));
                     return ok(unlinked.map((u) => u.aggregate));
                 },
             );
@@ -694,7 +698,9 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 async (): Promise<Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
                     const item = await liveOne(id);
                     if (item === undefined)
-                        return (await deletedOne(id)) ? err({ type: 'KnowledgeItemGone', itemId: id }) : err({ type: 'KnowledgeItemNotFound', itemId: id });
+                        return (await deletedOne(id))
+                            ? err({ type: 'Knowledge.KnowledgeItemGone', itemId: id })
+                            : err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                     if (other === id) return ok([item]);
                     const at = now();
                     // the other side too, while it is live (a deleted one's links go with it)
@@ -708,7 +714,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                         handed.map((h) => h.aggregate),
                         dir,
                     );
-                    await appendAudit(handed.map((h) => auditOf(h.events.KnowledgeHandedOverToHotspot)));
+                    await appendAudit(handed.map((h) => auditOf(h.events['Knowledge.KnowledgeHandedOverToHotspot'])));
                     return ok(handed.map((h) => h.aggregate));
                 },
             );
@@ -718,7 +724,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             checkProject(project);
             return exclusive(async (): Promise<Result<Deletion, Knowledge.KnowledgeItemNotFound>> => {
                 const item = await liveOne(id);
-                if (item === undefined) return err({ type: 'KnowledgeItemNotFound', itemId: id });
+                if (item === undefined) return err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                 return ok(await deleteNow(item, by));
             });
         },
@@ -741,11 +747,11 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             checkProject(project);
             return exclusive(async (): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound>> => {
                 const item = await deletedOne(id);
-                if (item === undefined) return err({ type: 'KnowledgeItemNotFound', itemId: id });
+                if (item === undefined) return err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
                 const { aggregate, events } = known(knowledgeItemCommands.restore(item, { by, at: now() })).Live;
                 await writeItems([aggregate], dir);
                 await rm(path.join(deletedDir, itemFileName(id)), { force: true });
-                await appendAudit([auditOf(events.KnowledgeItemRestored)]);
+                await appendAudit([auditOf(events['Knowledge.KnowledgeItemRestored'])]);
                 return ok(aggregate);
             });
         },
@@ -758,12 +764,12 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 if (retirement.replacedBy !== undefined && retirement.replacedBy !== id) {
                     const replacement = await liveOne(retirement.replacedBy);
                     if (replacement === undefined || isRetired(replacement))
-                        return err({ type: 'ProposalRefused' as const, reason: 'replacementUnavailable' as const });
+                        return err({ type: 'Knowledge.ProposalRefused' as const, reason: 'replacementUnavailable' as const });
                 }
                 const r = knowledgeItemCommands.retire(item, { ...retirement, by, at: now() });
                 if (!r.ok) return r;
                 await writeItems([r.value.Live.aggregate], dir);
-                await appendAudit([auditOf(r.value.Live.events.KnowledgeItemRetired)]);
+                await appendAudit([auditOf(r.value.Live.events['Knowledge.KnowledgeItemRetired'])]);
                 return ok(r.value.Live.aggregate);
             });
         },
@@ -776,7 +782,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
                 const r = knowledgeItemCommands.unretire(item, { by, at: now() });
                 if (!r.ok) return r;
                 await writeItems([r.value.Live.aggregate], dir);
-                await appendAudit([auditOf(r.value.Live.events.KnowledgeItemUnretired)]);
+                await appendAudit([auditOf(r.value.Live.events['Knowledge.KnowledgeItemUnretired'])]);
                 return ok(r.value.Live.aggregate);
             });
         },
@@ -905,7 +911,7 @@ function blockedBy(operation: Knowledge.Operation, unreadable: ReadonlySet<strin
     const fresh = operation.kind === 'Add' || operation.kind === 'Conflict' ? operation.id : undefined;
     // a proposal's ID is not an item's
     const existing = operation.kind === 'Add' ? undefined : operation.item;
-    if (fresh !== undefined && unreadable.has(fresh)) return { type: 'KnowledgeItemExists', itemId: fresh };
-    if (existing !== undefined && unreadable.has(existing)) return { type: 'KnowledgeItemNotFound', itemId: existing };
+    if (fresh !== undefined && unreadable.has(fresh)) return { type: 'Knowledge.KnowledgeItemExists', itemId: fresh };
+    if (existing !== undefined && unreadable.has(existing)) return { type: 'Knowledge.KnowledgeItemNotFound', itemId: existing };
     return undefined;
 }

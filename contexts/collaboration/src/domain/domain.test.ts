@@ -55,7 +55,7 @@ describe('content hashes', () => {
     test('workspace paths are relative, without dot segments or backslashes', () => {
         expect(value(workspacePath('sales/order.dt'))).toBe(path('sales/order.dt'));
         for (const raw of ['/etc/passwd', '../x.dt', 'a/../b.dt', './a.dt', 'a//b.dt', 'a\\b.dt', '']) {
-            expect(workspacePath(raw)).toEqual({ ok: false, error: { type: 'PathOutsideRoot', path: raw } });
+            expect(workspacePath(raw)).toEqual({ ok: false, error: { type: 'Collaboration.PathOutsideRoot', path: raw } });
         }
     });
 
@@ -270,13 +270,16 @@ describe('transitions', () => {
         ]);
         expect(sessionCommands.join(joined, { participant: guest, name, joinedAt: later })).toEqual({
             ok: false,
-            error: { type: 'AlreadyJoined', participant: guest },
+            error: { type: 'Collaboration.AlreadyJoined', participant: guest },
         });
         expect(value(sessionCommands.close(joined, { closedByRole: 'Facilitator', closedAt: later })).Closed.aggregate).toMatchObject({
             state: 'Closed',
             closedAt: later,
         });
-        expect(sessionCommands.close(joined, { closedByRole: 'Participant', closedAt: later })).toEqual({ ok: false, error: { type: 'FacilitatorOnly' } });
+        expect(sessionCommands.close(joined, { closedByRole: 'Participant', closedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'Collaboration.FacilitatorOnly' },
+        });
     });
 
     const running: C.RunningAgentRun = {
@@ -309,8 +312,8 @@ describe('transitions', () => {
     test('finish completes a run that meets the success rule and fails one that does not, with its report', () => {
         const done = value(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: true, finishedAt: later }));
         expect(done.Completed?.aggregate).toMatchObject({ state: 'Completed', resultRevision: result, changed: true, baseRevision: base });
-        expect(done.Completed?.events.RunCompleted).toEqual({
-            type: 'RunCompleted',
+        expect(done.Completed?.events['Collaboration.RunCompleted']).toEqual({
+            type: 'Collaboration.RunCompleted',
             runId: running.id,
             resultRevision: result,
             changed: true,
@@ -320,16 +323,19 @@ describe('transitions', () => {
         expect(failed.Failed?.aggregate).toMatchObject({ state: 'Failed', reason: 'RuleNotMet', report: report(2), resultRevision: base });
         expect(agentRunCommands.finish(running, { report: report(0), resultRevision: base, changed: true, finishedAt: later })).toEqual({
             ok: false,
-            error: { type: 'ChangedMismatch' },
+            error: { type: 'Collaboration.ChangedMismatch' },
         });
         expect(agentRunCommands.finish(running, { report: report(0), resultRevision: result, changed: false, finishedAt: later })).toEqual({
             ok: false,
-            error: { type: 'ChangedMismatch' },
+            error: { type: 'Collaboration.ChangedMismatch' },
         });
     });
 
     test("fail needs a reason other than the rule; cancel, the facilitator's, keeps the base revision of a running run", () => {
-        expect(agentRunCommands.fail(running, { reason: 'RuleNotMet', finishedAt: later })).toEqual({ ok: false, error: { type: 'ReportRequired' } });
+        expect(agentRunCommands.fail(running, { reason: 'RuleNotMet', finishedAt: later })).toEqual({
+            ok: false,
+            error: { type: 'Collaboration.ReportRequired' },
+        });
         const failed = value(agentRunCommands.fail(running, { reason: 'LeaseExpired', finishedAt: later })).Failed.aggregate;
         expect(failed).toMatchObject({ state: 'Failed', reason: 'LeaseExpired', finishedAt: later });
         expect('report' in failed).toBe(false);
@@ -341,7 +347,7 @@ describe('transitions', () => {
         });
         expect(agentRunCommands.cancel(running, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
             ok: false,
-            error: { type: 'FacilitatorOnly' },
+            error: { type: 'Collaboration.FacilitatorOnly' },
         });
         const { baseRevision: _b, startedAt: _s, ...rest } = running;
         const queued: C.QueuedAgentRun = { ...rest, state: 'Queued' };
@@ -351,7 +357,7 @@ describe('transitions', () => {
         ).toBe(false);
         expect(agentRunCommands.cancel(queued, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
             ok: false,
-            error: { type: 'FacilitatorOnly' },
+            error: { type: 'Collaboration.FacilitatorOnly' },
         });
     });
 
@@ -371,7 +377,7 @@ describe('transitions', () => {
             }),
         ).toEqual({
             ok: false,
-            error: { type: 'ContentHashMismatch' },
+            error: { type: 'Collaboration.ContentHashMismatch' },
         });
         expect(
             revisionCommands.take({
@@ -383,7 +389,7 @@ describe('transitions', () => {
                 validation,
                 takenAt: at,
             }),
-        ).toEqual({ ok: false, error: { type: 'RestoreNeedsCheck' } });
+        ).toEqual({ ok: false, error: { type: 'Collaboration.RestoreNeedsCheck' } });
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for MakeRestorableRevision's check
         const restorable = base as C.RestorableRevision;
         const restoreParams = {
@@ -398,11 +404,11 @@ describe('transitions', () => {
         };
         expect(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Participant' })).toEqual({
             ok: false,
-            error: { type: 'FacilitatorOnly' },
+            error: { type: 'Collaboration.FacilitatorOnly' },
         });
         const restored = value(revisionCommands.restore({ ...restoreParams, restoredByRole: 'Facilitator' })).Recorded;
         expect(restored.aggregate.origin).toEqual({ kind: 'Restored', restoredFrom: base, preRestore: result });
-        expect(restored.events.RevisionRestored).toMatchObject({ restoredFrom: base, preRestore: result });
+        expect(restored.events['Collaboration.RevisionRestored']).toMatchObject({ restoredFrom: base, preRestore: result });
     });
 });
 
@@ -633,15 +639,15 @@ describe("the agent's reply and the facilitator's answer (domain/reply.ts)", () 
             ok: true,
             value: { pickOf: id, assumption: 0, text: 'With tax', alternative: { id: 'net', label: 'Without tax' } },
         });
-        expect(resolvePick(pick(), run('Completed', []), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
+        expect(resolvePick(pick(), run('Completed', []), [m, n])).toEqual({ ok: false, error: { type: 'Collaboration.RunNotPickable', run: id } });
         for (const state of ['Queued', 'Running', 'NeedsClarification', 'Declined', 'Failed', 'Cancelled'])
-            expect(resolvePick(pick(), run(state), [m, n])).toEqual({ ok: false, error: { type: 'RunNotPickable', run: id } });
-        expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
-        expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'AlternativeNotFound', run: id } });
-        expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'PickMismatch', run: id } });
+            expect(resolvePick(pick(), run(state), [m, n])).toEqual({ ok: false, error: { type: 'Collaboration.RunNotPickable', run: id } });
+        expect(resolvePick(pick(1), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'Collaboration.AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(0, 'gross'), run('Completed'), [m, n])).toEqual({ ok: false, error: { type: 'Collaboration.AlternativeNotFound', run: id } });
+        expect(resolvePick(pick(), run('Completed'), [m])).toEqual({ ok: false, error: { type: 'Collaboration.PickMismatch', run: id } });
         expect(resolvePick(pick(), run('Completed'), [m, n, knownRequestId('00000000-0000-4000-8000-000000000003')])).toEqual({
             ok: false,
-            error: { type: 'PickMismatch', run: id },
+            error: { type: 'Collaboration.PickMismatch', run: id },
         });
     });
 });

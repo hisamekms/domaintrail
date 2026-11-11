@@ -73,7 +73,7 @@ describe('redactMessages', () => {
         expect(frozen?.map((r) => r.body)).toEqual([REDACTED_BODY, text('それは控えておきます')]);
         expect(frozen?.[1]?.replyTo).toMatchObject({ kind: 'Message', request: said.id, body: REDACTED_BODY });
         const outbox = await uow.transaction((s) => s.outbox.readAfter(0, 100, session));
-        const sent = outbox.flatMap((e) => (e.event.type === 'RequestSent' ? [[e.event.requestId, e.event.body]] : []));
+        const sent = outbox.flatMap((e) => (e.event.type === 'Collaboration.RequestSent' ? [[e.event.requestId, e.event.body]] : []));
         expect(sent).toEqual([
             [said.id, REDACTED_BODY],
             [reply.id, text('それは控えておきます')],

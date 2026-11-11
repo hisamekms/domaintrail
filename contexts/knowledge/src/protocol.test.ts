@@ -59,7 +59,7 @@ describe('the wire', () => {
         expect(() => knowledgeItem({ ...bookmarked, bookmarked: 'yes' }, 'item')).toThrow('item.bookmarked: expected a boolean');
         const result: AppliedExtraction = {
             items: [liveItem('kn_00000001')],
-            dropped: [{ operation: sent.operations[1], reason: { type: 'StaleOperation' } }],
+            dropped: [{ operation: sent.operations[1], reason: { type: 'Knowledge.StaleOperation' } }],
             replayed: false,
         };
         expect(appliedExtraction(overJson(result), 'body')).toEqual(result);
@@ -68,7 +68,7 @@ describe('the wire', () => {
     test('a value that is not the model’s is refused with where it is', () => {
         const bad = overJson({ by: extractionRef('s1', 1), operations: [{ kind: 'Add', id: 'kn_1', content: content('x'), sources: [source('s1', 'm1')] }] });
         expect(() => extraction(bad, 'body')).toThrow(
-            new WireError('body.operations[0].id: not valid ({"type":"InvalidKnowledgeItemId","value":"kn_1","invariant":"valid"})'),
+            new WireError('body.operations[0].id: not valid ({"type":"Knowledge.InvalidKnowledgeItemId","value":"kn_1","invariant":"valid"})'),
         );
         expect(() =>
             extraction(overJson({ by: extractionRef('s1', 1), operations: [{ kind: 'Add', id: 'kn_00000001', content: content('x'), sources: [] }] }), 'body'),
@@ -164,7 +164,7 @@ describe('the wire of retiring (廃止)', () => {
         expect(() => retirementProposal(overJson({ ...proposal, reason: undefined }), 'p')).toThrow(WireError);
         expect(() => retireBody({ reason: 'stale' }, 'body')).toThrow(WireError);
         expect(retireBody({}, 'body')).toEqual({});
-        const error = { type: 'ProposalRefused' as const, reason: 'dismissedBefore' as const };
+        const error = { type: 'Knowledge.ProposalRefused' as const, reason: 'dismissedBefore' as const };
         expect(domainErrorOf(decodeErrorBody(overJson(domainErrorBody(error))))).toEqual(error);
         expect(knowledgeQueryOf(knowledgeQueryParams({ retired: 'only' }))).toEqual({ retired: 'only' });
         expect(() => knowledgeQueryOf(new URLSearchParams({ retired: 'all' }))).toThrow(WireError);

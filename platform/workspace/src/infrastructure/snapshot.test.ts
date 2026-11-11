@@ -66,7 +66,7 @@ describe('workspace snapshots', () => {
         // the sources changed since `expected`: nothing is written
         expect(await snapshots.write([{ path: 'a.dt', bytes: bytes('context A3 {}') }], expected)).toEqual({
             ok: false,
-            error: { type: 'ExternalChangesSinceSnapshot', paths: ['a.dt', 'gone.dt', 'new/deep/b.dtes'] },
+            error: { type: 'Collaboration.ExternalChangesSinceSnapshot', paths: ['a.dt', 'gone.dt', 'new/deep/b.dtes'] },
         });
         expect(await readFile(path.join(root, 'a.dt'), 'utf8')).toBe('context A2 {}');
     });
@@ -77,19 +77,22 @@ describe('workspace snapshots', () => {
         const snapshots = createWorkspaceSnapshot(root, selection());
         const expected = (await snapshots.read()).files.map((f) => ({ path: f.path, hash: f.hash }));
         for (const p of ['../x.dt', '/etc/x.dt', 'a/../../x.dt', 'notes.md', '.domaintrail/x.dt', 'a\\b.dt', '']) {
-            expect(await snapshots.write([{ path: p, bytes: bytes('x') }], expected)).toEqual({ ok: false, error: { type: 'PathOutsideRoot', path: p } });
+            expect(await snapshots.write([{ path: p, bytes: bytes('x') }], expected)).toEqual({
+                ok: false,
+                error: { type: 'Collaboration.PathOutsideRoot', path: p },
+            });
         }
         await symlink(outside, path.join(root, 'out'));
         expect(await snapshots.write([{ path: 'out/x.dt', bytes: bytes('context X {}') }], expected)).toEqual({
             ok: false,
-            error: { type: 'SymlinkInWorkspace', path: 'out' },
+            error: { type: 'Collaboration.SymlinkInWorkspace', path: 'out' },
         });
         expect(await readdir(outside)).toEqual([]);
         await rm(path.join(root, 'out'));
         await symlink(path.join(outside, 'y.dt'), path.join(root, 'y.dt'));
         expect(await snapshots.write([{ path: 'a.dt', bytes: bytes('context B {}') }], expected)).toEqual({
             ok: false,
-            error: { type: 'SymlinkInWorkspace', path: 'y.dt' },
+            error: { type: 'Collaboration.SymlinkInWorkspace', path: 'y.dt' },
         });
         expect((await lstat(path.join(root, 'y.dt'))).isSymbolicLink()).toBe(true);
         expect(await readFile(path.join(root, 'a.dt'), 'utf8')).toBe('context A {}');

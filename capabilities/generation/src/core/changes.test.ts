@@ -156,11 +156,11 @@ export type RenameWorkDecision = {`,
         // the handler of the input's state; set replaces, `undefined` clears
         const rename = decide(WorkShape, {
             Draft: () => ok({ Draft: { set: { note: undefined, title: 'U' }, events: {} } }),
-            Review: () => err({ type: 'NotReady' }),
+            Review: () => err({ type: 'Tasks.NotReady' }),
         });
         const draft = { state: 'Draft', id: 'w1', title: 'T', note: 'n', tags: [], draftNo: 1 };
         expect(rename(draft).value.Draft.aggregate).toEqual({ state: 'Draft', id: 'w1', title: 'U', tags: [], draftNo: 1 });
-        expect(rename(review)).toEqual({ ok: false, error: { type: 'NotReady' } });
+        expect(rename(review)).toEqual({ ok: false, error: { type: 'Tasks.NotReady' } });
         // several outcomes: only the one decided, keyed by its state
         const two = decide(WorkShape, { Draft: () => ok({ Review: { set: { reviewer: 'r' }, events: {} }, Draft: undefined }) });
         expect(two(draft).value).toEqual({

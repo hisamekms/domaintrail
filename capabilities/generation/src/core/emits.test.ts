@@ -52,7 +52,7 @@ ${commands}
   }`;
 
 describe('emits: the name check of the generator (M011)', () => {
-    test('M011: the events of a command have distinct names, since its result is keyed by them', async () => {
+    test('M011: the same event cannot be listed twice; different contexts may use the same name', async () => {
         const a = await check({
             'billing.dt': 'context Billing { id InvoiceId: UUID event Done { invoiceId: InvoiceId } }',
             'sales.dt': `context Sales {${stateful(`
@@ -62,14 +62,46 @@ describe('emits: the name check of the generator (M011)', () => {
         });
         expect(only(a, 'M011').map((d) => [d.message, d.hint])).toEqual([
             [
-                "Event 'Done' is listed more than once in 'emits' of 'Work.a'; the events of its result are keyed by name.",
-                "list it once, with a multiplicity such as 'Done[1..*]' or 'Done?'",
-            ],
-            [
-                "Events 'Sales.Done' and 'Billing.Done' of 'Work.b' have the same name, and the events of its result are keyed by name.",
-                'rename one of the events',
+                "Event 'Sales.Done' is listed more than once in 'emits' of 'Work.a'; the events of its result are keyed by qualified name.",
+                "list it once, with a multiplicity such as 'Sales.Done[1..*]' or 'Sales.Done?'",
             ],
         ]);
+    });
+
+    test('same-named events from two contexts have distinct tags and result keys', async () => {
+        const a = await check({
+            'billing.dt': 'context Billing { event Done { at: Timestamp } }',
+            'sales.dt': `context Sales {
+                id WorkId: UUID
+                event Done { at: Timestamp }
+                aggregate Work {
+                    id: WorkId
+                    command finish(at: Timestamp) emits Done, Billing.Done
+                }
+            }`,
+        });
+        expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        const modules = generateTypeScript(a.model!);
+        const sales = modules.find((f) => f.path === 'Sales.ts')!.content;
+        const billing = modules.find((f) => f.path === 'Billing.ts')!.content;
+        expect(sales).toContain("readonly type: 'Sales.Done';");
+        expect(billing).toContain("readonly type: 'Billing.Done';");
+        expect(sales).toContain("readonly events: { readonly 'Sales.Done': Done; readonly 'Billing.Done': Billing.Done }");
+        const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-same-event-'));
+        try {
+            for (const f of modules) {
+                const file = path.join(dir, f.path);
+                await mkdir(path.dirname(file), { recursive: true });
+                await writeFile(file, f.content);
+            }
+            const { eventList } = await import(path.join(dir, '_runtime.ts'));
+            const at = new Date('2026-11-11T00:00:00Z');
+            expect(
+                eventList({ 'Sales.Done': { type: 'Sales.Done', at }, 'Billing.Done': { type: 'Billing.Done', at } }).map((e: { type: string }) => e.type),
+            ).toEqual(['Billing.Done', 'Sales.Done']);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
     });
 });
 
@@ -107,23 +139,25 @@ export type ProgressWork = (
     | {
           readonly InProgress: {
               readonly aggregate: InProgressWork;
-              readonly events: { readonly StepRecorded: StepRecorded };
+              readonly events: { readonly 'Tasks.StepRecorded': StepRecorded };
           };
           readonly Completed?: never;
       }
     | {
           readonly Completed: {
               readonly aggregate: CompletedWork;
-              readonly events: { readonly StepRecorded: StepRecorded; readonly WorkCompleted: WorkCompleted };
+              readonly events: { readonly 'Tasks.StepRecorded': StepRecorded; readonly 'Tasks.WorkCompleted': WorkCompleted };
           };
           readonly InProgress?: never;
       },
     NotReady
 >;`,
         );
-        expect(code).toContain('readonly events: { readonly WorkOpened: WorkOpened; readonly ItemAdded: readonly ItemAdded[] };');
-        expect(code).toContain('readonly events: { readonly ItemAdded: readonly [ItemAdded, ...ItemAdded[]]; readonly NoteChanged?: NoteChanged };');
-        expect(code).toContain('readonly events: { /** between 2 and 5 */ readonly ItemAdded: readonly ItemAdded[] };');
+        expect(code).toContain(`readonly events: { readonly 'Tasks.WorkOpened': WorkOpened; readonly 'Tasks.ItemAdded': readonly ItemAdded[] };`);
+        expect(code).toContain(
+            `readonly events: { readonly 'Tasks.ItemAdded': readonly [ItemAdded, ...ItemAdded[]]; readonly 'Tasks.NoteChanged'?: NoteChanged };`,
+        );
+        expect(code).toContain(`readonly events: { /** between 2 and 5 */ readonly 'Tasks.ItemAdded': readonly ItemAdded[] };`);
         expect(code).toContain(' * @emits ItemAdded[0..*] — zero or more when the command succeeds\n');
         expect(code).toContain(
             ' * @emits ItemAdded[1..*] — one or more when the command succeeds\n * @emits NoteChanged? — at most once when the command succeeds\n',
@@ -141,7 +175,7 @@ export type ProgressWork = (
     readonly Draft: Result<{
         readonly Cancelled: {
             readonly aggregate: CancelledWork;
-            readonly events: { readonly WorkCancelled: WorkCancelled };
+            readonly events: { readonly 'Tasks.WorkCancelled': WorkCancelled };
         };
     }, never>;
     /**
@@ -151,7 +185,7 @@ export type ProgressWork = (
     readonly InProgress: Result<{
         readonly Cancelled: {
             readonly aggregate: CancelledWork;
-            readonly events: { readonly WorkCancelled: WorkCancelled; readonly RefundRequested: RefundRequested };
+            readonly events: { readonly 'Tasks.WorkCancelled': WorkCancelled; readonly 'Tasks.RefundRequested': RefundRequested };
         };
     }, never>;
 }[S['state']];`,
@@ -162,7 +196,7 @@ export type ProgressWork = (
     readonly Draft: (work: DraftWork) => Result<{
         readonly Cancelled: {
             readonly set: NoChanges;
-            readonly events: { readonly WorkCancelled: WorkCancelled };
+            readonly events: { readonly 'Tasks.WorkCancelled': WorkCancelled };
         };
     }, never>;`,
         );
@@ -173,13 +207,20 @@ export type ProgressWork = (
     test('outcome and eventList: the key as `to`; events flattened, absent ones skipped, sorted by type', async () => {
         const { outcome, eventList, ok } = await import(path.join(dir, 'generated', '_runtime.ts'));
         const value = {
-            Completed: { aggregate: { id: 1 }, events: { WorkCompleted: { type: 'WorkCompleted' }, StepRecorded: { type: 'StepRecorded' } } },
+            Completed: {
+                aggregate: { id: 1 },
+                events: { 'Tasks.WorkCompleted': { type: 'Tasks.WorkCompleted' }, 'Tasks.StepRecorded': { type: 'Tasks.StepRecorded' } },
+            },
             InProgress: undefined,
         };
         expect(outcome(value)).toEqual({ to: 'Completed', aggregate: { id: 1 }, events: value.Completed.events });
-        const a = { type: 'ItemAdded', n: 1 };
-        const b = { type: 'ItemAdded', n: 2 };
-        expect(eventList({ NoteChanged: undefined, ItemAdded: [a, b], WorkOpened: { type: 'WorkOpened' } })).toEqual([a, b, { type: 'WorkOpened' }]);
+        const a = { type: 'Tasks.ItemAdded', n: 1 };
+        const b = { type: 'Tasks.ItemAdded', n: 2 };
+        expect(eventList({ 'Tasks.NoteChanged': undefined, 'Tasks.ItemAdded': [a, b], 'Tasks.WorkOpened': { type: 'Tasks.WorkOpened' } })).toEqual([
+            a,
+            b,
+            { type: 'Tasks.WorkOpened' },
+        ]);
         expect(eventList({})).toEqual([]);
         expect(ok(1)).toEqual({ ok: true, value: 1 });
     });

@@ -74,18 +74,18 @@ describe('a person retires an item', () => {
         const { aggregate, events } = value(commands.retire(i, { reason: 'replaced', replacedBy: itemId('kn_00000002'), by: alice, at: later })).Live;
         expect(aggregate).toMatchObject({ content: i.content, sources: i.sources, version: i.version, updatedAt: later });
         expect(aggregate.retirement).toEqual({ reason: 'replaced', replacedBy: itemId('kn_00000002'), by: alice, at: later });
-        expect(events.KnowledgeItemRetired).toMatchObject({ itemId: i.id, reason: 'replaced', by: alice });
+        expect(events['Knowledge.KnowledgeItemRetired']).toMatchObject({ itemId: i.id, reason: 'replaced', by: alice });
     });
 
     test('without a reason too; not twice; a replacement only for replaced, and never itself', () => {
         const retired = value(commands.retire(item('kn_00000001'), { by: alice, at })).Live.aggregate;
         expect(retired.retirement).toEqual({ by: alice, at });
-        expect(error(commands.retire(retired, { by: alice, at }))).toEqual({ type: 'AlreadyRetired' });
+        expect(error(commands.retire(retired, { by: alice, at }))).toEqual({ type: 'Knowledge.AlreadyRetired' });
         expect(error(commands.retire(item('kn_00000001'), { reason: 'wrong', replacedBy: itemId('kn_00000002'), by: alice, at }))).toEqual({
-            type: 'ReplacementWithoutReason',
+            type: 'Knowledge.ReplacementWithoutReason',
         });
         expect(error(commands.retire(item('kn_00000001'), { reason: 'replaced', replacedBy: itemId('kn_00000001'), by: alice, at }))).toEqual({
-            type: 'ReplacedByItself',
+            type: 'Knowledge.ReplacedByItself',
         });
     });
 
@@ -95,8 +95,8 @@ describe('a person retires an item', () => {
         const back = value(commands.unretire(retired, { by: bob, at: later })).Live;
         expect(back.aggregate.retirement).toBeUndefined();
         expect(back.aggregate.content).toEqual(i.content);
-        expect(back.events.KnowledgeItemUnretired).toMatchObject({ itemId: i.id, by: bob });
-        expect(error(commands.unretire(i, { by: bob, at }))).toEqual({ type: 'NotRetired' });
+        expect(back.events['Knowledge.KnowledgeItemUnretired']).toMatchObject({ itemId: i.id, by: bob });
+        expect(error(commands.unretire(i, { by: bob, at }))).toEqual({ type: 'Knowledge.NotRetired' });
     });
 });
 
@@ -105,7 +105,7 @@ describe('a proposal is taken or refused', () => {
         const target = item('kn_00000001');
         const admitted = value(admitProposal(candidate(), { lookup: lookupOf(target), proposals: [] }, at));
         expect(admitted.proposal).toMatchObject({ state: 'Open', item: target.id, action: 'retire', reason: 'obsolete', proposedBy: review });
-        expect(admitted.event?.type).toBe('RetirementProposed');
+        expect(admitted.event?.type).toBe('Knowledge.RetirementProposed');
         const again = value(admitProposal(candidate(), { lookup: lookupOf(target), proposals: [admitted.proposal] }, later));
         expect(again).toEqual({ proposal: admitted.proposal });
         expect(proposalIdOf(candidate())).toBe(admitted.proposal.id);
@@ -113,9 +113,9 @@ describe('a proposal is taken or refused', () => {
 
     test('a malformed one: no reason to retire, a reason to unretire, a replacement for another reason', () => {
         const context = { lookup: lookupOf(item('kn_00000001')), proposals: [] };
-        expect(error(admitProposal(candidate({ reason: undefined }), context, at))).toEqual({ type: 'MalformedProposal' });
-        expect(error(admitProposal(candidate({ action: 'unretire' }), context, at))).toEqual({ type: 'MalformedProposal' });
-        expect(error(admitProposal(candidate({ replacedBy: itemId('kn_00000002') }), context, at))).toEqual({ type: 'MalformedProposal' });
+        expect(error(admitProposal(candidate({ reason: undefined }), context, at))).toEqual({ type: 'Knowledge.MalformedProposal' });
+        expect(error(admitProposal(candidate({ action: 'unretire' }), context, at))).toEqual({ type: 'Knowledge.MalformedProposal' });
+        expect(error(admitProposal(candidate({ replacedBy: itemId('kn_00000002') }), context, at))).toEqual({ type: 'Knowledge.MalformedProposal' });
     });
 
     test('refused against the store: a missing or deleted item, a moot one, a replacement or a decision that is not one', () => {
@@ -124,16 +124,16 @@ describe('a proposal is taken or refused', () => {
         const target = item('kn_00000001');
         const deleted = value(commands.delete(target, { by: alice, at })).Deleted.aggregate;
         const retired = value(commands.retire(target, { by: alice, at })).Live.aggregate;
-        expect(refusal(candidate())).toEqual({ type: 'ProposalRefused', reason: 'itemUnavailable' });
-        expect(refusal(candidate(), deleted)).toEqual({ type: 'ProposalRefused', reason: 'itemUnavailable' });
-        expect(refusal(candidate(), retired)).toEqual({ type: 'ProposalRefused', reason: 'moot' });
-        expect(refusal(candidate({ action: 'unretire', reason: undefined }), target)).toEqual({ type: 'ProposalRefused', reason: 'moot' });
+        expect(refusal(candidate())).toEqual({ type: 'Knowledge.ProposalRefused', reason: 'itemUnavailable' });
+        expect(refusal(candidate(), deleted)).toEqual({ type: 'Knowledge.ProposalRefused', reason: 'itemUnavailable' });
+        expect(refusal(candidate(), retired)).toEqual({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
+        expect(refusal(candidate({ action: 'unretire', reason: undefined }), target)).toEqual({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
         expect(refusal(candidate({ reason: 'replaced', replacedBy: itemId('kn_00000002') }), target)).toEqual({
-            type: 'ProposalRefused',
+            type: 'Knowledge.ProposalRefused',
             reason: 'replacementUnavailable',
         });
         expect(refusal(candidate({ evidence: [decision('kn_00000003')] }), target, item('kn_00000003', 'to_be', 'rule'))).toEqual({
-            type: 'ProposalRefused',
+            type: 'Knowledge.ProposalRefused',
             reason: 'evidenceUnavailable',
         });
     });
@@ -143,11 +143,11 @@ describe('a proposal is taken or refused', () => {
         const toBeDecision = item('kn_00000003', 'to_be', 'decision');
         const context = { lookup: lookupOf(asIs, toBeDecision), proposals: [] };
         expect(error(admitProposal(candidate({ evidence: [stickyChange('Ordering.Accept')] }), context, at))).toEqual({
-            type: 'ProposalRefused',
+            type: 'Knowledge.ProposalRefused',
             reason: 'asIsAgainstStickies',
         });
         expect(error(admitProposal(candidate({ evidence: [stickyChange('Ordering.Accept'), decision('kn_00000003')] }), context, at))).toEqual({
-            type: 'ProposalRefused',
+            type: 'Knowledge.ProposalRefused',
             reason: 'asIsAgainstStickies',
         });
         // what is said of today may retire it
@@ -162,7 +162,7 @@ describe('a proposal is taken or refused', () => {
         const target = item('kn_00000001');
         const first = value(admitProposal(candidate(), { lookup: lookupOf(target), proposals: [] }, at)).proposal;
         expect(error(admitProposal(candidate({ evidence: [said('m2')] }), { lookup: lookupOf(target), proposals: [first] }, at))).toEqual({
-            type: 'ProposalRefused',
+            type: 'Knowledge.ProposalRefused',
             reason: 'pending',
         });
     });
@@ -183,7 +183,7 @@ describe('a dismissal is remembered', () => {
             proposedBy: { kind: 'Extraction', extraction: extraction('s3', 1) },
         });
         expect(error(admitProposal(again, { lookup: lookupOf(target), proposals: [dismissed] }, later))).toEqual({
-            type: 'ProposalRefused',
+            type: 'Knowledge.ProposalRefused',
             reason: 'dismissedBefore',
         });
     });
@@ -207,7 +207,7 @@ describe('a person approves or dismisses', () => {
         const approval = value(decideApproval(p.id, p, lookupOf(target, replacement), alice, later));
         expect(approval.proposal).toMatchObject({ state: 'Approved', decidedBy: alice, decidedAt: later });
         expect(approval.item.retirement).toEqual({ reason: 'replaced', replacedBy: replacement.id, by: alice, at: later, proposal: p.id });
-        expect(approval.itemEvent.type).toBe('KnowledgeItemRetired');
+        expect(approval.itemEvent.type).toBe('Knowledge.KnowledgeItemRetired');
         // the replacement gone meanwhile: retired all the same, without it
         expect(value(decideApproval(p.id, p, lookupOf(target), alice, later)).item.retirement).toEqual({
             reason: 'replaced',
@@ -222,19 +222,19 @@ describe('a person approves or dismisses', () => {
         const p = value(admitProposal(candidate({ action: 'unretire', reason: undefined }), { lookup: lookupOf(retired), proposals: [] }, at)).proposal;
         const approval = value(decideApproval(p.id, p, lookupOf(retired), bob, later));
         expect(approval.item.retirement).toBeUndefined();
-        expect(approval.itemEvent.type).toBe('KnowledgeItemUnretired');
+        expect(approval.itemEvent.type).toBe('Knowledge.KnowledgeItemUnretired');
     });
 
     test('a missing, decided or moot proposal is refused', () => {
         const target = item('kn_00000001');
         const p = value(admitProposal(candidate(), { lookup: lookupOf(target), proposals: [] }, at)).proposal;
-        expect(error(decideApproval(p.id, undefined, lookupOf(target), alice, later))).toEqual({ type: 'ProposalNotFound', proposalId: p.id });
+        expect(error(decideApproval(p.id, undefined, lookupOf(target), alice, later))).toEqual({ type: 'Knowledge.ProposalNotFound', proposalId: p.id });
         const dismissed = value(decideDismissal(p.id, p, alice, later)).proposal;
-        expect(error(decideApproval(p.id, dismissed, lookupOf(target), alice, later))).toEqual({ type: 'ProposalDecided', proposalId: p.id });
-        expect(error(decideDismissal(p.id, dismissed, alice, later))).toEqual({ type: 'ProposalDecided', proposalId: p.id });
+        expect(error(decideApproval(p.id, dismissed, lookupOf(target), alice, later))).toEqual({ type: 'Knowledge.ProposalDecided', proposalId: p.id });
+        expect(error(decideDismissal(p.id, dismissed, alice, later))).toEqual({ type: 'Knowledge.ProposalDecided', proposalId: p.id });
         const retired = value(commands.retire(target, { by: bob, at })).Live.aggregate;
         expect(isMoot(p, retired)).toBe(true);
-        expect(error(decideApproval(p.id, p, lookupOf(retired), alice, later))).toEqual({ type: 'ProposalRefused', reason: 'moot' });
+        expect(error(decideApproval(p.id, p, lookupOf(retired), alice, later))).toEqual({ type: 'Knowledge.ProposalRefused', reason: 'moot' });
     });
 
     test('the list waiting: open and not moot, newest first', () => {
@@ -281,7 +281,7 @@ describe('an extraction proposes', () => {
             [target.id, 'retire', 'Extraction'],
             [retired.id, 'unretire', 'Extraction'],
         ]);
-        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'ProposalRefused', reason: 'pending' }]);
+        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.ProposalRefused', reason: 'pending' }]);
         expect(outcome.items).toEqual([]);
     });
 
@@ -292,7 +292,7 @@ describe('an extraction proposes', () => {
             lookupOf(retired),
             at,
         );
-        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'RetiredItem', itemId: retired.id }]);
+        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.RetiredItem', itemId: retired.id }]);
     });
 });
 

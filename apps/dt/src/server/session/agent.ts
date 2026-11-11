@@ -204,7 +204,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                         const type = agentEventType(entry);
                         if (!type) continue;
                         await write(stream, `id: ${entry.seq}\nevent: ${type}\ndata: ${JSON.stringify(eventMessage(entry))}\n\n`);
-                        if (entry.event.type === 'SessionClosed') return endStream(stream);
+                        if (entry.event.type === 'Collaboration.SessionClosed') return endStream(stream);
                     }
                     if (entries.length < STREAM_PAGE) break;
                 }

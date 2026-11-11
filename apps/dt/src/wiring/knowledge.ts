@@ -349,7 +349,7 @@ export async function startSessionKnowledge(deps: SessionKnowledgeDeps): Promise
             deps.switched?.(enabled);
         },
         observe(events) {
-            if (events.some((e) => e.event.type === 'RequestSent')) scheduler.kick();
+            if (events.some((e) => e.event.type === 'Collaboration.RequestSent')) scheduler.kick();
         },
         kick: () => scheduler.kick(),
         flag(flags) {

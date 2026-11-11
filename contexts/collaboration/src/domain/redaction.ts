@@ -41,6 +41,6 @@ export function redactedRun(run: Collaboration.AgentRun, request: Collaboration.
 
 /** The outbox's event with the message `request` redacted: its `RequestSent`; `undefined` for any other event. */
 export function redactedEvent(event: Collaboration.PersistentEvent, request: Collaboration.RequestId): Collaboration.PersistentEvent | undefined {
-    if (event.type !== 'RequestSent' || event.requestId !== request || event.body === REDACTED_BODY) return undefined;
+    if (event.type !== 'Collaboration.RequestSent' || event.requestId !== request || event.body === REDACTED_BODY) return undefined;
     return { ...event, body: REDACTED_BODY };
 }

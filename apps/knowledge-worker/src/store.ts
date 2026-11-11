@@ -620,15 +620,15 @@ export class D1KnowledgeStore implements KnowledgeStore {
             [id],
             async (rows) => {
                 const row = rows.get(id);
-                if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+                if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
                 const item = itemOf(row);
-                if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+                if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
                 if ((item.bookmarked === true) === bookmarked) return { statements: [], value: ok(item) };
                 const r = knowledgeItemCommands.setBookmark(item, { bookmarked, by, at: this.now() });
                 if (!r.ok) throw new Error('setBookmark refused a live item');
                 const next = r.value.Live.aggregate;
                 return {
-                    statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeBookmarkChanged)]),
+                    statements: this.writes(project, [next], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeBookmarkChanged'])]),
                     value: ok(next),
                 };
             },
@@ -646,9 +646,9 @@ export class D1KnowledgeStore implements KnowledgeStore {
             [id],
             async (rows) => {
                 const row = rows.get(id);
-                if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+                if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
                 const item = itemOf(row);
-                if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+                if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
                 const r = knowledgeItemCommands.correct(item, { corrected, by, at: this.now() });
                 if (!r.ok) throw new Error('correct refused a live item');
                 const next = r.value.Live.aggregate;
@@ -656,7 +656,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                     project,
                     [next],
                     [{ item: id, past: pastVersionOf(item, next) }],
-                    [auditOf(r.value.Live.events.KnowledgeItemCorrected)],
+                    [auditOf(r.value.Live.events['Knowledge.KnowledgeItemCorrected'])],
                 );
                 return { statements, value: ok(next) };
             },
@@ -672,9 +672,9 @@ export class D1KnowledgeStore implements KnowledgeStore {
         type Answer = Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>;
         return this.decideAndWrite<Answer>(project, other === id ? [id] : [id, other], async (rows) => {
             const row = rows.get(id);
-            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
             const item = itemOf(row);
-            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
             if (other === id) return { statements: [], value: ok([item]) };
             const otherRow = rows.get(other);
             const otherItem = otherRow ? itemOf(otherRow) : undefined;
@@ -689,7 +689,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 project,
                 sides.map((s) => s.aggregate),
                 [],
-                sides.map((s) => auditOf(s.events.KnowledgeConflictUnlinked)),
+                sides.map((s) => auditOf(s.events['Knowledge.KnowledgeConflictUnlinked'])),
             );
             return { statements, value: ok(sides.map((s) => s.aggregate)) };
         });
@@ -705,9 +705,9 @@ export class D1KnowledgeStore implements KnowledgeStore {
         type Answer = Result<readonly Knowledge.LiveKnowledgeItem[], Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>;
         return this.decideAndWrite<Answer>(project, other === id ? [id] : [id, other], async (rows) => {
             const row = rows.get(id);
-            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
             const item = itemOf(row);
-            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
             if (other === id) return { statements: [], value: ok([item]) };
             const otherRow = rows.get(other);
             const otherItem = otherRow ? itemOf(otherRow) : undefined;
@@ -722,7 +722,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 project,
                 sides.map((s) => s.aggregate),
                 [],
-                sides.map((s) => auditOf(s.events.KnowledgeHandedOverToHotspot)),
+                sides.map((s) => auditOf(s.events['Knowledge.KnowledgeHandedOverToHotspot'])),
             );
             return { statements, value: ok(sides.map((s) => s.aggregate)) };
         });
@@ -735,7 +735,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
     ): Promise<Result<Deletion, Knowledge.KnowledgeItemNotFound>> {
         return this.decideAndWrite<Result<Deletion, Knowledge.KnowledgeItemNotFound>>(project, [id], async (rows) => {
             const row = rows.get(id);
-            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
             const item = itemOf(row);
             const deletion = { items: [id], messages: sourceMessages(item) };
             // deleting again (a retry) answers as the first time did
@@ -743,7 +743,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
             const r = knowledgeItemCommands.delete(item, { by, at: this.now() });
             if (!r.ok) throw new Error('delete refused a live item');
             return {
-                statements: this.writes(project, [r.value.Deleted.aggregate], [], [auditOf(r.value.Deleted.events.KnowledgeItemDeleted)]),
+                statements: this.writes(project, [r.value.Deleted.aggregate], [], [auditOf(r.value.Deleted.events['Knowledge.KnowledgeItemDeleted'])]),
                 value: ok(deletion),
             };
         });
@@ -765,7 +765,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                 const r = knowledgeItemCommands.delete(item, { by, at: this.now() });
                 if (!r.ok) throw new Error('delete refused a live item');
                 deleted.push(r.value.Deleted.aggregate);
-                audit.push(auditOf(r.value.Deleted.events.KnowledgeItemDeleted));
+                audit.push(auditOf(r.value.Deleted.events['Knowledge.KnowledgeItemDeleted']));
                 messages.push(...sourceMessages(item));
             }
             return {
@@ -782,13 +782,13 @@ export class D1KnowledgeStore implements KnowledgeStore {
     ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound>> {
         return this.decideAndWrite<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound>>(project, [id], async (rows) => {
             const row = rows.get(id);
-            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
             const item = itemOf(row);
             if (item.state === 'Live') return { statements: [], value: ok(item) };
             const r = knowledgeItemCommands.restore(item, { by, at: this.now() });
             if (!r.ok) throw new Error('restore refused a deleted item');
             const restored = r.value.Live.aggregate;
-            return { statements: this.writes(project, [restored], [], [auditOf(r.value.Live.events.KnowledgeItemRestored)]), value: ok(restored) };
+            return { statements: this.writes(project, [restored], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeItemRestored'])]), value: ok(restored) };
         });
     }
 
@@ -875,19 +875,19 @@ export class D1KnowledgeStore implements KnowledgeStore {
         const ids = retirement.replacedBy !== undefined && retirement.replacedBy !== id ? [id, retirement.replacedBy] : [id];
         return this.decideAndWrite<Result<Knowledge.LiveKnowledgeItem, RetireError>>(project, ids, async (rows) => {
             const row = rows.get(id);
-            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
             const item = itemOf(row);
-            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
             if (ids.length > 1) {
                 const other = rows.get(ids[1]);
                 const replacement = other ? itemOf(other) : undefined;
                 if (!replacement || replacement.state !== 'Live' || replacement.retirement !== undefined)
-                    return { statements: [], value: err({ type: 'ProposalRefused' as const, reason: 'replacementUnavailable' as const }) };
+                    return { statements: [], value: err({ type: 'Knowledge.ProposalRefused' as const, reason: 'replacementUnavailable' as const }) };
             }
             const r = knowledgeItemCommands.retire(item, { ...retirement, by, at: this.now() });
             if (!r.ok) return { statements: [], value: r };
             const next = r.value.Live.aggregate;
-            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeItemRetired)]), value: ok(next) };
+            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeItemRetired'])]), value: ok(next) };
         });
     }
 
@@ -899,13 +899,13 @@ export class D1KnowledgeStore implements KnowledgeStore {
         type Answer = Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | Knowledge.NotRetired>;
         return this.decideAndWrite<Answer>(project, [id], async (rows) => {
             const row = rows.get(id);
-            if (!row) return { statements: [], value: err({ type: 'KnowledgeItemNotFound' as const, itemId: id }) };
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
             const item = itemOf(row);
-            if (item.state !== 'Live') return { statements: [], value: err({ type: 'KnowledgeItemGone' as const, itemId: id }) };
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
             const r = knowledgeItemCommands.unretire(item, { by, at: this.now() });
             if (!r.ok) return { statements: [], value: r };
             const next = r.value.Live.aggregate;
-            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events.KnowledgeItemUnretired)]), value: ok(next) };
+            return { statements: this.writes(project, [next], [], [auditOf(r.value.Live.events['Knowledge.KnowledgeItemUnretired'])]), value: ok(next) };
         });
     }
 
@@ -1016,7 +1016,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
         const current = await this.get(project, id);
         if (!current) {
             const row = await this.row(project, id);
-            return err(row ? { type: 'KnowledgeItemGone', itemId: id } : { type: 'KnowledgeItemNotFound', itemId: id });
+            return err(row ? { type: 'Knowledge.KnowledgeItemGone', itemId: id } : { type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
         }
         const imageId = await this.putImage(project, image);
         const text = `${current.item.content.text}\n\n![](image:${imageId})`;

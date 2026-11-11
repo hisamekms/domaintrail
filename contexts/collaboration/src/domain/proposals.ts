@@ -311,7 +311,18 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
         return ok({
             Open: {
                 set: { id, session, triage, request, requestedBy, content, proposedAt },
-                events: { ChangeProposed: { type: 'ChangeProposed', proposalId: id, session, triage, request, requestedBy, content, proposedAt } },
+                events: {
+                    'Collaboration.ChangeProposed': {
+                        type: 'Collaboration.ChangeProposed',
+                        proposalId: id,
+                        session,
+                        triage,
+                        request,
+                        requestedBy,
+                        content,
+                        proposedAt,
+                    },
+                },
             },
         });
     }),
@@ -319,15 +330,15 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
     approve: decide<Collaboration.ApproveChangeProposalDecision>(Collaboration.ChangeProposalShape, {
         Open: (proposal, params) => {
             const failed = Collaboration.checkApproveChangeProposalRequires(proposal, params);
-            if (failed === 'facilitatorApproves') return err({ type: 'FacilitatorOnly' });
-            if (failed === 'optionOfProposal') return err({ type: 'NoSuchOption' });
+            if (failed === 'facilitatorApproves') return err({ type: 'Collaboration.FacilitatorOnly' });
+            if (failed === 'optionOfProposal') return err({ type: 'Collaboration.NoSuchOption' });
             const { approvedBy, option, editedHow, run, approvedAt } = params;
             return ok({
                 Approved: {
                     set: { approvedBy, approvedAt, option, editedHow, run },
                     events: {
-                        ProposalApproved: {
-                            type: 'ProposalApproved',
+                        'Collaboration.ProposalApproved': {
+                            type: 'Collaboration.ProposalApproved',
                             proposalId: proposal.id,
                             approvedBy,
                             ...(option !== undefined && { option }),
@@ -343,12 +354,21 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
 
     reject: decide<Collaboration.RejectChangeProposalDecision>(Collaboration.ChangeProposalShape, {
         Open: (proposal, params) => {
-            if (Collaboration.checkRejectChangeProposalRequires(proposal, params) === 'facilitatorRejects') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkRejectChangeProposalRequires(proposal, params) === 'facilitatorRejects')
+                return err({ type: 'Collaboration.FacilitatorOnly' });
             const { rejectedBy, note, rejectedAt } = params;
             return ok({
                 Rejected: {
                     set: { rejectedBy, rejectedAt, note },
-                    events: { ProposalRejected: { type: 'ProposalRejected', proposalId: proposal.id, rejectedBy, ...(note && { note }), rejectedAt } },
+                    events: {
+                        'Collaboration.ProposalRejected': {
+                            type: 'Collaboration.ProposalRejected',
+                            proposalId: proposal.id,
+                            rejectedBy,
+                            ...(note && { note }),
+                            rejectedAt,
+                        },
+                    },
                 },
             });
         },
@@ -356,12 +376,15 @@ export const proposalCommands: Collaboration.ChangeProposalCommands = {
 
     withdraw: decide<Collaboration.WithdrawChangeProposalDecision>(Collaboration.ChangeProposalShape, {
         Open: (proposal, params) => {
-            if (Collaboration.checkWithdrawChangeProposalRequires(proposal, params) === 'requesterWithdraws') return err({ type: 'NotTheRequester' });
+            if (Collaboration.checkWithdrawChangeProposalRequires(proposal, params) === 'requesterWithdraws')
+                return err({ type: 'Collaboration.NotTheRequester' });
             const { withdrawnBy, withdrawnAt } = params;
             return ok({
                 Withdrawn: {
                     set: { withdrawnAt },
-                    events: { ProposalWithdrawn: { type: 'ProposalWithdrawn', proposalId: proposal.id, withdrawnBy, withdrawnAt } },
+                    events: {
+                        'Collaboration.ProposalWithdrawn': { type: 'Collaboration.ProposalWithdrawn', proposalId: proposal.id, withdrawnBy, withdrawnAt },
+                    },
                 },
             });
         },

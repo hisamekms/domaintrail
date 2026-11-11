@@ -86,7 +86,7 @@ const apiError = (status: number, type: ApiErrorType, message?: string): Respons
 
 /** The domain's error of a call about an item, as its answer. */
 const itemError = (e: Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone): Response =>
-    e.type === 'KnowledgeItemNotFound' ? failure(404, e.type, 'no such item', e.itemId) : failure(410, e.type, 'the item is deleted', e.itemId);
+    e.type === 'Knowledge.KnowledgeItemNotFound' ? failure(404, e.type, 'no such item', e.itemId) : failure(410, e.type, 'the item is deleted', e.itemId);
 
 /** A domain's error (a store call's `Result`), as its answer. */
 const domainError = (e: DomainError): Response => json(domainErrorBody(e), domainErrorStatus(e.type));
@@ -183,7 +183,7 @@ async function route(
                     const denied = allow('read');
                     if (denied) return denied;
                     const found = await store.get(project, item, { history: q.get('history') === '1' });
-                    return found ? json(found) : itemError({ type: 'KnowledgeItemNotFound', itemId: item });
+                    return found ? json(found) : itemError({ type: 'Knowledge.KnowledgeItemNotFound', itemId: item });
                 }
                 if (method === 'PATCH') {
                     const denied = allow('correct');

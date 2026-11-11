@@ -98,14 +98,16 @@ describe('sending a message that mentions people', () => {
 
     test('not someone outside the session (of another one, or unknown), nor twice, nor more than 20', async () => {
         expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: [bob, stranger] }))).toEqual({
-            type: 'MentionedNotAParticipant',
+            type: 'Collaboration.MentionedNotAParticipant',
             participant: stranger,
         });
         expect(other).not.toBe(session);
-        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: [bob, bob] }))).toEqual({ type: 'DuplicateMention' });
+        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: [bob, bob] }))).toEqual({
+            type: 'Collaboration.DuplicateMention',
+        });
         // 21 participants are not needed to pass the limit: the count is checked before anything is sent
         const many = Array.from({ length: MAX_REQUEST_MENTIONS + 1 }, () => bob);
-        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: many })).type).toBe('TooManyMentions');
+        expect(error(await use.sendRequest({ session, actor: actor(ann), targets: [], body, mentions: many })).type).toBe('Collaboration.TooManyMentions');
         // nothing was sent
         const state = value(await use.sessionState({ session }));
         expect(state.requests.filter((r) => r.mentions.includes(stranger) || r.mentions.length > 2)).toEqual([]);
@@ -184,6 +186,6 @@ describe('the requests route with mentions', () => {
         expect(await bad({ targets: [], body: 'x', mentions: [bobId, bobId] })).toEqual([400, 'mentions[1]']);
         expect(await bad({ targets: [], body: 'x', mentions: [''] })).toEqual([400, 'mentions[0]']);
         expect(await bad({ targets: [], body: 'x', mentions: Array.from({ length: 21 }, (_, i) => `p${i}`) })).toEqual([400, 'mentions']);
-        expect(await bad({ targets: [], body: 'x', mentions: ['dev:nobody'] })).toEqual([400, 'MentionedNotAParticipant']);
+        expect(await bad({ targets: [], body: 'x', mentions: ['dev:nobody'] })).toEqual([400, 'Collaboration.MentionedNotAParticipant']);
     });
 });

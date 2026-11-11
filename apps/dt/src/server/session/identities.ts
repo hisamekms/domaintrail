@@ -157,11 +157,11 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
 
     /** Joins `identity` unless it did; refused when the session is full or not open. */
     const join = async (identity: Identity): Promise<Result<Collaboration.ParticipantId, SignInError>> => {
-        if (closed) return err({ type: 'SessionAlreadyClosed' });
+        if (closed) return err({ type: 'Collaboration.SessionAlreadyClosed' });
         const id = participantOf(identity);
         if (joined.has(id)) return ok(id);
         const state = await collaboration.sessionState({ session });
-        if (!state.ok) return err({ type: 'SessionNotFound' });
+        if (!state.ok) return err({ type: 'Collaboration.SessionNotFound' });
         const participants = state.value.session.participants;
         if (!participants.some((p) => p.id === id) && participants.length >= maxParticipants) return err({ type: 'SessionFull', maxParticipants });
         const name = Collaboration.makeDisplayName(identity.displayName.slice(0, 200));
@@ -204,7 +204,7 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
 
         async signIn(name) {
             if (!withCookie) throw new Error('Only the dev and link identity modes sign in with a name');
-            if (!(await isOpen())) return err({ type: 'SessionAlreadyClosed' });
+            if (!(await isOpen())) return err({ type: 'Collaboration.SessionAlreadyClosed' });
             const identity: Identity = { provider: mode, subject: randomUUID(), displayName: name };
             const joinedAs = await join(identity);
             if (!joinedAs.ok) return joinedAs;
@@ -215,7 +215,7 @@ export function createSessionIdentities(deps: SessionIdentitiesDeps): SessionIde
 
         async signInFacilitator(name, code) {
             if (mode !== 'link') throw new Error('Only the link identity mode signs the facilitator in with a link');
-            if (!(await isOpen())) return err({ type: 'SessionAlreadyClosed' });
+            if (!(await isOpen())) return err({ type: 'Collaboration.SessionAlreadyClosed' });
             const identity: Identity = { provider: mode, subject: randomUUID(), displayName: name };
             // the code first: nothing is signed in with a code that is not valid
             const claimed = await access.claimFacilitator({ session, code, identity: keyOf(identity) });

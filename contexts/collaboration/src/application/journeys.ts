@@ -118,7 +118,7 @@ export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
     const { uow, clock, ids } = deps;
     return {
         async actOnJourney({ actor, act, session, labels, language }) {
-            if (actor.role !== 'Facilitator') return err({ type: 'FacilitatorOnly' });
+            if (actor.role !== 'Facilitator') return err({ type: 'Collaboration.FacilitatorOnly' });
             let before: JourneyFile | undefined;
             const r = await updateJourneys<undefined, JourneyActError>(deps.journeys, (file) => {
                 before = file;
@@ -167,7 +167,7 @@ export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 const found = stores.sessions.load(session);
-                if (!found || found.state !== 'Open') return err({ type: 'SessionAlreadyClosed' });
+                if (!found || found.state !== 'Open') return err({ type: 'Collaboration.SessionAlreadyClosed' });
                 const at = clock.now();
                 const chosen = sessionCommands.chooseJourney(found, { journey, chosenByRole: actor.role, chosenAt: at });
                 if (!chosen.ok) return chosen;

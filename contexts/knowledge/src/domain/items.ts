@@ -71,7 +71,7 @@ export function withLiveConflicts(item: Knowledge.LiveKnowledgeItem, isLive: (id
 
 export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
     add: decide<Knowledge.AddKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, (params) => {
-        if (Knowledge.checkAddKnowledgeItemRequires(params) === 'distinctSources') return err({ type: 'DuplicateSource' });
+        if (Knowledge.checkAddKnowledgeItemRequires(params) === 'distinctSources') return err({ type: 'Knowledge.DuplicateSource' });
         const { id, content, sources, by, reason, at } = params;
         return ok({
             Live: {
@@ -88,8 +88,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     retirement: undefined,
                 },
                 events: {
-                    KnowledgeItemAdded: {
-                        type: 'KnowledgeItemAdded',
+                    'Knowledge.KnowledgeItemAdded': {
+                        type: 'Knowledge.KnowledgeItemAdded',
                         itemId: id,
                         version: FIRST_VERSION,
                         conflictsWith: [],
@@ -105,9 +105,9 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
     addConflicting: decide<Knowledge.AddConflictingKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, (params) => {
         switch (Knowledge.checkAddConflictingKnowledgeItemRequires(params)) {
             case 'distinctSources':
-                return err({ type: 'DuplicateSource' });
+                return err({ type: 'Knowledge.DuplicateSource' });
             case 'notItself':
-                return err({ type: 'ConflictWithItself' });
+                return err({ type: 'Knowledge.ConflictWithItself' });
         }
         const { id, content, sources, other, by, reason, at } = params;
         return ok({
@@ -125,8 +125,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                     retirement: undefined,
                 },
                 events: {
-                    KnowledgeItemAdded: {
-                        type: 'KnowledgeItemAdded',
+                    'Knowledge.KnowledgeItemAdded': {
+                        type: 'Knowledge.KnowledgeItemAdded',
                         itemId: id,
                         version: FIRST_VERSION,
                         conflictsWith: [other],
@@ -143,9 +143,9 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         Live: (item, params) => {
             switch (Knowledge.checkAddSourceKnowledgeItemRequires(item, params)) {
                 case 'current':
-                    return err({ type: 'StaleOperation' });
+                    return err({ type: 'Knowledge.StaleOperation' });
                 case 'newSource':
-                    return err({ type: 'DuplicateSource' });
+                    return err({ type: 'Knowledge.DuplicateSource' });
             }
             const { source, agreed, by, reason, at } = params;
             const labels = raisedOrigin(item.content.labels, agreed);
@@ -153,8 +153,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { content: { ...item.content, labels }, sources: [...item.sources, source], updatedAt: at },
                     events: {
-                        KnowledgeSourceAdded: {
-                            type: 'KnowledgeSourceAdded',
+                        'Knowledge.KnowledgeSourceAdded': {
+                            type: 'Knowledge.KnowledgeSourceAdded',
                             itemId: item.id,
                             version: item.version,
                             // whether it raised the origin, for the audit log
@@ -171,7 +171,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
 
     update: decide<Knowledge.UpdateKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Live: (item, params) => {
-            if (Knowledge.checkUpdateKnowledgeItemRequires(item, params) === 'current') return err({ type: 'StaleOperation' });
+            if (Knowledge.checkUpdateKnowledgeItemRequires(item, params) === 'current') return err({ type: 'Knowledge.StaleOperation' });
             const { revised, newSources, by, reason, at } = params;
             const why = reason && { reason };
             const sources = [...item.sources, ...newSourcesOf(item, newSources)];
@@ -179,14 +179,23 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 return ok({
                     Live: {
                         set: { content: revised, sources, version: item.version, updatedAt: at },
-                        events: { KnowledgeItemRewritten: { type: 'KnowledgeItemRewritten', itemId: item.id, version: item.version, by, ...why, at } },
+                        events: {
+                            'Knowledge.KnowledgeItemRewritten': {
+                                type: 'Knowledge.KnowledgeItemRewritten',
+                                itemId: item.id,
+                                version: item.version,
+                                by,
+                                ...why,
+                                at,
+                            },
+                        },
                     },
                 });
             const version = nextVersion(item.version);
             return ok({
                 Live: {
                     set: { content: revised, sources, version, updatedAt: at },
-                    events: { KnowledgeItemRevised: { type: 'KnowledgeItemRevised', itemId: item.id, version, by, ...why, at } },
+                    events: { 'Knowledge.KnowledgeItemRevised': { type: 'Knowledge.KnowledgeItemRevised', itemId: item.id, version, by, ...why, at } },
                 },
             });
         },
@@ -196,11 +205,11 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         Live: (item, params) => {
             switch (Knowledge.checkLinkConflictKnowledgeItemRequires(item, params)) {
                 case 'current':
-                    return err({ type: 'StaleOperation' });
+                    return err({ type: 'Knowledge.StaleOperation' });
                 case 'notItself':
-                    return err({ type: 'ConflictWithItself' });
+                    return err({ type: 'Knowledge.ConflictWithItself' });
                 case 'sourced':
-                    return err({ type: 'ConflictWithoutSource' });
+                    return err({ type: 'Knowledge.ConflictWithoutSource' });
             }
             const { other, by, reason, at } = params;
             // linking twice keeps one link
@@ -209,8 +218,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { conflictsWith, updatedAt: at },
                     events: {
-                        KnowledgeConflictLinked: {
-                            type: 'KnowledgeConflictLinked',
+                        'Knowledge.KnowledgeConflictLinked': {
+                            type: 'Knowledge.KnowledgeConflictLinked',
                             itemId: item.id,
                             version: item.version,
                             other,
@@ -226,7 +235,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
 
     unlinkConflict: decide<Knowledge.UnlinkConflictKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Live: (item, params) => {
-            if (Knowledge.checkUnlinkConflictKnowledgeItemRequires(item, params) === 'notItself') return err({ type: 'ConflictWithItself' });
+            if (Knowledge.checkUnlinkConflictKnowledgeItemRequires(item, params) === 'notItself') return err({ type: 'Knowledge.ConflictWithItself' });
             const { other, by, at } = params;
             // unlinking what is not linked changes nothing but the time (a retry, or the other side unlinked first)
             const conflictsWith = item.conflictsWith.filter((id) => id !== other);
@@ -234,7 +243,14 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { conflictsWith, updatedAt: at },
                     events: {
-                        KnowledgeConflictUnlinked: { type: 'KnowledgeConflictUnlinked', itemId: item.id, version: item.version, other, by, at },
+                        'Knowledge.KnowledgeConflictUnlinked': {
+                            type: 'Knowledge.KnowledgeConflictUnlinked',
+                            itemId: item.id,
+                            version: item.version,
+                            other,
+                            by,
+                            at,
+                        },
                     },
                 },
             });
@@ -243,7 +259,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
 
     handOverToHotspot: decide<Knowledge.HandOverToHotspotKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Live: (item, params) => {
-            if (Knowledge.checkHandOverToHotspotKnowledgeItemRequires(item, params) === 'notItself') return err({ type: 'ConflictWithItself' });
+            if (Knowledge.checkHandOverToHotspotKnowledgeItemRequires(item, params) === 'notItself') return err({ type: 'Knowledge.ConflictWithItself' });
             const { hotspot, other, by, at } = params;
             // handing over again changes nothing but the time (a retry after a failure half-way)
             const about = item.content.about.includes(hotspot) ? item.content.about : [...item.content.about, hotspot];
@@ -251,7 +267,15 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { content: { ...item.content, about }, conflictsWith: item.conflictsWith.filter((id) => id !== other), updatedAt: at },
                     events: {
-                        KnowledgeHandedOverToHotspot: { type: 'KnowledgeHandedOverToHotspot', itemId: item.id, version: item.version, hotspot, other, by, at },
+                        'Knowledge.KnowledgeHandedOverToHotspot': {
+                            type: 'Knowledge.KnowledgeHandedOverToHotspot',
+                            itemId: item.id,
+                            version: item.version,
+                            hotspot,
+                            other,
+                            by,
+                            at,
+                        },
                     },
                 },
             });
@@ -264,7 +288,7 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
             return ok({
                 Live: {
                     set: { content: corrected, version, updatedAt: at },
-                    events: { KnowledgeItemCorrected: { type: 'KnowledgeItemCorrected', itemId: item.id, version, by, at } },
+                    events: { 'Knowledge.KnowledgeItemCorrected': { type: 'Knowledge.KnowledgeItemCorrected', itemId: item.id, version, by, at } },
                 },
             });
         },
@@ -276,8 +300,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { bookmarked: bookmarked ? true : undefined },
                     events: {
-                        KnowledgeBookmarkChanged: {
-                            type: 'KnowledgeBookmarkChanged',
+                        'Knowledge.KnowledgeBookmarkChanged': {
+                            type: 'Knowledge.KnowledgeBookmarkChanged',
                             itemId: item.id,
                             version: item.version,
                             bookmarked,
@@ -293,11 +317,11 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
         Live: (item, params) => {
             switch (Knowledge.checkRetireKnowledgeItemRequires(item, params)) {
                 case 'notRetired':
-                    return err({ type: 'AlreadyRetired' });
+                    return err({ type: 'Knowledge.AlreadyRetired' });
                 case 'replacementWhenReplaced':
-                    return err({ type: 'ReplacementWithoutReason' });
+                    return err({ type: 'Knowledge.ReplacementWithoutReason' });
                 case 'notReplacedByItself':
-                    return err({ type: 'ReplacedByItself' });
+                    return err({ type: 'Knowledge.ReplacedByItself' });
             }
             const { reason, replacedBy, proposal, by, at } = params;
             const retirement: Knowledge.Retirement = {
@@ -311,8 +335,8 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
                 Live: {
                     set: { retirement, updatedAt: at },
                     events: {
-                        KnowledgeItemRetired: {
-                            type: 'KnowledgeItemRetired',
+                        'Knowledge.KnowledgeItemRetired': {
+                            type: 'Knowledge.KnowledgeItemRetired',
                             itemId: item.id,
                             version: item.version,
                             ...(reason && { reason }),
@@ -329,14 +353,14 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
 
     unretire: decide<Knowledge.UnretireKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Live: (item, params) => {
-            if (Knowledge.checkUnretireKnowledgeItemRequires(item, params) === 'retired') return err({ type: 'NotRetired' });
+            if (Knowledge.checkUnretireKnowledgeItemRequires(item, params) === 'retired') return err({ type: 'Knowledge.NotRetired' });
             const { proposal, by, at } = params;
             return ok({
                 Live: {
                     set: { retirement: undefined, updatedAt: at },
                     events: {
-                        KnowledgeItemUnretired: {
-                            type: 'KnowledgeItemUnretired',
+                        'Knowledge.KnowledgeItemUnretired': {
+                            type: 'Knowledge.KnowledgeItemUnretired',
                             itemId: item.id,
                             version: item.version,
                             ...(proposal && { proposal }),
@@ -354,13 +378,18 @@ export const knowledgeItemCommands: Knowledge.KnowledgeItemCommands = {
             ok({
                 Deleted: {
                     set: { deletedBy: by, deletedAt: at, bookmarked: undefined },
-                    events: { KnowledgeItemDeleted: { type: 'KnowledgeItemDeleted', itemId: item.id, version: item.version, by, at } },
+                    events: { 'Knowledge.KnowledgeItemDeleted': { type: 'Knowledge.KnowledgeItemDeleted', itemId: item.id, version: item.version, by, at } },
                 },
             }),
     }),
 
     restore: decide<Knowledge.RestoreKnowledgeItemDecision>(Knowledge.KnowledgeItemShape, {
         Deleted: (item, { by, at }) =>
-            ok({ Live: { set: {}, events: { KnowledgeItemRestored: { type: 'KnowledgeItemRestored', itemId: item.id, version: item.version, by, at } } } }),
+            ok({
+                Live: {
+                    set: {},
+                    events: { 'Knowledge.KnowledgeItemRestored': { type: 'Knowledge.KnowledgeItemRestored', itemId: item.id, version: item.version, by, at } },
+                },
+            }),
     }),
 };

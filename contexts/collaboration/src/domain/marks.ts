@@ -215,17 +215,17 @@ export const markCommands: Collaboration.MarkCommands = {
     place: decide<Collaboration.PlaceMarkDecision>(Collaboration.MarkShape, (params) => {
         switch (Collaboration.checkPlaceMarkRequires(params)) {
             case 'fitsTarget':
-                return err({ type: 'MarkNotForTarget' });
+                return err({ type: 'Collaboration.MarkNotForTarget' });
             case 'participantsVote':
-                return err({ type: 'FacilitatorDoesNotVote' });
+                return err({ type: 'Collaboration.FacilitatorDoesNotVote' });
             case 'facilitatorMarksSteps':
-                return err({ type: 'FacilitatorOnly' });
+                return err({ type: 'Collaboration.FacilitatorOnly' });
         }
         const { id, session, participant, target, sign, placedAt } = params;
         return ok({
             Placed: {
                 set: { id, session, participant, target, sign, placedAt },
-                events: { MarkPlaced: { type: 'MarkPlaced', markId: id, session, participant, target, sign, placedAt } },
+                events: { 'Collaboration.MarkPlaced': { type: 'Collaboration.MarkPlaced', markId: id, session, participant, target, sign, placedAt } },
             },
         });
     }),
@@ -236,7 +236,14 @@ export const markCommands: Collaboration.MarkCommands = {
                 Removed: {
                     set: { removedAt },
                     events: {
-                        MarkRemoved: { type: 'MarkRemoved', markId: mark.id, participant: mark.participant, target: mark.target, sign: mark.sign, removedAt },
+                        'Collaboration.MarkRemoved': {
+                            type: 'Collaboration.MarkRemoved',
+                            markId: mark.id,
+                            participant: mark.participant,
+                            target: mark.target,
+                            sign: mark.sign,
+                            removedAt,
+                        },
                     },
                 },
             }),

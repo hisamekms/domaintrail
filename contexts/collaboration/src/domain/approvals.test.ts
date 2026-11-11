@@ -73,8 +73,8 @@ describe('the approve command', () => {
     test('the facilitator approves: who and when are kept, and the event says which assumption', () => {
         const { Approved } = value(approvalCommands.approve({ id, session, assumption, approvedBy: who, approvedByRole: 'Facilitator', approvedAt: at }));
         expect(Approved.aggregate).toEqual({ state: 'Approved', id, session, assumption: ref, approvedBy: who, approvedAt: at });
-        expect(Approved.events.AssumptionApproved).toEqual({
-            type: 'AssumptionApproved',
+        expect(Approved.events['Collaboration.AssumptionApproved']).toEqual({
+            type: 'Collaboration.AssumptionApproved',
             approvalId: id,
             session,
             assumption: ref,
@@ -85,7 +85,7 @@ describe('the approve command', () => {
 
     test('a participant does not approve', () => {
         expect(error(approvalCommands.approve({ id, session, assumption, approvedBy: who, approvedByRole: 'Participant', approvedAt: at }))).toEqual({
-            type: 'FacilitatorOnly',
+            type: 'Collaboration.FacilitatorOnly',
         });
     });
 });

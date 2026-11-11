@@ -25,14 +25,14 @@ describe('use cases', () => {
         const saved = await shop.orders.load(order.id);
         expect(saved?.aggregate.state).toBe('Confirmed');
         expect(saved?.meta.version).toBe(4); // placed, two items added, confirmed
-        expect(shop.events.stored.map((s) => s.event.type)).toEqual(['OrderPlaced', 'OrderConfirmed']);
+        expect(shop.events.stored.map((s) => s.event.type)).toEqual(['Sales.OrderPlaced', 'Sales.OrderConfirmed']);
     });
 
     test('a domain error saves nothing and records no event', async () => {
         const { shop, order } = await confirmedOrder();
         const before = shop.events.stored.length;
         const r = await shop.app.cancelOrder(order.id, 'Other');
-        expect(r).toEqual({ ok: false, error: { type: 'NoteRequired' } });
+        expect(r).toEqual({ ok: false, error: { type: 'Sales.NoteRequired' } });
         expect((await shop.orders.load(order.id))?.aggregate.state).toBe('Confirmed');
         expect(shop.events.stored.length).toBe(before);
     });
@@ -41,15 +41,15 @@ describe('use cases', () => {
         const shop = createShop(fixedProviders());
         expect(await shop.app.registerCustomer('x', 'no-at-sign')).toEqual({
             ok: false,
-            error: { type: 'InvalidEmailAddress', value: 'no-at-sign', invariant: 'format' },
+            error: { type: 'Common.InvalidEmailAddress', value: 'no-at-sign', invariant: 'format' },
         });
-        expect(makeOrderId('order-1')).toEqual({ ok: false, error: { type: 'InvalidOrderId', value: 'order-1', invariant: 'uuid' } });
+        expect(makeOrderId('order-1')).toEqual({ ok: false, error: { type: 'Sales.InvalidOrderId', value: 'order-1', invariant: 'uuid' } });
         const r = await shop.app.addItem(idOf(makeOrderId('8c1e5f3a-6b2d-4e9f-a7c8-0d1e2f3a4b5c')), {
             sku: 'abc',
             quantity: 1,
             unitPrice: { amount: '1', currency: 'JPY' },
         });
-        expect(r).toEqual({ ok: false, error: { type: 'InvalidSku', value: 'abc', invariant: 'valid' } });
+        expect(r).toEqual({ ok: false, error: { type: 'Sales.InvalidSku', value: 'abc', invariant: 'valid' } });
     });
 
     test("a command the aggregate's state does not accept is not called", async () => {
@@ -81,7 +81,7 @@ describe('verified types', () => {
         const { makeAvailableEmail } = verifications(shop.customers);
         expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), undefined)).toEqual({
             ok: false,
-            error: { type: 'EmailTaken', email: 'hanako@example.com' },
+            error: { type: 'Sales.EmailTaken', email: 'hanako@example.com' },
         });
         expect<unknown>(await makeAvailableEmail(address('hanako@example.com'), hanako.value.id)).toEqual({ ok: true, value: 'hanako@example.com' });
         expect<unknown>(await makeAvailableEmail(address('taro@example.com'), undefined)).toEqual({ ok: true, value: 'taro@example.com' });
@@ -94,11 +94,11 @@ describe('verified types', () => {
         if (!hanako.ok || !ichiro.ok) throw new Error('registration failed');
         expect<unknown>(await shop.app.registerCustomer('山田 太郎', 'hanako@example.com')).toEqual({
             ok: false,
-            error: { type: 'EmailTaken', email: 'hanako@example.com' },
+            error: { type: 'Sales.EmailTaken', email: 'hanako@example.com' },
         });
         expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'hanako@example.com')).toEqual({
             ok: false,
-            error: { type: 'EmailTaken', email: 'hanako@example.com' },
+            error: { type: 'Sales.EmailTaken', email: 'hanako@example.com' },
         });
         expect<unknown>((await shop.customers.load(ichiro.value.id))?.aggregate.email).toBe('ichiro@example.com');
         expect<unknown>(await shop.app.changeEmail(ichiro.value.id, 'ichiro@example.com')).toMatchObject({ ok: true }); // its own address
@@ -113,8 +113,8 @@ describe('policies', () => {
         expect(invoice?.aggregate).toMatchObject({ state: 'Open', billedAmount: { amount: '37.55', currency: 'USD' } });
         const paid = await shop.app.payInvoice(invoice!.aggregate.id);
         expect(paid).toMatchObject({ ok: true, value: { state: 'Paid' } });
-        const [stored] = shop.events.stored.filter((s) => s.event.type === 'InvoicePaid');
-        expect(stored.event).toEqual({ type: 'InvoicePaid', invoiceId: invoice!.aggregate.id, paidAt: expect.any(Date) });
+        const [stored] = shop.events.stored.filter((s) => s.event.type === 'Billing.InvoicePaid');
+        expect(stored.event).toEqual({ type: 'Billing.InvoicePaid', invoiceId: invoice!.aggregate.id, paidAt: expect.any(Date) });
     });
 
     test('cancelling a confirmed order records a refund request; cancelling a draft does not', async () => {

@@ -668,8 +668,8 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             Asking: {
                 set: { id, session, command, startedBy, opening, focus, language, startedAt, awaiting: opening, asked: undefined },
                 events: {
-                    InterviewStarted: {
-                        type: 'InterviewStarted',
+                    'Collaboration.InterviewStarted': {
+                        type: 'Collaboration.InterviewStarted',
                         interviewId: id,
                         session,
                         command,
@@ -689,7 +689,7 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             ok({
                 Asking: {
                     set: { awaiting: message, asked: undefined },
-                    events: { InterviewAnswered: { type: 'InterviewAnswered', interviewId: interview.id, message, heardAt } },
+                    events: { 'Collaboration.InterviewAnswered': { type: 'Collaboration.InterviewAnswered', interviewId: interview.id, message, heardAt } },
                 },
             }),
         // a word on the brief: it is dropped, and the interviewer takes it from there
@@ -697,21 +697,21 @@ export const interviewCommands: Collaboration.InterviewCommands = {
             ok({
                 Asking: {
                     set: { awaiting: message, asked: undefined },
-                    events: { InterviewAnswered: { type: 'InterviewAnswered', interviewId: interview.id, message, heardAt } },
+                    events: { 'Collaboration.InterviewAnswered': { type: 'Collaboration.InterviewAnswered', interviewId: interview.id, message, heardAt } },
                 },
             }),
     }),
 
     ask: decide<Collaboration.AskInterviewDecision>(Collaboration.InterviewShape, {
         Asking: (interview, params) => {
-            if (Collaboration.checkAskInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'InterviewMovedOn' });
+            if (Collaboration.checkAskInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'Collaboration.InterviewMovedOn' });
             const { question, askedAt } = params;
             return ok({
                 Asking: {
                     set: { awaiting: undefined, asked: question },
                     events: {
-                        InterviewQuestionAsked: {
-                            type: 'InterviewQuestionAsked',
+                        'Collaboration.InterviewQuestionAsked': {
+                            type: 'Collaboration.InterviewQuestionAsked',
                             interviewId: interview.id,
                             question: question.question,
                             choices: question.choices,
@@ -726,12 +726,20 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     summarize: decide<Collaboration.SummarizeInterviewDecision>(Collaboration.InterviewShape, {
         Asking: (interview, params) => {
-            if (Collaboration.checkSummarizeInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'InterviewMovedOn' });
+            if (Collaboration.checkSummarizeInterviewRequires(interview, params) === 'stillAwaited') return err({ type: 'Collaboration.InterviewMovedOn' });
             const { answered, summary, briefedAt } = params;
             return ok({
                 Briefed: {
                     set: { brief: summary, answered, briefedAt },
-                    events: { InterviewBriefed: { type: 'InterviewBriefed', interviewId: interview.id, brief: summary, answered, briefedAt } },
+                    events: {
+                        'Collaboration.InterviewBriefed': {
+                            type: 'Collaboration.InterviewBriefed',
+                            interviewId: interview.id,
+                            brief: summary,
+                            answered,
+                            briefedAt,
+                        },
+                    },
                 },
             });
         },
@@ -739,14 +747,14 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     confirm: decide<Collaboration.ConfirmInterviewDecision>(Collaboration.InterviewShape, {
         Briefed: (interview, params) => {
-            if (Collaboration.checkConfirmInterviewRequires(interview, params) === 'facilitatorConfirms') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkConfirmInterviewRequires(interview, params) === 'facilitatorConfirms') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { confirmedBy, confirmedBrief, edited, run, confirmedAt } = params;
             return ok({
                 Confirmed: {
                     set: { brief: confirmedBrief, edited, confirmedBy, run, confirmedAt },
                     events: {
-                        InterviewConfirmed: {
-                            type: 'InterviewConfirmed',
+                        'Collaboration.InterviewConfirmed': {
+                            type: 'Collaboration.InterviewConfirmed',
                             interviewId: interview.id,
                             brief: confirmedBrief,
                             edited,
@@ -762,12 +770,20 @@ export const interviewCommands: Collaboration.InterviewCommands = {
 
     reject: decide<Collaboration.RejectInterviewDecision>(Collaboration.InterviewShape, {
         Briefed: (interview, params) => {
-            if (Collaboration.checkRejectInterviewRequires(interview, params) === 'facilitatorRejects') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkRejectInterviewRequires(interview, params) === 'facilitatorRejects') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { rejectedBy, note, rejectedAt } = params;
             return ok({
                 Rejected: {
                     set: { rejectedBy, note, rejectedAt },
-                    events: { InterviewRejected: { type: 'InterviewRejected', interviewId: interview.id, rejectedBy, ...(note && { note }), rejectedAt } },
+                    events: {
+                        'Collaboration.InterviewRejected': {
+                            type: 'Collaboration.InterviewRejected',
+                            interviewId: interview.id,
+                            rejectedBy,
+                            ...(note && { note }),
+                            rejectedAt,
+                        },
+                    },
                 },
             });
         },
@@ -786,17 +802,17 @@ function stopped(
     {
         readonly Stopped: {
             readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Date };
-            readonly events: { readonly InterviewStopped: Collaboration.InterviewStopped };
+            readonly events: { readonly 'Collaboration.InterviewStopped': Collaboration.InterviewStopped };
         };
     },
     Collaboration.NotTheInterviewer
 > {
-    if (Collaboration.checkStopInterviewRequires(interview, params) === 'starterOrFacilitatorStops') return err({ type: 'NotTheInterviewer' });
+    if (Collaboration.checkStopInterviewRequires(interview, params) === 'starterOrFacilitatorStops') return err({ type: 'Collaboration.NotTheInterviewer' });
     const { stoppedBy, stoppedAt } = params;
     return ok({
         Stopped: {
             set: { stoppedBy, stoppedAt },
-            events: { InterviewStopped: { type: 'InterviewStopped', interviewId: interview.id, stoppedBy, stoppedAt } },
+            events: { 'Collaboration.InterviewStopped': { type: 'Collaboration.InterviewStopped', interviewId: interview.id, stoppedBy, stoppedAt } },
         },
     });
 }

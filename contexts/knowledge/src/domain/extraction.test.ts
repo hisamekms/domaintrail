@@ -44,9 +44,9 @@ describe('applying an extraction', () => {
         const outcome = applyExtraction({ by, operations }, store(older), at);
         expect(outcome.dropped).toEqual([]);
         expect(outcome.applied.map((a) => a.changes.map((c) => c.event.type))).toEqual([
-            ['KnowledgeItemAdded'],
-            ['KnowledgeSourceAdded'],
-            ['KnowledgeItemRewritten'],
+            ['Knowledge.KnowledgeItemAdded'],
+            ['Knowledge.KnowledgeSourceAdded'],
+            ['Knowledge.KnowledgeItemRewritten'],
         ]);
         expect(outcome.items.map((i): unknown[] => [i.id, i.version, i.content.text])).toEqual([
             ['kn_00000002', 1, 'more precise'],
@@ -79,9 +79,9 @@ describe('applying an extraction', () => {
         const operations = [update('kn_00000002'), addSource('kn_00000004'), update('kn_00000003'), addSource('kn_00000001')];
         const outcome = applyExtraction({ by, operations }, store(kept, gone, corrected), at);
         expect(outcome.dropped).toEqual([
-            { operation: operations[0], reason: { type: 'KnowledgeItemGone', itemId: itemId('kn_00000002') } },
-            { operation: operations[1], reason: { type: 'KnowledgeItemNotFound', itemId: itemId('kn_00000004') } },
-            { operation: operations[2], reason: { type: 'StaleOperation' } },
+            { operation: operations[0], reason: { type: 'Knowledge.KnowledgeItemGone', itemId: itemId('kn_00000002') } },
+            { operation: operations[1], reason: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000004') } },
+            { operation: operations[2], reason: { type: 'Knowledge.StaleOperation' } },
         ]);
         expect(outcome.items.map((i) => i.id)).toEqual([kept.id]);
     });
@@ -90,7 +90,7 @@ describe('applying an extraction', () => {
         const older = liveItem('kn_00000001', { createdIn: 's0' });
         const outcome = applyExtraction({ by, operations: [update('kn_00000001'), update('kn_00000001')] }, store(older), at);
         expect(outcome.applied).toHaveLength(1);
-        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'StaleOperation' }]);
+        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.StaleOperation' }]);
     });
 
     test('a conflict adds the new item and links the older one, both with sources; otherwise neither', () => {
@@ -112,7 +112,7 @@ describe('applying an extraction', () => {
         const unsourced = liveItem('kn_00000001', { sources: [] });
         const refused = applyExtraction({ by, operations: [conflict('kn_00000001')] }, store(unsourced), at);
         expect(refused.items).toEqual([]);
-        expect(refused.dropped.map((d) => d.reason)).toEqual([{ type: 'ConflictWithoutSource' }]);
+        expect(refused.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.ConflictWithoutSource' }]);
 
         const onDeleted = applyExtraction({ by, operations: [conflict('kn_00000001')] }, store(deletedItem(older)), at);
         expect(onDeleted.items).toEqual([]);
@@ -125,7 +125,7 @@ describe('applying an extraction', () => {
             store(existing),
             at,
         );
-        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'KnowledgeItemExists', itemId: existing.id }]);
+        expect(outcome.dropped.map((d) => d.reason)).toEqual([{ type: 'Knowledge.KnowledgeItemExists', itemId: existing.id }]);
     });
 
     test('each applied change gives the audit log who, what and why', () => {

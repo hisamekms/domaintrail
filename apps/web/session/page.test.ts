@@ -257,7 +257,7 @@ describe('the session state from the socket', () => {
         ({
             type: 'request.sent',
             seq,
-            event: { type: 'RequestSent', requestId: id, session: 's1', author: 'dev:a', targets, body: 'b', sentAt: at, mentions: [] },
+            event: { type: 'Collaboration.RequestSent', requestId: id, session: 's1', author: 'dev:a', targets, body: 'b', sentAt: at, mentions: [] },
         }) as EventMessage;
     const message = (seq: number, event: object): EventMessage => ({ type: 'x', seq, event }) as unknown as EventMessage;
 
@@ -276,45 +276,56 @@ describe('the session state from the socket', () => {
         expect(applyEvent(once, sent(4, 'q1')).state).toBe(once);
         // the same change again under a later seq (a state fetched while it was on its way) is not doubled
         expect(applyEvent(once, sent(5, 'q1')).state.requests.length).toBe(1);
-        const dismissed = applyEvent(once, message(6, { type: 'RequestDismissed', requestId: 'q1', dismissedBy: 'dev:a', dismissedAt: at })).state;
+        const dismissed = applyEvent(
+            once,
+            message(6, { type: 'Collaboration.RequestDismissed', requestId: 'q1', dismissedBy: 'dev:a', dismissedAt: at }),
+        ).state;
         expect(dismissed.requests[0]).toMatchObject({ state: 'Dismissed', dismissedBy: 'dev:a' });
         expect(
-            applyEvent(dismissed, message(7, { type: 'RequestDismissed', requestId: 'q1', dismissedBy: 'dev:b', dismissedAt: at })).state.requests[0],
+            applyEvent(dismissed, message(7, { type: 'Collaboration.RequestDismissed', requestId: 'q1', dismissedBy: 'dev:b', dismissedAt: at })).state
+                .requests[0],
         ).toMatchObject({
             dismissedBy: 'dev:a',
         });
-        const joined = applyEvent(base, message(4, { type: 'ParticipantJoined', sessionId: 's1', participant: 'dev:b', name: 'B', joinedAt: at })).state;
+        const joined = applyEvent(
+            base,
+            message(4, { type: 'Collaboration.ParticipantJoined', sessionId: 's1', participant: 'dev:b', name: 'B', joinedAt: at }),
+        ).state;
         expect(
-            applyEvent(joined, message(5, { type: 'ParticipantJoined', sessionId: 's1', participant: 'dev:b', name: 'B', joinedAt: at })).state.session
-                .participants.length,
+            applyEvent(joined, message(5, { type: 'Collaboration.ParticipantJoined', sessionId: 's1', participant: 'dev:b', name: 'B', joinedAt: at })).state
+                .session.participants.length,
         ).toBe(2);
     });
 
     test('runs move through their states; what an event does not carry asks for the state again', () => {
         const queued = applyEvent(
             base,
-            message(4, { type: 'RunQueued', runId: 'run1', session: 's1', requests: ['q1'], queuedBy: 'local:facilitator', queuedAt: at }),
+            message(4, { type: 'Collaboration.RunQueued', runId: 'run1', session: 's1', requests: ['q1'], queuedBy: 'local:facilitator', queuedAt: at }),
         );
         expect(queued.refetch).toBe(true);
         expect(queued.state.runs.length).toBe(0);
         const run = { id: 'run1', session: 's1', input: { requests: [] }, queuedBy: 'local:facilitator', queuedAt: at, state: 'Queued' };
         const held = { ...base, runs: [run] } as unknown as SessionStateBody;
-        const started = applyEvent(held, message(4, { type: 'RunStarted', runId: 'run1', baseRevision: 'r1', startedAt: at }));
+        const started = applyEvent(held, message(4, { type: 'Collaboration.RunStarted', runId: 'run1', baseRevision: 'r1', startedAt: at }));
         expect(started).toMatchObject({ refetch: false, state: { runs: [{ state: 'Running', baseRevision: 'r1' }] } });
         expect(
-            applyEvent(started.state, message(5, { type: 'RunCompleted', runId: 'run1', resultRevision: 'r1', changed: false, finishedAt: at })).refetch,
+            applyEvent(started.state, message(5, { type: 'Collaboration.RunCompleted', runId: 'run1', resultRevision: 'r1', changed: false, finishedAt: at }))
+                .refetch,
         ).toBe(true);
-        const failed = applyEvent(started.state, message(5, { type: 'RunFailed', runId: 'run1', reason: 'AgentError', finishedAt: at }));
+        const failed = applyEvent(started.state, message(5, { type: 'Collaboration.RunFailed', runId: 'run1', reason: 'AgentError', finishedAt: at }));
         expect(failed).toMatchObject({ refetch: false, state: { runs: [{ state: 'Failed', reason: 'AgentError' }] } });
-        const cancelled = applyEvent(started.state, message(5, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'local:facilitator', cancelledAt: at }));
+        const cancelled = applyEvent(
+            started.state,
+            message(5, { type: 'Collaboration.RunCancelled', runId: 'run1', cancelledBy: 'local:facilitator', cancelledAt: at }),
+        );
         expect(cancelled.state.runs[0]).toMatchObject({ state: 'Cancelled', baseRevision: 'r1' });
         // a queued revert the server took: left to the AI with why (still queued), or reverted mechanically
         const obstacle = { kind: 'Conflict', paths: ['a.dt'] };
-        const left = applyEvent(held, message(5, { type: 'RevertLeftToAgent', runId: 'run1', obstacle }));
+        const left = applyEvent(held, message(5, { type: 'Collaboration.RevertLeftToAgent', runId: 'run1', obstacle }));
         expect(left).toMatchObject({ refetch: false, state: { runs: [{ state: 'Queued', revertObstacle: obstacle }] } });
         const reverted = applyEvent(
             held,
-            message(5, { type: 'RunReverted', runId: 'run1', baseRevision: 'r1', resultRevision: 'r2', changed: true, finishedAt: at }),
+            message(5, { type: 'Collaboration.RunReverted', runId: 'run1', baseRevision: 'r1', resultRevision: 'r2', changed: true, finishedAt: at }),
         );
         expect(reverted).toMatchObject({
             refetch: false,
@@ -322,13 +333,15 @@ describe('the session state from the socket', () => {
         });
         // one the page does not have yet is fetched
         expect(
-            applyEvent(base, message(5, { type: 'RunReverted', runId: 'run2', baseRevision: 'r1', resultRevision: 'r1', changed: false, finishedAt: at }))
-                .refetch,
+            applyEvent(
+                base,
+                message(5, { type: 'Collaboration.RunReverted', runId: 'run2', baseRevision: 'r1', resultRevision: 'r1', changed: false, finishedAt: at }),
+            ).refetch,
         ).toBe(true);
         // a cancel after the run ended changes nothing
-        expect(applyEvent(failed.state, message(6, { type: 'RunCancelled', runId: 'run1', cancelledBy: 'x', cancelledAt: at })).state.runs[0].state).toBe(
-            'Failed',
-        );
+        expect(
+            applyEvent(failed.state, message(6, { type: 'Collaboration.RunCancelled', runId: 'run1', cancelledBy: 'x', cancelledAt: at })).state.runs[0].state,
+        ).toBe('Failed');
     });
 
     test('a fetched state is taken only when it is not older; after a disconnect events wait for the next state', () => {

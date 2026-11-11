@@ -344,7 +344,7 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                         if (!request) throw new Error('The edit was recorded without its message');
                         return ok({ request, run: recorded.value, references: plan.references });
                     }
-                    if (recorded.error.type !== 'ExternalChangesSinceSnapshot') return recorded;
+                    if (recorded.error.type !== 'Collaboration.ExternalChangesSinceSnapshot') return recorded;
                     refused = recorded.error;
                 }
                 return err(refused ?? { type: 'StormingDoesNotParse' });

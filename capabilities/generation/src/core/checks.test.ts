@@ -158,7 +158,7 @@ describe('generated checks', () => {
 
     test('make<Name> reports the first violated invariant, and creation without invariants cannot fail', () => {
         expect(Sales.makeQuantity(5)).toEqual({ ok: true, value: 5 });
-        expect(Sales.makeQuantity(0)).toEqual({ ok: false, error: { type: 'InvalidQuantity', value: 0, invariant: 'valid' } });
+        expect(Sales.makeQuantity(0)).toEqual({ ok: false, error: { type: 'Sales.InvalidQuantity', value: 0, invariant: 'valid' } });
         expect(Sales.makeNote('x')).toBe('x');
     });
 
@@ -179,7 +179,7 @@ describe('generated checks', () => {
             '{3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b}',
             'gf2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b',
         ])
-            expect(Sales.makeOrderId(v)).toEqual({ ok: false, error: { type: 'InvalidOrderId', value: v, invariant: 'uuid' } });
+            expect(Sales.makeOrderId(v)).toEqual({ ok: false, error: { type: 'Sales.InvalidOrderId', value: v, invariant: 'uuid' } });
         expect(Sales.checkToken('x')).toEqual(['uuid', 'v4']);
         expect(Sales.makeToken('01890a5d-ac96-774b-bcce-b302099a8057')).toMatchObject({ ok: false, error: { invariant: 'v4' } });
         expect(Sales.makeToken('3f2b8c1e-9a4d-4e6f-8b7a-1c2d3e4f5a6b')).toMatchObject({ ok: true });

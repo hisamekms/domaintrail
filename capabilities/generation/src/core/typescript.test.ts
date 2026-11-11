@@ -40,7 +40,7 @@ describe('generated TypeScript', () => {
 ) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
-        readonly events: { readonly OrderConfirmed: OrderConfirmed };
+        readonly events: { readonly 'Sales.OrderConfirmed': OrderConfirmed };
     };
 }, EmptyOrder>;`,
         );
@@ -56,7 +56,7 @@ describe('generated TypeScript', () => {
     test('command error catalog contains actual type values and empty decisions', async () => {
         const sales = await readFile(path.join(dir, 'generated', 'domain', 'Sales.ts'), 'utf8');
         expect(sales).toContain('export const commandErrors = {');
-        expect(sales).toContain("    'Order.confirm': ['EmptyOrder'],");
+        expect(sales).toContain("    'Order.confirm': ['Sales.EmptyOrder'],");
         expect(sales).toContain("    'Order.changeNote': [],");
         expect(sales).toContain('} as const;');
     });
@@ -136,14 +136,14 @@ describe('commands with several transitions', () => {
     readonly Draft: Result<{
         readonly Draft: {
             readonly aggregate: DraftWork;
-            readonly events: { readonly WorkChanged: WorkChanged };
+            readonly events: { readonly 'Tasks.WorkChanged': WorkChanged };
         };
     }, never>;
     /** @emits WorkChanged — exactly once when the command succeeds */
     readonly InProgress: Result<{
         readonly InProgress: {
             readonly aggregate: InProgressWork;
-            readonly events: { readonly WorkChanged: WorkChanged };
+            readonly events: { readonly 'Tasks.WorkChanged': WorkChanged };
         };
     }, never>;
 }[S['state']];
@@ -161,14 +161,14 @@ export type ChangeWorkDecision = {
     readonly Draft: (work: DraftWork, params: ChangeWorkParams) => Result<{
         readonly Draft: {
             readonly set: { readonly title: Title };
-            readonly events: { readonly WorkChanged: WorkChanged };
+            readonly events: { readonly 'Tasks.WorkChanged': WorkChanged };
         };
     }, never>;
     /** @emits WorkChanged — exactly once when the command succeeds */
     readonly InProgress: (work: InProgressWork, params: ChangeWorkParams) => Result<{
         readonly InProgress: {
             readonly set: { readonly title: Title };
-            readonly events: { readonly WorkChanged: WorkChanged };
+            readonly events: { readonly 'Tasks.WorkChanged': WorkChanged };
         };
     }, never>;
 };`,

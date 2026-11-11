@@ -363,7 +363,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
             name: options.facilitatorName ?? (mode === 'Solo' ? await soloName(options.root) : FACILITATOR_NAME),
         });
         if (!openedSession.ok) {
-            if (openedSession.error.type === 'CollabSessionOpen')
+            if (openedSession.error.type === 'Collaboration.CollabSessionOpen')
                 throw new SessionError(
                     'This workspace has an open collab session: resume it with `dt collab`, or end it from its collab menu before `dt open`.',
                 );
@@ -611,13 +611,15 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 // the queue may have moved: a revert at its head is the server's to try
                 void reverts.kick();
                 // messages addressed to the AI: stage 2 on the server, then the answerer role's jobs
-                if (entries.some((e) => e.event.type === 'TriageOpened' || e.event.type === 'TriageReaddressed')) stage.kick();
+                if (entries.some((e) => e.event.type === 'Collaboration.TriageOpened' || e.event.type === 'Collaboration.TriageReaddressed')) stage.kick();
                 agent.answers.kick();
-                if (entries.some((e) => e.event.type === 'RevisionRestored')) agent.answers.restored();
+                if (entries.some((e) => e.event.type === 'Collaboration.RevisionRestored')) agent.answers.restored();
                 for (const e of entries) {
                     // one line per triage decided (and per override), without the message's text
-                    if (e.event.type === 'TriageDecided') debug?.(`triage ${e.event.triageId}: ${e.event.kind} (decided by ${e.event.decidedBy})`);
-                    if (e.event.type === 'TriageOverridden') debug?.(`triage ${e.event.triageId}: ${e.event.kind} (overridden by ${e.event.step.stage})`);
+                    if (e.event.type === 'Collaboration.TriageDecided')
+                        debug?.(`triage ${e.event.triageId}: ${e.event.kind} (decided by ${e.event.decidedBy})`);
+                    if (e.event.type === 'Collaboration.TriageOverridden')
+                        debug?.(`triage ${e.event.triageId}: ${e.event.kind} (overridden by ${e.event.step.stage})`);
                 }
                 for (const e of entries) if (ending.has(e.event.type) && 'runId' in e.event) activities.end(e.event.runId);
                 // a message, or the AI's answer: the extraction of knowledge decides when to run
@@ -625,7 +627,7 @@ export async function startSessionServer(options: SessionServerOptions): Promise
                 // a run ended, a proposal decided, a message triaged: the conflicts being made hotspots may be settled
                 void liveKnowledge?.handOvers?.settle();
                 presenceChanged();
-                if (entries.some((e) => e.event.type === 'SessionClosed')) {
+                if (entries.some((e) => e.event.type === 'Collaboration.SessionClosed')) {
                     agent.answers.close(true);
                     void onClosed();
                 }

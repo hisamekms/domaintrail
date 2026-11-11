@@ -23,7 +23,7 @@ export const sessionCommands: Collaboration.SessionCommands = {
                     startedAt,
                     currentJourney: undefined,
                 },
-                events: { SessionStarted: { type: 'SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
+                events: { 'Collaboration.SessionStarted': { type: 'Collaboration.SessionStarted', sessionId: id, facilitator, name, mode, startedAt } },
             },
         }),
     ),
@@ -33,14 +33,16 @@ export const sessionCommands: Collaboration.SessionCommands = {
             const { participant, name, joinedAt } = params;
             switch (Collaboration.checkJoinSessionRequires(session, params)) {
                 case 'newcomer':
-                    return err({ type: 'AlreadyJoined', participant });
+                    return err({ type: 'Collaboration.AlreadyJoined', participant });
                 case 'collaborative':
-                    return err({ type: 'SoloSession' });
+                    return err({ type: 'Collaboration.SoloSession' });
             }
             return ok({
                 Open: {
                     set: { participants: [...session.participants, { id: participant, name, role: 'Participant', joinedAt }] },
-                    events: { ParticipantJoined: { type: 'ParticipantJoined', sessionId: session.id, participant, name, joinedAt } },
+                    events: {
+                        'Collaboration.ParticipantJoined': { type: 'Collaboration.ParticipantJoined', sessionId: session.id, participant, name, joinedAt },
+                    },
                 },
             });
         },
@@ -49,10 +51,13 @@ export const sessionCommands: Collaboration.SessionCommands = {
     // a Solo session continued as a Collab one (`dt collab` on a workspace whose open session is `dt open`'s)
     collaborate: decide<Collaboration.CollaborateSessionDecision>(Collaboration.SessionShape, {
         Open: (session, params) => {
-            if (Collaboration.checkCollaborateSessionRequires(session, params) === 'solo') return err({ type: 'NotSolo' });
+            if (Collaboration.checkCollaborateSessionRequires(session, params) === 'solo') return err({ type: 'Collaboration.NotSolo' });
             const { collaboratedAt } = params;
             return ok({
-                Open: { set: { mode: 'Collab' }, events: { SessionCollaborated: { type: 'SessionCollaborated', sessionId: session.id, collaboratedAt } } },
+                Open: {
+                    set: { mode: 'Collab' },
+                    events: { 'Collaboration.SessionCollaborated': { type: 'Collaboration.SessionCollaborated', sessionId: session.id, collaboratedAt } },
+                },
             });
         },
     }),
@@ -60,12 +65,20 @@ export const sessionCommands: Collaboration.SessionCommands = {
     // the current journey (the guide's card and the app bar's chip): the facilitator's, the one person's in Solo
     chooseJourney: decide<Collaboration.ChooseJourneySessionDecision>(Collaboration.SessionShape, {
         Open: (session, params) => {
-            if (Collaboration.checkChooseJourneySessionRequires(session, params) === 'facilitatorChooses') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkChooseJourneySessionRequires(session, params) === 'facilitatorChooses')
+                return err({ type: 'Collaboration.FacilitatorOnly' });
             const { journey, chosenAt } = params;
             return ok({
                 Open: {
                     set: { currentJourney: journey },
-                    events: { JourneyChosen: { type: 'JourneyChosen', sessionId: session.id, ...(journey !== undefined && { journey }), chosenAt } },
+                    events: {
+                        'Collaboration.JourneyChosen': {
+                            type: 'Collaboration.JourneyChosen',
+                            sessionId: session.id,
+                            ...(journey !== undefined && { journey }),
+                            chosenAt,
+                        },
+                    },
                 },
             });
         },
@@ -73,9 +86,14 @@ export const sessionCommands: Collaboration.SessionCommands = {
 
     close: decide<Collaboration.CloseSessionDecision>(Collaboration.SessionShape, {
         Open: (session, params) => {
-            if (Collaboration.checkCloseSessionRequires(session, params) === 'facilitatorCloses') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkCloseSessionRequires(session, params) === 'facilitatorCloses') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { closedAt } = params;
-            return ok({ Closed: { set: { closedAt }, events: { SessionClosed: { type: 'SessionClosed', sessionId: session.id, closedAt } } } });
+            return ok({
+                Closed: {
+                    set: { closedAt },
+                    events: { 'Collaboration.SessionClosed': { type: 'Collaboration.SessionClosed', sessionId: session.id, closedAt } },
+                },
+            });
         },
     }),
 };
@@ -84,15 +102,15 @@ export const requestCommands: Collaboration.RequestCommands = {
     send: decide<Collaboration.SendRequestDecision>(Collaboration.RequestShape, (params) => {
         switch (Collaboration.checkSendRequestRequires(params)) {
             case 'atMostTwentyTargets':
-                return err({ type: 'TooManyTargets' });
+                return err({ type: 'Collaboration.TooManyTargets' });
             case 'distinctTargets':
-                return err({ type: 'DuplicateTarget' });
+                return err({ type: 'Collaboration.DuplicateTarget' });
             case 'noWorkspaceTarget':
-                return err({ type: 'WorkspaceTarget' });
+                return err({ type: 'Collaboration.WorkspaceTarget' });
             case 'atMostTwentyMentions':
-                return err({ type: 'TooManyMentions' });
+                return err({ type: 'Collaboration.TooManyMentions' });
             case 'distinctMentions':
-                return err({ type: 'DuplicateMention' });
+                return err({ type: 'Collaboration.DuplicateMention' });
         }
         const { id, session, author, targets, body, sentAt, replyTo, mentions, viewedAt } = params;
         return ok({
@@ -114,8 +132,8 @@ export const requestCommands: Collaboration.RequestCommands = {
                     edit: undefined,
                 },
                 events: {
-                    RequestSent: {
-                        type: 'RequestSent',
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
                         requestId: id,
                         session,
                         author,
@@ -133,7 +151,7 @@ export const requestCommands: Collaboration.RequestCommands = {
 
     // a revert of a run's changes: about the workspace as a whole (no target, no mention), the facilitator's
     requestRevert: decide<Collaboration.RequestRevertRequestDecision>(Collaboration.RequestShape, (params) => {
-        if (Collaboration.checkRequestRevertRequestRequires(params) === 'facilitatorReverts') return err({ type: 'FacilitatorOnly' });
+        if (Collaboration.checkRequestRevertRequestRequires(params) === 'facilitatorReverts') return err({ type: 'Collaboration.FacilitatorOnly' });
         const { id, session, author, body, sentAt } = params;
         // the run without its evidence: the aggregate stores the base type
         const reverts: Collaboration.AgentRunId = params.reverts;
@@ -154,7 +172,19 @@ export const requestCommands: Collaboration.RequestCommands = {
                     edit: undefined,
                     redactedAt: undefined,
                 },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], reverts } },
+                events: {
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets: [],
+                        body,
+                        sentAt,
+                        mentions: [],
+                        reverts,
+                    },
+                },
             },
         });
     }),
@@ -178,7 +208,19 @@ export const requestCommands: Collaboration.RequestCommands = {
                     redactedAt: undefined,
                     edit,
                 },
-                events: { RequestSent: { type: 'RequestSent', requestId: id, session, author, targets: [], body, sentAt, mentions: [], edit } },
+                events: {
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
+                        requestId: id,
+                        session,
+                        author,
+                        targets: [],
+                        body,
+                        sentAt,
+                        mentions: [],
+                        edit,
+                    },
+                },
             },
         }),
     ),
@@ -207,8 +249,8 @@ export const requestCommands: Collaboration.RequestCommands = {
                     redactedAt: undefined,
                 },
                 events: {
-                    RequestSent: {
-                        type: 'RequestSent',
+                    'Collaboration.RequestSent': {
+                        type: 'Collaboration.RequestSent',
                         requestId: id,
                         session,
                         author,
@@ -231,7 +273,7 @@ export const requestCommands: Collaboration.RequestCommands = {
             return ok({
                 Sent: {
                     set: { body: request.redactedAt ? request.body : body, redactedAt },
-                    events: { RequestRedacted: { type: 'RequestRedacted', requestId: request.id, redactedAt } },
+                    events: { 'Collaboration.RequestRedacted': { type: 'Collaboration.RequestRedacted', requestId: request.id, redactedAt } },
                 },
             });
         },
@@ -240,7 +282,7 @@ export const requestCommands: Collaboration.RequestCommands = {
             return ok({
                 Dismissed: {
                     set: { body: request.redactedAt ? request.body : body, redactedAt },
-                    events: { RequestRedacted: { type: 'RequestRedacted', requestId: request.id, redactedAt } },
+                    events: { 'Collaboration.RequestRedacted': { type: 'Collaboration.RequestRedacted', requestId: request.id, redactedAt } },
                 },
             });
         },
@@ -251,17 +293,17 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     queue: decide<Collaboration.QueueAgentRunDecision>(Collaboration.AgentRunShape, (params) => {
         switch (Collaboration.checkQueueAgentRunRequires(params)) {
             case 'facilitatorQueues':
-                return err({ type: 'FacilitatorOnly' });
+                return err({ type: 'Collaboration.FacilitatorOnly' });
             case 'distinctRequests':
-                return err({ type: 'DuplicateRequest' });
+                return err({ type: 'Collaboration.DuplicateRequest' });
             case 'inputCoversRequests':
-                return err({ type: 'InputMismatch' });
+                return err({ type: 'Collaboration.InputMismatch' });
         }
         const { id, session, requests, input, queuedBy, queuedAt } = params;
         return ok({
             Queued: {
                 set: { id, session, input, queuedBy, queuedAt, revertObstacle: undefined },
-                events: { RunQueued: { type: 'RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
+                events: { 'Collaboration.RunQueued': { type: 'Collaboration.RunQueued', runId: id, session, requests, queuedBy, queuedAt } },
             },
         });
     }),
@@ -271,9 +313,9 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         switch (Collaboration.checkRecordEditAgentRunRequires(params)) {
             case 'inputEdits':
             case 'editInputCoversRequests':
-                return err({ type: 'InputMismatch' });
+                return err({ type: 'Collaboration.InputMismatch' });
             case 'editChanges':
-                return err({ type: 'ChangedMismatch' });
+                return err({ type: 'Collaboration.ChangedMismatch' });
         }
         const { id, session, requests, input, queuedBy, queuedAt, baseRevision, resultRevision, reapplies, finishedAt } = params;
         return ok({
@@ -292,8 +334,8 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                     hotspotName: undefined,
                 },
                 events: {
-                    RunEdited: {
-                        type: 'RunEdited',
+                    'Collaboration.RunEdited': {
+                        type: 'Collaboration.RunEdited',
                         runId: id,
                         session,
                         requests,
@@ -311,12 +353,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     // the AI's name of a hotspot a person added, written over its provisional one: part of the same edit (ADR 0033)
     nameHotspot: decide<Collaboration.NameHotspotAgentRunDecision>(Collaboration.AgentRunShape, {
         Edited: (run, params) => {
-            if (Collaboration.checkNameHotspotAgentRunRequires(run, params) === 'renamedChanges') return err({ type: 'ChangedMismatch' });
+            if (Collaboration.checkNameHotspotAgentRunRequires(run, params) === 'renamedChanges') return err({ type: 'Collaboration.ChangedMismatch' });
             const { name: hotspotName, renamed: resultRevision } = params;
             return ok({
                 Edited: {
                     set: { hotspotName, resultRevision },
-                    events: { RunHotspotNamed: { type: 'RunHotspotNamed', runId: run.id, hotspotName, resultRevision } },
+                    events: { 'Collaboration.RunHotspotNamed': { type: 'Collaboration.RunHotspotNamed', runId: run.id, hotspotName, resultRevision } },
                 },
             });
         },
@@ -325,7 +367,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     // what a later run did to the same sticky, or the person's choice made (ADR 0033)
     noteConflict: decide<Collaboration.NoteConflictAgentRunDecision>(Collaboration.AgentRunShape, {
         Edited: (run, { conflict }) =>
-            ok({ Edited: { set: { conflict }, events: { RunEditConflicted: { type: 'RunEditConflicted', runId: run.id, conflict } } } }),
+            ok({
+                Edited: {
+                    set: { conflict },
+                    events: { 'Collaboration.RunEditConflicted': { type: 'Collaboration.RunEditConflicted', runId: run.id, conflict } },
+                },
+            }),
     }),
 
     // a queued revert whose turn came, reverted mechanically by the server (no agent); unchanged when nothing was left
@@ -333,15 +380,17 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
         Queued: (run, params) => {
             switch (Collaboration.checkRevertAgentRunRequires(run, params)) {
                 case 'inputReverts':
-                    return err({ type: 'InputMismatch' });
+                    return err({ type: 'Collaboration.InputMismatch' });
                 case 'changedMatchesResult':
-                    return err({ type: 'ChangedMismatch' });
+                    return err({ type: 'Collaboration.ChangedMismatch' });
             }
             const { baseRevision, resultRevision, changed, finishedAt } = params;
             return ok({
                 Reverted: {
                     set: { baseRevision, resultRevision, changed, finishedAt },
-                    events: { RunReverted: { type: 'RunReverted', runId: run.id, baseRevision, resultRevision, changed, finishedAt } },
+                    events: {
+                        'Collaboration.RunReverted': { type: 'Collaboration.RunReverted', runId: run.id, baseRevision, resultRevision, changed, finishedAt },
+                    },
                 },
             });
         },
@@ -350,12 +399,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     // a queued revert the server could not revert mechanically: it stays queued, for the agent, with why
     leaveToAgent: decide<Collaboration.LeaveToAgentAgentRunDecision>(Collaboration.AgentRunShape, {
         Queued: (run, params) => {
-            if (Collaboration.checkLeaveToAgentAgentRunRequires(run, params) === 'inputReverts') return err({ type: 'InputMismatch' });
+            if (Collaboration.checkLeaveToAgentAgentRunRequires(run, params) === 'inputReverts') return err({ type: 'Collaboration.InputMismatch' });
             const { obstacle } = params;
             return ok({
                 Queued: {
                     set: { revertObstacle: obstacle },
-                    events: { RevertLeftToAgent: { type: 'RevertLeftToAgent', runId: run.id, obstacle } },
+                    events: { 'Collaboration.RevertLeftToAgent': { type: 'Collaboration.RevertLeftToAgent', runId: run.id, obstacle } },
                 },
             });
         },
@@ -363,17 +412,22 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
 
     start: decide<Collaboration.StartAgentRunDecision>(Collaboration.AgentRunShape, {
         Queued: (run, { baseRevision, startedAt }) =>
-            ok({ Running: { set: { baseRevision, startedAt }, events: { RunStarted: { type: 'RunStarted', runId: run.id, baseRevision, startedAt } } } }),
+            ok({
+                Running: {
+                    set: { baseRevision, startedAt },
+                    events: { 'Collaboration.RunStarted': { type: 'Collaboration.RunStarted', runId: run.id, baseRevision, startedAt } },
+                },
+            }),
     }),
 
     // Completed when the report meets the run success rule, Failed (RuleNotMet) with the report otherwise
     finish: decideNamed<Collaboration.FinishAgentRunDecision>()(Collaboration.AgentRunShape, { Completed: 'Completed', Failed: 'Failed' }, (run, params) => {
         switch (Collaboration.checkFinishAgentRunRequires(run, params)) {
             case 'changedMatchesResult':
-                return err({ type: 'ChangedMismatch' });
+                return err({ type: 'Collaboration.ChangedMismatch' });
             case 'replyAsksNothing':
             case 'replyAboutInput':
-                return err({ type: 'InvalidReply' });
+                return err({ type: 'Collaboration.InvalidReply' });
         }
         const { report, resultRevision, changed, reply, review, finishedAt } = params;
         if (succeeded(report, changed)) {
@@ -381,26 +435,34 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
                 Completed: {
                     // the reply and the review are kept with a completed run only: a failure is the facts'
                     set: { report, resultRevision, changed, reply, review, finishedAt },
-                    events: { RunCompleted: { type: 'RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
+                    events: { 'Collaboration.RunCompleted': { type: 'Collaboration.RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
                 },
             });
         }
         return ok({
             Failed: {
                 set: { reason: 'RuleNotMet', report, resultRevision, finishedAt },
-                events: { RunFailed: { type: 'RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
+                events: { 'Collaboration.RunFailed': { type: 'Collaboration.RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
             },
         });
     }),
 
     askClarification: decide<Collaboration.AskClarificationAgentRunDecision>(Collaboration.AgentRunShape, {
         Running: (run, params) => {
-            if (Collaboration.checkAskClarificationAgentRunRequires(run, params) !== undefined) return err({ type: 'InvalidReply' });
+            if (Collaboration.checkAskClarificationAgentRunRequires(run, params) !== undefined) return err({ type: 'Collaboration.InvalidReply' });
             const { question, reply, resultRevision, finishedAt } = params;
             return ok({
                 NeedsClarification: {
                     set: { question, reply, resultRevision, finishedAt },
-                    events: { RunNeedsClarification: { type: 'RunNeedsClarification', runId: run.id, question, resultRevision, finishedAt } },
+                    events: {
+                        'Collaboration.RunNeedsClarification': {
+                            type: 'Collaboration.RunNeedsClarification',
+                            runId: run.id,
+                            question,
+                            resultRevision,
+                            finishedAt,
+                        },
+                    },
                 },
             });
         },
@@ -408,12 +470,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
 
     decline: decide<Collaboration.DeclineAgentRunDecision>(Collaboration.AgentRunShape, {
         Running: (run, params) => {
-            if (Collaboration.checkDeclineAgentRunRequires(run, params) !== undefined) return err({ type: 'InvalidReply' });
+            if (Collaboration.checkDeclineAgentRunRequires(run, params) !== undefined) return err({ type: 'Collaboration.InvalidReply' });
             const { reply, resultRevision, finishedAt } = params;
             return ok({
                 Declined: {
                     set: { reply, resultRevision, finishedAt },
-                    events: { RunDeclined: { type: 'RunDeclined', runId: run.id, resultRevision, finishedAt } },
+                    events: { 'Collaboration.RunDeclined': { type: 'Collaboration.RunDeclined', runId: run.id, resultRevision, finishedAt } },
                 },
             });
         },
@@ -422,12 +484,12 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     // a failure without a report: the run success rule is finish's
     fail: decide<Collaboration.FailAgentRunDecision>(Collaboration.AgentRunShape, {
         Running: (run, params) => {
-            if (Collaboration.checkFailAgentRunRequires(run, params) === 'abnormal') return err({ type: 'ReportRequired' });
+            if (Collaboration.checkFailAgentRunRequires(run, params) === 'abnormal') return err({ type: 'Collaboration.ReportRequired' });
             const { reason, finishedAt } = params;
             return ok({
                 Failed: {
                     set: { reason, report: undefined, resultRevision: undefined, finishedAt },
-                    events: { RunFailed: { type: 'RunFailed', runId: run.id, reason, finishedAt } },
+                    events: { 'Collaboration.RunFailed': { type: 'Collaboration.RunFailed', runId: run.id, reason, finishedAt } },
                 },
             });
         },
@@ -436,22 +498,22 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     // a running run keeps its base revision; a queued one has none
     cancel: decide<Collaboration.CancelAgentRunDecision>(Collaboration.AgentRunShape, {
         Queued: (run, params) => {
-            if (Collaboration.checkCancelAgentRunRequires(run, params) === 'facilitatorCancels') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkCancelAgentRunRequires(run, params) === 'facilitatorCancels') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { cancelledBy, cancelledAt } = params;
             return ok({
                 Cancelled: {
                     set: { baseRevision: undefined, cancelledBy, cancelledAt },
-                    events: { RunCancelled: { type: 'RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
+                    events: { 'Collaboration.RunCancelled': { type: 'Collaboration.RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
                 },
             });
         },
         Running: (run, params) => {
-            if (Collaboration.checkCancelAgentRunRequires(run, params) === 'facilitatorCancels') return err({ type: 'FacilitatorOnly' });
+            if (Collaboration.checkCancelAgentRunRequires(run, params) === 'facilitatorCancels') return err({ type: 'Collaboration.FacilitatorOnly' });
             const { cancelledBy, cancelledAt } = params;
             return ok({
                 Cancelled: {
                     set: { baseRevision: run.baseRevision, cancelledBy, cancelledAt },
-                    events: { RunCancelled: { type: 'RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
+                    events: { 'Collaboration.RunCancelled': { type: 'Collaboration.RunCancelled', runId: run.id, cancelledBy, cancelledAt } },
                 },
             });
         },
@@ -467,15 +529,25 @@ export const revisionCommands: Collaboration.RevisionCommands = {
         const check = Collaboration.checkTakeRevisionRequiresWith({ hashMatchesFiles: (p) => hashMatchesFiles(p.contentHash, p.files) });
         switch (check(params)) {
             case 'notRestored':
-                return err({ type: 'RestoreNeedsCheck' });
+                return err({ type: 'Collaboration.RestoreNeedsCheck' });
             case 'hashMatchesFiles':
-                return err({ type: 'ContentHashMismatch' });
+                return err({ type: 'Collaboration.ContentHashMismatch' });
         }
         const { id, session, origin, contentHash, files, validation, takenAt } = params;
         return ok({
             Recorded: {
                 set: { id, session, origin, contentHash, files, validation, takenAt },
-                events: { RevisionRecorded: { type: 'RevisionRecorded', revisionId: id, session, origin, contentHash, validation, takenAt } },
+                events: {
+                    'Collaboration.RevisionRecorded': {
+                        type: 'Collaboration.RevisionRecorded',
+                        revisionId: id,
+                        session,
+                        origin,
+                        contentHash,
+                        validation,
+                        takenAt,
+                    },
+                },
             },
         });
     }),
@@ -484,16 +556,25 @@ export const revisionCommands: Collaboration.RevisionCommands = {
         const check = Collaboration.checkRestoreRevisionRequiresWith({ hashMatchesFiles: (p) => hashMatchesFiles(p.contentHash, p.files) });
         switch (check(params)) {
             case 'facilitatorRestores':
-                return err({ type: 'FacilitatorOnly' });
+                return err({ type: 'Collaboration.FacilitatorOnly' });
             case 'hashMatchesFiles':
-                return err({ type: 'ContentHashMismatch' });
+                return err({ type: 'Collaboration.ContentHashMismatch' });
         }
         const { id, session, restoredFrom, preRestore, contentHash, files, validation, takenAt } = params;
         return ok({
             Recorded: {
                 set: { id, session, origin: { kind: 'Restored', restoredFrom, preRestore }, contentHash, files, validation, takenAt },
                 events: {
-                    RevisionRestored: { type: 'RevisionRestored', revisionId: id, session, restoredFrom, preRestore, contentHash, validation, takenAt },
+                    'Collaboration.RevisionRestored': {
+                        type: 'Collaboration.RevisionRestored',
+                        revisionId: id,
+                        session,
+                        restoredFrom,
+                        preRestore,
+                        contentHash,
+                        validation,
+                        takenAt,
+                    },
                 },
             },
         });

@@ -15,7 +15,7 @@ export function verifications(customers: CustomerRepository): Verifications {
         async makeAvailableEmail(email, customer) {
             const holder = await customers.find((c) => c.email === email && c.id !== customer);
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
-            return holder ? err({ type: 'EmailTaken', email }) : ok(email as Sales.AvailableEmail);
+            return holder ? err({ type: 'Sales.EmailTaken', email }) : ok(email as Sales.AvailableEmail);
         },
     };
 }

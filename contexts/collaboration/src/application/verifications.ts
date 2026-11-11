@@ -30,16 +30,16 @@ export function storeVerifications(stores: Stores): StoreVerifications {
     return {
         async makeActiveSession(id) {
             const session = stores.sessions.load(id);
-            if (!session) return err({ type: 'SessionNotFound' });
-            if (session.state === 'Closed') return err({ type: 'SessionAlreadyClosed' });
+            if (!session) return err({ type: 'Collaboration.SessionNotFound' });
+            if (session.state === 'Closed') return err({ type: 'Collaboration.SessionAlreadyClosed' });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(id as Collaboration.ActiveSession);
         },
         async makePendingRequest(id, session) {
             const request = stores.requests.load(id);
-            if (!request) return err({ type: 'RequestNotFound', request: id });
-            if (request.session !== session) return err({ type: 'RequestOfAnotherSession', request: id });
-            if (request.state === 'Dismissed') return err({ type: 'RequestAlreadyDismissed', request: id });
+            if (!request) return err({ type: 'Collaboration.RequestNotFound', request: id });
+            if (request.session !== session) return err({ type: 'Collaboration.RequestOfAnotherSession', request: id });
+            if (request.state === 'Dismissed') return err({ type: 'Collaboration.RequestAlreadyDismissed', request: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(id as Collaboration.PendingRequest);
         },
@@ -50,8 +50,8 @@ export function storeVerifications(stores: Stores): StoreVerifications {
                 runs: stores.runs.listBySession(session),
                 approvals: stores.approvals.listBySession(session),
             });
-            if (status === 'missing') return err({ type: 'MarkTargetNotFound' });
-            if (status === 'closed') return err({ type: 'MarkTargetClosed' });
+            if (status === 'missing') return err({ type: 'Collaboration.MarkTargetNotFound' });
+            if (status === 'closed') return err({ type: 'Collaboration.MarkTargetClosed' });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(target as Collaboration.OpenMarkTarget);
         },
@@ -59,14 +59,14 @@ export function storeVerifications(stores: Stores): StoreVerifications {
             if (target.kind === 'Message') {
                 // any message of the session, one's own too, whatever its state
                 const request = stores.requests.load(target.request);
-                if (!request) return err({ type: 'RequestNotFound', request: target.request });
-                if (request.session !== session) return err({ type: 'RequestOfAnotherSession', request: target.request });
+                if (!request) return err({ type: 'Collaboration.RequestNotFound', request: target.request });
+                if (request.session !== session) return err({ type: 'Collaboration.RequestOfAnotherSession', request: target.request });
             } else {
                 const id = target.run;
                 const run = stores.runs.load(id)?.run;
-                if (!run) return err({ type: 'RunNotFound', run: id });
-                if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: id });
-                if (!REPLYABLE_STATES.includes(run.state)) return err({ type: 'RunNotReplyable', run: id });
+                if (!run) return err({ type: 'Collaboration.RunNotFound', run: id });
+                if (run.session !== session) return err({ type: 'Collaboration.RunOfAnotherSession', run: id });
+                if (!REPLYABLE_STATES.includes(run.state)) return err({ type: 'Collaboration.RunNotReplyable', run: id });
             }
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(target as Collaboration.ReplyableTarget);
@@ -77,51 +77,52 @@ export function storeVerifications(stores: Stores): StoreVerifications {
                 // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the AI is part of every session
                 return ok(id as Collaboration.MentionableParticipant);
             }
-            if (!stores.sessions.load(session)?.participants.some((p) => p.id === id)) return err({ type: 'MentionedNotAParticipant', participant: id });
+            if (!stores.sessions.load(session)?.participants.some((p) => p.id === id))
+                return err({ type: 'Collaboration.MentionedNotAParticipant', participant: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the check above is the evidence
             return ok(id as Collaboration.MentionableParticipant);
         },
         async makeDecidableAssumption(ref, session) {
             const run = stores.runs.load(ref.run)?.run;
-            if (!run) return err({ type: 'RunNotFound', run: ref.run });
-            if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: ref.run });
+            if (!run) return err({ type: 'Collaboration.RunNotFound', run: ref.run });
+            if (run.session !== session) return err({ type: 'Collaboration.RunOfAnotherSession', run: ref.run });
             // completed with that assumption, neither approved nor taken over by a later run (a pick among them)
             switch (assumptionStatus(run, ref.assumption, stores.runs.listBySession(session), stores.approvals.listBySession(session))) {
                 case 'notApprovable':
-                    return err({ type: 'RunNotApprovable', run: run.id });
+                    return err({ type: 'Collaboration.RunNotApprovable', run: run.id });
                 case 'missing':
-                    return err({ type: 'AssumptionNotFound', run: run.id });
+                    return err({ type: 'Collaboration.AssumptionNotFound', run: run.id });
                 case 'closed':
-                    return err({ type: 'AssumptionClosed', run: run.id });
+                    return err({ type: 'Collaboration.AssumptionClosed', run: run.id });
             }
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(ref as Collaboration.DecidableAssumption);
         },
         async makeRevertableRun(id, session) {
             const run = stores.runs.load(id)?.run;
-            if (!run) return err({ type: 'RunNotFound', run: id });
-            if (run.session !== session) return err({ type: 'RunOfAnotherSession', run: id });
+            if (!run) return err({ type: 'Collaboration.RunNotFound', run: id });
+            if (run.session !== session) return err({ type: 'Collaboration.RunOfAnotherSession', run: id });
             // it changed files, and no revert of it is done or under way
             if (!revertableChanges(run) || revertStatus(run, stores.runs.listBySession(session)).kind !== 'none')
-                return err({ type: 'RunNotRevertable', run: id });
+                return err({ type: 'Collaboration.RunNotRevertable', run: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(id as Collaboration.RevertableRun);
         },
         async makeAddressableRequest(id, session) {
             const request = stores.requests.load(id);
-            if (!request) return err({ type: 'RequestNotFound', request: id });
-            if (request.session !== session) return err({ type: 'RequestOfAnotherSession', request: id });
+            if (!request) return err({ type: 'Collaboration.RequestNotFound', request: id });
+            if (request.session !== session) return err({ type: 'Collaboration.RequestOfAnotherSession', request: id });
             // a person's message: not the AI's answer, not a revert (the server's own work)
-            if (isAi(request.author) || request.reverts !== undefined) return err({ type: 'RequestNotAddressable', request: id });
+            if (isAi(request.author) || request.reverts !== undefined) return err({ type: 'Collaboration.RequestNotAddressable', request: id });
             // one triage per message (the store's unique index keeps it)
-            if (stores.triages.ofRequest(id)) return err({ type: 'RequestAlreadyAddressed', request: id });
+            if (stores.triages.ofRequest(id)) return err({ type: 'Collaboration.RequestAlreadyAddressed', request: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(id as Collaboration.AddressableRequest);
         },
         async makeProposableTriage(id, session) {
             const triage = stores.triages.load(id);
-            if (!triage) return err({ type: 'TriageNotFound', triage: id });
-            if (triage.session !== session) return err({ type: 'TriageOfAnotherSession', triage: id });
+            if (!triage) return err({ type: 'Collaboration.TriageNotFound', triage: id });
+            if (triage.session !== session) return err({ type: 'Collaboration.TriageOfAnotherSession', triage: id });
             const found = stores.sessions.load(session);
             const request = stores.requests.load(triage.request);
             // a participant's change request, not concluded: the facilitator's, a Solo session's and those the
@@ -133,7 +134,7 @@ export function storeVerifications(stores: Stores): StoreVerifications {
                 !request ||
                 triageRoute(triage, { mode: found.mode, authorIsFacilitator: request.author === found.facilitator }) !== 'propose'
             )
-                return err({ type: 'TriageNotProposable', triage: id });
+                return err({ type: 'Collaboration.TriageNotProposable', triage: id });
             // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
             return ok(id as Collaboration.ProposableTriage);
         },
@@ -148,13 +149,13 @@ export function storeVerifications(stores: Stores): StoreVerifications {
 export function restorableRevision(uow: UnitOfWork, workspace: WorkspaceSnapshot): Collaboration.MakeRestorableRevision {
     return async (id, session) => {
         const found = await uow.transaction(({ revisions }) => ({ revision: revisions.load(id), latest: revisions.latest(session) }));
-        if (!found.revision) return err({ type: 'RevisionNotFound', revision: id });
-        if (found.revision.session !== session) return err({ type: 'RevisionOfAnotherSession', revision: id });
+        if (!found.revision) return err({ type: 'Collaboration.RevisionNotFound', revision: id });
+        if (found.revision.session !== session) return err({ type: 'Collaboration.RevisionOfAnotherSession', revision: id });
         const scan = await workspace.read();
         const [link] = scan.symlinks;
         if (link !== undefined) {
             const linked = workspacePath(link);
-            return linked.ok ? err({ type: 'SymlinkInWorkspace', path: linked.value }) : linked;
+            return linked.ok ? err({ type: 'Collaboration.SymlinkInWorkspace', path: linked.value }) : linked;
         }
         const current: { path: Collaboration.WorkspacePath; hash: Collaboration.ContentHash }[] = [];
         for (const f of scan.files) {
@@ -165,7 +166,7 @@ export function restorableRevision(uow: UnitOfWork, workspace: WorkspaceSnapshot
             current.push({ path: p.value, hash: hash.value });
         }
         const [first, ...rest] = changedPaths(found.latest?.files ?? [], current);
-        if (first !== undefined) return err({ type: 'ExternalChangesSinceSnapshot', paths: [first, ...rest] });
+        if (first !== undefined) return err({ type: 'Collaboration.ExternalChangesSinceSnapshot', paths: [first, ...rest] });
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the factory of the verified type: the checks above are the evidence
         return ok(id as Collaboration.RestorableRevision);
     };

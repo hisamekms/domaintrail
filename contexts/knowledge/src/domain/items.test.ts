@@ -21,7 +21,14 @@ describe('add', () => {
             commands.add({ id: itemId('kn_00000001'), content: content('a rule'), sources: [source('s1', 'm1')], by, at }),
         ).Live;
         expect(aggregate).toMatchObject({ state: 'Live', version: 1, createdIn: 's1', conflictsWith: [], createdAt: at, updatedAt: at });
-        expect(events.KnowledgeItemAdded).toEqual({ type: 'KnowledgeItemAdded', itemId: aggregate.id, version: aggregate.version, conflictsWith: [], by, at });
+        expect(events['Knowledge.KnowledgeItemAdded']).toEqual({
+            type: 'Knowledge.KnowledgeItemAdded',
+            itemId: aggregate.id,
+            version: aggregate.version,
+            conflictsWith: [],
+            by,
+            at,
+        });
     });
 
     test('refuses the same message twice among its sources', () => {
@@ -32,7 +39,7 @@ describe('add', () => {
             by: extraction('s1', 1),
             at,
         });
-        expect(error(r)).toEqual({ type: 'DuplicateSource' });
+        expect(error(r)).toEqual({ type: 'Knowledge.DuplicateSource' });
     });
 });
 
@@ -49,7 +56,7 @@ describe('update', () => {
             }),
         ).Live;
         expect(aggregate).toMatchObject({ version: 1, content: content('more precise'), sources: item.sources, updatedAt: later });
-        expect(Object.keys(events)).toEqual(['KnowledgeItemRewritten']);
+        expect(Object.keys(events)).toEqual(['Knowledge.KnowledgeItemRewritten']);
     });
 
     test('an update that adds a source makes a new version even of an item of this session, the source appended once', () => {
@@ -66,7 +73,7 @@ describe('update', () => {
         ).Live;
         expect(aggregate.version).toBe(version(2));
         expect(aggregate.sources).toEqual([...item.sources, correction]);
-        expect(Object.keys(events)).toEqual(['KnowledgeItemRevised']);
+        expect(Object.keys(events)).toEqual(['Knowledge.KnowledgeItemRevised']);
     });
 
     test('makes a new version of an item of an earlier session, or written by hand', () => {
@@ -82,7 +89,13 @@ describe('update', () => {
             ).Live;
             expect(aggregate.version).toBe(version(2));
             expect(events).toEqual({
-                KnowledgeItemRevised: { type: 'KnowledgeItemRevised', itemId: item.id, version: version(2), by: extraction('s1', 3), at: later },
+                'Knowledge.KnowledgeItemRevised': {
+                    type: 'Knowledge.KnowledgeItemRevised',
+                    itemId: item.id,
+                    version: version(2),
+                    by: extraction('s1', 3),
+                    at: later,
+                },
             });
         }
     });
@@ -99,7 +112,7 @@ describe('update', () => {
             }),
         ).Live;
         expect(aggregate.version).toBe(version(3));
-        expect(events.KnowledgeItemRevised).toBeDefined();
+        expect(events['Knowledge.KnowledgeItemRevised']).toBeDefined();
     });
 
     test('refuses an item that changed since the extraction saw it', () => {
@@ -109,7 +122,7 @@ describe('update', () => {
                 commands.update(item, { revised: content('more precise'), newSources: [source('s1', 'm-new')], base: version(1), by: extraction('s1', 3), at }),
             ),
         ).toEqual({
-            type: 'StaleOperation',
+            type: 'Knowledge.StaleOperation',
         });
     });
 });
@@ -125,7 +138,7 @@ describe('addSource', () => {
         expect(aggregate.sources).toEqual([...item.sources, source('s2', 'm9')]);
         expect(aggregate.content.labels.origin).toBe('agreed');
         expect(aggregate.version).toBe(item.version);
-        expect(events.KnowledgeSourceAdded.agreed).toBe(true);
+        expect(events['Knowledge.KnowledgeSourceAdded'].agreed).toBe(true);
         expect(origin(item, false)).toBe('said');
     });
 
@@ -136,7 +149,7 @@ describe('addSource', () => {
     test('refuses a message already among the sources', () => {
         const item = liveItem('kn_00000001', { sources: [source('s2', 'm9')] });
         expect(error(commands.addSource(item, { source: source('s2', 'm9', 'other words'), agreed: false, base: version(1), by, at }))).toEqual({
-            type: 'DuplicateSource',
+            type: 'Knowledge.DuplicateSource',
         });
     });
 });
@@ -159,9 +172,11 @@ describe('a conflict', () => {
 
     test('needs a source on the older side, and is not with the item itself', () => {
         const unsourced = liveItem('kn_00000001', { sources: [] });
-        expect(error(commands.linkConflict(unsourced, { other: itemId('kn_00000002'), base: version(1), by, at }))).toEqual({ type: 'ConflictWithoutSource' });
+        expect(error(commands.linkConflict(unsourced, { other: itemId('kn_00000002'), base: version(1), by, at }))).toEqual({
+            type: 'Knowledge.ConflictWithoutSource',
+        });
         const older = liveItem('kn_00000001');
-        expect(error(commands.linkConflict(older, { other: older.id, base: version(1), by, at }))).toEqual({ type: 'ConflictWithItself' });
+        expect(error(commands.linkConflict(older, { other: older.id, base: version(1), by, at }))).toEqual({ type: 'Knowledge.ConflictWithItself' });
     });
 });
 
@@ -171,8 +186,8 @@ describe("a person's edits", () => {
         const by = userName('alice@example.com');
         const { aggregate, events } = value(commands.setBookmark(item, { bookmarked: true, by, at: later })).Live;
         expect(aggregate).toEqual({ ...item, bookmarked: true });
-        expect(events.KnowledgeBookmarkChanged).toEqual({
-            type: 'KnowledgeBookmarkChanged',
+        expect(events['Knowledge.KnowledgeBookmarkChanged']).toEqual({
+            type: 'Knowledge.KnowledgeBookmarkChanged',
             itemId: item.id,
             version: item.version,
             bookmarked: true,
@@ -187,7 +202,13 @@ describe("a person's edits", () => {
         const item = liveItem('kn_00000001', { createdIn: 's1' });
         const { aggregate, events } = value(commands.correct(item, { corrected: content('as it is'), by: person, at: later })).Live;
         expect(aggregate.version).toBe(version(2));
-        expect(events.KnowledgeItemCorrected).toEqual({ type: 'KnowledgeItemCorrected', itemId: item.id, version: version(2), by: person, at: later });
+        expect(events['Knowledge.KnowledgeItemCorrected']).toEqual({
+            type: 'Knowledge.KnowledgeItemCorrected',
+            itemId: item.id,
+            version: version(2),
+            by: person,
+            at: later,
+        });
     });
 
     test('a deletion hides the item; restoring brings it back as it was', () => {
@@ -204,8 +225,8 @@ describe('unlinkConflict', () => {
         const item = liveItem('kn_00000001', { conflictsWith: ['kn_00000002', 'kn_00000003'] });
         const { aggregate, events } = value(commands.unlinkConflict(item, { other: itemId('kn_00000002'), by: userName('alice@example.com'), at: later })).Live;
         expect(aggregate).toMatchObject({ version: 1, content: item.content, conflictsWith: ['kn_00000003'], updatedAt: later });
-        expect(events.KnowledgeConflictUnlinked).toEqual({
-            type: 'KnowledgeConflictUnlinked',
+        expect(events['Knowledge.KnowledgeConflictUnlinked']).toEqual({
+            type: 'Knowledge.KnowledgeConflictUnlinked',
             itemId: item.id,
             version: item.version,
             other: itemId('kn_00000002'),
@@ -216,7 +237,9 @@ describe('unlinkConflict', () => {
 
     test('refuses the item itself', () => {
         const item = liveItem('kn_00000001');
-        expect(error(commands.unlinkConflict(item, { other: item.id, by: userName('alice@example.com'), at: later }))).toEqual({ type: 'ConflictWithItself' });
+        expect(error(commands.unlinkConflict(item, { other: item.id, by: userName('alice@example.com'), at: later }))).toEqual({
+            type: 'Knowledge.ConflictWithItself',
+        });
     });
 });
 
@@ -234,8 +257,8 @@ describe('handOverToHotspot', () => {
             conflictsWith: ['kn_00000003'],
             updatedAt: later,
         });
-        expect(events.KnowledgeHandedOverToHotspot).toEqual({
-            type: 'KnowledgeHandedOverToHotspot',
+        expect(events['Knowledge.KnowledgeHandedOverToHotspot']).toEqual({
+            type: 'Knowledge.KnowledgeHandedOverToHotspot',
             itemId: item.id,
             version: item.version,
             hotspot,
@@ -256,7 +279,7 @@ describe('handOverToHotspot', () => {
     test('refuses the item itself', () => {
         const item = liveItem('kn_00000001');
         expect(error(commands.handOverToHotspot(item, { hotspot, other: item.id, by: userName('a@example.com'), at: later }))).toEqual({
-            type: 'ConflictWithItself',
+            type: 'Knowledge.ConflictWithItself',
         });
     });
 });

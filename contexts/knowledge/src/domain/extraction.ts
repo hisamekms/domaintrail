@@ -165,14 +165,14 @@ function liveAt(
     itemId: Knowledge.KnowledgeItemId,
 ): Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | Knowledge.RetiredItem> {
     const item = current(itemId);
-    if (item === undefined) return { ok: false, error: { type: 'KnowledgeItemNotFound', itemId } };
-    if (item.state === 'Deleted') return { ok: false, error: { type: 'KnowledgeItemGone', itemId } };
-    if (isRetired(item)) return { ok: false, error: { type: 'RetiredItem', itemId } };
+    if (item === undefined) return { ok: false, error: { type: 'Knowledge.KnowledgeItemNotFound', itemId } };
+    if (item.state === 'Deleted') return { ok: false, error: { type: 'Knowledge.KnowledgeItemGone', itemId } };
+    if (isRetired(item)) return { ok: false, error: { type: 'Knowledge.RetiredItem', itemId } };
     return { ok: true, value: item };
 }
 
 const absent = (current: ItemLookup, itemId: Knowledge.KnowledgeItemId): Result<undefined, Knowledge.KnowledgeItemExists> =>
-    current(itemId) === undefined ? { ok: true, value: undefined } : { ok: false, error: { type: 'KnowledgeItemExists', itemId } };
+    current(itemId) === undefined ? { ok: true, value: undefined } : { ok: false, error: { type: 'Knowledge.KnowledgeItemExists', itemId } };
 
 function applyOperation(
     operation: Exclude<Knowledge.Operation, { readonly kind: 'ProposeRetire' | 'ProposeUnretire' }>,
@@ -188,14 +188,14 @@ function applyOperation(
             if (!free.ok) return free;
             const r = knowledgeItemCommands.add({ id: operation.id, content: operation.content, sources: operation.sources, by, ...why, at });
             if (!r.ok) return r;
-            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events.KnowledgeItemAdded }] };
+            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events['Knowledge.KnowledgeItemAdded'] }] };
         }
         case 'AddSource': {
             const item = liveAt(current, operation.item);
             if (!item.ok) return item;
             const r = knowledgeItemCommands.addSource(item.value, { source: operation.source, agreed: operation.agreed, base: operation.base, by, ...why, at });
             if (!r.ok) return r;
-            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events.KnowledgeSourceAdded }] };
+            return { ok: true, value: [{ item: r.value.Live.aggregate, event: r.value.Live.events['Knowledge.KnowledgeSourceAdded'] }] };
         }
         case 'Update': {
             const item = liveAt(current, operation.item);
@@ -210,8 +210,10 @@ function applyOperation(
             });
             if (!r.ok) return r;
             const { aggregate, events } = r.value.Live;
-            if (events.KnowledgeItemRevised) return { ok: true, value: [{ item: aggregate, replaced: item.value, event: events.KnowledgeItemRevised }] };
-            if (events.KnowledgeItemRewritten) return { ok: true, value: [{ item: aggregate, event: events.KnowledgeItemRewritten }] };
+            if (events['Knowledge.KnowledgeItemRevised'])
+                return { ok: true, value: [{ item: aggregate, replaced: item.value, event: events['Knowledge.KnowledgeItemRevised'] }] };
+            if (events['Knowledge.KnowledgeItemRewritten'])
+                return { ok: true, value: [{ item: aggregate, event: events['Knowledge.KnowledgeItemRewritten'] }] };
             throw new Error('update emitted neither KnowledgeItemRevised nor KnowledgeItemRewritten');
         }
         case 'Conflict': {
@@ -234,8 +236,8 @@ function applyOperation(
             return {
                 ok: true,
                 value: [
-                    { item: added.value.Live.aggregate, event: added.value.Live.events.KnowledgeItemAdded },
-                    { item: linked.value.Live.aggregate, event: linked.value.Live.events.KnowledgeConflictLinked },
+                    { item: added.value.Live.aggregate, event: added.value.Live.events['Knowledge.KnowledgeItemAdded'] },
+                    { item: linked.value.Live.aggregate, event: linked.value.Live.events['Knowledge.KnowledgeConflictLinked'] },
                 ],
             };
         }

@@ -23,7 +23,7 @@ describe('the audit log', () => {
     test("a person's deletion names the person; the sweep drops the reasons", () => {
         const person = userName('a@example.com');
         const item = liveItem('kn_00000001');
-        expect(auditOf({ type: 'KnowledgeItemDeleted', itemId: item.id, version: item.version, by: person, at })).toEqual({
+        expect(auditOf({ type: 'Knowledge.KnowledgeItemDeleted', itemId: item.id, version: item.version, by: person, at })).toEqual({
             item: item.id,
             version: item.version,
             operation: 'delete',
@@ -31,7 +31,7 @@ describe('the audit log', () => {
             at,
         });
         const added = auditOf({
-            type: 'KnowledgeItemAdded',
+            type: 'Knowledge.KnowledgeItemAdded',
             itemId: item.id,
             version: item.version,
             conflictsWith: [],
@@ -52,7 +52,9 @@ describe('the audit log', () => {
         const person = userName('a@example.com');
         const item = liveItem('kn_00000001');
         const hotspot = stickyRef('Ordering.CutOffUnclear');
-        expect(auditOf({ type: 'KnowledgeHandedOverToHotspot', itemId: item.id, version: item.version, hotspot, other: item.id, by: person, at })).toEqual({
+        expect(
+            auditOf({ type: 'Knowledge.KnowledgeHandedOverToHotspot', itemId: item.id, version: item.version, hotspot, other: item.id, by: person, at }),
+        ).toEqual({
             item: item.id,
             version: item.version,
             operation: 'handOverToHotspot',

@@ -66,11 +66,11 @@ describe('field sets: generated TypeScript', () => {
 declare const tenant: Common.TenantId;
 declare const staff: Sales.StaffId;
 declare const order: Sales.OrderId;
-export const placed: Sales.OrderPlaced = { type: 'OrderPlaced', tenant, performedBy: staff, orderId: order };
+export const placed: Sales.OrderPlaced = { type: 'Sales.OrderPlaced', tenant, performedBy: staff, orderId: order };
 export const events: readonly Sales.OrderEvent[] = [placed];
 export const all: readonly Sales.DomainEvent[] = [placed];
 // @ts-expect-error the tenant comes from the field set and is required
-export const missing: Sales.OrderPlaced = { type: 'OrderPlaced', performedBy: staff, orderId: order };
+export const missing: Sales.OrderPlaced = { type: 'Sales.OrderPlaced', performedBy: staff, orderId: order };
 `,
         );
         const tsc = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
