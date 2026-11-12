@@ -120,12 +120,31 @@ test('edit rejects a stale version without overwriting the concurrent write', as
     expect(saved).not.toContain('Stale edit');
 });
 
+test('saving identical content creates no version or audit record', async () => {
+    const { root, file } = await workspace();
+    const unchangedFile = await readFile(file, 'utf8');
+    const noop = await editor(root, '// Save without changing the JSON document.');
+    const edited = await run(root, ['edit', 'kn_00000001'], { EDITOR: noop });
+    expect(edited.code).toBe(0);
+    expect(edited.out).toContain('unchanged at version 1');
+    expect(await readFile(file, 'utf8')).toBe(unchangedFile);
+    const deps = cliDeps();
+    const config = await deps.loadConfig({ start: root });
+    const opened = await deps.openKnowledgeStore!(config, undefined);
+    if (!opened.ok) throw new Error(opened.error.message);
+    expect((await opened.value.store.audit(opened.value.project, {})).items).toEqual([]);
+});
+
 test('proposal list and input errors', async () => {
     const { root } = await workspace();
     expect((await run(root, ['proposals'])).out).toBe('No open proposals.');
     expect((await run(root, ['approve', 'bad', '--json'])).code).toBe(1);
-    expect((await run(root, ['dismiss', 'rp_00000001', '--json'])).code).toBe(1);
+    const missingProposal = await run(root, ['dismiss', 'rp_00000001', '--json']);
+    expect(missingProposal.code).toBe(1);
+    expect(JSON.parse(missingProposal.out).error).toBe('Proposal rp_00000001 was not found.');
     expect((await run(root, ['retire', 'kn_00000001', '--replaced-by', 'kn_00000002', '--json'])).code).toBe(1);
+    expect((await run(root, ['retire', 'kn_00000002'])).err).toBe('Knowledge item kn_00000002 was not found.');
+    expect((await run(root, ['unretire', 'kn_00000001'])).err).toBe('Knowledge item is not retired.');
 });
 
 test('Cloudflare writes require an actor and prefix the supplied name', async () => {

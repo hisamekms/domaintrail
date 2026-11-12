@@ -346,6 +346,7 @@ export function registerKnowledgeCommand(program: Command, context: Context): vo
 
     common(knowledge.command('edit').description('Edit an item title, text, labels, and about references in an editor.').argument('<id>')).action(
         async (id: string, options: WriteOptions) => {
+            let unchanged = false;
             await write(
                 options.json === true,
                 options.actor,
@@ -360,9 +361,13 @@ export function registerKnowledgeCommand(program: Command, context: Context): vo
                         context.deps.env,
                     );
                     const content = editedContent(edited, original.id, original.version);
+                    if (Knowledge.equalItemContent(content, original.content)) {
+                        unchanged = true;
+                        return original;
+                    }
                     return result(await store.correct(project, input, content, by, original.version));
                 },
-                (item) => `${item.id} updated to version ${item.version}.`,
+                (item) => (unchanged ? `${item.id} unchanged at version ${item.version}.` : `${item.id} updated to version ${item.version}.`),
             );
         },
     );
