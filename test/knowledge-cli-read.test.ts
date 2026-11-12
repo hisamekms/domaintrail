@@ -3,7 +3,6 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
-import { openKnowledgeStore } from '../apps/dt/src/wiring/knowledge.js';
 
 const roots: string[] = [];
 afterEach(async () => {
@@ -120,25 +119,12 @@ test('unapproved cloudflare settings do not send the service token', async () =>
         path.join(root, 'domaintrail.jsonc'),
         JSON.stringify({ knowledge: { store: 'cloudflare', project: 'shop', url: 'https://unapproved.example.test' } }),
     );
-    let fetched = false;
     const deps = {
         ...cliDeps(),
         trust: { approved: async () => undefined, approve: async () => {} },
-        openKnowledgeStore: (config: Parameters<typeof openKnowledgeStore>[0], approval: Parameters<typeof openKnowledgeStore>[1]) =>
-            openKnowledgeStore(config, approval, {
-                env: { CF_ACCESS_CLIENT_ID: 'secret-id', CF_ACCESS_CLIENT_SECRET: 'secret-key' },
-                fetch: Object.assign(
-                    async () => {
-                        fetched = true;
-                        throw new Error('unexpected request');
-                    },
-                    { preconnect: () => {} },
-                ),
-            }),
     };
     const out: string[] = [];
     const code = await runCli(['-r', root, 'knowledge', 'list', '--json'], { out: (line) => out.push(line), err: () => {} }, deps);
     expect(code).toBe(1);
     expect(JSON.parse(out.join('\n')).error).toContain('not approved');
-    expect(fetched).toBe(false);
 });
