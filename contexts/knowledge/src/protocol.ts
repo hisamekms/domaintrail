@@ -18,6 +18,7 @@ import {
     type Deletion,
     type ItemWithHistory,
     type KnowledgeQuery,
+    type KnowledgeItemVersionConflict,
     type MissingStickies,
     type Page,
     type PublishedEntry,
@@ -85,6 +86,8 @@ export interface ErrorBody {
     readonly error: {
         readonly type: ApiErrorType | DomainErrorType;
         readonly itemId?: string;
+        readonly expectedVersion?: number;
+        readonly currentVersion?: number;
         readonly proposalId?: string;
         /** `ProposalRefused`'s reason. */
         readonly reason?: string;
@@ -96,6 +99,7 @@ export interface ErrorBody {
 export type DomainErrorType =
     | 'Knowledge.KnowledgeItemNotFound'
     | 'Knowledge.KnowledgeItemGone'
+    | 'Knowledge.KnowledgeItemVersionConflict'
     | 'Knowledge.AlreadyRetired'
     | 'Knowledge.NotRetired'
     | 'Knowledge.ReplacementWithoutReason'
@@ -108,6 +112,7 @@ export type DomainErrorType =
 export const DOMAIN_ERROR_TYPES: readonly DomainErrorType[] = [
     'Knowledge.KnowledgeItemNotFound',
     'Knowledge.KnowledgeItemGone',
+    'Knowledge.KnowledgeItemVersionConflict',
     'Knowledge.AlreadyRetired',
     'Knowledge.NotRetired',
     'Knowledge.ReplacementWithoutReason',
@@ -141,6 +146,7 @@ export function domainErrorBody(e: DomainError): ErrorBody {
         error: {
             type: e.type,
             ...('itemId' in e && { itemId: e.itemId }),
+            ...('expectedVersion' in e && { expectedVersion: e.expectedVersion, currentVersion: e.currentVersion }),
             ...('proposalId' in e && { proposalId: e.proposalId }),
             ...('reason' in e && { reason: e.reason }),
         },
@@ -179,11 +185,13 @@ export class WireError extends Error {
 /** The error body of an answer, when it is one. */
 export function decodeErrorBody(v: unknown): ErrorBody['error'] | undefined {
     if (!isObject(v) || !isObject(v.error) || typeof v.error.type !== 'string') return undefined;
-    const { type, itemId, proposalId, reason, message } = v.error;
+    const { type, itemId, expectedVersion, currentVersion, proposalId, reason, message } = v.error;
     const known = [...API_ERROR_TYPES, ...DOMAIN_ERROR_TYPES].find((t) => t === type) ?? 'Internal';
     return {
         type: known,
         ...(typeof itemId === 'string' && { itemId }),
+        ...(typeof expectedVersion === 'number' && { expectedVersion }),
+        ...(typeof currentVersion === 'number' && { currentVersion }),
         ...(typeof proposalId === 'string' && { proposalId }),
         ...(typeof reason === 'string' && { reason }),
         ...(typeof message === 'string' && { message }),
@@ -740,6 +748,7 @@ export const retirementCandidate: Decoder<RetirementCandidate> = (v, at) => {
 export type DomainError =
     | Knowledge.KnowledgeItemNotFound
     | Knowledge.KnowledgeItemGone
+    | KnowledgeItemVersionConflict
     | Knowledge.AlreadyRetired
     | Knowledge.NotRetired
     | Knowledge.ReplacementWithoutReason
@@ -756,6 +765,13 @@ export function domainErrorOf(body: ErrorBody['error'] | undefined): DomainError
             case 'Knowledge.KnowledgeItemNotFound':
             case 'Knowledge.KnowledgeItemGone':
                 return { type: body.type, itemId: itemId(body.itemId, 'error.itemId') };
+            case 'Knowledge.KnowledgeItemVersionConflict':
+                return {
+                    type: body.type,
+                    itemId: itemId(body.itemId, 'error.itemId'),
+                    expectedVersion: itemVersion(body.expectedVersion, 'error.expectedVersion'),
+                    currentVersion: itemVersion(body.currentVersion, 'error.currentVersion'),
+                };
             case 'Knowledge.ProposalNotFound':
             case 'Knowledge.ProposalDecided':
                 return { type: body.type, proposalId: proposalId(body.proposalId, 'error.proposalId') };

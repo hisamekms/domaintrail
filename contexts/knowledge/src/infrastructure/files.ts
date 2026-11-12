@@ -501,6 +501,42 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
         return { items: [item.id], messages: sourceMessages(item) };
     }
 
+    function correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+    function correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+        expectedVersion: Knowledge.ItemVersion,
+    ): ReturnType<KnowledgeStore['correct']>;
+    async function correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+        expectedVersion?: Knowledge.ItemVersion,
+    ): ReturnType<KnowledgeStore['correct']> {
+        checkProject(project);
+        return exclusive(async (): ReturnType<KnowledgeStore['correct']> => {
+            const item = await liveOne(id);
+            if (item === undefined)
+                return (await deletedOne(id))
+                    ? err({ type: 'Knowledge.KnowledgeItemGone', itemId: id })
+                    : err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
+            if (expectedVersion !== undefined && item.version !== expectedVersion)
+                return err({ type: 'Knowledge.KnowledgeItemVersionConflict', itemId: id, expectedVersion, currentVersion: item.version });
+            const { aggregate, events } = known(knowledgeItemCommands.correct(item, { corrected, by, at: now() })).Live;
+            await writeItems([aggregate], dir);
+            await appendAudit([auditOf(events['Knowledge.KnowledgeItemCorrected'])]);
+            return ok(aggregate);
+        });
+    }
+
     return {
         sweep: () => exclusive(async () => undefined),
 
@@ -650,20 +686,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
             });
         },
 
-        async correct(project, id, corrected, by) {
-            checkProject(project);
-            return exclusive(async (): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> => {
-                const item = await liveOne(id);
-                if (item === undefined)
-                    return (await deletedOne(id))
-                        ? err({ type: 'Knowledge.KnowledgeItemGone', itemId: id })
-                        : err({ type: 'Knowledge.KnowledgeItemNotFound', itemId: id });
-                const { aggregate, events } = known(knowledgeItemCommands.correct(item, { corrected, by, at: now() })).Live;
-                await writeItems([aggregate], dir);
-                await appendAudit([auditOf(events['Knowledge.KnowledgeItemCorrected'])]);
-                return ok(aggregate);
-            });
-        },
+        correct,
 
         async unlinkConflict(project, id, other, by) {
             checkProject(project);

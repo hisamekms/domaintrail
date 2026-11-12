@@ -129,6 +129,7 @@ export type {
     Deletion,
     ItemWithHistory,
     KnowledgeImage,
+    KnowledgeItemVersionConflict,
     KnowledgeQuery,
     KnowledgeStore,
     MissingStickies,

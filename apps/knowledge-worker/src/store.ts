@@ -45,6 +45,7 @@ import {
     type KnowledgeImage,
     type KnowledgeQuery,
     type KnowledgeStore,
+    type KnowledgeItemVersionConflict,
     type Page,
     type PastVersion,
     type RedactionEntry,
@@ -635,32 +636,49 @@ export class D1KnowledgeStore implements KnowledgeStore {
         );
     }
 
+    correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+    correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+        expectedVersion: Knowledge.ItemVersion,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | KnowledgeItemVersionConflict>>;
     async correct(
         project: Knowledge.ProjectName,
         id: Knowledge.KnowledgeItemId,
         corrected: Knowledge.ItemContent,
         by: Knowledge.UserName,
-    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>> {
-        return this.decideAndWrite<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>(
-            project,
-            [id],
-            async (rows) => {
-                const row = rows.get(id);
-                if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
-                const item = itemOf(row);
-                if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
-                const r = knowledgeItemCommands.correct(item, { corrected, by, at: this.now() });
-                if (!r.ok) throw new Error('correct refused a live item');
-                const next = r.value.Live.aggregate;
-                const statements = this.writes(
-                    project,
-                    [next],
-                    [{ item: id, past: pastVersionOf(item, next) }],
-                    [auditOf(r.value.Live.events['Knowledge.KnowledgeItemCorrected'])],
-                );
-                return { statements, value: ok(next) };
-            },
-        );
+        expectedVersion?: Knowledge.ItemVersion,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | KnowledgeItemVersionConflict>> {
+        return this.decideAndWrite<
+            Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | KnowledgeItemVersionConflict>
+        >(project, [id], async (rows) => {
+            const row = rows.get(id);
+            if (!row) return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemNotFound' as const, itemId: id }) };
+            const item = itemOf(row);
+            if (item.state !== 'Live') return { statements: [], value: err({ type: 'Knowledge.KnowledgeItemGone' as const, itemId: id }) };
+            if (expectedVersion !== undefined && item.version !== expectedVersion)
+                return {
+                    statements: [],
+                    value: err({ type: 'Knowledge.KnowledgeItemVersionConflict' as const, itemId: id, expectedVersion, currentVersion: item.version }),
+                };
+            const r = knowledgeItemCommands.correct(item, { corrected, by, at: this.now() });
+            if (!r.ok) throw new Error('correct refused a live item');
+            const next = r.value.Live.aggregate;
+            const statements = this.writes(
+                project,
+                [next],
+                [{ item: id, past: pastVersionOf(item, next) }],
+                [auditOf(r.value.Live.events['Knowledge.KnowledgeItemCorrected'])],
+            );
+            return { statements, value: ok(next) };
+        });
     }
 
     async unlinkConflict(

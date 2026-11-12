@@ -51,6 +51,7 @@ import {
     type DomainError,
     imageId,
     itemContent,
+    itemVersion,
     bookmarkBody,
     itemId,
     knowledgeQueryOf,
@@ -190,8 +191,14 @@ async function route(
                     if (denied) return denied;
                     const b = await body();
                     const content = itemContent(typeof b === 'object' && b !== null && 'content' in b ? b.content : undefined, 'content');
-                    const r = await store.correct(project, item, content, actor());
-                    return r.ok ? json(r.value) : itemError(r.error);
+                    const expectedVersion =
+                        typeof b === 'object' && b !== null && 'expectedVersion' in b ? itemVersion(b.expectedVersion, 'expectedVersion') : undefined;
+                    const by = actor();
+                    const r =
+                        expectedVersion === undefined
+                            ? await store.correct(project, item, content, by)
+                            : await store.correct(project, item, content, by, expectedVersion);
+                    return r.ok ? json(r.value) : domainError(r.error);
                 }
                 if (method === 'DELETE') {
                     const denied = allow('delete');
