@@ -6,6 +6,12 @@ import type { LanguageServerOptions } from '../lsp/server.js';
 import type { SettingsApproval, TrustStore } from './trust.js';
 import type { LaidOutGraph, StructureLevel } from '@domaintrail/visualization';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
+import type { Knowledge, KnowledgeStore, Result } from '@domaintrail/knowledge';
+
+export interface CliKnowledgeAccess {
+    readonly store: KnowledgeStore;
+    readonly project: Knowledge.ProjectName;
+}
 
 /**
  * What the CLI needs from outside, defined here on its side (ADR 0025): `cliDeps` (`main.ts`)
@@ -13,6 +19,8 @@ import type { ViewPayload } from '@domaintrail/visualization/protocol';
  * none of them.
  */
 export interface CliDeps {
+    /** Opens the configured knowledge store after the caller checks approval. */
+    openKnowledgeStore?(config: ResolvedConfig, approval: SettingsApproval | undefined): Promise<Result<CliKnowledgeAccess, { readonly message: string }>>;
     /** Resolves the configuration from `start` upwards, or from the explicit `configPath`; rejects with `ConfigError`. */
     loadConfig(opts: { start: string; configPath?: string }): Promise<ResolvedConfig>;
     /** The sources below `root` (paths relative to it, sorted), as `dt check` finds them. */

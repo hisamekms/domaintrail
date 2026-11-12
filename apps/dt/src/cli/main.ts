@@ -41,6 +41,7 @@ import { PublishError } from './publish.js';
 import guide from '../../../../docs/guide.md' with { type: 'text' };
 import { designLevelAdvice } from './storming-advice.js';
 import { applyInitPlan, initPlan, initPlanText } from './init.js';
+import { registerKnowledgeCommand } from './knowledge.js';
 
 export interface CliIO {
     out: (line: string) => void;
@@ -236,6 +237,8 @@ Examples:
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
   dt mcp                        MCP server over stdio: the project's knowledge for Claude Code (read-only)
+  dt knowledge list             search and page through knowledge items (read-only)
+  dt knowledge show kn_...      show an item and optionally its history
   dt show Sales.Order           one element resolved (field sets, labels, commands, used by), instead of reading files
   dt export sources             the .dt and .dtes files and the config as <workspace>-sources.zip, to share without git
   dt export svg --storming S -o s.svg   a diagram as the Live View's 書き出し → SVG saves it, without a browser
@@ -1439,6 +1442,8 @@ Examples:
         if (!info.isDirectory()) throw new CliError(`Root is not a directory: ${program.opts().root}`);
         return deps.loadConfig({ start, configPath: program.opts().config });
     };
+
+    registerKnowledgeCommand(program, { config, deps, io, setExitCode: (code) => (exitCode = code) });
 
     try {
         await program.parseAsync([...argv], { from: 'user' });
