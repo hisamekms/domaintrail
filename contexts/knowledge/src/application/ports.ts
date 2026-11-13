@@ -125,6 +125,14 @@ export interface AuditQuery {
     readonly cursor?: string;
 }
 
+/** A person's correction was based on an older item version. */
+export interface KnowledgeItemVersionConflict {
+    readonly type: 'Knowledge.KnowledgeItemVersionConflict';
+    readonly itemId: Knowledge.KnowledgeItemId;
+    readonly expectedVersion: Knowledge.ItemVersion;
+    readonly currentVersion: Knowledge.ItemVersion;
+}
+
 export interface KnowledgeStore {
     /** The live items about any of these stickies, newest first, the retired ones left out: the panel of a sticky, the extractor's context. */
     about(project: Project, stickies: readonly Knowledge.StickyRef[]): Promise<readonly Knowledge.LiveKnowledgeItem[]>;
@@ -147,13 +155,20 @@ export interface KnowledgeStore {
      */
     applyExtraction(project: Project, extraction: Knowledge.Extraction): Promise<AppliedExtraction>;
 
-    /** A person's edit of the text, labels or `about`: always a new version, the replaced one kept. */
+    /** A person's edit of the text, labels or `about`; an expected version refuses a stale edit atomically. */
     correct(
         project: Project,
         id: ItemId,
         corrected: Knowledge.ItemContent,
         by: Knowledge.UserName,
     ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+    correct(
+        project: Project,
+        id: ItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+        expectedVersion: Knowledge.ItemVersion,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone | KnowledgeItemVersionConflict>>;
 
     /** Set the project's shared bookmark; a repeated setting changes neither the item nor its audit. */
     setBookmark(

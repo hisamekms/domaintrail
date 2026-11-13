@@ -220,6 +220,40 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
     const search = async (project: Knowledge.ProjectName, query: KnowledgeQuery): Promise<Page<Knowledge.LiveKnowledgeItem>> =>
         read(await request(project, '/knowledge', { query: knowledgeQueryParams(query) }), page(liveItem), 'a search');
 
+    function correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+    ): Promise<Result<Knowledge.LiveKnowledgeItem, Knowledge.KnowledgeItemNotFound | Knowledge.KnowledgeItemGone>>;
+    function correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+        expectedVersion: Knowledge.ItemVersion,
+    ): ReturnType<KnowledgeStore['correct']>;
+    async function correct(
+        project: Knowledge.ProjectName,
+        id: Knowledge.KnowledgeItemId,
+        corrected: Knowledge.ItemContent,
+        by: Knowledge.UserName,
+        expectedVersion?: Knowledge.ItemVersion,
+    ): ReturnType<KnowledgeStore['correct']> {
+        const res = await request(project, itemPath(id), {
+            method: 'PATCH',
+            json: { content: corrected, ...(expectedVersion !== undefined && { expectedVersion }) },
+            headers: actor(by),
+        });
+        const what = `correcting ${id}`;
+        const refused = await refusal(res, what, [
+            'Knowledge.KnowledgeItemNotFound',
+            'Knowledge.KnowledgeItemGone',
+            'Knowledge.KnowledgeItemVersionConflict',
+        ] as const);
+        return refused ? err(refused) : ok(await read(res, liveItem, what));
+    }
+
     return {
         async about(project, stickies) {
             const found = new Map<string, Knowledge.LiveKnowledgeItem>();
@@ -261,12 +295,7 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
             return read(res, appliedExtraction, `extraction ${idempotencyKey(extraction.by)}`);
         },
 
-        async correct(project, id, corrected, by) {
-            const res = await request(project, itemPath(id), { method: 'PATCH', json: { content: corrected }, headers: actor(by) });
-            const what = `correcting ${id}`;
-            const gone = await missing(res, what);
-            return gone ? err({ type: gone, itemId: id }) : ok(await read(res, liveItem, what));
-        },
+        correct,
 
         async setBookmark(project, id, bookmarked, by) {
             const res = await request(project, `${itemPath(id)}/bookmark`, { method: 'POST', json: { bookmarked }, headers: actor(by) });

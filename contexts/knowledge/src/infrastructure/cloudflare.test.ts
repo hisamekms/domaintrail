@@ -3,7 +3,7 @@
 // as a KnowledgeStoreError). The adapter against the real Worker is apps/knowledge-worker's test.
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import type { Knowledge } from '../generated/index.js';
-import { content, extraction, itemId, liveItem, source, stickyRef, userName } from '../test-helpers.js';
+import { content, extraction, itemId, liveItem, source, stickyRef, userName, version } from '../test-helpers.js';
 import { cloudflareKnowledgeStore, KnowledgeStoreError } from './cloudflare.js';
 
 /** The error a promise rejects with (fails when it resolves). */
@@ -80,6 +80,28 @@ describe('the cloudflare adapter', () => {
             error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: itemId('kn_00000001') },
         });
         expect(await store().get(project, itemId('kn_00000001'))).toBeUndefined();
+    });
+
+    test('sends an expected version and maps the conflict response', async () => {
+        reset(() =>
+            Response.json(
+                {
+                    error: {
+                        type: 'Knowledge.KnowledgeItemVersionConflict',
+                        itemId: 'kn_00000001',
+                        expectedVersion: 1,
+                        currentVersion: 2,
+                    },
+                },
+                { status: 409 },
+            ),
+        );
+        const id = itemId('kn_00000001');
+        expect(await store().correct(project, id, content('stale'), userName('a@example.com'), version(1))).toEqual({
+            ok: false,
+            error: { type: 'Knowledge.KnowledgeItemVersionConflict', itemId: id, expectedVersion: version(1), currentVersion: version(2) },
+        });
+        expect(JSON.parse(seen[0].body)).toMatchObject({ expectedVersion: 1 });
     });
 
     test('unlinks a conflict with the other item in the body, and reads both sides back', async () => {

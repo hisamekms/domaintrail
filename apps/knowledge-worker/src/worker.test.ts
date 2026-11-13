@@ -4,7 +4,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { cloudflareKnowledgeStore, KnowledgeStoreError, type Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
 import * as wire from '@domaintrail/knowledge/protocol';
-import { guard } from './store.js';
+import { D1KnowledgeStore, guard } from './store.js';
+import type { D1Database, R2Bucket } from './env.js';
 import { statementsOf, startWorker, type RunningWorker } from './test-helpers.js';
 
 /** The error a promise rejects with (fails when it resolves). */
@@ -198,6 +199,90 @@ describe('extractions', () => {
             ok: false,
             error: { type: 'Knowledge.KnowledgeItemNotFound', itemId: id(9) },
         });
+    });
+
+    test('PATCH refuses a stale expected version without changing the item or audit', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, 'original')]));
+        const before = await store.get(project, id(1), { history: true });
+        const auditBefore = await store.audit(project, { item: id(1) });
+        const stale = await store.correct(project, id(1), wire.itemContent(content('stale'), 'test'), user, wire.itemVersion(2, 'test'));
+        expect(stale).toEqual({
+            ok: false,
+            error: {
+                type: 'Knowledge.KnowledgeItemVersionConflict',
+                itemId: id(1),
+                expectedVersion: wire.itemVersion(2, 'test'),
+                currentVersion: wire.itemVersion(1, 'test'),
+            },
+        });
+        expect(await store.get(project, id(1), { history: true })).toEqual(before);
+        expect(await store.audit(project, { item: id(1) })).toEqual(auditBefore);
+        expect((await store.correct(project, id(1), wire.itemContent(content('fresh'), 'test'), user, wire.itemVersion(1, 'test'))).ok).toBe(true);
+    });
+
+    test('PATCH returns HTTP 409 with the version conflict', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, 'original')]));
+        const response = await fetch(`${worker.url}/v1/projects/${project}/knowledge/${id(1)}`, {
+            method: 'PATCH',
+            headers: { 'CF-Access-Client-Id': WRITER, 'X-Knowledge-Actor': encodeURIComponent(user), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: content('stale'), expectedVersion: 2 }),
+        });
+        expect(response.status).toBe(409);
+        expect(await response.json()).toEqual({
+            error: {
+                type: 'Knowledge.KnowledgeItemVersionConflict',
+                itemId: id(1),
+                expectedVersion: 2,
+                currentVersion: 1,
+            },
+        });
+    });
+
+    test('D1 retries a concurrent write and returns a conflict without applying the stale correction', async () => {
+        const project = newProject();
+        await store.applyExtraction(project, extraction('s1', 1, [add(1, 'original')]));
+        let injected = false;
+        const db: D1Database = {
+            prepare: (query) => worker.db.prepare(query),
+            batch: async (statements) => {
+                if (!injected) {
+                    injected = true;
+                    await store.correct(project, id(1), wire.itemContent(content('concurrent'), 'test'), user);
+                }
+                return worker.db.batch(statements);
+            },
+        };
+        const unusedBucket: R2Bucket = {
+            put: async () => {
+                throw new Error('unexpected R2 write');
+            },
+            get: async () => {
+                throw new Error('unexpected R2 read');
+            },
+            delete: async () => {
+                throw new Error('unexpected R2 delete');
+            },
+        };
+        const direct = new D1KnowledgeStore(db, unusedBucket, { caller: 'test' });
+        const result = await direct.correct(project, id(1), wire.itemContent(content('stale'), 'test'), user, wire.itemVersion(1, 'test'));
+        expect(injected).toBe(true);
+        expect(result).toEqual({
+            ok: false,
+            error: {
+                type: 'Knowledge.KnowledgeItemVersionConflict',
+                itemId: id(1),
+                expectedVersion: wire.itemVersion(1, 'test'),
+                currentVersion: wire.itemVersion(2, 'test'),
+            },
+        });
+        const item = await store.get(project, id(1), { history: true });
+        expect(plain(item?.item.content.text)).toBe('concurrent');
+        expect(item?.item.version).toBe(wire.itemVersion(2, 'test'));
+        expect(item?.history).toHaveLength(1);
+        const audit = await store.audit(project, { item: id(1) });
+        expect(audit.items.filter((entry) => entry.operation === 'correct')).toHaveLength(1);
     });
 
     test('drops the operations on an item a person corrected or deleted meanwhile, and keeps the person’s change', async () => {

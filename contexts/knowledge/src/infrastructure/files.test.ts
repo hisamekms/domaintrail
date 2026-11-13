@@ -247,6 +247,20 @@ describe('the files store', () => {
         });
     });
 
+    test('correct refuses a stale version without changing the item or audit', async () => {
+        const id = itemId('kn_00000001');
+        await apply('s1', 1, add(id));
+        const before = await store.get(project, id, { history: true });
+        const auditBefore = await store.audit(project, { item: id });
+        expect(await store.correct(project, id, content('stale'), alice, version(2))).toEqual({
+            ok: false,
+            error: { type: 'Knowledge.KnowledgeItemVersionConflict', itemId: id, expectedVersion: version(2), currentVersion: version(1) },
+        });
+        expect(await store.get(project, id, { history: true })).toEqual(before);
+        expect(await store.audit(project, { item: id })).toEqual(auditBefore);
+        expect((await store.correct(project, id, content('fresh'), alice, version(1))).ok).toBe(true);
+    });
+
     test('delete removes the file at once and returns the messages; restore within the window brings it back', async () => {
         await apply('s1', 1, add('kn_00000001'));
         const d = await store.delete(project, itemId('kn_00000001'), alice);
