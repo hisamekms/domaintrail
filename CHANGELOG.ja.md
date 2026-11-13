@@ -10,6 +10,38 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.13.0] - 2026-11-13
+
+### 追加
+
+- コマンドを持つコンテキストの生成 TypeScript に `commandErrors` を追加しました。
+  `'<Aggregate>.<command>'` から、そのコマンドの `errors` と `requires … else` に宣言されたエラーの
+  `type` 値を引ける、リテラル型付きの対応表です。宣言されたエラーがないコマンドには空配列が入ります。
+  例えば `Sales.commandErrors['Order.confirm']` で判断時に起こりうるエラーを文書化できます。
+  プリミティブのコンストラクターと検証済み型のファクトリーのエラーは含みません。
+- `dt knowledge list` で設定済みナレッジストアを検索できます。`--query`、繰り返し指定できる
+  `--about`・`--when`・`--kind`・`--origin` に加え、`--perspective`・`--session`・`--bookmarked`・
+  `--retired exclude|include|only` で絞り込めます。新しい項目から並び、`--limit` と `--cursor` で
+  ページを送れます。`dt knowledge show <id> --history` は項目と取得可能な過去の版を表示します。
+  例: `dt knowledge list --query delivery --bookmarked --json`、`dt knowledge show kn_00000001 --json`。
+  各コマンドの `--json` は、失敗時のエラーも含め、一つの JSON 文書を出力します。
+- `dt knowledge edit <id>` は `VISUAL` または `EDITOR` で JSON 文書を開き、項目の `title`・`text`・
+  `labels`・`about` を編集できます。`id` と `version` は変更しないでください。変更した内容の保存時は、
+  開いたときの版を原子的に照合します。他の書き込みで項目が変わっていれば古い編集を拒否し、エディターを
+  開き直すよう案内します。内容を変更せずに保存した場合、版も監査記録も変わりません。
+- `dt knowledge retire <id> --reason replaced --replaced-by <id>` と `unretire` で廃止・復帰できます。
+  `proposals`・`approve <proposal-id>`・`dismiss <proposal-id>` で廃止提案を扱えます。
+  `delete <id>` は対話時に項目の ID とタイトルを示して確認し、スクリプトでは `--yes` が必要です。
+  `restore <id>` はストアによる消去前に削除済み項目を復元できます。書き込みの実行者は files ストアでは
+  既定で OS のユーザー名、Cloudflare ストアでは必須の `--actor <name>` で指定します。CLI の実行者名は
+  自己申告で `cli:` を付けて記録され、Cloudflare Access で検証された ID ではありません。
+
+### 変更
+
+- ナレッジの修正時に項目の期待する版を指定できるようにしました。files と Cloudflare のストアは、古い版に
+  基づく修正を項目や監査記録を変更せず拒否します。Cloudflare API は版の競合に HTTP 409 を返します。
+  期待する版を省略した既存の呼び出しの動作は変わりません。
+
 ## [0.12.0] - 2026-11-11
 
 ### 変更
@@ -1009,6 +1041,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/hisamekms/domaintrail/compare/v0.9.0...v0.10.0
