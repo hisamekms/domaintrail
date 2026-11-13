@@ -19,6 +19,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { DEFAULT_IDLE_TIMEOUT, DEFAULT_RESTART_AFTER } from './config.js';
 import { type ClaudeResult, createStreamReader, isObject, resultEvent } from './claude-stream.js';
 import { type AgentCommand, CLAUDE, KILL_GRACE_MS, killTree } from './claude-code.js';
+import { executableFormatFailure } from './spawn-diagnostic.js';
 
 /** Tokens of context past which the process is replaced after the turn. */
 export const CONTEXT_LIMIT = 150_000;
@@ -233,11 +234,17 @@ export function createWarmClaude(options: WarmClaudeOptions): WarmClaude {
             });
         } catch (e) {
             await environment.dispose?.();
+            const diagnostic = executableFormatFailure(e, 'claude', command.command, 'warm turn');
+            if (diagnostic) log(diagnostic);
             throw e;
         }
         let exitCode = -1;
         const exited = new Promise<void>((resolve) => {
-            child.once('error', () => resolve());
+            child.once('error', (e) => {
+                const diagnostic = executableFormatFailure(e, 'claude', command.command, 'warm turn');
+                if (diagnostic) log(diagnostic);
+                resolve();
+            });
             child.once('close', (code) => {
                 exitCode = code ?? -1;
                 resolve();

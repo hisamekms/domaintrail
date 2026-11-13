@@ -13,6 +13,7 @@ import { replyJsonSchema } from '@domaintrail/collaboration';
 import { parseReply } from '../core/prompt.js';
 import { activityOfEvent, createStreamReader } from './claude-stream.js';
 import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
+import { executableFormatFailure } from './spawn-diagnostic.js';
 
 /** The command that starts the agent: the program and the arguments before the adapter's own. */
 export interface AgentCommand {
@@ -423,14 +424,21 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
                 // cancelled while the shim was written
                 if (signal.aborted) return Promise.resolve({ exitCode: -1, outcome: 'done', summary: '' });
                 return new Promise<AgentOutcome>((resolve, reject) => {
-                    const child = spawn(command.command, args, {
-                        cwd: options.root,
-                        ...(env && { env }),
-                        shell: false,
-                        detached: process.platform !== 'win32',
-                        stdio: ['pipe', 'pipe', 'pipe'],
-                        windowsHide: true,
-                    });
+                    let child;
+                    try {
+                        child = spawn(command.command, args, {
+                            cwd: options.root,
+                            ...(env && { env }),
+                            shell: false,
+                            detached: process.platform !== 'win32',
+                            stdio: ['pipe', 'pipe', 'pipe'],
+                            windowsHide: true,
+                        });
+                    } catch (e) {
+                        const diagnostic = executableFormatFailure(e, 'claude', command.command, 'cold turn');
+                        reject(diagnostic ? new Error(diagnostic) : e);
+                        return;
+                    }
                     // what the agent does, as it goes; its result at the end
                     const stream = createStreamReader((event) => {
                         const activity = invocation.onActivity && activityOfEvent(event, roots);
@@ -453,7 +461,8 @@ export async function createClaudeCodeRunner(options: ClaudeCodeOptions): Promis
                     signal.addEventListener('abort', stop, { once: true });
                     child.once('error', (e) => {
                         signal.removeEventListener('abort', stop);
-                        reject(e);
+                        const diagnostic = executableFormatFailure(e, 'claude', command.command, 'cold turn');
+                        reject(diagnostic ? new Error(diagnostic) : e);
                     });
                     child.once('close', (code) => {
                         signal.removeEventListener('abort', stop);

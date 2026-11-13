@@ -4,15 +4,35 @@
 // fall-back to cold runs, the notifications of the user's hooks, and the idle timeout.
 import { afterEach, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { AgentInvocation, AgentOutcome, AgentRunner } from '../core/ports.js';
 import { createClaudeCodeRunner } from './claude-code.js';
 import { createWarmClaudeRunner, type WarmRunnerOptions } from './claude-warm.js';
+import { createWarmClaude } from './warm-claude.js';
 
 const FAKE = path.join(import.meta.dir, '..', '..', 'test-fixtures', 'warm-claude.mjs');
 const TOOLS = ['Read', 'Edit'];
+
+test.skipIf(process.platform === 'win32')('a warm process logs safe ENOEXEC diagnostics when spawn throws', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'domaintrail-warm-invalid-'));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const file = path.join(root, 'claude');
+    await writeFile(file, 'secret fixture text, never show this');
+    await chmod(file, 0o755);
+    const log: string[] = [];
+    const warm = createWarmClaude({ root, command: { command: file, args: [] }, log: (line) => log.push(line) });
+    cleanups.push(() => warm.close());
+    const failure = await warm.turn({ profile: { key: 'invalid', args: [] }, prompt: () => 'secret prompt', signal: new AbortController().signal }).then(
+        () => undefined,
+        (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect(log.some((line) => line.includes('stage: warm turn') && line.includes('code: ENOEXEC') && line.includes(file))).toBe(true);
+    expect(log.join('\n').includes('secret fixture text')).toBe(false);
+    expect(log.join('\n').includes('secret prompt')).toBe(false);
+});
 
 interface Logged {
     pid: number;
