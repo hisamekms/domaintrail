@@ -12,6 +12,7 @@ import { extractorInstructions, gateInstructions, hotspotNameInstructions } from
 import { type AgentCommand, KILL_GRACE_MS, killTree, type ExtraRead, type KnowledgeMcp } from './claude-code.js';
 import { dtCommandOf, fingerprintDt, pinDt, withPathFirst, writeDtShim, type PinnedDt } from './dt-shim.js';
 import { createCodexHook, type CodexHookRole } from './codex-hook.js';
+import { executableFormatFailure } from './spawn-diagnostic.js';
 
 export const CODEX: AgentCommand = { command: 'codex', args: [] };
 const MAX_OUTPUT = 8 * 1024 * 1024;
@@ -141,14 +142,21 @@ export async function runCodexOnce(options: CodexTurnOptions): Promise<AnswerTur
         const command = options.command ?? CODEX;
         const env = shim ? withPathFirst(process.env, shim.dir) : process.env;
         const exitCode = await new Promise<number>((resolve, reject) => {
-            const child = spawn(command.command, args, {
-                cwd: options.root,
-                env,
-                shell: false,
-                detached: process.platform !== 'win32',
-                stdio: ['pipe', 'pipe', 'pipe'],
-                windowsHide: true,
-            });
+            let child;
+            try {
+                child = spawn(command.command, args, {
+                    cwd: options.root,
+                    env,
+                    shell: false,
+                    detached: process.platform !== 'win32',
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                    windowsHide: true,
+                });
+            } catch (e) {
+                const diagnostic = executableFormatFailure(e, 'codex', command.command, 'cold turn');
+                reject(diagnostic ? new Error(diagnostic) : e);
+                return;
+            }
             let buffered = '';
             child.stdout.setEncoding('utf8');
             child.stdout.on('data', (chunk: string) => {
@@ -177,7 +185,10 @@ export async function runCodexOnce(options: CodexTurnOptions): Promise<AnswerTur
                 killer.unref();
             };
             options.signal.addEventListener('abort', stop, { once: true });
-            child.once('error', reject);
+            child.once('error', (e) => {
+                const diagnostic = executableFormatFailure(e, 'codex', command.command, 'cold turn');
+                reject(diagnostic ? new Error(diagnostic) : e);
+            });
             child.once('close', (code) => {
                 options.signal.removeEventListener('abort', stop);
                 if (killer) clearTimeout(killer);
@@ -248,8 +259,10 @@ export async function checkCodex(command: AgentCommand = CODEX, timeoutMs = 5_00
                 resolve({ code: code ?? -1, text });
             });
         });
+    let stage = '--version';
     try {
         const version = await probe(['--version']);
+        stage = 'exec --help';
         const help = await probe(['exec', '--help']);
         const needed = [
             '--output-schema',
@@ -264,7 +277,7 @@ export async function checkCodex(command: AgentCommand = CODEX, timeoutMs = 5_00
             return { ok: false, reason: 'codex CLI lacks the flags required by dt' };
         return { ok: true, version: version.text.trim().replace(/^codex-cli\s+/, '') };
     } catch (e) {
-        return { ok: false, reason: `codex ${e instanceof Error ? e.message : String(e)}` };
+        return { ok: false, reason: executableFormatFailure(e, 'codex', command.command, stage) ?? `codex ${e instanceof Error ? e.message : String(e)}` };
     }
 }
 

@@ -1,5 +1,5 @@
 import { afterAll, expect, test } from 'bun:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { answererJsonSchema } from '@domaintrail/collaboration';
@@ -9,6 +9,25 @@ const fixture = path.join(import.meta.dir, '..', '..', 'test-fixtures', 'fake-co
 const dirs: string[] = [];
 afterAll(async () => {
     for (const dir of dirs) await rm(dir, { recursive: true, force: true });
+});
+
+test.skipIf(process.platform === 'win32')('an invalid Codex executable reports safe startup diagnostics and next steps', async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-invalid-codex-'));
+    dirs.push(dir);
+    const file = path.join(dir, 'codex');
+    await writeFile(file, 'secret fixture text, never show this');
+    await chmod(file, 0o755);
+    const result = await checkCodex({ command: file, args: [] });
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected an unusable CLI');
+    expect(result.reason.includes('stage: --version')).toBe(true);
+    expect(result.reason.includes('code: ENOEXEC')).toBe(true);
+    expect(result.reason.includes(`command: ${JSON.stringify(file)}`)).toBe(true);
+    expect(result.reason).toContain(`OS: ${process.platform}`);
+    expect(result.reason.includes('command -v codex')).toBe(true);
+    expect(result.reason.includes('dt open --agent claude')).toBe(true);
+    expect(result.reason.includes('dt open --no-agent')).toBe(true);
+    expect(result.reason.includes('secret fixture text')).toBe(false);
 });
 
 test('Codex CLI is detected and a read-only turn uses a strict schema and isolated settings', async () => {

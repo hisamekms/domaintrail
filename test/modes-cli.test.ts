@@ -22,7 +22,7 @@ import {
     type SessionServerOptions,
     startSessionServer,
 } from '@domaintrail/dt';
-import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
+import { checkClaudeCode, checkCodex, DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import {
     createSessionAccess,
     createUnitOfWork,
@@ -278,6 +278,31 @@ describe('dt open and dt collab: the agent in process', () => {
             expect(off.calls.agents).toEqual([]);
             expect(n.out.filter((l) => l.startsWith('AI:'))).toEqual(['AI: not started (--no-agent); start it with `dt agent`']);
         }
+    });
+
+    test.skipIf(process.platform === 'win32')('dt open gives actionable ENOEXEC guidance for its default and selected agent', async () => {
+        const dir = await copy();
+        const invalid = path.join(dir, 'invalid-agent');
+        await writeFile(invalid, 'secret fixture text, never show this');
+        await chmod(invalid, 0o755);
+        const defaultAgent = fakeDeps(USABLE);
+        defaultAgent.deps.checkAgent = () => checkClaudeCode({ command: invalid, args: [] });
+        const opened = await run(defaultAgent.deps, '-r', dir, 'open');
+        expect(opened.code).toBe(0);
+        expect(opened.out.some((line) => line.startsWith('AI: not started') && line.includes('code: ENOEXEC') && line.includes('dt open --no-agent'))).toBe(
+            true,
+        );
+        expect(defaultAgent.calls.agents).toEqual([]);
+
+        const selected = fakeDeps(USABLE);
+        selected.deps.checkAgent = () => checkCodex({ command: invalid, args: [] });
+        const failed = await run(selected.deps, '-r', dir, 'open', '--agent', 'codex');
+        expect(failed.code).toBe(1);
+        expect(
+            failed.err.some((line) => line.startsWith('AI: cannot start') && line.includes('code: ENOEXEC') && line.includes('dt open --agent claude')),
+        ).toBe(true);
+        expect(failed.err.join('\n').includes('secret fixture text')).toBe(false);
+        expect(selected.calls.stopped).toBe(1);
     });
 
     test('--agent claude makes an unusable Claude Code an error, and stops the server', async () => {
