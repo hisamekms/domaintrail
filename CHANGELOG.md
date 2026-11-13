@@ -9,6 +9,14 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.13.1] - 2026-11-13
+
+### Fixed
+
+- When Claude Code or Codex cannot start because of an executable format error (`ENOEXEC`), `dt open` now identifies
+  the command, startup stage, OS and error code, with guidance to inspect or reinstall the executable or use another
+  agent or no agent. This covers startup checks and cold turns; warm Claude startup logs the same diagnostic.
+
 ## [0.13.0] - 2026-11-13
 
 ### Added
@@ -1042,6 +1050,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.13.1]: https://github.com/hisamekms/domaintrail/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0

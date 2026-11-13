@@ -10,6 +10,14 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.13.1] - 2026-11-13
+
+### 修正
+
+- Claude Code または Codex が実行形式エラー（`ENOEXEC`）で起動できない場合、`dt open` はコマンド、起動段階、
+  OS、エラーコードとともに、実行ファイルの確認・再インストールや別のエージェント・エージェントなしでの利用を案内します。
+  起動前の確認とコールドターンが対象です。Claude のウォームターンの起動失敗でも同じ診断をログに記録します。
+
 ## [0.13.0] - 2026-11-13
 
 ### 追加
@@ -1041,6 +1049,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.13.1]: https://github.com/hisamekms/domaintrail/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0
