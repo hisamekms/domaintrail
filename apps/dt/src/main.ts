@@ -80,6 +80,7 @@ function onInterrupt(stop: () => Promise<unknown>): void {
 export function cliDeps(): CliDeps {
     return {
         loadConfig,
+        openKnowledgeStore: async (config, approval) => (await import('./wiring/knowledge.js')).openKnowledgeStore(config, approval),
         findDomainFiles,
         loadWorkspace,
         exportSources: ({ root, sources, respectGitignore, configFile }) =>
