@@ -9,6 +9,36 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.13.0] - 2026-11-13
+
+### Added
+
+- Generated TypeScript contexts with commands export `commandErrors`: a literal-typed map from
+  `'<Aggregate>.<command>'` to the error `type` values declared by that command's `errors` and `requires … else`.
+  Commands without declared errors have an empty array. For example, use `Sales.commandErrors['Order.confirm']` to
+  document possible decision errors; primitive constructors and verified factories are outside this catalog.
+- `dt knowledge list` searches the configured knowledge store with `--query`, repeatable `--about`, `--when`, `--kind`
+  and `--origin` filters, plus `--perspective`, `--session`, `--bookmarked` and `--retired exclude|include|only`.
+  Results are newest first; `--limit` and `--cursor` page through them. `dt knowledge show <id> --history` shows an
+  item and available earlier versions. For example, run `dt knowledge list --query delivery --bookmarked --json` or
+  `dt knowledge show kn_00000001 --json`. Each command's `--json` emits one JSON document, including an error document
+  on failure.
+- `dt knowledge edit <id>` opens a JSON document in `VISUAL` or `EDITOR` for the item's title, text, labels and
+  `about` references. Keep its `id` and `version` unchanged. A changed edit checks the opened version atomically;
+  if another write changed the item, it refuses the stale edit and asks you to reopen the editor. Saving unchanged
+  content leaves the version and audit unchanged.
+- `dt knowledge retire <id> --reason replaced --replaced-by <id>` and `unretire` manage retirement; `proposals`,
+  `approve <proposal-id>` and `dismiss <proposal-id>` handle retirement proposals. `delete <id>` confirms the item's
+  ID and title interactively; scripts must pass `--yes`. `restore <id>` can recover a deleted item before the store
+  sweeps it. For writes, the files store defaults to the OS username; Cloudflare requires `--actor <name>`. CLI actor
+  names are self-asserted and recorded with a `cli:` prefix, not verified Cloudflare Access identities.
+
+### Changed
+
+- Knowledge corrections can supply an expected item version. The files and Cloudflare stores reject stale
+  corrections without changing the item or audit; the Cloudflare API returns HTTP 409 for a version conflict.
+  Existing callers that omit the expected version retain their behavior.
+
 ## [0.12.0] - 2026-11-11
 
 ### Changed
@@ -1012,6 +1042,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/hisamekms/domaintrail/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/hisamekms/domaintrail/compare/v0.9.0...v0.10.0
