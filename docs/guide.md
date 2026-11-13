@@ -102,7 +102,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
 - `dt show <name>` — one element, command or state resolved, with who uses it; read it instead of the `.dt` files.
 - `dt lsp` — language server over stdio: the diagnostics of `dt check`, definitions, references, hover, rename.
-- `dt mcp` — MCP server over stdio: the project's knowledge, read-only (`dt guide mcp`; knowledge: `dt guide knowledge`).
+- `dt knowledge` — list, show and manage items (`dt guide knowledge`); `dt mcp` — read-only knowledge over stdio (`dt guide mcp`).
 - `dt publish` — the stormings to the knowledge store's Worker, for its read-only page; run by CI (`dt guide publish`).
 - `dt open` — the Live View in the browser, with a chat to the AI; it runs until Ctrl+C, so run it in the background.
 - `dt export sources` / `svg` — the sources as one ZIP, for someone without the repository; a diagram as an SVG file.
@@ -3922,6 +3922,44 @@ pressing one shows the tab filtered by that label ([the Live View](live-view.md#
 runs get `dt mcp`'s tools when the store is usable when `dt agent` starts (`files`: `knowledge/` exists; `cloudflare`:
 approved, with the token), and cite the items they rest on. Outside one, Claude Code reads it through `dt mcp`
 (below), and with `cloudflare` the business reads it on the Worker's page (`dt publish`, below).
+
+**Knowledge CLI.** `dt knowledge` uses the configured `knowledge.store` and project. It reads and manages items
+created by session extraction; there is no command to create an item manually. For example:
+
+```sh
+dt knowledge list --query delivery --about Issue.Requested --when as_is --kind rule --origin said
+dt knowledge list --session s1 --perspective Sales --bookmarked --retired include --limit 20 --json
+dt knowledge list --retired only --limit 20 --cursor '<cursor from previous page>'
+dt knowledge show kn_00000001 --history
+dt knowledge show kn_00000001 --json
+dt knowledge edit kn_00000001
+dt knowledge retire kn_00000001 --reason replaced --replaced-by kn_00000002
+dt knowledge unretire kn_00000001
+dt knowledge proposals --json
+dt knowledge approve rp_00000001
+dt knowledge dismiss rp_00000002
+dt knowledge delete kn_00000001 --yes
+dt knowledge restore kn_00000001
+```
+
+`list` returns newest items first. `--query` searches item titles, text and source quotes where supported.
+`--about` takes a `<Storming>.<LocalId>` sticky reference. `--about`, `--when`, `--kind` and `--origin` can each be
+repeated; the other filters are `--perspective`,
+`--session`, `--bookmarked` and `--retired exclude|include|only` (default `exclude`). `--limit` accepts 1–100
+(default 20); pass the next cursor returned by one page to `--cursor` for the next. `--json` prints one JSON document
+for each command, including an `{ "error": "…" }` document on failure. `show --history` includes earlier versions
+when the store has them; the files store uses git history instead.
+
+`edit` opens a temporary JSON document in `VISUAL` or `EDITOR`. Change `title`, `text`, `labels` and `about`; keep
+`id` and `version` unchanged. Saving unchanged content leaves its version and audit unchanged; a changed edit checks the
+version when saving and refuses a stale edit if the item changed while the editor was open. `retire --reason` accepts
+`replaced`, `obsolete` or `wrong`; `--replaced-by` requires
+`--reason replaced`. `proposals` lists open retirement proposals; `approve` applies one and `dismiss` rejects one.
+
+Writes to the files store use the operating system username by default. Writes to the Cloudflare store require
+`--actor <name>`; files writes may also supply it. CLI actor names are self-asserted and recorded with a `cli:` prefix,
+not verified Cloudflare Access identities. `delete` asks for confirmation with the item's title; in a noninteractive
+run, use `--yes`. `restore` can recover a deleted item before the store sweeps it (see below).
 
 **Retiring.** An item that no longer holds — a newer item says it better, it was true and is not any more, or it was
 wrong — is **retired** (廃止), not deleted: its text, sources and versions stay, as the record of what was said. A
