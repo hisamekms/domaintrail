@@ -10,6 +10,45 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.14.0] - 2026-11-18
+
+### 追加
+
+- 状態を持つ集約を受け取るコマンドごとに、生成 TypeScript が遷移元の状態から、そのコマンドを呼べる場所を導きます
+  （ライフサイクルセレクターがある場合は種別ごと）。DSL の構文は増えていません。
+  `can<Command><Aggregate>(aggregate)` は集約をコマンドの入力の型に絞り込み、`anyState<Aggregate>Commands(commands)` は
+  どの状態の集約に対してもコマンドを呼べるようにします。遷移元でない状態で呼ぶと、コマンドを呼ばずに
+  `CommandUnavailable` を返します: `{ type: 'CommandUnavailable', aggregate, command, state, expected }`
+  （ライフサイクルセレクターがある場合は `kind` も）。この `type` は宣言したエラーの `type` と一致しないため、
+  どのコマンドも扱うコードで、状態による拒否を区別できます。`available<Aggregate>Commands(aggregate)` は集約の状態で
+  呼べるコマンドを返し、`<Aggregate>Availability` は遷移元の状態をデータとして持ちます。例えば `order` を手で
+  絞り込む代わりに `Sales.anyStateOrderCommands(commands).cancel(order, params)` を使えます。ADR 0036 と
+  ガイドの「Commands in any state」を参照してください。
+
+### 変更
+
+- キャストを経由して遷移元でない状態で呼ばれたコマンドは、その状態と遷移元の状態を示す `Error` を投げます。
+  これまで `decide` は `TypeError` を投げていました。`decideNamed` のコマンドはこれまで判断を実行し、遷移元の
+  状態のフィールドを持たない遷移先の集約を返していました。今後は判断を実行する前に例外を投げます。
+- `decideNamed` は、状態を持つ集約を受け取るコマンドに対して 4 つ目の引数 `{ availability, command }` を受け取ります。
+  この引数は型の上で必須です。ファクトリーと状態を持たない集約には不要です。availability にないコマンド名を
+  渡すと、コマンドを組み立てた時点で例外を投げます。
+- 生成モジュールは、ドキュメントコメントの中でだけ名前が出てくる runtime の補助を import しなくなりました。
+  「Availability」のようなラベルで未使用の import が生成されることはありません。
+
+### アップグレード手順
+
+- TypeScript を再生成し、状態を持つ集約を受け取るコマンドの `decideNamed` 呼び出しそれぞれに、4 つ目の引数
+  `{ availability: <Context>.<Aggregate>Availability, command: '<command>' }` を加えてください。生成される
+  `<Command><Aggregate>Decision` の JSDoc に、そのまま使える引数が書かれています。例:
+  `decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, decision, { availability: Sales.OrderAvailability, command: 'ship' })`。
+- 生成名 `<Aggregate>Availability`、`can<Command><Aggregate>`、`<Command><Aggregate>Unavailable`、
+  `<Command><Aggregate>FromAnyState`、`<Aggregate>CommandsFromAnyState`、`anyState<Aggregate>Commands`、
+  `available<Aggregate>Commands` が増えました。`dt check` がこれらについて M011 を報告した場合は、宣言の名前を
+  変えてください。
+- 遷移元でない状態で呼んだときの `TypeError` を捕まえていた場合は、新しい `Error` を捕まえるか、
+  `anyState<Aggregate>Commands` を通して呼び `CommandUnavailable` を処理してください。
+
 ## [0.13.1] - 2026-11-13
 
 ### 修正

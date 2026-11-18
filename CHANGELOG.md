@@ -9,6 +9,45 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.14.0] - 2026-11-18
+
+### Added
+
+- For every command that takes an aggregate with states, generated TypeScript derives where the command can be called
+  from its source states (per kind with a lifecycle selector), with no new DSL syntax:
+  `can<Command><Aggregate>(aggregate)` narrows an aggregate to the command's input, and
+  `anyState<Aggregate>Commands(commands)` calls your commands on an aggregate in any state. A call in a state that is
+  not a source state returns `CommandUnavailable` without calling the command:
+  `{ type: 'CommandUnavailable', aggregate, command, state, expected }`, plus `kind` with a lifecycle selector. Its
+  `type` never equals a declared error's, so code that handles any command can tell state rejections apart.
+  `available<Aggregate>Commands(aggregate)` lists the commands callable in the aggregate's state, and
+  `<Aggregate>Availability` holds the source states as data. For example, use
+  `Sales.anyStateOrderCommands(commands).cancel(order, params)` instead of narrowing `order` by hand. See ADR 0036
+  and the guide's "Commands in any state".
+
+### Changed
+
+- A command called through a cast in a state that is not a source state throws an `Error` naming the state and the
+  source states. `decide` used to throw a `TypeError`. A `decideNamed` command used to run its decision and return an
+  aggregate of the target state without the source state's fields; it now throws before the decision runs.
+- `decideNamed` takes a fourth argument, `{ availability, command }`, for a command that takes an aggregate with
+  states. The argument is required by its type; factories and aggregates without states take none. A command name
+  that the availability does not have throws when the command is made.
+- Runtime helpers named only in doc comments are no longer imported by generated modules, so a label such as
+  "Availability" no longer causes an unused import.
+
+### Upgrading
+
+- Regenerate TypeScript, then add `{ availability: <Context>.<Aggregate>Availability, command: '<command>' }` as the
+  fourth argument of each `decideNamed` call whose command takes an aggregate with states. The JSDoc of the generated
+  `<Command><Aggregate>Decision` shows the exact argument. For example:
+  `decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, decision, { availability: Sales.OrderAvailability, command: 'ship' })`.
+- The generated names `<Aggregate>Availability`, `can<Command><Aggregate>`, `<Command><Aggregate>Unavailable`,
+  `<Command><Aggregate>FromAnyState`, `<Aggregate>CommandsFromAnyState`, `anyState<Aggregate>Commands` and
+  `available<Aggregate>Commands` are new. If `dt check` reports M011 for one of them, rename your declaration.
+- If your code caught the `TypeError` of a call in a wrong state, catch the new `Error` instead, or call the command
+  through `anyState<Aggregate>Commands` and handle `CommandUnavailable`.
+
 ## [0.13.1] - 2026-11-13
 
 ### Fixed
