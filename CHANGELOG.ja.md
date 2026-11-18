@@ -1088,6 +1088,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.14.0]: https://github.com/hisamekms/domaintrail/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/hisamekms/domaintrail/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0

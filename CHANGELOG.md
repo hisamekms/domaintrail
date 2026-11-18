@@ -1089,6 +1089,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.14.0]: https://github.com/hisamekms/domaintrail/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/hisamekms/domaintrail/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/hisamekms/domaintrail/compare/v0.11.0...v0.12.0
