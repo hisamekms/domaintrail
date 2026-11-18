@@ -28,6 +28,7 @@ export const RUNTIME_NAMES = [
     'decimalCompare',
     'Availability',
     'CommandUnavailable',
+    'CommandOf',
     'isAvailable',
     'availableCommands',
     'fromAnyState',

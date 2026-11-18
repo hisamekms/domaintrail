@@ -1531,7 +1531,7 @@ export type FinishAgentRun = (
 
 /**
  * Decision of AgentRun.finish; each named outcome gives only its set fields and events.
- * Use decideNamed with an outcome-to-target map to form the aggregate.
+ * Use decideNamed with an outcome-to-target map to form the aggregate, and `{ availability: AgentRunAvailability, command: 'finish' }` to check the source states.
  * @see contexts/collaboration/model/agent-run.dt:441
  */
 export type FinishAgentRunDecision = (
@@ -11303,7 +11303,7 @@ export type RecordTriage = (
 
 /**
  * Decision of Triage.record; each named outcome gives only its set fields and events.
- * Use decideNamed with an outcome-to-target map to form the aggregate.
+ * Use decideNamed with an outcome-to-target map to form the aggregate, and `{ availability: TriageAvailability, command: 'record' }` to check the source states.
  * @see contexts/collaboration/model/triage.dt:114
  */
 export type RecordTriageDecision = (

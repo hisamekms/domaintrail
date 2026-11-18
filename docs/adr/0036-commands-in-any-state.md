@@ -2,7 +2,8 @@
 
 - Status: accepted, implemented
 - Date: 2026-11-18
-- Amends: [ADR 0019](0019-command-changes-and-decisions.md), [ADR 0035](0035-kind-specific-lifecycles.md)
+- Amends: [ADR 0011](0011-generated-code-boundary.md), [ADR 0019](0019-command-changes-and-decisions.md),
+  [ADR 0035](0035-kind-specific-lifecycles.md)
 
 ## Context
 
@@ -30,14 +31,19 @@ call a command on an aggregate in any state and get the rejection back as a valu
   generated functions only pass it the aggregate's data and give the result its type (ADR 0011, 0019).
 - **One error, `CommandUnavailable`**, of the runtime: `{ type: 'CommandUnavailable', aggregate, command, state,
   expected }`, with `kind` under a selector. `state` is the aggregate's state, `expected` the command's source states
-  for its kind. Its `type` has no context prefix, so it cannot be a declared error's (those are `Context.Name`).
+  for its kind (a copy: the availability is shared). Its `type` has no context prefix, so it cannot be a declared error's (those are `Context.Name`).
 - **The state is checked before the requirements**: the requirements see the fields of the source states.
-- **The strict entry stays strict.** The command's own type is unchanged. A state its decision has no handler for is a
-  contract violation: `decide` throws an `Error` that names the state and the source states, no longer a `TypeError`.
-  This is ADR 0035's "unavailable … is a contract violation" for the strict entry; only the any-state entry reports it
-  as a value.
+- **The strict entry stays strict.** The command's own type is unchanged. A state that is not a source state (a call
+  through a cast) is a contract violation: the command throws an `Error` that names the state and the source states.
+  `decide` knows them from its handlers (it used to call `undefined` and throw a `TypeError`). `decideNamed` takes one
+  function, which used to run in any state and make an aggregate of the target state without the fields of a source
+  state: it now takes `{ availability, command }` (the generated availability and the command's name), required by its
+  type for a command that takes an aggregate with states, and checks the state per kind before the decision runs; an
+  unknown command throws when the command is made. This is ADR 0035's "unavailable … is a contract violation" for the
+  strict entry; only the any-state entry reports it as a value.
 - **Kind and state are different.** A command with no source state for the aggregate's kind can never be called on
-  it, since the kind is fixed at creation: through the any-state entry this throws (a caller's bug). Only a state that
+  it, since the kind is fixed at creation: `…FromAnyState` does not take an aggregate of that kind, and a call that
+  bypasses its type throws (a caller's bug). Only a state that
   can still change gives `CommandUnavailable`. The guards and `available…Commands` return `false` / leave it out.
 - **No generated wording.** Labels stay in JSDoc. Mapping `aggregate` and `command` to an API's error codes or a UI's
   messages is the caller's.

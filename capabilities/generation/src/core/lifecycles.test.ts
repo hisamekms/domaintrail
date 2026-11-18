@@ -117,6 +117,7 @@ commands.complete(invalid);
             { fields: ['kind', 'ready'], states: { Assigned: [], Accepted: [], Rejected: [] } },
             { accepted: 'Accepted', rejected: 'Rejected' },
             () => ({ ok: true, value: { accepted: { set: {}, events: {} } } }),
+            { availability: { aggregate: 'Sales.Request', kindField: 'kind', commands: { inspect: { COLLECT: ['Assigned'] } } }, command: 'inspect' },
             { applicable: () => ['accepted', 'rejected'], choices: () => ({ accepted: false, rejected: true }) },
         );
         expect(() => decide({ kind: 'COLLECT', ready: true, state: 'Assigned' })).toThrow('DomainTrail choice contract violated');
@@ -288,6 +289,7 @@ export const finish: X.FinishRun = decideNamed<X.FinishRunDecision>()(
     (run, params) => params.resultRevision === run.baseRevision
         ? ok({ unchanged: { set: {}, events: {} } })
         : ok({ finished: { set: { resultRevision: params.resultRevision }, events: {} } }),
+    { availability: X.RunAvailability, command: 'finish' },
 );
 `,
         );

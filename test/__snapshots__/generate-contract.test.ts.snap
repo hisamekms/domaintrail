@@ -1756,13 +1756,19 @@ export interface ChoiceVerifier {
     readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
 }
 
-export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+/** The command's contract takes only its source states: another state is a caller's bug, not a domain error. */
+const notASource = (subject: any, sources: readonly string[]): Error =>
+    new Error(\`DomainTrail command contract violated: state '\${String(subject?.state)}' is not a source state of this command (sources: \${sources.join(', ')}).\`);
+
+const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>>, where: CommandOf | undefined, verify: ChoiceVerifier | undefined): Decide<D> =>
     ((...args: any[]) => {
         const subject = args[0];
-        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject.state]) as ((...args: any[]) => Result<object, unknown>) | undefined;
-        // the command's contract takes only its source states: another state is a caller's bug, not a domain error
-        if (handler === undefined)
-            throw new Error(\`DomainTrail command contract violated: state '\${String(subject?.state)}' is not a source state of this command (sources: \${Object.keys(decision as object).join(', ')}).\`);
+        if (where !== undefined) {
+            const sources = sourcesFor(where.availability, where.command, subject);
+            if (!sources.includes(subject?.state)) throw notASource(subject, sources);
+        }
+        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.state]) as ((...args: any[]) => Result<object, unknown>) | undefined;
+        if (handler === undefined) throw notASource(subject, Object.keys(decision as object));
         const r = handler(...args);
         if (!r.ok) return r;
         if (verify) {
@@ -1788,13 +1794,46 @@ export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<st
         return { ok: true, value };
     }) as Decide<D>;
 
-/** Construct a named-outcome command from a decision and its outcome-to-state map. */
+export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+    decideWith(shape, decision, targets, undefined, verify);
+
+/**
+ * Which command a named-outcome decision implements, for the check of its source states: the aggregate's generated
+ * \`<Aggregate>Availability\` and the command's name.
+ */
+export interface CommandOf {
+    readonly availability: Availability;
+    readonly command: string;
+}
+
+/**
+ * The arguments after the decision: \`CommandOf\` for a command that takes an aggregate with states (required: its one
+ * function would otherwise run in any state), nothing for a factory and an aggregate without states.
+ */
+type NamedRest<D> = D extends (...args: infer A) => unknown
+    ? A[0] extends { readonly state: string }
+        ? [command: CommandOf, verify?: ChoiceVerifier]
+        : [command?: undefined, verify?: ChoiceVerifier]
+    : never;
+
+/**
+ * Construct a named-outcome command from a decision, its outcome-to-state map and, for a command that takes an
+ * aggregate with states, which command it is: a state that is not a source state of the command (for the aggregate's
+ * kind) throws before the decision runs, as \`decide\` does.
+ *
+ *     ship: decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, (order) => ok({ shipped: … }), { availability: Sales.OrderAvailability, command: 'ship' })
+ */
 export const decideNamed = <D>() => <const Targets extends Readonly<Record<string, string>>>(
     shape: Shape,
     targets: Targets,
     decision: D,
-    verify?: ChoiceVerifier,
-): Decide<D, Targets> => decide(shape, decision, targets, verify) as Decide<D, Targets>;
+    ...rest: NamedRest<D>
+): Decide<D, Targets> => {
+    const [where, verify] = rest as readonly unknown[] as readonly [CommandOf | undefined, ChoiceVerifier | undefined];
+    if (where !== undefined && where.availability.commands[where.command] === undefined)
+        throw new Error(\`DomainTrail: \${where.availability.aggregate} has no command '\${where.command}' that takes an aggregate.\`);
+    return decideWith(shape, decision, targets, where, verify) as Decide<D, Targets>;
+};
 
 /**
  * Where the commands of an aggregate can be called, as data (a generated \`<Aggregate>Availability\`): for each command
@@ -1858,7 +1897,7 @@ export const fromAnyState = (availability: Availability, commands: object): obje
                     command,
                     ...(kind === undefined ? {} : { kind }),
                     state: subject.state,
-                    expected: sources,
+                    expected: [...sources],
                 });
             },
         ]),

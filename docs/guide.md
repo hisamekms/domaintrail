@@ -1680,9 +1680,12 @@ export const cancelOffered = (order: Sales.Order): boolean => Sales.availableOrd
 
 With a lifecycle selector, the source states are those of the aggregate's kind. A command with no source state at all
 for a kind cannot be called on an aggregate of that kind (the kind never changes): through `anyState…`, that throws, as
-a bug of the caller. So does a command built with `decide` that is given a state its decision has no handler for: the
+a bug of the caller. So does a command given a state that is not one of its source states (through a cast): the
 command's own type takes only its source states, and a call that bypasses it is a contract violation, not a domain
-error.
+error. `decide` knows the source states from its handlers; `decideNamed` takes one function, so it is told which
+command it implements, and checks the state (per kind) before the decision runs:
+`decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, decision, { availability: Sales.OrderAvailability, command: 'ship' })`
+(required for a command that takes an aggregate with states).
 
 <!-- topic: your-code -->
 ### Generated code and your code
@@ -1696,7 +1699,7 @@ The generated files are the **contract**, your code is the **implementation**:
   [Decisions and `decide`](#decisions-and-decide)) — plus logic
   derived 1:1 from DSL expressions: the checks of invariants and requirements, the equality of value types and the
   constructors of domain primitives (see [Generated checks](#generated-checks)). Invariants and requirements also
-  appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `outcome`,
+  appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `decideNamed`, `outcome`,
   `eventList`, `fromAnyState`, `parseDecimal`, and those of the checks) that are the same for every model.
 - Yours: the behaviour — command implementations (returning the error of the first requirement that does not hold;
   pure functions, see [Pure commands](#pure-commands)), the factories of verified types (the checks outside the

@@ -188,13 +188,19 @@ export interface ChoiceVerifier {
     readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
 }
 
-export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+/** The command's contract takes only its source states: another state is a caller's bug, not a domain error. */
+const notASource = (subject: any, sources: readonly string[]): Error =>
+    new Error(\`DomainTrail command contract violated: state '\${String(subject?.${STATE_TAG})}' is not a source state of this command (sources: \${sources.join(', ')}).\`);
+
+const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>>, where: CommandOf | undefined, verify: ChoiceVerifier | undefined): Decide<D> =>
     ((...args: any[]) => {
         const subject = args[0];
-        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject.${STATE_TAG}]) as ((...args: any[]) => Result<object, unknown>) | undefined;
-        // the command's contract takes only its source states: another state is a caller's bug, not a domain error
-        if (handler === undefined)
-            throw new Error(\`DomainTrail command contract violated: state '\${String(subject?.${STATE_TAG})}' is not a source state of this command (sources: \${Object.keys(decision as object).join(', ')}).\`);
+        if (where !== undefined) {
+            const sources = sourcesFor(where.availability, where.command, subject);
+            if (!sources.includes(subject?.${STATE_TAG})) throw notASource(subject, sources);
+        }
+        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.${STATE_TAG}]) as ((...args: any[]) => Result<object, unknown>) | undefined;
+        if (handler === undefined) throw notASource(subject, Object.keys(decision as object));
         const r = handler(...args);
         if (!r.ok) return r;
         if (verify) {
@@ -220,13 +226,46 @@ export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<st
         return { ok: true, value };
     }) as Decide<D>;
 
-/** Construct a named-outcome command from a decision and its outcome-to-state map. */
+export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+    decideWith(shape, decision, targets, undefined, verify);
+
+/**
+ * Which command a named-outcome decision implements, for the check of its source states: the aggregate's generated
+ * \`<Aggregate>Availability\` and the command's name.
+ */
+export interface CommandOf {
+    readonly availability: Availability;
+    readonly command: string;
+}
+
+/**
+ * The arguments after the decision: \`CommandOf\` for a command that takes an aggregate with states (required: its one
+ * function would otherwise run in any state), nothing for a factory and an aggregate without states.
+ */
+type NamedRest<D> = D extends (...args: infer A) => unknown
+    ? A[0] extends { readonly ${STATE_TAG}: string }
+        ? [command: CommandOf, verify?: ChoiceVerifier]
+        : [command?: undefined, verify?: ChoiceVerifier]
+    : never;
+
+/**
+ * Construct a named-outcome command from a decision, its outcome-to-state map and, for a command that takes an
+ * aggregate with states, which command it is: a state that is not a source state of the command (for the aggregate's
+ * kind) throws before the decision runs, as \`decide\` does.
+ *
+ *     ship: decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, (order) => ok({ shipped: … }), { availability: Sales.OrderAvailability, command: 'ship' })
+ */
 export const decideNamed = <D>() => <const Targets extends Readonly<Record<string, string>>>(
     shape: Shape,
     targets: Targets,
     decision: D,
-    verify?: ChoiceVerifier,
-): Decide<D, Targets> => decide(shape, decision, targets, verify) as Decide<D, Targets>;
+    ...rest: NamedRest<D>
+): Decide<D, Targets> => {
+    const [where, verify] = rest as readonly unknown[] as readonly [CommandOf | undefined, ChoiceVerifier | undefined];
+    if (where !== undefined && where.availability.commands[where.command] === undefined)
+        throw new Error(\`DomainTrail: \${where.availability.aggregate} has no command '\${where.command}' that takes an aggregate.\`);
+    return decideWith(shape, decision, targets, where, verify) as Decide<D, Targets>;
+};
 
 /**
  * Where the commands of an aggregate can be called, as data (a generated \`<Aggregate>Availability\`): for each command
@@ -290,7 +329,7 @@ export const fromAnyState = (availability: Availability, commands: object): obje
                     command,
                     ...(kind === undefined ? {} : { kind }),
                     state: subject.${STATE_TAG},
-                    expected: sources,
+                    expected: [...sources],
                 });
             },
         ]),
@@ -559,10 +598,15 @@ class ContextEmitter {
         this.policyHandlers();
         this.commandErrors();
         const body = this.out.join('\n');
-        const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(body);
+        // names in doc comments (labels, descriptions) are not uses
+        const code = this.out
+            .flatMap((chunk) => chunk.split('\n'))
+            .filter((line) => !/^\s*(\/\*\*|\*|\/\/)/.test(line))
+            .join('\n');
+        const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(code);
         const runtime = ['Availability', 'CommandUnavailable', 'Decimal', 'Err', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
         const values = ['availableCommands', 'decimalCompare', 'distinct', 'err', 'fromAnyState', 'isAvailable', 'ok', 'sameList', 'sameOptional'].filter((n) =>
-            new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(body),
+            new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(code),
         );
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
@@ -946,8 +990,12 @@ class ContextEmitter {
                 `${agg.name}.${c.name} for the ${self} in any state: the command in a source state (${where}), and \`${unavailableTypeName(agg, c)}\` in another.`,
                 seeLine(c.location),
             ]);
+            // a kind without a source state of the command never can have it called (the kind is fixed): not accepted
+            const callable = kinds.filter((k) => sources(c, k).length);
+            const subject =
+                callable.length === kinds.length ? agg.name : callable.flatMap((k) => valid(k).map((s) => this.pairType(agg, k, s))).join(' | ') || 'never';
             this.line(`export type ${anyStateTypeName(agg, c)} = (`);
-            this.line(`    ${self}: ${agg.name},`);
+            this.line(`    ${self}: ${subject},`);
             for (const p of params) this.line(`    ${p},`);
             this.line(`) => ReturnType<${commandTypeName(agg, c)}> | Err<${unavailableTypeName(agg, c)}>;`);
         }
@@ -1070,7 +1118,9 @@ class ContextEmitter {
         this.out.push('');
         this.jsdoc([
             `Decision of ${agg.name}.${c.name}; each named outcome gives only its set fields and events.`,
-            'Use decideNamed with an outcome-to-target map to form the aggregate.',
+            c.factory || !agg.states.length
+                ? 'Use decideNamed with an outcome-to-target map to form the aggregate.'
+                : `Use decideNamed with an outcome-to-target map to form the aggregate, and \`{ availability: ${availabilityName(agg)}, command: ${quote(c.name)} }\` to check the source states.`,
             seeLine(c.location),
         ]);
         if (c.factory) {

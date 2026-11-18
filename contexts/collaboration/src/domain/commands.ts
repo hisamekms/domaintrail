@@ -421,31 +421,36 @@ export const agentRunCommands: Collaboration.AgentRunCommands = {
     }),
 
     // Completed when the report meets the run success rule, Failed (RuleNotMet) with the report otherwise
-    finish: decideNamed<Collaboration.FinishAgentRunDecision>()(Collaboration.AgentRunShape, { Completed: 'Completed', Failed: 'Failed' }, (run, params) => {
-        switch (Collaboration.checkFinishAgentRunRequires(run, params)) {
-            case 'changedMatchesResult':
-                return err({ type: 'Collaboration.ChangedMismatch' });
-            case 'replyAsksNothing':
-            case 'replyAboutInput':
-                return err({ type: 'Collaboration.InvalidReply' });
-        }
-        const { report, resultRevision, changed, reply, review, finishedAt } = params;
-        if (succeeded(report, changed)) {
+    finish: decideNamed<Collaboration.FinishAgentRunDecision>()(
+        Collaboration.AgentRunShape,
+        { Completed: 'Completed', Failed: 'Failed' },
+        (run, params) => {
+            switch (Collaboration.checkFinishAgentRunRequires(run, params)) {
+                case 'changedMatchesResult':
+                    return err({ type: 'Collaboration.ChangedMismatch' });
+                case 'replyAsksNothing':
+                case 'replyAboutInput':
+                    return err({ type: 'Collaboration.InvalidReply' });
+            }
+            const { report, resultRevision, changed, reply, review, finishedAt } = params;
+            if (succeeded(report, changed)) {
+                return ok({
+                    Completed: {
+                        // the reply and the review are kept with a completed run only: a failure is the facts'
+                        set: { report, resultRevision, changed, reply, review, finishedAt },
+                        events: { 'Collaboration.RunCompleted': { type: 'Collaboration.RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
+                    },
+                });
+            }
             return ok({
-                Completed: {
-                    // the reply and the review are kept with a completed run only: a failure is the facts'
-                    set: { report, resultRevision, changed, reply, review, finishedAt },
-                    events: { 'Collaboration.RunCompleted': { type: 'Collaboration.RunCompleted', runId: run.id, resultRevision, changed, finishedAt } },
+                Failed: {
+                    set: { reason: 'RuleNotMet', report, resultRevision, finishedAt },
+                    events: { 'Collaboration.RunFailed': { type: 'Collaboration.RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
                 },
             });
-        }
-        return ok({
-            Failed: {
-                set: { reason: 'RuleNotMet', report, resultRevision, finishedAt },
-                events: { 'Collaboration.RunFailed': { type: 'Collaboration.RunFailed', runId: run.id, reason: 'RuleNotMet', finishedAt } },
-            },
-        });
-    }),
+        },
+        { availability: Collaboration.AgentRunAvailability, command: 'finish' },
+    ),
 
     askClarification: decide<Collaboration.AskClarificationAgentRunDecision>(Collaboration.AgentRunShape, {
         Running: (run, params) => {
