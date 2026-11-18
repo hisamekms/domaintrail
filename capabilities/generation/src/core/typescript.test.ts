@@ -46,7 +46,7 @@ describe('generated TypeScript', () => {
         );
         // no events -> NoEvents; factory -> no aggregate parameter, the new ID passed in
         expect(sales).toContain('        readonly events: NoEvents;\n    };\n}, DuplicateSku | CurrencyMismatch>;');
-        expect(sales).toContain("import type { NoEvents, Result, Shape, Timestamp } from './_runtime.js';");
+        expect(sales).toContain("import type { Availability, CommandUnavailable, Err, NoEvents, Result, Shape, Timestamp } from './_runtime.js';");
         expect(sales).toContain('export type PlaceOrder = (\n    params: PlaceOrderParams,\n)');
         // an aggregate without states: keyed by the aggregate's name
         expect(sales).toContain(') => Result<{\n    readonly Customer: {\n        readonly aggregate: Customer;\n');

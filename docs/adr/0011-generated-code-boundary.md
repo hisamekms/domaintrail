@@ -4,7 +4,8 @@
 - Date: 2026-10-18
 - Amended by: [ADR 0019](0019-command-changes-and-decisions.md) (generated code may also hold data without logic: the
   shape constants read by `decide`), [ADR 0020](0020-generated-checks-and-contract-tests.md) (generated code may hold
-  logic derived 1:1 from DSL expressions: checks, equality, `make<Name>`)
+  logic derived 1:1 from DSL expressions: checks, equality, `make<Name>`), [ADR 0036](0036-commands-in-any-state.md)
+  (the availability constant: the source states of each command)
 
 ## Context
 

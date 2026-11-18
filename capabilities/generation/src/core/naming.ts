@@ -26,6 +26,12 @@ export const RUNTIME_NAMES = [
     'distinct',
     'parseDecimal',
     'decimalCompare',
+    'Availability',
+    'CommandUnavailable',
+    'CommandOf',
+    'isAvailable',
+    'availableCommands',
+    'fromAnyState',
 ] as const;
 
 /** Discriminant property of generated event / error types. */
@@ -59,6 +65,20 @@ export const paramsTypeName = (agg: Named, cmd: Named): string => `${commandType
 /** The fields of an aggregate as data for `decide`, e.g. `OrderShape`. */
 export const shapeName = (agg: Named): string => `${agg.name}Shape`;
 export const restoreName = (agg: Named): string => `restore${agg.name}`;
+/** Where the commands of an aggregate can be called, as data (`OrderAvailability`). */
+export const availabilityName = (agg: Named): string => `${agg.name}Availability`;
+/** The guard of whether a command can be called on an aggregate in its state (`canCancelOrder`). */
+export const canName = (agg: Named, cmd: Named): string => `can${commandTypeName(agg, cmd)}`;
+/** The error of a command called in a state that is not one of its source states (`CancelOrderUnavailable`). */
+export const unavailableTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Unavailable`;
+/** A command for an aggregate in any state (`CancelOrderFromAnyState`). */
+export const anyStateTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}FromAnyState`;
+/** The commands of an aggregate for an aggregate in any state (`OrderCommandsFromAnyState`). */
+export const anyStateInterfaceName = (agg: Named): string => `${agg.name}CommandsFromAnyState`;
+/** Makes `OrderCommandsFromAnyState` of the hand-written commands (`anyStateOrderCommands`). */
+export const anyStateFunctionName = (agg: Named): string => `anyState${agg.name}Commands`;
+/** The commands that can be called on an aggregate in its state (`availableOrderCommands`). */
+export const availableCommandsName = (agg: Named): string => `available${agg.name}Commands`;
 /**
  * Whether the outputs of a command depend on its source state, which makes its contract generic over the input state:
  * the targets differ by transition (`A -> A, B -> B`), or the events do (`emits X when A ->`). State names only, as in
@@ -187,6 +207,19 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         const commands = firstByName(written.commandsOf(el));
         if (commands.length > 0) {
             out.push({ name: commandsInterfaceName(el), origin: `commands of '${el.name}'`, at });
+        }
+        // where the commands can be called (ADR 0036): for an aggregate with states and a command that takes one
+        const available = states.length > 0 ? commands.filter((c) => !c.factory) : [];
+        if (available.length > 0) {
+            out.push({ name: availabilityName(el), origin: `the availability of the commands of '${el.name}'`, at });
+            out.push({ name: availableCommandsName(el), origin: `the available commands of '${el.name}'`, at });
+            out.push({ name: anyStateInterfaceName(el), origin: `the any-state commands of '${el.name}'`, at });
+            out.push({ name: anyStateFunctionName(el), origin: `the any-state commands of '${el.name}'`, at });
+            for (const c of available) {
+                const origin = `the availability of '${el.name}.${c.name}'`;
+                out.push({ name: canName(el, c), origin, at: c.nameAt }, { name: unavailableTypeName(el, c), origin, at: c.nameAt });
+                out.push({ name: anyStateTypeName(el, c), origin, at: c.nameAt });
+            }
         }
         const invs = [...written.invariantsOf(el.members), ...states.flatMap((s) => written.invariantsOf(s.members))];
         if (invs.length) {

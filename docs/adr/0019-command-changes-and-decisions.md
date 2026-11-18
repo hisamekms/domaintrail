@@ -6,6 +6,7 @@
 - Amends: [ADR 0011](0011-generated-code-boundary.md) (generated code may hold data without logic), the generated
   contract of [ADR 0014](0014-command-transitions.md) and [ADR 0018](0018-command-events-contract.md) for commands
   whose output depends on the input
+- Amended by: [ADR 0036](0036-commands-in-any-state.md) (a state that is not a source state throws a contract violation)
 
 ## Context
 

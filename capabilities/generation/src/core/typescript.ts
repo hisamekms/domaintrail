@@ -18,7 +18,17 @@ import type {
     UnionModel,
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
-import { applicableOutcomes, contextNames, elementOf, elementsIn, emitApplies, emittedEvents, outcomeFields, ownFields } from '@domaintrail/modeling';
+import {
+    applicableOutcomes,
+    contextNames,
+    elementOf,
+    elementsIn,
+    emitApplies,
+    emittedEvents,
+    outcomeFields,
+    ownFields,
+    validStatesFor,
+} from '@domaintrail/modeling';
 import { CheckWriter, primitiveInvariants, quote, type DomainPrimitive } from './checks.js';
 import { generateTests, type TestsOptions } from './tests.js';
 import {
@@ -33,6 +43,12 @@ import {
     VERIFIED_PREFIX,
     aggregateEventTypeName,
     aggregateParamName,
+    anyStateFunctionName,
+    anyStateInterfaceName,
+    anyStateTypeName,
+    availabilityName,
+    availableCommandsName,
+    canName,
     commandTypeName,
     commandsInterfaceName,
     commonTypeName,
@@ -47,6 +63,7 @@ import {
     policyTypeName,
     shapeName,
     stateTypeName,
+    unavailableTypeName,
 } from './naming.js';
 
 /**
@@ -171,10 +188,19 @@ export interface ChoiceVerifier {
     readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
 }
 
-export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+/** The command's contract takes only its source states: another state is a caller's bug, not a domain error. */
+const notASource = (subject: any, sources: readonly string[]): Error =>
+    new Error(\`DomainTrail command contract violated: state '\${String(subject?.${STATE_TAG})}' is not a source state of this command (sources: \${sources.join(', ')}).\`);
+
+const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>>, where: CommandOf | undefined, verify: ChoiceVerifier | undefined): Decide<D> =>
     ((...args: any[]) => {
         const subject = args[0];
-        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject.${STATE_TAG}]) as (...args: any[]) => Result<object, unknown>;
+        if (where !== undefined) {
+            const sources = sourcesFor(where.availability, where.command, subject);
+            if (!sources.includes(subject?.${STATE_TAG})) throw notASource(subject, sources);
+        }
+        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.${STATE_TAG}]) as ((...args: any[]) => Result<object, unknown>) | undefined;
+        if (handler === undefined) throw notASource(subject, Object.keys(decision as object));
         const r = handler(...args);
         if (!r.ok) return r;
         if (verify) {
@@ -200,13 +226,114 @@ export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<st
         return { ok: true, value };
     }) as Decide<D>;
 
-/** Construct a named-outcome command from a decision and its outcome-to-state map. */
+export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+    decideWith(shape, decision, targets, undefined, verify);
+
+/**
+ * Which command a named-outcome decision implements, for the check of its source states: the aggregate's generated
+ * \`<Aggregate>Availability\` and the command's name.
+ */
+export interface CommandOf {
+    readonly availability: Availability;
+    readonly command: string;
+}
+
+/**
+ * The arguments after the decision: \`CommandOf\` for a command that takes an aggregate with states (required: its one
+ * function would otherwise run in any state), nothing for a factory and an aggregate without states.
+ */
+type NamedRest<D> = D extends (...args: infer A) => unknown
+    ? A[0] extends { readonly ${STATE_TAG}: string }
+        ? [command: CommandOf, verify?: ChoiceVerifier]
+        : [command?: undefined, verify?: ChoiceVerifier]
+    : never;
+
+/**
+ * Construct a named-outcome command from a decision, its outcome-to-state map and, for a command that takes an
+ * aggregate with states, which command it is: a state that is not a source state of the command (for the aggregate's
+ * kind) throws before the decision runs, as \`decide\` does.
+ *
+ *     ship: decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, (order) => ok({ shipped: … }), { availability: Sales.OrderAvailability, command: 'ship' })
+ */
 export const decideNamed = <D>() => <const Targets extends Readonly<Record<string, string>>>(
     shape: Shape,
     targets: Targets,
     decision: D,
-    verify?: ChoiceVerifier,
-): Decide<D, Targets> => decide(shape, decision, targets, verify) as Decide<D, Targets>;
+    ...rest: NamedRest<D>
+): Decide<D, Targets> => {
+    const [where, verify] = rest as readonly unknown[] as readonly [CommandOf | undefined, ChoiceVerifier | undefined];
+    if (where !== undefined && where.availability.commands[where.command] === undefined)
+        throw new Error(\`DomainTrail: \${where.availability.aggregate} has no command '\${where.command}' that takes an aggregate.\`);
+    return decideWith(shape, decision, targets, where, verify) as Decide<D, Targets>;
+};
+
+/**
+ * Where the commands of an aggregate can be called, as data (a generated \`<Aggregate>Availability\`): for each command
+ * that is not a factory, its source states per kind of the lifecycle selector \`kindField\`, or under \`'*'\` for an
+ * aggregate without one.
+ */
+export interface Availability {
+    /** The aggregate's qualified name (\`Context.Aggregate\`). */
+    readonly aggregate: string;
+    readonly kindField?: string;
+    readonly commands: { readonly [command: string]: { readonly [kind: string]: readonly string[] } };
+}
+
+/**
+ * The error of a command called through its any-state entry on an aggregate whose state is not one of the command's
+ * source states: \`state\` is the aggregate's state, \`expected\` the states the command can be called in, and \`kind\` the
+ * aggregate's kind when it has a lifecycle selector. It tells apart every state rejection from the command's own errors.
+ */
+export type CommandUnavailable<A extends string = string, C extends string = string, S extends string = string, E extends string = string, K extends string = never> = {
+    readonly type: 'CommandUnavailable';
+    readonly aggregate: A;
+    readonly command: C;
+    readonly state: S;
+    readonly expected: readonly E[];
+} & ([K] extends [never] ? {} : { readonly kind: K });
+
+/** The source states of a command for the subject's kind; none when the command has none for that kind. */
+const sourcesFor = (availability: Availability, command: string, subject: any): readonly string[] => {
+    const byKind = availability.commands[command];
+    if (byKind === undefined) throw new Error(\`DomainTrail: \${availability.aggregate} has no command '\${command}' that takes an aggregate.\`);
+    return byKind[availability.kindField === undefined ? '*' : String(subject?.[availability.kindField])] ?? [];
+};
+
+/** Whether the command can be called on the aggregate: its state is a source state of the command for its kind. */
+export const isAvailable = (availability: Availability, command: string, subject: { readonly ${STATE_TAG}: string }): boolean =>
+    sourcesFor(availability, command, subject).includes(subject.${STATE_TAG});
+
+/** The commands that can be called on the aggregate in its state (and kind), in declaration order. */
+export const availableCommands = (availability: Availability, subject: { readonly ${STATE_TAG}: string }): string[] =>
+    Object.keys(availability.commands).filter((command) => isAvailable(availability, command, subject));
+
+/**
+ * The commands of an aggregate for an aggregate in any state: each calls the command when the aggregate's state is one
+ * of its source states, and otherwise returns \`CommandUnavailable\` without calling it. A command that has no source
+ * state at all for the aggregate's kind cannot be called on it (the kind never changes): that throws, as a caller's bug.
+ * Use the generated \`anyState<Aggregate>Commands\`, which gives the result its type.
+ */
+export const fromAnyState = (availability: Availability, commands: object): object =>
+    Object.fromEntries(
+        Object.keys(availability.commands).map((command) => [
+            command,
+            (subject: any, ...args: any[]): unknown => {
+                const sources = sourcesFor(availability, command, subject);
+                const kind = availability.kindField === undefined ? undefined : String(subject?.[availability.kindField]);
+                if (!sources.length)
+                    throw new Error(\`DomainTrail command contract violated: \${availability.aggregate}.\${command} has no source state for \${availability.kindField} '\${kind}'.\`);
+                if (sources.includes(subject.${STATE_TAG})) return (commands as Record<string, (...a: any[]) => unknown>)[command]!(subject, ...args);
+                return err({
+                    type: 'CommandUnavailable',
+                    aggregate: availability.aggregate,
+                    command,
+                    ...(kind === undefined ? {} : { kind }),
+                    state: subject.${STATE_TAG},
+                    expected: [...sources],
+                });
+            },
+        ]),
+    );
 
 /** Whether two optional values are equal: both absent, or both present and equal by \`same\` (for generated checks). */
 export const sameOptional = <T>(a: T | undefined, b: T | undefined, same: (x: T, y: T) => boolean): boolean =>
@@ -471,9 +598,16 @@ class ContextEmitter {
         this.policyHandlers();
         this.commandErrors();
         const body = this.out.join('\n');
-        const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(body);
-        const runtime = ['Decimal', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
-        const values = ['decimalCompare', 'distinct', 'err', 'ok', 'sameList', 'sameOptional'].filter((n) => new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(body));
+        // names in doc comments (labels, descriptions) are not uses
+        const code = this.out
+            .flatMap((chunk) => chunk.split('\n'))
+            .filter((line) => !/^\s*(\/\*\*|\*|\/\/)/.test(line))
+            .join('\n');
+        const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(code);
+        const runtime = ['Availability', 'CommandUnavailable', 'Decimal', 'Err', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
+        const values = ['availableCommands', 'decimalCompare', 'distinct', 'err', 'fromAnyState', 'isAvailable', 'ok', 'sameList', 'sameOptional'].filter((n) =>
+            new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(code),
+        );
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
             ...(values.length ? [`import { ${values.join(', ')} } from './_runtime.js';`] : []),
@@ -786,6 +920,113 @@ class ContextEmitter {
             this.jsdoc([`Events that the commands of ${agg.name} may emit.`, seeLine(agg.location)]);
             this.line(`export type ${aggregateEventTypeName(agg)} = ${events.map((e) => this.ref(e)).join(' | ')};`);
         }
+        this.availability(agg);
+    }
+
+    /**
+     * Where the commands of an aggregate with states can be called (ADR 0036): the data of the runtime's \`isAvailable\`
+     * and \`fromAnyState\`, a guard per command, the error of a command called in another state, and the commands for an
+     * aggregate in any state. Factories take no aggregate and have none.
+     */
+    private availability(agg: AggregateModel): void {
+        const commands = agg.states.length ? agg.commands.filter((c) => !c.factory) : [];
+        if (!commands.length) return;
+        const states = agg.states.map((s) => s.name);
+        const kinds = agg.lifecycleField ? agg.validStates.map((v) => v.kind) : ['*'];
+        const valid = (kind: string): readonly string[] => (agg.lifecycleField ? validStatesFor(agg, kind) : states);
+        /** The source states of a command for a kind, in the order the states are declared. */
+        const sources = (c: CommandModel, kind: string): string[] => {
+            const from = c.legacy ? c.transitions.flatMap((t) => t.from) : applicableOutcomes(agg, c, kind).flatMap((o) => o.from);
+            return states.filter((s) => from.includes(s) && valid(kind).includes(s));
+        };
+        const self = aggregateParamName(agg);
+        const lit = (names: readonly string[]): string => names.map((n) => `'${n}'`).join(' | ') || 'never';
+
+        this.out.push('');
+        this.jsdoc([
+            `Where the commands of ${agg.name} can be called: the source states of each command${agg.lifecycleField ? ` per ${agg.lifecycleField}` : ''}.`,
+            'Data for `isAvailable`, `availableCommands` and `fromAnyState` of the runtime.',
+            seeLine(agg.location),
+        ]);
+        this.line(`export const ${availabilityName(agg)}: Availability = {`);
+        this.line(`    aggregate: ${quote(agg.id)},`);
+        if (agg.lifecycleField) this.line(`    kindField: ${quote(agg.lifecycleField)},`);
+        this.line('    commands: {');
+        for (const c of commands) {
+            const byKind = kinds.map((k) => `${quote(k)}: [${sources(c, k).map(quote).join(', ')}]`).join(', ');
+            this.line(`        ${c.name}: { ${byKind} },`);
+        }
+        this.line('    },');
+        this.line('};');
+
+        for (const c of commands) {
+            const input =
+                agg.lifecycleField && !c.legacy
+                    ? kinds.flatMap((k) => sources(c, k).map((s) => this.pairType(agg, k, s)))
+                    : unique(kinds.flatMap((k) => sources(c, k))).map((s) => stateTypeName(agg, s));
+            const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
+            const unavailable = kinds.flatMap((k) => {
+                const from = sources(c, k);
+                const others = valid(k).filter((s) => !from.includes(s));
+                // no source state for a kind: the command cannot be called on that kind at all (a caller's bug)
+                if (!from.length || !others.length) return [];
+                const kind = agg.lifecycleField ? `, ${quote(k)}` : '';
+                return [`CommandUnavailable<${quote(agg.id)}, ${quote(c.name)}, ${lit(others)}, ${lit(from)}${kind}>`];
+            });
+            const where = agg.lifecycleField ? kinds.map((k) => `${k}: ${sources(c, k).join(' | ') || 'none'}`).join('; ') : sources(c, '*').join(' | ');
+            this.out.push('');
+            this.jsdoc([`Whether ${agg.name}.${c.name} can be called on the ${self} in its state (${where}).`, seeLine(c.location)]);
+            this.line(
+                `export const ${canName(agg, c)} = (${self}: ${agg.name}): ${self} is ${input.join(' | ') || 'never'} => isAvailable(${availabilityName(agg)}, ${quote(c.name)}, ${self});`,
+            );
+            this.out.push('');
+            this.jsdoc([
+                `The error of ${agg.name}.${c.name} called through \`${anyStateFunctionName(agg)}\` on the ${self} when its state is not one of its source states.`,
+                seeLine(c.location),
+            ]);
+            this.line(`export type ${unavailableTypeName(agg, c)} = ${unavailable.join(' | ') || 'never'};`);
+            this.out.push('');
+            this.jsdoc([
+                `${agg.name}.${c.name} for the ${self} in any state: the command in a source state (${where}), and \`${unavailableTypeName(agg, c)}\` in another.`,
+                seeLine(c.location),
+            ]);
+            // a kind without a source state of the command never can have it called (the kind is fixed): not accepted
+            const callable = kinds.filter((k) => sources(c, k).length);
+            const subject =
+                callable.length === kinds.length ? agg.name : callable.flatMap((k) => valid(k).map((s) => this.pairType(agg, k, s))).join(' | ') || 'never';
+            this.line(`export type ${anyStateTypeName(agg, c)} = (`);
+            this.line(`    ${self}: ${subject},`);
+            for (const p of params) this.line(`    ${p},`);
+            this.line(`) => ReturnType<${commandTypeName(agg, c)}> | Err<${unavailableTypeName(agg, c)}>;`);
+        }
+
+        this.out.push('');
+        this.jsdoc([
+            `The commands of ${agg.name} that take the ${self}, for the ${self} in any state: make it with \`${anyStateFunctionName(agg)}\`.`,
+            seeLine(agg.location),
+        ]);
+        this.line(`export interface ${anyStateInterfaceName(agg)} {`);
+        for (const c of commands) {
+            if (c.label) this.line(`    /** ${oneLine(c.label)} */`);
+            this.line(`    readonly ${c.name}: ${anyStateTypeName(agg, c)};`);
+        }
+        this.line('}');
+        this.out.push('');
+        this.jsdoc([
+            `The hand-written commands of ${agg.name} for the ${self} in any state: each returns its \`…Unavailable\` error, without calling the command, when the ${self} is not in one of its source states.`,
+            seeLine(agg.location),
+        ]);
+        this.line(
+            `export const ${anyStateFunctionName(agg)} = (commands: ${commandsInterfaceName(agg)}): ${anyStateInterfaceName(agg)} => fromAnyState(${availabilityName(agg)}, commands) as ${anyStateInterfaceName(agg)};`,
+        );
+        this.out.push('');
+        this.jsdoc([
+            `The commands that can be called on the ${self} in its state, in declaration order (for example, to offer them in a UI).`,
+            seeLine(agg.location),
+        ]);
+        this.line(
+            `export const ${availableCommandsName(agg)} = (${self}: ${agg.name}): (keyof ${anyStateInterfaceName(agg)})[] => availableCommands(${availabilityName(agg)}, ${self}) as (keyof ${anyStateInterfaceName(agg)})[];`,
+        );
     }
 
     private pairType(agg: AggregateModel, kind: string, state: string): string {
@@ -877,7 +1118,9 @@ class ContextEmitter {
         this.out.push('');
         this.jsdoc([
             `Decision of ${agg.name}.${c.name}; each named outcome gives only its set fields and events.`,
-            'Use decideNamed with an outcome-to-target map to form the aggregate.',
+            c.factory || !agg.states.length
+                ? 'Use decideNamed with an outcome-to-target map to form the aggregate.'
+                : `Use decideNamed with an outcome-to-target map to form the aggregate, and \`{ availability: ${availabilityName(agg)}, command: ${quote(c.name)} }\` to check the source states.`,
             seeLine(c.location),
         ]);
         if (c.factory) {

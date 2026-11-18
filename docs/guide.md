@@ -1644,6 +1644,49 @@ export type AcceptReview = (
 }, Conflict | NotApprover | Blocked | NotSignedOff>;
 ```
 
+**Commands in any state.** A command's type takes only its source states (`ConfirmOrder` takes a `DraftOrder`), so calling it in another state
+does not compile. An aggregate loaded from a store can be in any state, and the model already says which states each
+command takes. For every aggregate with states, the generated module therefore also has, for each command that is not
+a factory (ADR 0036):
+
+- `can<Command><Aggregate>(aggregate)`: whether the command can be called in the aggregate's state; a type guard that
+  narrows the aggregate to the command's input.
+- `<Command><Aggregate>Unavailable`: the error of calling the command in another state, a `CommandUnavailable` of the
+  runtime: `{ type: 'CommandUnavailable', aggregate, command, state, expected }` (and `kind` with a lifecycle selector),
+  where `state` is the aggregate's state and `expected` the command's source states. It is `never` when every state is
+  a source state.
+- `<Command><Aggregate>FromAnyState`: the command for an aggregate in any state: its own result, or `Err` of
+  `…Unavailable`.
+
+Once per aggregate, it also has `anyState<Aggregate>Commands(commands)`, your commands for an aggregate in any state (a
+state that is not a source state gives `…Unavailable` without calling the command), `available<Aggregate>Commands(aggregate)`,
+the commands that can be called in its state (to offer them in a UI), and `<Aggregate>Availability`, the source states
+of each command as data. Every state rejection has one `type`, `'CommandUnavailable'`, never one of the command's own
+errors, so code that handles any command can treat them alike (a policy that finds the aggregate already moved on may
+skip it). What to show, and how, is up to the caller: map `aggregate` and `command` to your API's error codes.
+
+```ts
+// src/cancel-any.ts — your code: cancel an order loaded in any state
+import { Sales } from '../generated/domain/index.js';
+
+export function cancelLoaded(commands: Sales.OrderCommands, order: Sales.Order) {
+    const r = Sales.anyStateOrderCommands(commands).cancel(order, { reason: 'Requested' });
+    if (!r.ok && r.error.type === 'CommandUnavailable') return `cannot cancel a ${r.error.state} order (only ${r.error.expected.join(', ')})`;
+    return r;
+}
+
+export const cancelOffered = (order: Sales.Order): boolean => Sales.availableOrderCommands(order).includes('cancel');
+```
+
+With a lifecycle selector, the source states are those of the aggregate's kind. A command with no source state at all
+for a kind cannot be called on an aggregate of that kind (the kind never changes): through `anyState…`, that throws, as
+a bug of the caller. So does a command given a state that is not one of its source states (through a cast): the
+command's own type takes only its source states, and a call that bypasses it is a contract violation, not a domain
+error. `decide` knows the source states from its handlers; `decideNamed` takes one function, so it is told which
+command it implements, and checks the state (per kind) before the decision runs:
+`decideNamed<Sales.ShipOrderDecision>()(Sales.OrderShape, { shipped: 'Shipped' }, decision, { availability: Sales.OrderAvailability, command: 'ship' })`
+(required for a command that takes an aggregate with states).
+
 <!-- topic: your-code -->
 ### Generated code and your code
 
@@ -1651,11 +1694,13 @@ The generated files are the **contract**, your code is the **implementation**:
 
 - Generated: types — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`) and their
   decisions (`ConfirmOrderDecision`), and the constructor signatures of domain primitives (`MakeQuantity`) — plus
-  data without logic: one shape constant per aggregate (`OrderShape`), the field names `decide` needs — plus logic
+  data without logic: one shape constant per aggregate (`OrderShape`), the field names `decide` needs, and one
+  availability constant (`OrderAvailability`), the source states of each command (see
+  [Decisions and `decide`](#decisions-and-decide)) — plus logic
   derived 1:1 from DSL expressions: the checks of invariants and requirements, the equality of value types and the
   constructors of domain primitives (see [Generated checks](#generated-checks)). Invariants and requirements also
-  appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `outcome`,
-  `eventList`, `parseDecimal`, and those of the checks) that are the same for every model.
+  appear as JSDoc (`@invariant`, `@requires`). `_runtime.ts` holds a few helpers (`ok`, `err`, `decide`, `decideNamed`, `outcome`,
+  `eventList`, `fromAnyState`, `parseDecimal`, and those of the checks) that are the same for every model.
 - Yours: the behaviour — command implementations (returning the error of the first requirement that does not hold;
   pure functions, see [Pure commands](#pure-commands)), the factories of verified types (the checks outside the
   aggregate, see [Verified types](#verified-types)) and the constraints the DSL does not express, which you pass to
