@@ -975,7 +975,26 @@ context Tickets {
 5. Without states, a command changes only the fields in `changes`.
 6. A field in `changes` is **given every time**: there is no "absent = keep". An optional field is cleared by giving
    `undefined`. A command that changes a field only in some cases gives the old value in the others.
-7. The unit is a top-level field: `changes items` for adding, removing or editing elements of `items`.
+7. The unit is a top-level field: `changes items` for adding, removing or editing elements of `items`. A path into a
+   field (`changes schedule.plannedDate`) is an error: a value is replaced whole, so `changes schedule` gives the
+   whole new `Schedule`. When parts of a value change under different commands (`carryOver` moves only the planned
+   date, `changePromise` both dates), they are not one value to this aggregate: make them fields of the aggregate,
+   shared with a field set when several aggregates have them, and list the part that changes:
+
+   ```dt
+   fields Schedule "日程" {
+     requestedDate: CalendarDate "指定日"
+     plannedDate:   CalendarDate "予定日"
+   }
+   aggregate DeliveryRequest "配達依頼" with Schedule {
+     id: DeliveryRequestId
+     invariant plannedNotBeforeRequested { plannedDate >= requestedDate }
+     command carryOver(newPlannedDate: CalendarDate) changes plannedDate
+     command changePromise(newDate: CalendarDate) changes requestedDate, plannedDate
+   }
+   ```
+
+   A field set holds no invariants (M016), so each aggregate states the rule between the two dates.
 
 The generated decision of each command enforces these rules (see [Decisions and `decide`](#decisions-and-decide)).
 
@@ -984,6 +1003,8 @@ The generated decision of each command enforces these rules (see [Decisions and 
   the command (from a state that has it to one that has it, with the same type): in the other outcomes it is new in
   the target and set anyway, or not in the target and dropped, so listing a field that no outcome carries over would
   change nothing. `retitle` above may list `assignee` (`Open -> Open` carries it over); `start` may not.
+  A path into a field (`schedule.plannedDate`) is reported with what to write instead (rule 7), in an outcome's
+  `changes` too.
 - A field is listed once (M002).
 - `changes` is also usable as a field and parameter name.
 
@@ -3369,7 +3390,7 @@ storming](#diagnostics-of-a-storming).
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
-| M021 | `changes` names fields the command can change: fields of the aggregate other than its identity, a state-specific one carried over by an outcome; none on a `create command` |
+| M021 | `changes` names fields the command can change: fields of the aggregate other than its identity (not paths into them), a state-specific one carried over by an outcome; none on a `create command` |
 | M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
 | M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |

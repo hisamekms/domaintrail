@@ -1,4 +1,5 @@
 import type { RuleSink } from '../diagnostics.js';
+import { checkChangedPath } from './commands.js';
 import { commandsOf, commonFields, statesOf, type CommandDecl, type OutcomeDecl, type SourceModel, type TransitionGroupDecl } from '../source-model.js';
 
 function annotation(rule: { expr?: unknown; externalReason?: string; at: import('../source-model.js').Site }, name: string, rules: RuleSink): void {
@@ -124,6 +125,7 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                         rules.error('M028', `Event '${emitted.event.text}' is already scoped to outcome '${o.name}'; remove 'when'.`, emitted.whenAt);
                 const changedFields = new Set<string>();
                 for (const change of o.changes) {
+                    if (checkChangedPath(agg, change.name, change.at, rules)) continue;
                     if (changedFields.has(change.name))
                         rules.error('M028', `Field '${change.name}' is listed more than once in outcome '${o.name}'.`, change.at);
                     changedFields.add(change.name);

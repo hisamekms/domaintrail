@@ -115,15 +115,20 @@ Command:
     |
     (transitions+=Transition (','? transitions+=Transition)*)?
     requirements+=Requirement*
-    ('changes' changes+=FeatureName (',' changes+=FeatureName)*)?
+    ('changes' changes+=ChangedField (',' changes+=ChangedField)*)?
     ('emits' emits+=Emit (',' emits+=Emit)*)?
     ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?);
 
 Outcome:
     'outcome' name=FeatureName ':' (from+=[State:ID] ('|' from+=[State:ID])*)? '->' to=[State:ID]
     ('select' (('{' selectExpr=Expression '}') | selectText=STRING) external=ExternalCheck?)?
-    ('changes' changes+=FeatureName (',' changes+=FeatureName)*)?
+    ('changes' changes+=ChangedField (',' changes+=ChangedField)*)?
     ('emits' emits+=Emit (',' emits+=Emit)*)?;
+
+// A field in `changes`. A path into a field (`schedule.plannedDate`) is parsed only to be reported by M021, which
+// says why a field is changed whole and what to write instead.
+ChangedField returns string:
+    FeatureName ('.' ValueName)*;
 
 ExternalCheck:
     '@externalCheck' '(' reason=STRING ')';
