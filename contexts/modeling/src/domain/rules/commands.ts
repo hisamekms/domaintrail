@@ -10,6 +10,7 @@ import {
     type AggregateDecl,
     type CommandDecl,
     type FieldDecl,
+    type Site,
     type SourceModel,
     type StateDecl,
 } from '../source-model.js';
@@ -203,9 +204,47 @@ const sameField = (a: FieldDecl, b: FieldDecl): boolean =>
 const quotedList = (names: string[]): string => names.map((n) => `'${n}'`).join(', ');
 
 /**
+ * M021 for a path in `changes` (`schedule.plannedDate`): the unit of `changes` is a field of the aggregate, and a
+ * field is changed whole (ADR 0019). Reports the path and says what to write instead: the field itself, or — for a
+ * single value whose parts change under different commands — the parts as fields of the aggregate. Returns whether
+ * `name` is a path; a command's and an outcome's `changes` both use it.
+ */
+export function checkChangedPath(agg: AggregateDecl, name: string, at: Site, rules: RuleSink): boolean {
+    const [root, ...rest] = name.split('.');
+    if (!rest.length) return false;
+    const fields = [...includedFields(agg).map((x) => x.field), ...commonFields(agg), ...statesOf(agg).flatMap((s) => fieldsOf(s.members))];
+    const field = fields.find((f) => f.name === root);
+    if (!field) {
+        const names = [...new Set(fields.map((f) => f.name))].filter((f) => f !== identityField(agg)?.name);
+        rules.error('M021', `'${agg.name}' has no field '${root}'.`, at, suggestFrom(root!, names, `a field of '${agg.name}'`));
+        return true;
+    }
+    const type = field.type?.decl?.target;
+    const single = !field.multiplicity || field.multiplicity.optional;
+    const part = rest.at(-1)!;
+    if (type?.kind === 'valueObject' && single) {
+        rules.error(
+            'M021',
+            `'changes' takes a field of '${agg.name}', not a part of one: '${name}' is inside '${root}' (${type.name}), and a value is replaced whole.`,
+            at,
+            `write 'changes ${root}' and give the whole new ${type.name}; if its parts change under different commands, make them fields of '${agg.name}' (share them with a 'fields' set) and write 'changes ${part}'`,
+        );
+        return true;
+    }
+    rules.error(
+        'M021',
+        `'changes' takes a field of '${agg.name}', not a part of one: '${name}' is inside '${root}'.`,
+        at,
+        `write 'changes ${root}'; the decision gives its whole new value`,
+    );
+    return true;
+}
+
+/**
  * M021: `changes` lists fields that the command can change (ADR 0019):
  *   - not on a `create command`, which sets every field;
  *   - a field of the aggregate — a common field (also from a field set) or a field of a state — other than its identity;
+ *   - a field, not a path into one (`checkChangedPath`);
  *   - a state-specific field is carried over by at least one outcome of the command: a transition from a state that
  *     has it to a state that has it, with the same type. In the other outcomes it is new in the target (and set
  *     anyway) or not in the target (and dropped), so listing a field no outcome carries over would change nothing.
@@ -231,6 +270,7 @@ export function checkChanges(model: SourceModel, rules: RuleSink): void {
             }
             const outcomes = cmd.transitions.flatMap((t) => t.from.flatMap((f) => t.to.map((to) => ({ from: f.target, to: to.target }))));
             for (const { name, at } of cmd.changes) {
+                if (checkChangedPath(agg, name, at, rules)) continue;
                 if (name === identity) {
                     rules.error('M021', `Field '${name}' is the identity of '${agg.name}' and never changes.`, at, `remove '${name}' from 'changes'`);
                     continue;

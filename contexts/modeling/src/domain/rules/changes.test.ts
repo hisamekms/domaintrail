@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { check, only, element } from '../../test-helpers.js';
+import { formatDomain } from '../../infrastructure/syntax/format.js';
 
 /**
  * Work moves Draft -> Review -> Done -> Archived. `draftNo` is in Draft and Review (carried over between them),
@@ -123,5 +124,60 @@ describe('changes in the DSL', () => {
         );
         expect(only(a, 'M002').map((d) => d.message)).toEqual(["Field 'title' is listed more than once in 'changes' of command 'x'."]);
         expect(only(a, 'M021').map((d) => [d.message, d.hint])).toEqual([["'Plain' has no field 'sise'.", "did you mean 'size'?"]]);
+    });
+
+    test('M021: a path into a field is reported with what to write instead', async () => {
+        const a = await work(
+            `command plan(at: Timestamp) Draft -> Draft changes title.length, sched.plannedDate
+    command tag() Draft -> Draft changes tags.first`,
+            `id DeliveryId: UUID
+  value Schedule {
+    requestedDate: String
+    plannedDate: String
+    invariant plannedNotBeforeRequested { plannedDate >= requestedDate }
+  }
+  aggregate Delivery {
+    id: DeliveryId
+    owns schedule: Schedule
+    owns history: Schedule[0..*]
+    command carryOver(newPlannedDate: String) changes schedule.plannedDate
+    command rewrite() changes history.plannedDate
+    state Open
+    state Closed
+    initial Open
+    command close() {
+      outcome closed: Open -> Closed changes schedule.requestedDate
+    }
+  }`,
+        );
+        expect(only(a, 'M021').map((d) => [d.message, d.hint])).toEqual([
+            [
+                "'changes' takes a field of 'Work', not a part of one: 'title.length' is inside 'title'.",
+                "write 'changes title'; the decision gives its whole new value",
+            ],
+            ["'Work' has no field 'sched'.", "use a field of 'Work': updatedAt, title, note, tags, draftNo, reviewer, doneAt"],
+            [
+                "'changes' takes a field of 'Work', not a part of one: 'tags.first' is inside 'tags'.",
+                "write 'changes tags'; the decision gives its whole new value",
+            ],
+            [
+                "'changes' takes a field of 'Delivery', not a part of one: 'schedule.plannedDate' is inside 'schedule' (Schedule), and a value is replaced whole.",
+                "write 'changes schedule' and give the whole new Schedule; if its parts change under different commands, make them fields of 'Delivery' (share them with a 'fields' set) and write 'changes plannedDate'",
+            ],
+            [
+                "'changes' takes a field of 'Delivery', not a part of one: 'history.plannedDate' is inside 'history'.",
+                "write 'changes history'; the decision gives its whole new value",
+            ],
+            [
+                "'changes' takes a field of 'Delivery', not a part of one: 'schedule.requestedDate' is inside 'schedule' (Schedule), and a value is replaced whole.",
+                "write 'changes schedule' and give the whole new Schedule; if its parts change under different commands, make them fields of 'Delivery' (share them with a 'fields' set) and write 'changes requestedDate'",
+            ],
+        ]);
+        expect(only(a, 'M028')).toEqual([]);
+    });
+
+    test('a path in changes is kept by dt fmt', () => {
+        const source = 'context C {\n  aggregate A {\n    command go() changes schedule.plannedDate\n  }\n}\n';
+        expect(formatDomain(source)).toContain('changes schedule.plannedDate');
     });
 });
