@@ -29,7 +29,7 @@ import {
     type StateDecl,
     type UnionDecl,
 } from '../source-model.js';
-import { canonicalTemporal, isTemporal, TEMPORAL_EXAMPLE, TEMPORAL_FORM } from '../temporal.js';
+import { canonicalTemporal, isOrderedTemporal, isTemporal, TEMPORAL_EXAMPLE, TEMPORAL_FORM } from '../temporal.js';
 import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, showType, type Ty } from '../types.js';
 
 interface Scope {
@@ -408,7 +408,7 @@ class ExprChecker {
                 const v = this.check(e.operand, scope);
                 const lo = this.check(e.lower, scope);
                 const hi = this.check(e.upper, scope);
-                const bound = (t: Ty, x: Expr): boolean => this.temporalLiteral(v, x) || ordered(v, t);
+                const bound = (t: Ty, x: Expr): boolean => this.temporalLiteral(v, x, true) || ordered(v, t);
                 if (v.k !== 'error' && lo.k !== 'error' && hi.k !== 'error' && !(bound(lo, e.lower) && bound(hi, e.upper))) {
                     this.rules.error('M009', `Range '${showType(lo)}..${showType(hi)}' cannot be applied to '${showType(v)}'.`, e.at);
                 }
@@ -499,7 +499,8 @@ class ExprChecker {
         const r = this.check(e.right, scope);
         if (l.k === 'error' || r.k === 'error') return BOOL;
         // a date or time compared with a string literal: the literal is a value of its type (ADR 0038)
-        if (this.temporalLiteral(l, e.right) || this.temporalLiteral(r, e.left)) return BOOL;
+        const ordering = op !== '==' && op !== '!=';
+        if (this.temporalLiteral(l, e.right, ordering) || this.temporalLiteral(r, e.left, ordering)) return BOOL;
         const ok = op === '==' || op === '!=' ? equatable(l, r) : ordered(l, r);
         if (!ok) {
             const [lb, rb] = [basePrimitive(l), basePrimitive(r)];
@@ -522,9 +523,13 @@ class ExprChecker {
      * Whether `other` is a string literal compared with a value of a date or time type `t` (ADR 0038): it is then one of
      * that type's values, or M009 says what it should look like.
      */
-    private temporalLiteral(t: Ty, other: Expr): boolean {
+    private temporalLiteral(t: Ty, other: Expr, ordering = false): boolean {
         const base = basePrimitive(t);
         if (other.k !== 'string' || t.k === 'opt' || t.k === 'list' || !isTemporal(base)) return false;
+        if (ordering && !isOrderedTemporal(base)) {
+            this.rules.error('M009', `A ${base} has no order: compare it with '==' or '!='.`, other.at);
+            return true;
+        }
         if (canonicalTemporal(base, other.value) === undefined)
             this.rules.error('M009', `"${other.value}" is not a ${base}: write ${TEMPORAL_FORM[base]}.`, other.at, `for example "${TEMPORAL_EXAMPLE[base]}"`);
         return true;
@@ -706,7 +711,7 @@ function equatable(l: Ty, r: Ty): boolean {
 function ordered(l: Ty, r: Ty): boolean {
     return comparable(l, r, (a, b) => {
         if (isNumeric(a) && isNumeric(b)) return true;
-        return a.k === 'prim' && b.k === 'prim' && a.name === b.name && (isTemporal(a.name) || a.name === 'String');
+        return a.k === 'prim' && b.k === 'prim' && a.name === b.name && (isOrderedTemporal(a.name) || a.name === 'String');
     });
 }
 

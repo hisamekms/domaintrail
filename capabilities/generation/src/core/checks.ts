@@ -123,6 +123,9 @@ const BASE: Record<PrimitiveName, string> = {
     Date: 'PlainDate',
     Time: 'PlainTime',
     YearMonth: 'PlainYearMonth',
+    DateTime: 'PlainDateTime',
+    ZonedDateTime: 'ZonedDateTime',
+    TimeZone: 'TimeZone',
 };
 
 export const equalName = (el: { name: string }): string => `equal${el.name}`;
@@ -219,8 +222,13 @@ function scalar(b: Binding, other?: Binding): string {
 }
 
 const isDecimal = (b: Binding): boolean => primOf(strip(b.ty)) === 'Decimal';
+const isZoned = (b: Binding): boolean => primOf(strip(b.ty)) === 'ZonedDateTime';
 const compare = (a: Binding, b: Binding, op: string): string =>
-    isDecimal(a) || isDecimal(b) ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0` : `${scalar(a, b)} ${op} ${scalar(b, a)}`;
+    isDecimal(a) || isDecimal(b)
+        ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0`
+        : isZoned(a) || isZoned(b) // by instant (ADR 0038)
+          ? `zonedCompare(${scalar(a, b)}, ${scalar(b, a)}) ${op} 0`
+          : `${scalar(a, b)} ${op} ${scalar(b, a)}`;
 
 export class ExprCompiler {
     /** Counter of temporaries (`$0`, `$1`, …), which no DSL name can collide with. */

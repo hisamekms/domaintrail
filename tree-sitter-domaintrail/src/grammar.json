@@ -1360,6 +1360,18 @@
         {
           "type": "STRING",
           "value": "YearMonth"
+        },
+        {
+          "type": "STRING",
+          "value": "DateTime"
+        },
+        {
+          "type": "STRING",
+          "value": "ZonedDateTime"
+        },
+        {
+          "type": "STRING",
+          "value": "TimeZone"
         }
       ]
     },
@@ -3531,6 +3543,18 @@
               {
                 "type": "STRING",
                 "value": "YearMonth"
+              },
+              {
+                "type": "STRING",
+                "value": "DateTime"
+              },
+              {
+                "type": "STRING",
+                "value": "ZonedDateTime"
+              },
+              {
+                "type": "STRING",
+                "value": "TimeZone"
               }
             ]
           },
