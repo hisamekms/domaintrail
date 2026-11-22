@@ -26,7 +26,9 @@ context Modeling {
   enum ElementKind { id primitive verified enum valueObject union entity aggregate event error fieldSet policy }
 
   /// The primitive types of the language.
-  enum PrimitiveName { String Int Decimal Bool Timestamp UUID }
+  /// The built-in types. Date, Time and YearMonth are values on a calendar or clock without a time zone; Timestamp is
+  /// an instant (ADR 0038).
+  enum PrimitiveName { String Int Decimal Bool Timestamp UUID Date Time YearMonth }
 
   /// An element of a context: each kind has exactly its own parts.
   union ElementModel by kind: ElementKind {

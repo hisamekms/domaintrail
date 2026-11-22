@@ -2,7 +2,7 @@
 // any number of times until it expires or is revoked, one live per session (a new one revokes the previous), never
 // accepted as another kind of link, revoked with the server's links; and a removed identity's sign-ins revoked.
 import { describe, expect, test } from 'bun:test';
-import { Collaboration as C } from '../generated/index.js';
+import { Collaboration as C, timestampOf } from '../generated/index.js';
 import { sessionCommands } from '../domain/commands.js';
 import { knownSessionId } from '../domain/ids.js';
 import { createUnitOfWork, openDatabase } from '../infrastructure/sqlite.js';
@@ -25,7 +25,9 @@ async function setup(): Promise<{ access: SessionAccess; advance: (ms: number) =
             [session, 'Collab'],
             [solo, 'Solo'],
         ] as const) {
-            const { Open } = value(sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), mode, startedAt: new Date(t) }));
+            const { Open } = value(
+                sessionCommands.start({ id, facilitator, name: value(C.makeDisplayName('Ada')), mode, startedAt: timestampOf(new Date(t)) }),
+            );
             stores.sessions.save(Open.aggregate);
         }
     });

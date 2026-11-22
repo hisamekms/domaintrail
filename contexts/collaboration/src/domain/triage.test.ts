@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { Collaboration as C } from '../generated/index.js';
+import { timestamp } from '../test-helpers.js';
 import { AI_PARTICIPANT, isAi } from './ai.js';
 import { knownRequestId, knownSessionId, knownTriageId } from './ids.js';
 import { sessionOpening } from './modes.js';
@@ -28,7 +29,7 @@ const error = <E>(r: { ok: true } | { ok: false; error: E }): E => {
     return r.error;
 };
 
-const at = new Date('2026-11-03T09:00:00Z');
+const at = timestamp('2026-11-03T09:00:00Z');
 const facilitator = value(C.makeParticipantId('local:facilitator'));
 const guest = value(C.makeParticipantId('dev:guest'));
 

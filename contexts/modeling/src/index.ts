@@ -148,6 +148,9 @@ export type {
     WithMembers,
 } from './domain/source-model.js';
 export * as written from './domain/source-model.js';
+
+// the date and time types (ADR 0038): their canonical text, for the generator
+export { canonicalTemporal, isTemporal, TEMPORAL_TYPES, type TemporalName } from './domain/temporal.js';
 export { RuleSink } from './domain/diagnostics.js';
 export { generationGateDiagnostics } from './domain/rules/generation-gate.js';
 

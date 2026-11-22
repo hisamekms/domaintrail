@@ -3,7 +3,7 @@
 // ports, and the infrastructure an app wires. Its wire types are `./protocol`.
 
 // ---- published language: the generated contracts (model/*.dt) --------------------------------------------------
-export { Collaboration, err, ok, type Result } from './generated/index.js';
+export { Collaboration, err, ok, parseTimestamp, type Result, type Timestamp, timestampOf } from './generated/index.js';
 
 // ---- published language: a message's body, the agent's reply, marks, approvals, targets -------------------------
 export {

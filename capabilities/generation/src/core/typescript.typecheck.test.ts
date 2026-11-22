@@ -104,10 +104,10 @@ export function classify(error: Sales.Conflict | Billing.Conflict): 'sales' | 'b
     test('contract violations are rejected by the TypeScript compiler', async () => {
         await writeFile(
             path.join(dir, 'src', 'violations.ts'),
-            `import { err, ok, type Sales } from '../generated/domain/index.js';
+            `import { err, ok, type Sales, type Timestamp } from '../generated/domain/index.js';
 declare const draft: Sales.DraftOrder;
 declare const confirmed: Sales.ConfirmedOrder;
-declare const at: Date;
+declare const at: Timestamp;
 
 type ConfirmResult = ReturnType<Sales.ConfirmOrder>;
 const confirmedEvent = (order: Sales.DraftOrder): Sales.OrderConfirmed => ({ type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at });
@@ -143,7 +143,7 @@ export function twoEvents(order: Sales.DraftOrder): ConfirmResult {
     // @ts-expect-error exactly one, not a list
     return ok({ Confirmed: { aggregate: c, events: { 'Sales.OrderConfirmed': [confirmedEvent(order), confirmedEvent(order)] } } });
 }
-export function declaredOnly(order: Sales.DraftOrder, when: Date): ConfirmResult {
+export function declaredOnly(order: Sales.DraftOrder, when: Timestamp): ConfirmResult {
     if (order.items.length === 0) return err({ type: 'Sales.EmptyOrder' });
     const c: Sales.ConfirmedOrder = { ...order, state: 'Confirmed', confirmedAt: when };
     return ok({ Confirmed: { aggregate: c, events: { 'Sales.OrderConfirmed': confirmedEvent(order) } } });
@@ -285,10 +285,10 @@ export const wrong: Tasks.ChangeWork = (work, { title }) =>
     test('decide: decisions implement the commands, typed without assertions', async () => {
         await writeFile(
             path.join(work, 'src', 'impl.ts'),
-            `import { Tasks, decide, err, ok } from '../generated/index.js';
+            `import { Tasks, decide, err, ok, type Timestamp } from '../generated/index.js';
 
 const changed = (work: Tasks.Work) => ({ 'Tasks.WorkChanged': { type: 'Tasks.WorkChanged', workId: work.id } }) as const;
-declare const now: Date;
+declare const now: Timestamp;
 
 export const commands: Tasks.WorkCommands = {
     open: decide<Tasks.OpenWorkDecision>(Tasks.WorkShape, ({ id, title }) => ok({ Draft: { set: { id, title }, events: {} } })),

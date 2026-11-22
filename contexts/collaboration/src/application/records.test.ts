@@ -201,7 +201,7 @@ describe('a participant’s request', () => {
         ]);
         const decided = value(await use.decideJourneyRequest({ session, request: REQUEST, outcome: 'Approved', by: facilitatorId }));
         expect(decided?.fact).toMatchObject({ kind: 'JourneyRequested', outcome: 'Approved', decidedBy: facilitatorId });
-        expect(decided?.revisedAt).toBeInstanceOf(Date);
+        expect(decided?.revisedAt).toEqual(expect.any(String));
         expect(await use.openJourneyRequests({ session })).toEqual([]);
         // decided already: nothing changes
         expect(value(await use.decideJourneyRequest({ session, request: REQUEST, outcome: 'Denied', by: facilitatorId }))).toBeUndefined();
@@ -241,6 +241,6 @@ describe('persistence', () => {
         value(await use.recordJourneyRequest({ session, actor: bob, request: REQUEST, act: { kind: 'choose', journey: 'es:Issue' }, file: FILE, labels }));
         const again = await createUnitOfWork(openDatabase(file)).transaction((s) => s.records.listBySession(session));
         expect(again.map((r) => r.fact.kind)).toEqual(['GoalChanged', 'JourneyRequested']);
-        expect(again[0]?.at).toBeInstanceOf(Date);
+        expect(again[0]?.at).toEqual(expect.any(String));
     });
 });

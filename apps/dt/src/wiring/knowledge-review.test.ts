@@ -5,7 +5,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createFilesKnowledgeStore, Knowledge } from '@domaintrail/knowledge';
+import { createFilesKnowledgeStore, Knowledge, timestampOf } from '@domaintrail/knowledge';
 import { proposeReviewRetirements, RELINKED_BY, relinkRenamed, REVIEW_KNOWLEDGE_TEXT, reviewKnowledgeOf } from './knowledge-review';
 
 const known = <T>(made: { ok: true; value: T } | { ok: false; error: unknown }): T => {
@@ -33,8 +33,8 @@ const item = (
     sources: [],
     version: known(Knowledge.makeItemVersion(1)),
     conflictsWith: [],
-    createdAt: new Date(Date.UTC(2026, 10, 7, 9, minute)),
-    updatedAt: new Date(Date.UTC(2026, 10, 7, 9, minute)),
+    createdAt: timestampOf(new Date(Date.UTC(2026, 10, 7, 9, minute))),
+    updatedAt: timestampOf(new Date(Date.UTC(2026, 10, 7, 9, minute))),
 });
 
 describe('the items a review gives the agent', () => {
@@ -88,7 +88,9 @@ describe('the links of a renamed sticky', () => {
                     kind: 'Add',
                     id: known(Knowledge.makeKnowledgeItemId('kn_00000001')),
                     content: item('kn_00000001', 'decision', 'to_be', 0, '返品は30日まで', ['Returns.ReturnRequested', 'Returns.Deadline']).content,
-                    sources: [{ session, message: known(Knowledge.makeMessageRef('m1')), at: new Date(), quote: known(Knowledge.makeQuote('30日')) }],
+                    sources: [
+                        { session, message: known(Knowledge.makeMessageRef('m1')), at: timestampOf(new Date()), quote: known(Knowledge.makeQuote('30日')) },
+                    ],
                 },
             ],
         });
@@ -119,7 +121,7 @@ describe('the retirements a review proposes', () => {
         const project = known(Knowledge.makeProjectName('shop'));
         const store = createFilesKnowledgeStore({ dir: path.join(root, 'knowledge'), project, stateDir: path.join(root, 'state') });
         const session = known(Knowledge.makeSessionRef('s1'));
-        const source = { session, message: known(Knowledge.makeMessageRef('m1')), at: new Date(), quote: known(Knowledge.makeQuote('x')) };
+        const source = { session, message: known(Knowledge.makeMessageRef('m1')), at: timestampOf(new Date()), quote: known(Knowledge.makeQuote('x')) };
         await store.applyExtraction(project, {
             by: { session, number: known(Knowledge.makeExtractionNumber(1)) },
             operations: [

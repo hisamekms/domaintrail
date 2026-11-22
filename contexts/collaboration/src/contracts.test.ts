@@ -5,7 +5,8 @@
 // that reach the successful outcomes the random inputs rarely meet (a frozen input that covers its requests, a content
 // hash that matches its files, a changed flag that agrees with the result revision).
 import * as fc from 'fast-check';
-import { Collaboration as C } from './generated/index.js';
+import { Collaboration as C, timestampOf } from './generated/index.js';
+import { timestamp } from './test-helpers.js';
 import { Collaboration as Contract, register } from './generated/tests/index.js';
 import { agentRunCommands, declaredChecks, requestCommands, revisionCommands, sessionCommands } from './domain/commands.js';
 import { hashBytes, snapshotFile, snapshotHash } from './domain/snapshot.js';
@@ -26,11 +27,13 @@ const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T 
 const base = Contract.arbitraries();
 
 const success: C.RunReport = { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: tally(0), unparsedDtes: tally(0) };
-const at = new Date('2026-10-31T09:00:00Z');
+const at = timestamp('2026-10-31T09:00:00Z');
+/** Instants of 2000–2099: canonical text. */
+const instant = fc.date({ min: new Date('2000-01-01T00:00:00Z'), max: new Date('2099-12-31T00:00:00Z'), noInvalidDate: true }).map(timestampOf);
 
 /** A completed run meets the run success rule, and its result is its base exactly when nothing changed. */
 const CompletedAgentRun: fc.Arbitrary<C.CompletedAgentRun> = fc
-    .record({ run: base.RunningAgentRun, result: base.RevisionId, changed: fc.boolean(), finishedAt: fc.date({ noInvalidDate: true }) })
+    .record({ run: base.RunningAgentRun, result: base.RevisionId, changed: fc.boolean(), finishedAt: instant })
     .filter(({ run, result, changed }) => !changed || result !== run.baseRevision)
     .map(({ run, result, changed, finishedAt }) => ({
         ...run,
@@ -45,7 +48,7 @@ const CompletedAgentRun: fc.Arbitrary<C.CompletedAgentRun> = fc
 const OpenSession: fc.Arbitrary<C.OpenSession> = fc
     .record({
         id: base.SessionId,
-        startedAt: fc.date({ noInvalidDate: true }),
+        startedAt: instant,
         facilitator: base.Participant,
         others: fc.uniqueArray(base.Participant, { selector: (p) => p.id, maxLength: 4 }),
         mode: base.SessionMode,

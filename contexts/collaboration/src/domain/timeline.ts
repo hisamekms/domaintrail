@@ -21,7 +21,7 @@
 // `full` entries in full, the `lines` before them one line each, the older ones only counted.
 //
 // Pure. The text is data for the agents: their prompts put it in a delimited block they are told not to obey.
-import type { Collaboration } from '../generated/index.js';
+import type { Collaboration, Timestamp } from '../generated/index.js';
 import { isAi, AI_NAME } from './ai.js';
 import { approvalOf } from './approvals.js';
 import { plainBody } from './body.js';
@@ -67,7 +67,7 @@ export type TimelineEntryKind = 'message' | 'answer' | 'turn' | 'proposal' | 'in
 /** One entry of the timeline: its number (from 1, in time order), when, and its full and one-line texts. */
 export interface TimelineEntry {
     readonly index: number;
-    readonly at: Date;
+    readonly at: Timestamp;
     readonly kind: TimelineEntryKind;
     readonly full: string;
     readonly line: string;
@@ -87,14 +87,14 @@ export interface SessionSoFar {
     readonly open: readonly string[];
 }
 
-const time = (d: Date): string => d.toISOString().slice(0, 16).replace('T', ' ');
+const time = (t: Timestamp): string => t.slice(0, 16).replace('T', ' ');
 
 const cut = (s: string, max: number): string => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
 const oneLine = (s: string): string => s.replace(/\s+/gu, ' ').trim();
 
 /** The time a run ended (or was cancelled), if it did. */
-function endedAt(run: Collaboration.AgentRun): Date | undefined {
+function endedAt(run: Collaboration.AgentRun): Timestamp | undefined {
     switch (run.state) {
         case 'Queued':
         case 'Running':
@@ -107,7 +107,7 @@ function endedAt(run: Collaboration.AgentRun): Date | undefined {
 }
 
 interface Draft {
-    readonly at: Date;
+    readonly at: Timestamp;
     readonly kind: TimelineEntryKind;
     /** What the entry is about, so that other entries can name it by its number. */
     readonly key: string;
@@ -370,7 +370,7 @@ function numbered(records: TimelineRecords): { readonly entries: TimelineEntry[]
         });
     }
 
-    const sorted = drafts.map((d, i) => ({ d, i })).sort((a, b) => a.d.at.getTime() - b.d.at.getTime() || a.i - b.i);
+    const sorted = drafts.map((d, i) => ({ d, i })).sort((a, b) => (a.d.at < b.d.at ? -1 : a.d.at > b.d.at ? 1 : 0) || a.i - b.i);
     const numbers = new Map(sorted.map(({ d }, n) => [d.key, n + 1]));
     const ref = (key: string): string | undefined => {
         const n = numbers.get(key);

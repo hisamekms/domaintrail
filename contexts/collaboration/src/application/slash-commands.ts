@@ -4,7 +4,7 @@
 // facilitator), and the command jobs that wait for the
 // answerer. As the other use cases: the aggregates loaded and saved in one transaction with their events, the
 // commands deciding.
-import { Collaboration, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, err, ok, type Result, timestampOf, type Timestamp } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { knownRequestId, knownSlashCommandId } from '../domain/ids.js';
 import { guideMarks, guideSnapshot, journeyMarks, readGuideGoal, type GuideWorkspace } from '../domain/guide.js';
@@ -115,7 +115,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
         return c ? ok(c) : err(notFound('SlashCommand', id));
     };
 
-    const save = (stores: Stores, command: Collaboration.SlashCommand, events: object, at: Date): void => {
+    const save = (stores: Stores, command: Collaboration.SlashCommand, events: object, at: Timestamp): void => {
         stores.slashCommands.save(command);
         publish(stores, command.session, events, at);
     };
@@ -129,7 +129,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!sent.ok) return sent;
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const scope = spec.needsStorming ? stormingInView(viewedAt, focus) : undefined;
                 // the guide's snapshot: the journey file's goals and marks, the session's current journey first
                 const current = stores.sessions.load(session)?.currentJourney;
@@ -177,7 +177,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (slashCommandSpec(c.kind).type !== 'candidates') return err({ type: 'WrongCommandType' });
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const listed = decided(slashCommandCommands.list(c, { candidates, listedAt: at }));
                 save(stores, listed.Listed.aggregate, listed.Listed.events, at);
                 return ok(listed.Listed.aggregate);
@@ -194,7 +194,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (spec.type !== 'answer' || (spec.reply === 'next') !== (next !== undefined)) return err({ type: 'WrongCommandType' });
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const id = knownRequestId(ids.newId());
                 const { Sent } = decided(requestCommands.answer({ id, session: active.value, answers: c.opening, body: answer, sentAt: at }));
                 stores.requests.save(Sent.aggregate);
@@ -217,7 +217,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!indices) return err({ type: 'Collaboration.NoSuchCandidate' });
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const [first, ...rest] = indices.map((i) => c.candidates[i]).filter((x): x is Collaboration.CommandCandidate => x !== undefined);
                 if (!first) return err({ type: 'Collaboration.NoSuchCandidate' });
                 const run = await queueRequests(stores, ids, {
@@ -250,7 +250,7 @@ export function createSlashCommands(deps: CollaborationDeps): SlashCommandUseCas
                 if (!isCommandRunning(c)) return err(notAllowed('stop', c.state));
                 const active = await storeVerifications(stores).makeActiveSession(c.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const stopped = slashCommandCommands.stop(c, { stoppedBy: actor.participant, stoppedByRole: actor.role, stoppedAt: at });
                 if (!stopped.ok) return stopped;
                 save(stores, stopped.value.Stopped.aggregate, stopped.value.Stopped.events, at);

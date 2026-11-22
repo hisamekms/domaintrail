@@ -1,6 +1,6 @@
 // The review's way in: its reply read without trusting it, each candidate proposed by the review, decided by the store.
 import { describe, expect, test } from 'bun:test';
-import { Knowledge } from '../generated/index.js';
+import { Knowledge, timestampOf } from '../generated/index.js';
 import { proposeRetirements, readRetirementCandidates } from './retirement-proposals.js';
 import { liveItem, memoryStore } from '../test-helpers.js';
 import { admitProposal } from '../domain/retirement.js';
@@ -54,7 +54,7 @@ describe("the review's proposals", () => {
         const proposing = {
             ...store,
             propose: async (_p: Knowledge.ProjectName, c: Parameters<typeof admitProposal>[0]) => {
-                const r = admitProposal(c, { lookup: (id) => store.items.get(id), proposals }, new Date());
+                const r = admitProposal(c, { lookup: (id) => store.items.get(id), proposals }, timestampOf(new Date()));
                 if (r.ok) proposals.push(r.value.proposal);
                 return r.ok ? { ok: true as const, value: r.value.proposal } : r;
             },

@@ -12,7 +12,7 @@ import { sha256Hex } from './sha256.js';
 import { changedPaths, hashBytes, languageOf, snapshotFile, snapshotHash, workspacePath } from './snapshot.js';
 import { decodeOccurrencePath, encodeOccurrencePath, targetStatus, type TargetScope } from './targets.js';
 import { diagnosticsDiff, readToolOutcome, runReport, succeeded, summarize, tally, unparsedDtes } from './validation.js';
-import { check } from '../test-helpers.js';
+import { check, timestamp } from '../test-helpers.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId, knownSessionId } from './ids.js';
 
 const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
@@ -21,8 +21,8 @@ const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T 
 };
 const bytes = (text: string): Uint8Array => new TextEncoder().encode(text);
 const path = (p: string): C.WorkspacePath => value(C.makeWorkspacePath(p));
-const at = new Date('2026-10-31T09:00:00Z');
-const later = new Date('2026-10-31T10:00:00Z');
+const at = timestamp('2026-10-31T09:00:00Z');
+const later = timestamp('2026-10-31T10:00:00Z');
 
 describe('content hashes', () => {
     test('sha256Hex agrees with node:crypto, across block boundaries and for multi-byte text', () => {

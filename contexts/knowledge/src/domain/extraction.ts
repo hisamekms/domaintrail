@@ -12,7 +12,7 @@
 // extractor's proposals to retire an item or to undo a retirement (`ProposeRetire`, `ProposeUnretire`) are decided as
 // every store decides a candidate (`admitProposal`, `domain/retirement.ts`), over the proposals about the item and those
 // this extraction made before.
-import { Knowledge, type Result } from '../generated/index.js';
+import { Knowledge, type Result, type Timestamp } from '../generated/index.js';
 import { knowledgeItemCommands } from './items.js';
 import { admitProposal, isRetired, type ProposalRejection, type RetirementCandidate } from './retirement.js';
 
@@ -123,7 +123,7 @@ export function candidateOf(
 }
 
 /** Applies an extraction's operations at `at`, over the items `lookup` gives and the proposals `proposals` gives. */
-export function applyExtraction(extraction: Knowledge.Extraction, lookup: ItemLookup, at: Date, proposals: ProposalLookup = () => []): ExtractionOutcome {
+export function applyExtraction(extraction: Knowledge.Extraction, lookup: ItemLookup, at: Timestamp, proposals: ProposalLookup = () => []): ExtractionOutcome {
     const changed = new Map<Knowledge.KnowledgeItemId, Knowledge.KnowledgeItem>();
     const current = (id: Knowledge.KnowledgeItemId): Knowledge.KnowledgeItem | undefined => changed.get(id) ?? lookup(id);
     const made: Knowledge.OpenRetirementProposal[] = [];
@@ -178,7 +178,7 @@ function applyOperation(
     operation: Exclude<Knowledge.Operation, { readonly kind: 'ProposeRetire' | 'ProposeUnretire' }>,
     by: Knowledge.ExtractionRef,
     current: ItemLookup,
-    at: Date,
+    at: Timestamp,
 ): Result<readonly ItemChange[], DropReason> {
     const reason = operation.reason;
     const why = reason && { reason };

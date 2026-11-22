@@ -2,6 +2,7 @@
 // (the use case and the route: test/session-marks.test.ts; the migrations: infrastructure/migrations.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { Collaboration as C } from '../generated/index.js';
+import { timestamp } from '../test-helpers.js';
 import { readEmoji } from './emoji.js';
 import {
     DONE,
@@ -223,7 +224,7 @@ describe('the rules of marks', () => {
     });
 
     test('the place command: the sign must fit the target, and the facilitator does not vote', () => {
-        const at = new Date('2026-11-01T09:00:00Z');
+        const at = timestamp('2026-11-01T09:00:00Z');
         const id = knownMarkId('00000000-0000-4000-8000-000000000001');
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for what the factories check
         const session = knownSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession;

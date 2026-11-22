@@ -158,7 +158,7 @@ describe('the reply made into operations', () => {
                     labels: { when: 'as_is', kind: 'rule', origin: 'said', perspective: '営業' },
                     about: ['Ordering.Estimate'],
                 },
-                sources: [{ session: 's1', message: 'r-2', at: new Date('2026-11-05T09:01:00.000Z'), quote: '当日中に' }],
+                sources: [{ session: 's1', message: 'r-2', at: '2026-11-05T09:01:00.000Z', quote: '当日中に' }],
                 reason: '決まり',
             },
         ]);

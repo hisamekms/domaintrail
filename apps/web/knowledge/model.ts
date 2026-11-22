@@ -34,7 +34,8 @@ export function selectionOfSticky(sticky: string): string {
     return `es/${sticky.slice(0, dot)}/${sticky.slice(dot + 1)}`;
 }
 
-const newestFirst = (a: KnowledgeItem, b: KnowledgeItem): number => b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+const newestFirst = (a: KnowledgeItem, b: KnowledgeItem): number =>
+    (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 
 /** The items in the order asked for. */
 export function ordered(items: readonly KnowledgeItem[], order: Order): KnowledgeItem[] {

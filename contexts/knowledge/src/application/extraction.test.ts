@@ -4,7 +4,7 @@
 // the scheduler, and the facilitator's switch (off, on again, kept in the session database).
 import { describe, expect, test } from 'bun:test';
 import { DatabaseSync } from 'node:sqlite';
-import type { Knowledge } from '../generated/index.js';
+import { type Knowledge, timestampOf } from '../generated/index.js';
 import type { ExtractionInput, ExtractionResultBody } from '../domain/extractor.js';
 import type { GateInput } from '../domain/stages.js';
 import { loadExtractionSwitch } from './extraction-switch.js';
@@ -184,7 +184,7 @@ describe("a session's extraction", () => {
         const retired: Knowledge.LiveKnowledgeItem = {
             ...liveItem('kn_00000078', { createdIn: 'sess-0' }),
             content: content('昔は翌日に出していた、という詳しい本文', 'said', ['Ordering.Estimate'], '見積もりは翌日に出す（昔）'),
-            retirement: { reason: 'obsolete', by: 'access:a@example.com' as Knowledge.UserName, at: t(0) },
+            retirement: { reason: 'obsolete', by: 'access:a@example.com' as Knowledge.UserName, at: timestampOf(t(0)) },
         };
         const extractor = fakeExtractor(
             reply(
@@ -463,10 +463,10 @@ describe('the checkpoint in the session database', () => {
         expect<unknown>(read.lastMessageAt).toEqual(t(900));
         expect<unknown>(read.held[0].heldAt).toEqual(t(900));
         expect<unknown>(read.held[0].operation.kind).toBe('Update');
-        // a pending extraction's sources come back with their dates
+        // a pending extraction's sources come back with their times
         await sqlite.save(SESSION, { ...read, pending: store.applied[0] });
         const pending = (await createSqliteCheckpoints(db).load(SESSION)).pending;
-        expect<unknown>(pending?.operations[0].kind === 'Add' && pending.operations[0].sources[0].at).toEqual(t(900));
+        expect<unknown>(pending?.operations[0].kind === 'Add' && pending.operations[0].sources[0].at).toEqual(timestampOf(t(900)));
         expect<unknown>(extractionCosts(db, SESSION).map((c) => [c.number, c.applied, c.held])).toEqual([[1, 1, 1]]);
         expect<unknown>(await createSqliteCheckpoints(db).load('another')).toEqual(EMPTY_CHECKPOINT);
         db.close();

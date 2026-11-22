@@ -6,7 +6,7 @@
 // On disk, the overwritten text leaves no copy behind: the store zeroes what it frees and empties its WAL afterwards
 // (`UnitOfWork.checkpoint`). Backups and copies on other machines are not reached here; each dt that holds a copy of the
 // database follows the same redaction log.
-import { Collaboration } from '../generated/index.js';
+import { Collaboration, timestampOf } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { REDACTED_BODY, redactedEvent, redactedRun } from '../domain/redaction.js';
 import type { Clock, UnitOfWork } from './ports.js';
@@ -34,7 +34,7 @@ export function createRedaction(deps: { readonly uow: UnitOfWork; readonly clock
             const done = await deps.uow.transaction((stores) => {
                 const requests: Collaboration.RequestId[] = [];
                 const sessions = new Set<Collaboration.SessionId>();
-                const at = deps.clock.now();
+                const at = timestampOf(deps.clock.now());
                 for (const { session, message } of messages) {
                     const id = Collaboration.makeRequestId(message);
                     if (!id.ok) continue;

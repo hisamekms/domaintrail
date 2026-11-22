@@ -3,6 +3,7 @@
 // test/session-replies.test.ts; the store: infrastructure/migrations.test.ts).
 import { describe, expect, test } from 'bun:test';
 import { Collaboration as C } from '../generated/index.js';
+import { timestamp } from '../test-helpers.js';
 import { approvalCommands, approvalOf, assumptionStatus } from './approvals.js';
 import type { MarkRun } from './marks.js';
 import { knownAgentRunId, knownAssumptionApprovalId, knownSessionId } from './ids.js';
@@ -61,7 +62,7 @@ describe('whether an assumption can be decided', () => {
 });
 
 describe('the approve command', () => {
-    const at = new Date('2026-11-01T09:00:00Z');
+    const at = timestamp('2026-11-01T09:00:00Z');
     const id = knownAssumptionApprovalId('00000000-0000-4000-8000-000000000001');
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- stands in for what the factories check
     const session = knownSessionId('00000000-0000-4000-8000-000000000002') as C.ActiveSession;

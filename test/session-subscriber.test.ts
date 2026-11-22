@@ -30,7 +30,7 @@ import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { resolveConfig, type SessionSettings } from '@domaintrail/dt';
 import type { ViewPayload } from '@domaintrail/visualization/protocol';
 import { findDomainFiles } from '@domaintrail/workspace';
-import { createFilesKnowledgeStore, Knowledge } from '@domaintrail/knowledge';
+import { createFilesKnowledgeStore, Knowledge, timestampOf } from '@domaintrail/knowledge';
 import { tempCopyOfExamples } from './helpers';
 import { sourceSelection } from '@domaintrail/analysis';
 import { hasElement } from '@domaintrail/modeling';
@@ -741,7 +741,7 @@ describe('the pipeline', () => {
                         {
                             session,
                             message: known(Knowledge.makeMessageRef('m1')),
-                            at: new Date(),
+                            at: timestampOf(new Date()),
                             quote: known(Knowledge.makeQuote('在庫を見てから受ける')),
                         },
                     ],

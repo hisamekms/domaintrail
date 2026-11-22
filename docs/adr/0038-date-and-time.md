@@ -1,6 +1,6 @@
 # ADR 0038: Dates, times and time zones
 
-- Status: proposed
+- Status: accepted; stage 1 implemented
 - Date: 2026-11-22
 - Amends: [ADR 0035](0035-kind-specific-lifecycles.md) (the target-independent semantics of `Timestamp`), the
   representation of `Timestamp` in generated TypeScript
@@ -91,11 +91,13 @@ belong in the language.
 - The runtime makes values: `parseDate`, `parseTime`, `parseYearMonth`, `parseDateTime`, `parseTimestamp`,
   `parseZonedDateTime`, `parseTimeZone` (each `undefined` for text that is not a value, as `parseDecimal`), and
   `timestampOf(date: Date)`. `instantOf(z)` gives a `ZonedDateTime`'s instant. These and `make<Name>` of domain
-  primitives over them are the only ways to make the types (no `as`, `dt guide lint`).
-- Calculation (adding days, converting zones, today in a zone) is the application's, in `decide` or around it. The
-  runtime converts to and from Temporal for those who use it (`toPlainDate` / `fromPlainDate`, `toInstant` /
-  `fromInstant`, `toZonedDateTime` / `fromZonedDateTime`, …); the generated code does not depend on Temporal, which
-  Safari and Bun do not ship at the time of writing.
+  primitives over them are the only ways to make the types (no `as`, `dt guide lint`). The brands are string keys, as
+  `Decimal`'s, so that the runtimes of several output directories agree.
+- Calculation (adding days, converting zones, today in a zone) is the application's, in `decide` or around it. Temporal
+  needs no conversion functions: its values print canonical text that the parsers read
+  (`parseDate(plainDate.toString())`; `parseTimestamp` cuts a finer fraction to milliseconds), and it reads the
+  types' text (`Temporal.PlainDate.from(date)`). The generated code does not depend on Temporal, which Safari and Bun
+  do not ship at the time of writing.
 - Generated contract tests draw valid values of each type (including month ends, leap days, the bounds of a range),
   and the generated checks compile the comparisons as above.
 
@@ -113,8 +115,10 @@ when a model needs them. The decisions above cover both; the second stage adds t
 ## Rejected alternatives
 
 - **Temporal objects as the generated representation**: they do not survive JSON or `structuredClone` as values,
-  compare with `.equals` rather than `===`, need a polyfill where engines lack them, and are one target's library. The
-  runtime converts to them for calculation instead; a later option may generate them where every engine has them.
+  compare with `.equals` rather than `===`, need a polyfill where engines lack them, and are one target's library. They
+  read and print the canonical text instead; a later option may generate them where every engine has them.
+- **Conversion functions to and from Temporal in the runtime**: they would type the runtime against Temporal's
+  declarations, which not every TypeScript setup has; the canonical text already converts both ways.
 - **`Plain…` (or `Local…`, `Naive…`) names in the DSL**: each is one ecosystem's convention (Temporal, Java, chrono);
   the language keeps neutral names and each generator maps them.
 - **`DateTime` and `TimeZone` side by side for a zoned value**: the pairing is implicit and ambiguous with several

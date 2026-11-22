@@ -4,7 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { createFilesKnowledgeStore, Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
+import { createFilesKnowledgeStore, Knowledge, type KnowledgeStore, timestampOf } from '@domaintrail/knowledge';
 import { KNOWLEDGE_TOOLS } from '@domaintrail/agent';
 import { analyzeStormings } from '@domaintrail/storming';
 import { knowledgeTools, LIST_TEXT_CHARS, stickyIndex, type StickyIndex } from './knowledge-tools.js';
@@ -59,7 +59,7 @@ const add = (
         {
             session: made(Knowledge.makeSessionRef('s1')),
             message: made(Knowledge.makeMessageRef(message)),
-            at: new Date(at),
+            at: timestampOf(new Date(at)),
             quote: made(Knowledge.makeQuote(`quote of ${message}`)),
         },
     ],
@@ -67,7 +67,7 @@ const add = (
 
 beforeAll(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'domaintrail-mcp-tools-'));
-    let clock = new Date('2026-11-05T09:00:00Z');
+    let clock = timestampOf(new Date('2026-11-05T09:00:00Z'));
     store = createFilesKnowledgeStore({ dir: path.join(root, 'knowledge'), project, stateDir: path.join(root, 'state'), now: () => clock });
     const by = (n: number): Knowledge.ExtractionRef => ({ session: made(Knowledge.makeSessionRef('s1')), number: made(Knowledge.makeExtractionNumber(n)) });
     await store.applyExtraction(project, {
@@ -92,7 +92,7 @@ beforeAll(async () => {
             ),
         ],
     });
-    clock = new Date('2026-11-06T10:00:00Z');
+    clock = timestampOf(new Date('2026-11-06T10:00:00Z'));
     await store.applyExtraction(project, {
         by: by(2),
         operations: [

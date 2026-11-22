@@ -359,5 +359,56 @@ export function decimalCompare(a: string, b: string): -1 | 0 | 1 {
     return (x.negative ? -magnitude : magnitude) as -1 | 0 | 1;
 }
 
-/** Point in time. */
-export type Timestamp = Date;
+// ---- dates and times (ADR 0038) --------------------------------------------------------------------------------
+// A value of a date or time type is its canonical text, branded: it crosses JSON and structuredClone as it is, and
+// its text orders as its values do. Make one with its parser, never with `as`. The parsers read the text of Temporal
+// values (`parseDate(plainDate.toString())`), and Temporal reads theirs (`Temporal.PlainDate.from(date)`).
+
+/** The brand of a date or time type: a string key, as `Decimal`'s, so that the runtimes of all output directories agree. */
+type Canonical<T extends string> = string & { readonly __brand: T };
+
+/** DSL `Date`: a calendar date without a time zone, `YYYY-MM-DD`. Make it with `parseDate`. */
+export type PlainDate = Canonical<'PlainDate'>;
+/** DSL `Time`: a time of day without a time zone, `HH:MM:SS`. Make it with `parseTime`. */
+export type PlainTime = Canonical<'PlainTime'>;
+/** DSL `YearMonth`: a month of a year without a time zone, `YYYY-MM`. Make it with `parseYearMonth`. */
+export type PlainYearMonth = Canonical<'PlainYearMonth'>;
+/** DSL `Timestamp`: an instant, `YYYY-MM-DDTHH:MM:SS.sssZ` (UTC). Make it with `parseTimestamp` or `timestampOf`. */
+export type Timestamp = Canonical<'Timestamp'>;
+
+const leap = (y: number): boolean => y % 4 === 0 && (y % 100 !== 0 || y % 400 === 0);
+const daysIn = (y: number, m: number): number => (m === 2 ? (leap(y) ? 29 : 28) : m === 4 || m === 6 || m === 9 || m === 11 ? 30 : 31);
+const isDay = (y: number, m: number, d: number): boolean => y >= 1 && m >= 1 && m <= 12 && d >= 1 && d <= daysIn(y, m);
+const isClock = (h: number, m: number, s: number): boolean => h <= 23 && m <= 59 && s <= 59;
+
+/** The date of `YYYY-MM-DD`, or `undefined` when it is not one (`2026-02-30`). */
+export const parseDate = (text: string): PlainDate | undefined => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    return m && isDay(+m[1]!, +m[2]!, +m[3]!) ? (text as PlainDate) : undefined;
+};
+
+/** The time of `HH:MM:SS` or `HH:MM` (a zero fraction of a second is accepted), as `HH:MM:SS`; else `undefined`. */
+export const parseTime = (text: string): PlainTime | undefined => {
+    const m = /^(\d{2}):(\d{2})(?::(\d{2})(?:\.0+)?)?$/.exec(text);
+    return m && isClock(+m[1]!, +m[2]!, +(m[3] ?? '0')) ? ((m[1] + ':' + m[2] + ':' + (m[3] ?? '00')) as PlainTime) : undefined;
+};
+
+/** The month of `YYYY-MM`, or `undefined` when it is not one. */
+export const parseYearMonth = (text: string): PlainYearMonth | undefined => {
+    const m = /^(\d{4})-(\d{2})$/.exec(text);
+    return m && +m[1]! >= 1 && +m[2]! >= 1 && +m[2]! <= 12 ? (text as PlainYearMonth) : undefined;
+};
+
+/**
+ * The instant of an ISO 8601 date and time with `Z` or an offset (`2026-11-22T18:30:00+09:00`), as UTC with
+ * milliseconds (a finer fraction is cut); else `undefined`.
+ */
+export const parseTimestamp = (text: string): Timestamp | undefined => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:\d{2})$/.exec(text);
+    if (!m || !isDay(+m[1]!, +m[2]!, +m[3]!) || !isClock(+m[4]!, +m[5]!, +m[6]!)) return undefined;
+    const date = new Date(m[1] + '-' + m[2] + '-' + m[3] + 'T' + m[4] + ':' + m[5] + ':' + m[6] + '.' + (m[7] ?? '').slice(0, 3).padEnd(3, '0') + m[8]);
+    return Number.isNaN(date.getTime()) ? undefined : timestampOf(date);
+};
+
+/** The instant of a JavaScript `Date` (an invalid one throws: it is no instant). */
+export const timestampOf = (date: Date): Timestamp => date.toISOString() as Timestamp;

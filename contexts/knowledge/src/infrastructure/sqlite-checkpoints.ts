@@ -9,10 +9,10 @@
 //   them) and did (operations proposed, applied, held, dropped), JSON, for measuring the cost per extraction:
 //   `SELECT data FROM knowledge_extraction_costs WHERE session_id = ? ORDER BY number`.
 //
-// The operations are written as JSON with their times as ISO strings, and read back with the times made dates again:
-// the rows are this module's own writing, not input.
+// The operations are written as JSON with their times as ISO strings, and read back with their sources' times checked
+// as timestamps and the held times made dates again: the rows are this module's own writing, not input.
 import type { DatabaseSync, SQLOutputValue } from 'node:sqlite';
-import type { Knowledge } from '../generated/index.js';
+import { type Knowledge, parseTimestamp } from '../generated/index.js';
 import { EMPTY_CHECKPOINT, type ExtractionCheckpoint, type ExtractionCheckpoints, type ExtractionCost } from '../application/extraction.js';
 import type { HeldOperation } from '../domain/guards.js';
 
@@ -39,12 +39,15 @@ CREATE TABLE IF NOT EXISTS knowledge_extraction_costs (
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const dateOr = (v: SQLOutputValue | undefined): Date | undefined => (typeof v === 'string' ? new Date(v) : undefined);
 
-/** A source read back: its time made a date again. */
+/** A source read back: its time a timestamp (a corrupt one throws). */
 function reviveSource(source: unknown): unknown {
-    return isObject(source) && typeof source.at === 'string' ? { ...source, at: new Date(source.at) } : source;
+    if (!isObject(source) || typeof source.at !== 'string') return source;
+    const at = parseTimestamp(source.at);
+    if (at === undefined) throw new Error(`knowledge_extractions: a source's time is not a timestamp: ${source.at}`);
+    return { ...source, at };
 }
 
-/** An operation read back: the times of its sources made dates again. */
+/** An operation read back: the times of its sources checked as timestamps. */
 function reviveOperation(operation: unknown): unknown {
     if (!isObject(operation)) return operation;
     return {

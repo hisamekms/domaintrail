@@ -6,7 +6,7 @@
 // posts its note under the AI's name as the last reply in the interview's thread (`journey-note.ts`: what was decided,
 // where the journey is, the next step): at once, or for a new storming when the run that creates it ends. The starter's messages are heard by the interview in `sendMessage` (`hearIn`), without triage.
 // As the other use cases: the aggregates loaded and saved in one transaction with their events, the commands deciding.
-import { Collaboration, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, err, ok, type Result, timestampOf, type Timestamp } from '../generated/index.js';
 import { requestCommands } from '../domain/commands.js';
 import { knownInterviewId, knownRequestId } from '../domain/ids.js';
 import { awaitedMessage, interviewCommands, interviewMessages, isRunning, runningInterview, withEditedText } from '../domain/interviews.js';
@@ -159,7 +159,7 @@ export interface InterviewUseCases {
  * for the interviewer again; a brief waiting is dropped). Undefined when no interview of the author runs: the message
  * goes on to the triage.
  */
-export function hearIn(stores: Stores, request: Collaboration.SentRequest, at: Date): Collaboration.AskingInterview | undefined {
+export function hearIn(stores: Stores, request: Collaboration.SentRequest, at: Timestamp): Collaboration.AskingInterview | undefined {
     const running = runningInterview(stores.interviews.listBySession(request.session));
     if (!running || running.startedBy !== request.author) return undefined;
     const heard = decided(interviewCommands.hear(running, { message: request.id, heardAt: at }));
@@ -184,7 +184,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (!sent.ok) return sent;
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const started = interviewCommands.start({
                     id: knownInterviewId(ids.newId()),
                     session: active.value,
@@ -210,7 +210,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (i.state !== 'Asking') return err(notAllowed('ask', i.state));
                 const active = await storeVerifications(stores).makeActiveSession(i.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const id = knownRequestId(ids.newId());
                 // the interview first: a question to a message it no longer waits for writes nothing
                 const asked = interviewCommands.ask(i, {
@@ -236,7 +236,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (i.state !== 'Asking') return err(notAllowed('summarize', i.state));
                 const active = await storeVerifications(stores).makeActiveSession(i.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const briefed = interviewCommands.summarize(i, { answered, summary: brief, briefedAt: at });
                 if (!briefed.ok) return briefed;
                 stores.interviews.save(briefed.value.Briefed.aggregate);
@@ -294,7 +294,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (now.state !== 'Briefed') return err(notAllowed('confirm', now.state));
                 const active = await storeVerifications(stores).makeActiveSession(now.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 // a new storming still needs a run to create its block (its `///`: the short description only)
                 let run: Collaboration.QueuedAgentRun | undefined;
                 if (now.command === 'Es' && brief.isNew) {
@@ -362,7 +362,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (i.state !== 'Briefed') return err(notAllowed('reject', i.state));
                 const active = await storeVerifications(stores).makeActiveSession(i.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const rejected = interviewCommands.reject(i, { rejectedBy: actor.participant, rejectedByRole: actor.role, note, rejectedAt: at });
                 if (!rejected.ok) return rejected;
                 stores.interviews.save(rejected.value.Rejected.aggregate);
@@ -381,7 +381,7 @@ export function createInterviews(deps: CollaborationDeps): InterviewUseCases {
                 if (!isRunning(i)) return err(notAllowed('stop', i.state));
                 const active = await storeVerifications(stores).makeActiveSession(i.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const stopped = interviewCommands.stop(i, { stoppedBy: actor.participant, stoppedByRole: actor.role, stoppedAt: at });
                 if (!stopped.ok) return stopped;
                 stores.interviews.save(stopped.value.Stopped.aggregate);
@@ -419,7 +419,7 @@ function postNote(
     session: Collaboration.ActiveSession,
     answers: Collaboration.RequestId,
     text: JourneyNoteText,
-    at: Date,
+    at: Timestamp,
 ): Collaboration.SentRequest | undefined {
     const body = Collaboration.makeText(text.body);
     if (!body.ok) return undefined;
@@ -460,7 +460,7 @@ export async function noteStormingRun(deps: CollaborationDeps, run: Collaboratio
             language: interview.language,
             ...(approvedBy !== undefined && { approvedBy }),
         });
-        return postNote(stores, deps.ids.newId(), active.value, answered, text, deps.clock.now());
+        return postNote(stores, deps.ids.newId(), active.value, answered, text, timestampOf(deps.clock.now()));
     });
 }
 
@@ -472,7 +472,7 @@ function recordInThread(
     interview: Collaboration.Interview,
     by: Collaboration.ParticipantId,
     fact: Collaboration.RecordFact,
-    at: Date,
+    at: Timestamp,
 ): void {
     const last = interviewMessages(interview, stores.requests.listBySession(interview.session)).at(-1);
     writeRecord(stores, id, { session, by, fact, ...(last && { replyTo: last.id }), at });

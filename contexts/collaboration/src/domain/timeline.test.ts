@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { Collaboration as C } from '../generated/index.js';
+import { Collaboration as C, timestampOf, type Timestamp } from '../generated/index.js';
 import { AI_PARTICIPANT_ID } from './ai.js';
 import { knownAgentRunId, knownChangeProposalId, knownRequestId, knownRevisionId, knownSessionId, knownTriageId } from './ids.js';
 import { snapshotFile, snapshotHash } from './snapshot.js';
@@ -12,7 +12,7 @@ const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T 
 };
 const text = (t: string): C.Text => value(C.makeText(t));
 const id = (n: number): string => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const minute = (m: number): Date => new Date(Date.UTC(2026, 10, 3, 9, m));
+const minute = (m: number): Timestamp => timestampOf(new Date(Date.UTC(2026, 10, 3, 9, m)));
 
 const session = knownSessionId(id(1));
 const ada = value(C.makeParticipantId('local:facilitator'));
@@ -29,7 +29,7 @@ const open: C.OpenSession = {
     startedAt: minute(0),
 };
 
-const message = (n: number, author: C.ParticipantId, body: string, at: Date, extra: Partial<C.SentRequest> = {}): C.SentRequest => ({
+const message = (n: number, author: C.ParticipantId, body: string, at: Timestamp, extra: Partial<C.SentRequest> = {}): C.SentRequest => ({
     state: 'Sent',
     id: knownRequestId(id(n)),
     session,
@@ -43,7 +43,7 @@ const message = (n: number, author: C.ParticipantId, body: string, at: Date, ext
 
 const file = (path: string, content: string): C.SnapshotFile => snapshotFile(value(C.makeWorkspacePath(path)), new TextEncoder().encode(content));
 const validation: C.ValidationSummary = { dtErrors: tally(0), dtesErrors: tally(0), dtesWarnings: tally(0), linkWarnings: tally(0), stale: false };
-const revision = (n: number, origin: C.RevisionOrigin, files: C.SnapshotFile[], at: Date): C.RecordedRevision => ({
+const revision = (n: number, origin: C.RevisionOrigin, files: C.SnapshotFile[], at: Timestamp): C.RecordedRevision => ({
     state: 'Recorded',
     id: knownRevisionId(id(n)),
     session,
@@ -224,7 +224,9 @@ describe('the session so far', () => {
     });
 
     test('the newest in full, the next ones a line each, the rest counted', () => {
-        const many = Array.from({ length: 140 }, (_, i) => message(1000 + i, bob, `message ${i}\nsecond line`, new Date(minute(0).getTime() + i * 1000)));
+        const many = Array.from({ length: 140 }, (_, i) =>
+            message(1000 + i, bob, `message ${i}\nsecond line`, timestampOf(new Date(new Date(minute(0)).getTime() + i * 1000))),
+        );
         const soFar = sessionSoFar({ ...records, requests: many, runs: [], proposals: [], triages: [], revisions: [] });
         expect(soFar.omitted).toBe(10);
         expect(soFar.entries).toHaveLength(130);

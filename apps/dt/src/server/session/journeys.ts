@@ -225,7 +225,7 @@ export function createSessionJourneys(deps: {
                 by: r.by,
                 byName: names.get(r.by) ?? r.by,
                 act: r.act,
-                at: r.at.toISOString(),
+                at: r.at,
             }));
             tell();
         },

@@ -10,7 +10,7 @@
 // Here: the commands' decisions, the stable English IDs of the commands, the interviewer's output (a question or a
 // brief: AI output, untrusted, validated against its shape and limits before anything is kept, as the answerer's), and
 // which messages make up an interview's transcript. Pure.
-import { Collaboration, decide, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, decide, err, ok, type Result, type Timestamp } from '../generated/index.js';
 import { isAi } from './ai.js';
 import { GUIDE_PATTERNS, MODEL_PATTERNS, PATTERN_SUBJECT, type EsGoalLevel } from './guide-paths.js';
 import { JOURNEY_ID, journeyIdFor, type JourneyUse } from './journey.js';
@@ -76,7 +76,7 @@ export function runningInterview(interviews: readonly Collaboration.Interview[])
 export const awaitedMessage = (i: Collaboration.Interview): Collaboration.RequestId | undefined => (i.state === 'Asking' ? i.awaiting : undefined);
 
 /** When an interview ended (confirmed, stopped or rejected), if it did. */
-function endedAt(i: Collaboration.Interview): Date | undefined {
+function endedAt(i: Collaboration.Interview): Timestamp | undefined {
     if (i.state === 'Confirmed') return i.confirmedAt;
     if (i.state === 'Stopped') return i.stoppedAt;
     if (i.state === 'Rejected') return i.rejectedAt;
@@ -801,7 +801,7 @@ function stopped(
 ): Result<
     {
         readonly Stopped: {
-            readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Date };
+            readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Timestamp };
             readonly events: { readonly 'Collaboration.InterviewStopped': Collaboration.InterviewStopped };
         };
     },

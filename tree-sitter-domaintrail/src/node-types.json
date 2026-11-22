@@ -2643,6 +2643,10 @@
     "named": false
   },
   {
+    "type": "Date",
+    "named": false
+  },
+  {
     "type": "Decimal",
     "named": false
   },
@@ -2655,11 +2659,19 @@
     "named": false
   },
   {
+    "type": "Time",
+    "named": false
+  },
+  {
     "type": "Timestamp",
     "named": false
   },
   {
     "type": "UUID",
+    "named": false
+  },
+  {
+    "type": "YearMonth",
     "named": false
   },
   {

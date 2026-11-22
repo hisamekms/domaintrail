@@ -319,7 +319,7 @@ export function extractionInput(
         about: [...item.content.about],
         conflictsWith: item.conflictsWith.flatMap((c) => keys.get(c) ?? []),
         thisSession: item.createdIn === session,
-        createdAt: item.createdAt.toISOString(),
+        createdAt: item.createdAt,
     }));
     return {
         session,

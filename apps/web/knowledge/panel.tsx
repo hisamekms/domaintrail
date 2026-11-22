@@ -63,20 +63,20 @@ import {
 } from './model';
 import { KnowledgeMarkdown, KnowledgePlain } from './text';
 import { KnowledgeContext, useKnowledgeView, type KnowledgeView } from './useKnowledge';
-import type { Knowledge, PastVersion } from '@domaintrail/knowledge';
+import type { Knowledge, PastVersion, Timestamp } from '@domaintrail/knowledge';
 
 const failure = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
 /** The date an item was made, short (11/5). */
-function useShortDate(): (d: Date) => string {
+function useShortDate(): (t: Timestamp) => string {
     const lang = useLang();
-    return (d) => d.toLocaleDateString(lang === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric' });
+    return (t) => new Date(t).toLocaleDateString(lang === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric' });
 }
 
 /** A moment, short with its time (11/5 18:02): a source's tooltip. */
-function useShortTime(): (d: Date) => string {
+function useShortTime(): (t: Timestamp) => string {
     const lang = useLang();
-    return (d) => d.toLocaleString(lang === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return (t) => new Date(t).toLocaleString(lang === 'ja' ? 'ja-JP' : 'en-US', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 /** 新しい順 / 種類の順: a segmented setting of the list. */

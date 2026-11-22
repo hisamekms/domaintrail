@@ -10986,7 +10986,7 @@ export interface TriageStep {
  * @see contexts/collaboration/model/triage.dt:39
  */
 export function equalTriageStep(a: TriageStep, b: TriageStep): boolean {
-    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($126: Confidence, $127: Confidence) => decimalCompare(String($126), String($127)) === 0) && sameOptional(a.reason, b.reason, ($128: Text, $129: Text) => $128 === $129) && sameOptional(a.model, b.model, ($130: string, $131: string) => $130 === $131) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($132: Text, $133: Text) => $132 === $133) && a.at.getTime() === b.at.getTime();
+    return a.stage === b.stage && a.verdict === b.verdict && sameOptional(a.confidence, b.confidence, ($126: Confidence, $127: Confidence) => decimalCompare(String($126), String($127)) === 0) && sameOptional(a.reason, b.reason, ($128: Text, $129: Text) => $128 === $129) && sameOptional(a.model, b.model, ($130: string, $131: string) => $130 === $131) && a.durationMs === b.durationMs && sameOptional(a.error, b.error, ($132: Text, $133: Text) => $132 === $133) && a.at === b.at;
 }
 
 /**

@@ -11,7 +11,7 @@
 // before, and what the run left (a three-way compare): an edit the run's result dropped (the old label, or the old
 // name) is written again, as a new edit attributed to the same person; a label the run changed to something else is
 // kept as the run's, and the edit records the conflict for people to choose.
-import { Collaboration, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, err, ok, type Result, timestampOf, type Timestamp } from '../generated/index.js';
 import { agentRunCommands, requestCommands, revisionCommands } from '../domain/commands.js';
 import { knownAgentRunId, knownRequestId, knownRevisionId } from '../domain/ids.js';
 import { revertStatus } from '../domain/revert.js';
@@ -65,7 +65,7 @@ export interface EditsReapplied {
 /** A person's edit as the agent is told of it: who, and what changed. */
 export interface PeopleEdit {
     readonly by: Collaboration.ParticipantId;
-    readonly at: Date;
+    readonly at: Timestamp;
     readonly edit: Collaboration.StickyEdit;
 }
 
@@ -205,7 +205,13 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
         return next;
     };
 
-    const recordRevision = (stores: Stores, session: SessionId, origin: Collaboration.RevisionOrigin, captured: Captured, at: Date): Collaboration.Revision => {
+    const recordRevision = (
+        stores: Stores,
+        session: SessionId,
+        origin: Collaboration.RevisionOrigin,
+        captured: Captured,
+        at: Timestamp,
+    ): Collaboration.Revision => {
         const taken = revisionCommands.take({
             id: knownRevisionId(ids.newId()),
             session,
@@ -233,7 +239,7 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
         input: {
             readonly by: Collaboration.ParticipantId;
             readonly reapplies?: AgentRunId;
-            readonly requests: (stores: Stores, at: Date) => Collaboration.Request[];
+            readonly requests: (stores: Stores, at: Timestamp) => Collaboration.Request[];
         },
     ): Promise<Result<Collaboration.EditedAgentRun, EditStickyError>> => {
         const after = replaced(scan, edits);
@@ -248,7 +254,7 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
         );
         if (!wrote.ok) return err(writeRefusal(wrote.error));
         return uow.transaction(async (stores) => {
-            const at = clock.now();
+            const at = timestampOf(clock.now());
             const id = knownAgentRunId(ids.newId());
             const requests = input.requests(stores, at);
             const verify = storeVerifications(stores);
@@ -364,8 +370,8 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                     (r): r is Collaboration.EditedAgentRun =>
                         r.state === 'Edited' &&
                         r.reapplies !== run &&
-                        r.finishedAt.getTime() >= ended.startedAt.getTime() &&
-                        r.finishedAt.getTime() <= ended.finishedAt.getTime() &&
+                        r.finishedAt >= ended.startedAt &&
+                        r.finishedAt <= ended.finishedAt &&
                         revertStatus(r, runs).kind === 'none',
                 );
                 const active = stores.sessions.load(session);
@@ -440,7 +446,7 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                 }
                 const marked = await uow.transaction((stores) => {
                     const out: Collaboration.EditedAgentRun[] = [];
-                    const at = clock.now();
+                    const at = timestampOf(clock.now());
                     for (const { run: edited, conflict } of conflicts) {
                         const current = stores.runs.load(edited.id)?.run;
                         if (current?.state !== 'Edited') continue;
@@ -464,7 +470,7 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                 const noted = agentRunCommands.noteConflict(edited, { conflict: { ...edited.conflict, settled: true } });
                 if (!noted.ok) throw new Error(`Settling the conflict of ${run} failed`);
                 stores.runs.save(noted.value.Edited.aggregate);
-                publish(stores, session, noted.value.Edited.events, clock.now());
+                publish(stores, session, noted.value.Edited.events, timestampOf(clock.now()));
                 return ok(noted.value.Edited.aggregate);
             });
         },
@@ -534,7 +540,7 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                 return uow.transaction((stores) => {
                     const current = stores.runs.load(run)?.run;
                     if (current?.state !== 'Edited') throw new Error(`The edit ${run} is gone`);
-                    const at = clock.now();
+                    const at = timestampOf(clock.now());
                     const revision = recordRevision(stores, session, { kind: 'RunResult', run }, written.value, at);
                     const named = agentRunCommands.nameHotspot(current, { name: final, renamed: revision.id });
                     if (!named.ok) throw new Error(`Naming the hotspot of ${run} failed`);
@@ -550,22 +556,22 @@ export function createStickies(deps: CollaborationDeps): StickyUseCases {
                 const started = stores.runs.load(run)?.run;
                 if (!started) return [];
                 const runs = stores.runs.listBySession(started.session);
-                const startOf = (r: Collaboration.AgentRun): number | undefined => ('startedAt' in r ? r.startedAt.getTime() : undefined);
-                const mine = startOf(started) ?? Number.POSITIVE_INFINITY;
+                const startOf = (r: Collaboration.AgentRun): Timestamp | undefined => ('startedAt' in r ? r.startedAt : undefined);
+                const mine = startOf(started);
                 // the latest run that started before this one: what it saw, this one's agent may remember
-                const since = runs.reduce<number | undefined>((latest, r) => {
+                const since = runs.reduce<Timestamp | undefined>((latest, r) => {
                     const s = startOf(r);
-                    return r.id !== started.id && s !== undefined && s < mine && (latest === undefined || s > latest) ? s : latest;
+                    return r.id !== started.id && s !== undefined && (mine === undefined || s < mine) && (latest === undefined || s > latest) ? s : latest;
                 }, undefined);
                 return runs
                     .filter(
                         (r): r is Collaboration.EditedAgentRun =>
                             r.state === 'Edited' &&
-                            (since === undefined || r.finishedAt.getTime() >= since) &&
-                            r.finishedAt.getTime() <= mine &&
+                            (since === undefined || r.finishedAt >= since) &&
+                            (mine === undefined || r.finishedAt <= mine) &&
                             revertStatus(r, runs).kind === 'none',
                     )
-                    .sort((a, b) => a.finishedAt.getTime() - b.finishedAt.getTime())
+                    .sort((a, b) => (a.finishedAt < b.finishedAt ? -1 : a.finishedAt > b.finishedAt ? 1 : 0))
                     .flatMap((r) =>
                         r.input.requests.flatMap((q) => {
                             if (!q.edit) return [];

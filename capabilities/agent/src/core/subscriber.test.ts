@@ -17,7 +17,7 @@ import {
     toolNames,
 } from '../adapters/claude-code.js';
 import { resultOf } from '../adapters/claude-stream.js';
-import { type Collaboration, type JourneySummary, REPLY_LIMITS, replyJsonSchema } from '@domaintrail/collaboration';
+import { type Collaboration, type JourneySummary, REPLY_LIMITS, replyJsonSchema, timestampOf } from '@domaintrail/collaboration';
 import { parseSse } from '../adapters/http-agent-api.js';
 import type { AgentJourneysBody, AgentPreviousRun, Json } from '@domaintrail/collaboration/protocol';
 
@@ -136,9 +136,9 @@ describe('the prompt', () => {
                 session: crypto.randomUUID(),
                 input: input([frozen({ kind: 'DtElement', element: 'Sales.Order' }, 'x')]),
                 queuedBy: 'dev:a',
-                queuedAt: '2026-10-31T09:00:00.000Z',
+                queuedAt: timestampOf(new Date('2026-10-31T09:00:00.000Z')),
                 baseRevision: crypto.randomUUID(),
-                startedAt: '2026-10-31T09:00:00.000Z',
+                startedAt: timestampOf(new Date('2026-10-31T09:00:00.000Z')),
                 report: { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
                 resultRevision: crypto.randomUUID(),
                 changed: true,
@@ -148,7 +148,7 @@ describe('the prompt', () => {
                     questions: [],
                     assumptions: [{ text: 'The amount includes tax', requests: [], alternatives: [{ id: 'net', label: 'Without tax' }] }],
                 },
-                finishedAt: '2026-10-31T09:01:00.000Z',
+                finishedAt: timestampOf(new Date('2026-10-31T09:01:00.000Z')),
             } as Json<Collaboration.AgentRun>,
             changes: { kind: 'diff', files: [], diff: '' },
         };
@@ -977,9 +977,9 @@ const completed = (id: string): Json<Collaboration.AgentRun> => ({
         ],
     },
     queuedBy: 'dev:ada',
-    queuedAt: '2026-11-01T09:00:00.000Z',
+    queuedAt: timestampOf(new Date('2026-11-01T09:00:00.000Z')),
     baseRevision: '00000000-0000-4000-8000-0000000000c1',
-    startedAt: '2026-11-01T09:00:01.000Z',
+    startedAt: timestampOf(new Date('2026-11-01T09:00:01.000Z')),
     report: { exitCode: 0, formatted: 'Ran', checked: 'Ran', newDtErrors: 0, unparsedDtes: 0 },
     resultRevision: '00000000-0000-4000-8000-0000000000c2',
     changed: true,
@@ -992,7 +992,7 @@ const completed = (id: string): Json<Collaboration.AgentRun> => ({
         questions: [],
         assumptions: [{ text: 'Only drafts.', requests: [M1], alternatives: [{ id: 'all', label: 'Any state' }] }],
     },
-    finishedAt: '2026-11-01T09:00:30.000Z',
+    finishedAt: timestampOf(new Date('2026-11-01T09:00:30.000Z')),
 });
 
 describe('the prompt with previous runs', () => {
@@ -1084,7 +1084,7 @@ describe('the prompt with previous runs', () => {
                     ...completed(OTHER),
                     state: 'Cancelled',
                     cancelledBy: 'dev:ada',
-                    cancelledAt: '2026-11-01T09:01:00.000Z',
+                    cancelledAt: timestampOf(new Date('2026-11-01T09:01:00.000Z')),
                 } as Json<Collaboration.AgentRun>,
                 changes: { kind: 'unrecorded' },
             },
@@ -1113,9 +1113,9 @@ describe('the prompt with previous runs', () => {
             session: '00000000-0000-4000-8000-000000000001',
             input: { requests: [{ request: M1, author: 'dev:bob', targets: [], body: 'Add a state.' }] },
             queuedBy: 'dev:ada',
-            queuedAt: '2026-11-01T09:00:00.000Z',
+            queuedAt: timestampOf(new Date('2026-11-01T09:00:00.000Z')),
             baseRevision: '00000000-0000-4000-8000-0000000000c1',
-            startedAt: '2026-11-01T09:00:01.000Z',
+            startedAt: timestampOf(new Date('2026-11-01T09:00:01.000Z')),
             question: 'Which state?',
             reply: {
                 summary: 'Which?',
@@ -1124,7 +1124,7 @@ describe('the prompt with previous runs', () => {
                 assumptions: [],
             },
             resultRevision: '00000000-0000-4000-8000-0000000000c1',
-            finishedAt: '2026-11-01T09:00:30.000Z',
+            finishedAt: timestampOf(new Date('2026-11-01T09:00:30.000Z')),
         };
         const input: Json<Collaboration.RunInput> = {
             requests: [{ request: M1, author: 'dev:bob', targets: [], body: 'Add a state.' }],

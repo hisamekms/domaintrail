@@ -43,6 +43,7 @@ import {
     type KnowledgeStore,
     type ResolvedKnowledgeConfig,
     type StormingPublisher,
+    timestampOf,
     type Result,
     createExtractionScheduler,
     createSessionExtraction,
@@ -113,11 +114,12 @@ export async function openKnowledgeStore(
     switch (knowledge.store) {
         case 'files': {
             const state = options.stateDir ? await options.stateDir(root) : (await workspaceState(root, (line) => console.error(line))).state;
+            const { now } = options;
             const store = createFilesKnowledgeStore({
                 dir: path.join(root, KNOWLEDGE_DIR),
                 project: knowledge.project,
                 stateDir: path.join(state, KNOWLEDGE_DIR),
-                ...(options.now && { now: options.now }),
+                ...(now && { now: () => timestampOf(now()) }),
             });
             return ok({ kind: 'files', store, project: knowledge.project, sweep: () => store.sweep() });
         }
@@ -217,7 +219,7 @@ export function sessionTalk(collaboration: CollaborationUseCases, session: Colla
                     const ai = isAi(r.author);
                     return {
                         id: r.id,
-                        at: r.sentAt,
+                        at: new Date(r.sentAt),
                         from: ai ? 'ai' : 'person',
                         author: ai ? 'AI' : alias(r.author),
                         text: plainBody(r.body, { targets: r.targets.length, people: r.mentions.length }),

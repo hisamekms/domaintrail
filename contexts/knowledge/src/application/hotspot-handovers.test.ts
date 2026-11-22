@@ -8,7 +8,9 @@ import { CLEARED_KEPT_MS, createHotspotHandOvers, hotspotOf, type RequestOutcome
 import { createSqliteHotspotHandOvers } from '../infrastructure/sqlite-hotspot-handovers.js';
 import type { KnowledgeStore } from './ports.js';
 import type { Knowledge } from '../generated/index.js';
-import { at, itemId, liveItem, userName } from '../test-helpers.js';
+import { itemId, liveItem, userName } from '../test-helpers.js';
+
+const at = new Date('2026-11-05T09:00:00Z');
 
 const project = 'shop' as Knowledge.ProjectName;
 const alice = userName('access:alice@example.com');

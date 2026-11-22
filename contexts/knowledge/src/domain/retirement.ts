@@ -20,7 +20,7 @@
 // The same candidate sent again (a retry) has the same ID (`proposalIdOf`, SHA-256 of what it proposes), and is
 // answered with the proposal made the first time; a proposal of that ID that proposes something else is a collision,
 // never taken for it (`ProposalIdCollision`). A store looks the ID up in the whole project, not only about the item.
-import { decide, err, Knowledge, ok, type Result } from '../generated/index.js';
+import { decide, err, Knowledge, ok, type Result, type Timestamp } from '../generated/index.js';
 import { knowledgeItemCommands } from './items.js';
 import { sha256Hex } from './sha256.js';
 
@@ -123,14 +123,14 @@ export function openProposals(
 ): Knowledge.OpenRetirementProposal[] {
     return proposals
         .filter((p): p is Knowledge.OpenRetirementProposal => p.state === 'Open' && !isMoot(p, lookup(p.item)))
-        .sort((a, b) => b.proposedAt.getTime() - a.proposedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+        .sort((a, b) => (a.proposedAt < b.proposedAt ? 1 : a.proposedAt > b.proposedAt ? -1 : 0) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
 }
 
 const usable = (item: Knowledge.KnowledgeItem | undefined): item is Knowledge.LiveKnowledgeItem =>
     item !== undefined && item.state === 'Live' && !isRetired(item);
 
 /** Decides a candidate against the item and the proposals about it (see the head of this file). */
-export function admitProposal(candidate: RetirementCandidate, context: ProposalContext, at: Date): Result<Admitted, ProposalRejection> {
+export function admitProposal(candidate: RetirementCandidate, context: ProposalContext, at: Timestamp): Result<Admitted, ProposalRejection> {
     const id = proposalIdOf(candidate);
     const again = context.proposals.find((p) => p.id === id);
     if (again) {
@@ -195,7 +195,7 @@ export function decideApproval(
     proposal: Knowledge.RetirementProposal | undefined,
     lookup: (id: Knowledge.KnowledgeItemId) => Knowledge.KnowledgeItem | undefined,
     by: Knowledge.UserName,
-    at: Date,
+    at: Timestamp,
 ): Result<Approval, ApprovalError> {
     if (proposal === undefined) return err({ type: 'Knowledge.ProposalNotFound', proposalId: id });
     if (proposal.state !== 'Open') return err({ type: 'Knowledge.ProposalDecided', proposalId: id });
@@ -238,7 +238,7 @@ export function decideDismissal(
     id: Knowledge.RetirementProposalId,
     proposal: Knowledge.RetirementProposal | undefined,
     by: Knowledge.UserName,
-    at: Date,
+    at: Timestamp,
 ): Result<
     { readonly proposal: Knowledge.DismissedRetirementProposal; readonly event: Knowledge.RetirementProposalDismissed },
     Knowledge.ProposalNotFound | Knowledge.ProposalDecided

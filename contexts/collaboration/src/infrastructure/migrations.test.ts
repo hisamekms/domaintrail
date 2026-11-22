@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
+import { timestamp } from '../test-helpers.js';
 import { makeEmoji, markKey, VOTE, type MarkTargetData } from '../domain/marks.js';
 import { createUnitOfWork, MIGRATIONS, openDatabase } from './sqlite.js';
 import { knownAgentRunId, knownChangeProposalId, knownMarkId, knownRequestId, knownRevisionId, knownSessionId, knownTriageId } from '../domain/ids.js';
@@ -70,7 +71,7 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
             participant: value(C.makeParticipantId('ann')),
             target: { kind: 'Message', request: knownRequestId('00000000-0000-4000-8000-000000000003') },
             sign: react('❤️'),
-            placedAt: new Date('2026-11-01T09:00:00Z'),
+            placedAt: timestamp('2026-11-01T09:00:00Z'),
         };
         await uow.transaction((s) => s.marks.save(mark));
         const duplicate = await uow
@@ -81,7 +82,7 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
             );
         expect(duplicate).toBe('refused');
         // removed, it stays as a row; another can be placed
-        await uow.transaction((s) => s.marks.save({ ...mark, state: 'Removed', removedAt: new Date('2026-11-01T09:01:00Z') }));
+        await uow.transaction((s) => s.marks.save({ ...mark, state: 'Removed', removedAt: timestamp('2026-11-01T09:01:00Z') }));
         await uow.transaction((s) => s.marks.save({ ...mark, id: knownMarkId('00000000-0000-4000-8000-000000000005') }));
         expect(await uow.transaction((s): unknown[] => [s.marks.placedBySession(sid).map((m): string => m.id), s.marks.load(mark.id)?.state])).toEqual([
             ['00000000-0000-4000-8000-000000000005'],
@@ -136,7 +137,7 @@ describe('the marks table (migration 4) and reactions as emoji', () => {
         const id = knownSessionId(sid);
         const placed = await uow.transaction((s) => s.marks.placedBySession(id));
         expect(placed.map((m) => m.sign)).toEqual([react('👍'), react('🤔'), react('❤️'), VOTE]);
-        expect(placed[0].placedAt).toEqual(new Date('2026-11-01T09:00:00.000Z'));
+        expect(placed[0].placedAt).toEqual(timestamp('2026-11-01T09:00:00.000Z'));
         const events = await uow.transaction((s) => s.outbox.readAfter(0, 100, id));
         expect(events.map((e): unknown => ('sign' in e.event ? e.event.sign : undefined))).toEqual([
             react('👍'),
@@ -217,7 +218,7 @@ describe('the reply_to column (migration 5)', () => {
             author: value(C.makeParticipantId('local:facilitator')),
             targets: [],
             body: text('Why?'),
-            sentAt: new Date('2026-11-01T09:00:00Z'),
+            sentAt: timestamp('2026-11-01T09:00:00Z'),
             replyTo: { kind: 'Run', run: knownAgentRunId(runId) },
             mentions: [],
         };
@@ -325,7 +326,7 @@ describe('the reply_to_request column (migration 7)', () => {
             author: value(C.makeParticipantId(who)),
             targets: [],
             body: text('Same here.'),
-            sentAt: new Date('2026-11-01T09:00:00Z'),
+            sentAt: timestamp('2026-11-01T09:00:00Z'),
             replyTo: { kind: 'Message', request: knownRequestId(rid) },
             mentions: [],
         };
@@ -404,7 +405,7 @@ describe('the approvals table (migration 8)', () => {
             session: session8,
             assumption: { run: knownAgentRunId(runId), assumption: value(C.makeTally(index)) },
             approvedBy: value(C.makeParticipantId(who)),
-            approvedAt: new Date('2026-11-01T09:00:00Z'),
+            approvedAt: timestamp('2026-11-01T09:00:00Z'),
         });
         const first = approval('00000000-0000-4000-8000-000000000005', 1);
         await uow.transaction((s) => s.approvals.save(first));
@@ -486,7 +487,7 @@ describe('no confirmed revisions (migration 9)', () => {
             revision: s.revisions.load(knownRevisionId(confirmed)),
             events: s.outbox.readAfter(0, 10, knownSessionId(sid)),
         }));
-        expect(read.revision).toEqual({ ...revision(confirmed), takenAt: new Date('2026-10-31T09:00:00.000Z') } as unknown as C.Revision);
+        expect(read.revision).toEqual({ ...revision(confirmed), takenAt: timestamp('2026-10-31T09:00:00.000Z') } as unknown as C.Revision);
         expect(read.events.map((e) => e.event.type)).toEqual(['Collaboration.RevisionRecorded']);
         db.close();
     });
@@ -540,7 +541,7 @@ describe('the reverts column (migration 10)', () => {
             author: value(C.makeParticipantId(who)),
             targets: [],
             body: text('Revert the changes of Add cancel.'),
-            sentAt: new Date('2026-11-03T09:00:00Z'),
+            sentAt: timestamp('2026-11-03T09:00:00Z'),
             mentions: [],
             reverts: knownAgentRunId(reverts),
         });
@@ -639,10 +640,10 @@ describe('triages and change proposals (migration 11)', () => {
             addressedBy: 'Mention',
             addressedByParticipant: value(C.makeParticipantId(who)),
             steps: [],
-            openedAt: new Date('2026-11-03T09:00:00Z'),
+            openedAt: timestamp('2026-11-03T09:00:00Z'),
             kind: 'ChangeRequest',
             decidedBy: 'Model',
-            decidedAt: new Date('2026-11-03T09:00:01Z'),
+            decidedAt: timestamp('2026-11-03T09:00:01Z'),
         };
         await uow.transaction((s) => s.triages.save(triage));
         expect(await uow.transaction((s) => s.triages.ofRequest(knownRequestId(rid)))).toEqual(triage);
@@ -668,14 +669,14 @@ describe('triages and change proposals (migration 11)', () => {
             request: knownRequestId(rid),
             requestedBy: value(C.makeParticipantId(who)),
             content,
-            proposedAt: new Date('2026-11-03T09:00:02Z'),
+            proposedAt: timestamp('2026-11-03T09:00:02Z'),
         };
         await uow.transaction((s) => s.proposals.save(proposal));
         const approved: C.ChangeProposal = {
             ...proposal,
             state: 'Approved',
             approvedBy: value(C.makeParticipantId(who)),
-            approvedAt: new Date('2026-11-03T09:01:00Z'),
+            approvedAt: timestamp('2026-11-03T09:01:00Z'),
             run: knownAgentRunId(runId),
         };
         await uow.transaction((s) => s.proposals.save(approved));

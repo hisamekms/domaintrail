@@ -31,7 +31,7 @@ const FEATURE_KEYWORDS = [
 ];
 
 /** The other keywords that may name enum values, union variants and members after `.` (ValueName). */
-const VALUE_KEYWORDS = ['not', 'in', 'and', 'or', 'implies', 'true', 'false', 'String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'];
+const VALUE_KEYWORDS = ['not', 'in', 'and', 'or', 'implies', 'true', 'false', 'String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth'];
 
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
 const pipeSep1 = (rule) => seq(rule, repeat(seq('|', rule)));
@@ -222,7 +222,7 @@ module.exports = grammar({
 
     _type: ($) => choice($.primitive_type, $.qualified_name),
 
-    primitive_type: (_) => choice('String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID'),
+    primitive_type: (_) => choice('String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth'),
 
     multiplicity: ($) => choice(
       '?',

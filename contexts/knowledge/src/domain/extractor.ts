@@ -10,7 +10,7 @@
 // (the quote is what lets a reader check the AI's wording, so it must be the person's). The IDs of new items are made
 // from the session, the extraction's number and the operation's place, so that the same extraction sent again names the
 // same items.
-import { err, Knowledge, ok, type Result } from '../generated/index.js';
+import { err, Knowledge, ok, parseTimestamp, type Result } from '../generated/index.js';
 import type { GateInput } from './stages.js';
 import type { WorkspaceSticky } from './stickies.js';
 
@@ -532,8 +532,8 @@ export function operationsOf(reply: ExtractorReply, input: ExtractionInput): Ext
         const message = messages.get(s.message);
         if (!message) return problem(path, `No message ${s.message} was given.`);
         const id = Knowledge.makeMessageRef(message.id);
-        const at = new Date(message.at);
-        if (!id.ok || Number.isNaN(at.getTime())) return problem(path, `Message ${s.message} cannot be a source.`);
+        const at = parseTimestamp(message.at);
+        if (!id.ok || at === undefined) return problem(path, `Message ${s.message} cannot be a source.`);
         const said = spaced(message.text);
         const given = spaced(s.quote);
         const fallback = said.length > EXTRACTION_LIMITS.fallbackQuote ? `${said.slice(0, EXTRACTION_LIMITS.fallbackQuote)}…` : said;

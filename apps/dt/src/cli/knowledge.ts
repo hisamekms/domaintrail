@@ -163,7 +163,7 @@ function contentLines(content: Knowledge.ItemContent): string[] {
 function showText({ item, history }: ItemWithHistory, withHistory: boolean): string {
     return [
         `${item.id}${item.retirement ? ' [retired]' : ''}`,
-        `Version ${item.version} · created ${item.createdAt.toISOString()} · updated ${item.updatedAt.toISOString()}`,
+        `Version ${item.version} · created ${item.createdAt} · updated ${item.updatedAt}`,
         ...contentLines(item.content),
         '',
         `Conflicts with: ${item.conflictsWith.join(', ') || 'none'}`,
@@ -171,17 +171,17 @@ function showText({ item, history }: ItemWithHistory, withHistory: boolean): str
         ...(item.createdIn ? [`Created in session: ${item.createdIn}`] : []),
         ...(item.retirement
             ? [
-                  `Retired: ${item.retirement.reason ?? 'no reason'}${item.retirement.replacedBy ? `; replaced by ${item.retirement.replacedBy}` : ''}; by ${item.retirement.by} at ${item.retirement.at.toISOString()}`,
+                  `Retired: ${item.retirement.reason ?? 'no reason'}${item.retirement.replacedBy ? `; replaced by ${item.retirement.replacedBy}` : ''}; by ${item.retirement.by} at ${item.retirement.at}`,
               ]
             : []),
         '',
         `Sources: ${item.sources.length}`,
-        ...item.sources.flatMap((source) => [`  ${source.session}/${source.message} · ${source.at.toISOString()}`, `    ${source.quote}`]),
+        ...item.sources.flatMap((source) => [`  ${source.session}/${source.message} · ${source.at}`, `    ${source.quote}`]),
         ...(withHistory
             ? [
                   '',
                   `History: ${history?.length ?? 0} previous version(s)`,
-                  ...(history ?? []).flatMap((past) => ['', `v${past.version} · replaced ${past.replacedAt.toISOString()}`, ...contentLines(past.content)]),
+                  ...(history ?? []).flatMap((past) => ['', `v${past.version} · replaced ${past.replacedAt}`, ...contentLines(past.content)]),
               ]
             : []),
     ].join('\n');
@@ -289,9 +289,7 @@ export function registerKnowledgeCommand(program: Command, context: Context): vo
                     ({ store, project }, query) => store.search(project, query),
                     (page) =>
                         [
-                            ...page.items.map(
-                                (item) => `${item.id}\t${item.content.title}${item.retirement ? ' [retired]' : ''}\t${item.updatedAt.toISOString()}`,
-                            ),
+                            ...page.items.map((item) => `${item.id}\t${item.content.title}${item.retirement ? ' [retired]' : ''}\t${item.updatedAt}`),
                             ...(page.items.length === 0 ? ['No knowledge items found.'] : []),
                             ...(page.next ? [`Next cursor: ${page.next}`] : []),
                         ].join('\n'),

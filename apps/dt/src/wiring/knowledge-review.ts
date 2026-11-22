@@ -31,7 +31,10 @@ export function reviewKnowledgeOf(items: readonly Knowledge.LiveKnowledgeItem[],
     return items
         .filter((i) => i.content.labels.when !== 'as_is')
         .map((item, index) => ({ item, index }))
-        .sort((a, b) => rank(a.item) - rank(b.item) || b.item.createdAt.getTime() - a.item.createdAt.getTime() || a.index - b.index)
+        .sort(
+            (a, b) =>
+                rank(a.item) - rank(b.item) || (a.item.createdAt < b.item.createdAt ? 1 : a.item.createdAt > b.item.createdAt ? -1 : 0) || a.index - b.index,
+        )
         .slice(0, max)
         .map(({ item }) => ({
             id: item.id,
@@ -40,7 +43,7 @@ export function reviewKnowledgeOf(items: readonly Knowledge.LiveKnowledgeItem[],
             kind: item.content.labels.kind,
             when: item.content.labels.when,
             about: [...item.content.about],
-            createdAt: item.createdAt.toISOString(),
+            createdAt: item.createdAt,
         }));
 }
 

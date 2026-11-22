@@ -13,7 +13,7 @@
 // limits before anything is kept; candidates past the limit are dropped rather than refused, as a proposal's options).
 // A new command is a row of the table, an entry of the enum in `command.dt`, its prompt and, for a candidate command,
 // its rule for the run. Pure.
-import { Collaboration, decide, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, decide, err, ok, type Result, type Timestamp } from '../generated/index.js';
 import { elementReference, PROPOSAL_LIMITS, readProposalText, readTargets } from './proposals.js';
 import { REPLY_LIMITS } from './reply.js';
 
@@ -500,7 +500,7 @@ function stopped(
 ): Result<
     {
         readonly Stopped: {
-            readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Date };
+            readonly set: { readonly stoppedBy: Collaboration.ParticipantId; readonly stoppedAt: Timestamp };
             readonly events: { readonly 'Collaboration.SlashCommandStopped': Collaboration.SlashCommandStopped };
         };
     },
