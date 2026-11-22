@@ -8,7 +8,7 @@
 // A retired item (廃止, ADR 0031 section 12) is left out unless `include_retired` asks for it, and then marked with its
 // reason and the item that replaced it. The agent's answerer and runner start `dt mcp --without-retired`: the option is
 // not offered, and `knowledge_get` answers that a retired item is retired, without its text (`withoutRetired`).
-import { Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
+import { Knowledge, type KnowledgeStore, type Timestamp } from '@domaintrail/knowledge';
 import { declarations, type NodeElementKind, type Storming } from '@domaintrail/storming';
 import type { McpTool, McpToolResult } from './protocol.js';
 
@@ -81,8 +81,8 @@ export const LIST_TEXT_CHARS = 600;
 
 // ---- the text ---------------------------------------------------------------------------------------------------
 
-const day = (d: Date): string => d.toISOString().slice(0, 10);
-const minute = (d: Date): string => `${d.toISOString().slice(0, 16).replace('T', ' ')}Z`;
+const day = (t: Timestamp): string => t.slice(0, 10);
+const minute = (t: Timestamp): string => `${t.slice(0, 16).replace('T', ' ')}Z`;
 
 function stickyText(ref: string, stickies: StickyIndex): string {
     const s = stickies.get(ref);
@@ -421,7 +421,7 @@ async function aboutWithRetired(
 ): Promise<Knowledge.LiveKnowledgeItem[]> {
     const live = await store.about(project, stickies);
     const retired = (await store.search(project, { about: stickies.slice(0, 50), retired: 'only', limit: MAX_SEARCH_LIMIT })).items;
-    return [...live, ...retired].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+    return [...live, ...retired].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
 }
 
 /** An item whole (`knowledge_get`). */
@@ -429,7 +429,7 @@ export function itemDetail(
     item: Knowledge.LiveKnowledgeItem,
     stickies: StickyIndex,
     conflicts: readonly { readonly other: Knowledge.KnowledgeItemId; readonly item?: Knowledge.LiveKnowledgeItem }[],
-    history?: readonly { readonly version: Knowledge.ItemVersion; readonly content: Knowledge.ItemContent; readonly replacedAt: Date }[],
+    history?: readonly { readonly version: Knowledge.ItemVersion; readonly content: Knowledge.ItemContent; readonly replacedAt: Timestamp }[],
 ): string {
     const { labels } = item.content;
     const out = [

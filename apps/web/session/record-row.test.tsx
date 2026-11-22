@@ -3,6 +3,7 @@
 // of an interview's thread hangs on the thread's line under the message it follows.
 import { describe, expect, test } from 'bun:test';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { timestampOf } from '@domaintrail/collaboration';
 import { I18nProvider, MESSAGES } from '../i18n';
 import { ChatProvider, type ChatContextValue } from './chat-context';
 import { RecordRow } from './record-row';
@@ -21,7 +22,7 @@ const goal: RecordJson = {
     session: 's',
     by: 'f',
     fact: { kind: 'GoalChanged', journey: { journey: 'es:Issue', label: '交付' }, from: 'BigPicture', to: 'DesignLevel', other: false },
-    at: '2026-11-04T09:00:02.000Z',
+    at: timestampOf(new Date('2026-11-04T09:00:02.000Z')),
 };
 const stopped: RecordJson = {
     state: 'Written',
@@ -30,7 +31,7 @@ const stopped: RecordJson = {
     by: 'b',
     fact: { kind: 'InterviewStopped', interview: 'i1' },
     replyTo: 'm1',
-    at: '2026-11-04T09:00:04.000Z',
+    at: timestampOf(new Date('2026-11-04T09:00:04.000Z')),
 };
 const message = (id: string, at: string) => ({ id, author: 'b', body: 'x', sentAt: at, targets: [], mentions: [], state: 'Sent', session: 's' });
 
@@ -95,8 +96,8 @@ describe('the records in the chat', () => {
         const revised = applyEvent(written.state, {
             type: 'record.revised',
             seq: 3,
-            event: { type: 'Collaboration.RecordRevised', recordId: 'r1', fact, revisedAt: '2026-11-04T09:00:09.000Z' },
+            event: { type: 'Collaboration.RecordRevised', recordId: 'r1', fact, revisedAt: timestampOf(new Date('2026-11-04T09:00:09.000Z')) },
         } as never);
-        expect(revised.state.records).toEqual([{ ...goal, fact, revisedAt: '2026-11-04T09:00:09.000Z' }]);
+        expect(revised.state.records).toEqual([{ ...goal, fact, revisedAt: timestampOf(new Date('2026-11-04T09:00:09.000Z')) }]);
     });
 });

@@ -5,21 +5,21 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import type { Knowledge } from '../generated/index.js';
+import { type Knowledge, type Timestamp, timestampOf } from '../generated/index.js';
 import { createFilesKnowledgeStore, type FilesKnowledgeStore } from './files.js';
 import { createSqliteRedactionCursors } from './sqlite-redaction-cursors.js';
-import { content, extraction, itemId, source, userName } from '../test-helpers.js';
+import { content, extraction, itemId, source, timestamp, userName } from '../test-helpers.js';
 import { createRedactionSync, type RedactionCursors } from '../application/redaction-sync.js';
 
 const project = 'shop' as Knowledge.ProjectName;
 let root: string;
-let clock: Date;
+let clock: Timestamp;
 let store: FilesKnowledgeStore;
 let cursors: RedactionCursors;
 
 beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'domaintrail-redaction-'));
-    clock = new Date('2026-11-05T09:00:00Z');
+    clock = timestamp('2026-11-05T09:00:00Z');
     store = createFilesKnowledgeStore({
         dir: path.join(root, 'knowledge'),
         project,
@@ -56,14 +56,14 @@ describe('the redaction sync', () => {
         await addAndDelete(1);
         // within the undo window: nothing yet
         expect(await sync.run()).toBe(0);
-        clock = new Date(clock.getTime() + 61_000);
+        clock = timestampOf(new Date(new Date(clock).getTime() + 61_000));
         expect(await sync.run()).toBe(1);
         expect(redacted).toEqual([['s1/m1', 's1/m1b']]);
         expect(await cursors.get(project)).toBeString();
         // read on from the cursor: nothing again, then only the next deletion
         expect(await sync.run()).toBe(0);
         await addAndDelete(2);
-        clock = new Date(clock.getTime() + 61_000);
+        clock = timestampOf(new Date(new Date(clock).getTime() + 61_000));
         expect(await sync.run()).toBe(1);
         expect(redacted).toEqual([
             ['s1/m1', 's1/m1b'],
@@ -87,7 +87,7 @@ describe('the redaction sync', () => {
             log: (l) => lines.push(l),
         });
         await addAndDelete(1);
-        clock = new Date(clock.getTime() + 61_000);
+        clock = timestampOf(new Date(new Date(clock).getTime() + 61_000));
         expect(await sync.run()).toBe(0);
         expect(lines[0]).toContain('database locked');
         expect(await cursors.get(project)).toBeUndefined();

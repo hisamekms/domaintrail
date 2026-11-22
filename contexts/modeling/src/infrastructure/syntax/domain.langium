@@ -172,7 +172,7 @@ TypeRef:
     primitive=PrimitiveType | decl=[TypeDecl:QualifiedName];
 
 PrimitiveType returns string:
-    'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
+    'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth';
 
 Multiplicity:
     optional?='?' | '[' lower=INT '..' (upper=INT | unbounded?='*') ']';
@@ -239,7 +239,8 @@ FeatureName returns string:
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never
 // read alone in an expression: it is written after a `.` (`Op.and`).
 ValueName returns string:
-    FeatureName | 'not' | 'in' | 'and' | 'or' | 'implies' | 'true' | 'false' | 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
+    FeatureName | 'not' | 'in' | 'and' | 'or' | 'implies' | 'true' | 'false' | 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID'
+    | 'Date' | 'Time' | 'YearMonth';
 
 QualifiedName returns string:
     ID ('.' ID)*;

@@ -82,14 +82,14 @@ describe('emits in the generated TypeScript', () => {
     test('implementations that follow the contract compile; outcome and eventList type what they return', async () => {
         await writeFile(
             path.join(dir, 'src', 'ok.ts'),
-            `import { Tasks, decide, eventList, ok, outcome, err } from '../generated/index.js';
+            `import { Tasks, decide, eventList, ok, outcome, err, type Timestamp } from '../generated/index.js';
 const ev = <T extends string>(type: T, work: Tasks.Work) => ({ type, workId: work.id });
 
 export const commands: Tasks.WorkCommands = {
     open: ({ id }) => ok({ Draft: { aggregate: { state: 'Draft', id }, events: { 'Tasks.WorkOpened': { type: 'Tasks.WorkOpened', workId: id }, 'Tasks.ItemAdded': [] } } }),
     progress: (work, { at }) => {
-        if (at.getTime() < 0) return err({ type: 'Tasks.NotReady' });
-        if (at.getTime() === 0) return ok({ InProgress: { aggregate: work, events: { 'Tasks.StepRecorded': ev('Tasks.StepRecorded', work) } } });
+        if (at < '1970-01-01T00:00:00.000Z') return err({ type: 'Tasks.NotReady' });
+        if (at === '1970-01-01T00:00:00.000Z') return ok({ InProgress: { aggregate: work, events: { 'Tasks.StepRecorded': ev('Tasks.StepRecorded', work) } } });
         return ok({
             Completed: {
                 aggregate: { ...work, state: 'Completed', completedAt: at },
@@ -107,7 +107,7 @@ export const commands: Tasks.WorkCommands = {
 };
 
 declare const inProgress: Tasks.InProgressWork;
-declare const at: Date;
+declare const at: Timestamp;
 const r = commands.progress(inProgress, { at });
 if (r.ok) {
     const o = outcome(r.value);

@@ -4,7 +4,7 @@
 // thing in the stream and the same person's marks on the same journey in the same direction. A participant's requests
 // about the journeys are records too: kept in the session (they survive a restart; the server rebuilds its waiting
 // requests from them), their outcome written on the same record.
-import { Collaboration, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, err, ok, type Result, timestampOf, type Timestamp } from '../generated/index.js';
 import { isOpenRequest, journeyActOf, journeyFileChanges, mergedMarks, recordCommands, requestedAct, type JourneyLabels } from '../domain/records.js';
 import type { JourneyAct, JourneyFile } from '../domain/journey.js';
 import type { Actor } from './actor.js';
@@ -23,15 +23,15 @@ export interface OpenJourneyRequest {
     readonly id: string;
     readonly by: Collaboration.ParticipantId;
     readonly act: RequestedAct;
-    readonly at: Date;
+    readonly at: Timestamp;
 }
 
 /**
  * Whether anything came into the session's stream after `at` (a message, a card's first run, a proposal, a command, a
  * restore, another record): the ✓ merge stops there.
  */
-export function laterInStream(stores: Stores, session: SessionId, at: Date, except: Collaboration.SessionRecordId): boolean {
-    const after = (d: Date | undefined): boolean => d !== undefined && d.getTime() > at.getTime();
+export function laterInStream(stores: Stores, session: SessionId, at: Timestamp, except: Collaboration.SessionRecordId): boolean {
+    const after = (t: Timestamp | undefined): boolean => t !== undefined && t > at;
     return (
         stores.requests.listBySession(session).some((r) => after(r.sentAt)) ||
         stores.runs.listBySession(session).some((r) => after(r.queuedAt)) ||
@@ -51,7 +51,7 @@ export function writeRecord(
         readonly by?: Collaboration.ParticipantId;
         readonly fact: Collaboration.RecordFact;
         readonly replyTo?: Collaboration.RequestId;
-        readonly at: Date;
+        readonly at: Timestamp;
     },
 ): Collaboration.SessionRecord | undefined {
     const recordId = Collaboration.makeSessionRecordId(id);
@@ -64,7 +64,7 @@ export function writeRecord(
 }
 
 /** A record written again (marks merged, a request's outcome), inside the caller's transaction. */
-function reviseRecord(stores: Stores, record: Collaboration.SessionRecord, fact: Collaboration.RecordFact, at: Date): Collaboration.SessionRecord {
+function reviseRecord(stores: Stores, record: Collaboration.SessionRecord, fact: Collaboration.RecordFact, at: Timestamp): Collaboration.SessionRecord {
     const revised = recordCommands.revise(record, { fact, revisedAt: at });
     if (!revised.ok) return record;
     stores.records.save(revised.value.Written.aggregate);
@@ -83,14 +83,14 @@ export function recordAct(
         readonly session: Collaboration.ActiveSession;
         readonly by: Collaboration.ParticipantId;
         readonly fact: Collaboration.RecordFact;
-        readonly at: Date;
+        readonly at: Timestamp;
     },
 ): Collaboration.SessionRecord | undefined {
     const { fact } = input;
     if (fact.kind === 'MarksChanged') {
         const last = stores.records
             .listBySession(input.session)
-            .reduce<Collaboration.SessionRecord | undefined>((a, r) => (!a || r.at.getTime() >= a.at.getTime() ? r : a), undefined);
+            .reduce<Collaboration.SessionRecord | undefined>((a, r) => (!a || r.at >= a.at ? r : a), undefined);
         const merged = last && mergedMarks(last, input.by, fact, laterInStream(stores, input.session, last.at, last.id));
         if (last && merged) return reviseRecord(stores, last, merged, input.at);
     }
@@ -145,7 +145,7 @@ export function createRecords(deps: CollaborationDeps): RecordUseCases {
                 const active = await storeVerifications(stores).makeActiveSession(session);
                 if (!active.ok) return active;
                 const fact: Collaboration.RecordFact = { kind: 'JourneyRequested', request: requestId.value, act: asked };
-                const written = writeRecord(stores, ids.newId(), { session: active.value, by: actor.participant, fact, at: clock.now() });
+                const written = writeRecord(stores, ids.newId(), { session: active.value, by: actor.participant, fact, at: timestampOf(clock.now()) });
                 return written ? ok(written) : err({ type: 'InvalidInput' });
             });
         },
@@ -154,7 +154,7 @@ export function createRecords(deps: CollaborationDeps): RecordUseCases {
             return uow.transaction((stores) => {
                 const record = recordOf(stores, session, request);
                 if (!record || record.fact.kind !== 'JourneyRequested' || record.fact.outcome !== undefined) return ok(undefined);
-                return ok(reviseRecord(stores, record, { ...record.fact, outcome, decidedBy: by }, clock.now()));
+                return ok(reviseRecord(stores, record, { ...record.fact, outcome, decidedBy: by }, timestampOf(clock.now())));
             });
         },
 
@@ -179,7 +179,7 @@ export function createRecords(deps: CollaborationDeps): RecordUseCases {
                 const tally = Collaboration.makeTally(more);
                 if (!tally.ok) return ok(undefined);
                 const fact: Collaboration.RecordFact = { kind: 'FileChangedOutside', changes: [...changes], more: tally.value, unreadable };
-                return ok(writeRecord(stores, ids.newId(), { session: active.value, fact, at: clock.now() }));
+                return ok(writeRecord(stores, ids.newId(), { session: active.value, fact, at: timestampOf(clock.now()) }));
             });
         },
     };

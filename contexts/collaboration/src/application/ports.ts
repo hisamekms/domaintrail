@@ -4,7 +4,7 @@
 import type { DomainModel } from '@domaintrail/modeling';
 import type { Storming } from '@domaintrail/storming';
 import type { Diagnostic } from '@domaintrail/kernel';
-import type { Collaboration } from '../generated/index.js';
+import type { Collaboration, Timestamp } from '../generated/index.js';
 import type { Identity, IdentityKey } from './identity.js';
 
 type SessionId = Collaboration.SessionId;
@@ -168,12 +168,12 @@ export interface OutboxEntry {
     readonly seq: number;
     readonly session: SessionId;
     readonly event: Collaboration.PersistentEvent;
-    readonly recordedAt: Date;
+    readonly recordedAt: Timestamp;
 }
 
 /** The events of the commands, appended in the transaction that saves their aggregates. */
 export interface EventOutbox {
-    append(session: SessionId, events: readonly Collaboration.PersistentEvent[], recordedAt: Date): void;
+    append(session: SessionId, events: readonly Collaboration.PersistentEvent[], recordedAt: Timestamp): void;
     /** At most `limit` entries after `cursor` (0: from the start), in order; of one session when given. */
     readAfter(cursor: number, limit: number, session?: SessionId): OutboxEntry[];
     /** The `RequestSent` entries of a message (one, unless the outbox was replayed into another database). */

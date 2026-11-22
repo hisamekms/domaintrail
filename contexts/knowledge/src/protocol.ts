@@ -5,7 +5,7 @@
 // The bodies are the port's values as JSON (`JSON.stringify`: a `Date` becomes its ISO string). Decoding checks every
 // value with the generated constructors (`Knowledge.make…`), so that what a body holds is a value of the model or a
 // `WireError`, never a cast: the Worker decodes what dt sends, the adapter what the Worker answers.
-import { Knowledge, type Result } from './generated/index.js';
+import { Knowledge, parseTimestamp, type Result, type Timestamp } from './generated/index.js';
 import type { DroppedOperation, DropReason } from './domain/extraction.js';
 import type { PastVersion } from './domain/records.js';
 import type { RetirementCandidate } from './domain/retirement.js';
@@ -315,11 +315,10 @@ const nonEmpty =
 const opt = <T>(d: Decoder<T>, v: unknown, at: string): T | undefined => (v === undefined || v === null ? undefined : d(v, at));
 
 /** A time: an ISO 8601 string (what `JSON.stringify` makes of a `Date`). */
-const time: Decoder<Date> = (v, at) => {
-    const s = str(v, at);
-    const d = new Date(s);
-    return /^\d{4}-\d{2}-\d{2}T/.test(s) && !Number.isNaN(d.getTime()) ? d : fail(at, 'expected an ISO 8601 time');
-};
+const time: Decoder<Timestamp> = (v, at) => parseTimestamp(str(v, at)) ?? fail(at, 'expected an ISO 8601 time');
+
+/** A time the port holds as a `Date` (a published storming's). */
+const date: Decoder<Date> = (v, at) => new Date(time(v, at));
 
 const WHEN: readonly Knowledge.When[] = ['as_is', 'to_be', 'none'];
 const KINDS: readonly Knowledge.KnowledgeKind[] = ['rule', 'flow', 'example', 'term', 'pain', 'want', 'decision'];
@@ -869,7 +868,7 @@ const commitId: Decoder<string> = (v, at) => {
 const drawing = (v: unknown, at: string): PublishedStorming['drawing'] => {
     const o = obj(v, at);
     const commit = opt(commitId, o.commit, `${at}.commit`);
-    return { at: time(o.at, `${at}.at`), ...(commit !== undefined && { commit }) };
+    return { at: date(o.at, `${at}.at`), ...(commit !== undefined && { commit }) };
 };
 
 const publishedSticky =
@@ -919,7 +918,7 @@ const publishedEntry: Decoder<PublishedEntry> = (v, at) => {
         ...(label !== undefined && { label }),
         version: str(o.version, `${at}.version`),
         drawing: drawing(o.drawing, `${at}.drawing`),
-        publishedAt: time(o.publishedAt, `${at}.publishedAt`),
+        publishedAt: date(o.publishedAt, `${at}.publishedAt`),
     };
 };
 

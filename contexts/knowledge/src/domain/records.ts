@@ -1,7 +1,7 @@
 // What an item leaves behind (ADR 0031, sections 7 and 8): the audit log's record of each change, the redaction log's
 // entry when the store's sweep removes a deleted item, the past version kept when a new one is made, and the images
 // its text refers to (which the sweep removes with it).
-import { Knowledge } from '../generated/index.js';
+import { Knowledge, type Timestamp } from '../generated/index.js';
 
 /** The audit log's record of a change: who, which item and version, what, why and when. */
 export function auditOf(event: Knowledge.KnowledgeItemEvent): Knowledge.AuditEntry {
@@ -128,7 +128,7 @@ export const redactionOf = (item: Knowledge.DeletedKnowledgeItem): Knowledge.Red
 export interface PastVersion {
     readonly version: Knowledge.ItemVersion;
     readonly content: Knowledge.ItemContent;
-    readonly replacedAt: Date;
+    readonly replacedAt: Timestamp;
 }
 
 /** The past version an item leaves when `next` replaces it. */

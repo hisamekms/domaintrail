@@ -6,7 +6,7 @@
 // Who may act: a person through the `Actor` this application built (the facilitator's rescue 「AI に送る」, approving
 // and rejecting proposals, withdrawing one's own); the server and the agent's answerer role through the use cases that
 // take no actor (a stage's verdict, an override, an answer, a proposal) — the agent API (M4) authenticates them.
-import { Collaboration, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, err, ok, type Result, timestampOf, type Timestamp } from '../generated/index.js';
 import { isAi } from '../domain/ai.js';
 import { requestCommands, sessionCommands } from '../domain/commands.js';
 import { knownChangeProposalId, knownRequestId, knownTriageId } from '../domain/ids.js';
@@ -332,7 +332,7 @@ export interface ConversationNeeds {
 const MEASURED_TURNS = 30;
 
 /** A step's input as the model's `TriageStep`, or why it is not one. */
-function stepOf(input: TriageStepInput, at: Date): Result<Collaboration.TriageStep, InvalidTriageInput> {
+function stepOf(input: TriageStepInput, at: Timestamp): Result<Collaboration.TriageStep, InvalidTriageInput> {
     const text = (s: string | undefined): Collaboration.Text | undefined => {
         const t = s?.trim().slice(0, MAX_TRIAGE_REASON);
         if (!t) return undefined;
@@ -359,7 +359,7 @@ function stepOf(input: TriageStepInput, at: Date): Result<Collaboration.TriageSt
 }
 
 /** Stage 1 for a message: its step (no time to speak of; the rule as its reason). */
-function mechanicalStep(body: string, at: Date): Collaboration.TriageStep {
+function mechanicalStep(body: string, at: Timestamp): Collaboration.TriageStep {
     const v = mechanicalVerdict(body);
     const reason = v.verdict === 'NotForAi' ? Collaboration.makeText(MECHANICAL_REASONS[v.rule]) : undefined;
     return {
@@ -392,7 +392,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
             readonly body: string;
             readonly addressedBy: Collaboration.AddressedBy;
             readonly by: Collaboration.ParticipantId;
-            readonly at: Date;
+            readonly at: Timestamp;
         },
     ): Collaboration.Triage => {
         const { Pending } = decided(
@@ -419,7 +419,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
     const queueIfRouted = async (
         stores: Stores,
         triage: Collaboration.DecidedTriage,
-        at: Date,
+        at: Timestamp,
     ): Promise<
         Result<
             { triage: Collaboration.Triage; route: TriageRoute; run?: Collaboration.QueuedAgentRun },
@@ -454,7 +454,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
         stores: Stores,
         triage: Collaboration.DecidedTriage,
         content: Collaboration.ProposalContent,
-        at: Date,
+        at: Timestamp,
     ): Promise<
         Result<
             { proposal: Collaboration.OpenChangeProposal; triage: Collaboration.DecidedTriage },
@@ -515,7 +515,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                     return uow.transaction((stores) => {
                         const open = current && stores.sessions.load(current.id);
                         if (open?.state !== 'Open') throw new Error('The Solo session to continue is no longer open');
-                        const at = clock.now();
+                        const at = timestampOf(clock.now());
                         const collaborated = sessionCommands.collaborate(open, { collaboratedAt: at });
                         if (!collaborated.ok) throw new Error(`Continuing session ${open.id} as Collab failed: ${collaborated.error.type}`);
                         stores.sessions.save(collaborated.value.Open.aggregate);
@@ -535,7 +535,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 const session = stores.sessions.load(input.session);
                 if (session?.state !== 'Open') return ok({ request });
                 // the starter of a running interview answers it: no triage (a reply would come out "neither")
-                const interview = hearIn(stores, request, clock.now());
+                const interview = hearIn(stores, request, timestampOf(clock.now()));
                 if (interview) return ok({ request, interview });
                 const to = request.replyTo;
                 const replyTo =
@@ -556,7 +556,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                     body: request.body,
                     addressedBy,
                     by: request.author,
-                    at: clock.now(),
+                    at: timestampOf(clock.now()),
                 });
                 return ok({ request, triage });
             });
@@ -569,7 +569,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 const verify = storeVerifications(stores);
                 const active = await verify.makeActiveSession(session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const triages: Collaboration.Triage[] = [];
                 for (const id of new Set(requests)) {
                     const existing = stores.triages.ofRequest(id);
@@ -609,7 +609,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 if (t.state !== 'Pending') return err(notAllowed('record', t.state));
                 const active = await storeVerifications(stores).makeActiveSession(t.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const made = stepOf(step, at);
                 if (!made.ok) return made;
                 const recorded = triageCommands.record(t, { step: made.value, recordedAt: at });
@@ -630,7 +630,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 if (t.state !== 'Decided') return err(notAllowed('override', t.state));
                 const active = await storeVerifications(stores).makeActiveSession(t.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const made = stepOf(step, at);
                 if (!made.ok) return made;
                 const overridden = triageCommands.override(t, { step: made.value, overriddenAt: at });
@@ -657,7 +657,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 if (readRevision !== undefined && stores.revisions.load(readRevision)?.session !== t.session) return err(notFound('Revision', readRevision));
                 const active = await storeVerifications(stores).makeActiveSession(t.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const id = knownRequestId(ids.newId());
                 const to: Collaboration.TriageOutcome = { kind: 'Answer', answer: id, ...(readRevision && { readRevision }) };
                 // concluded first: an answer to what is not an open 相談 writes nothing
@@ -677,7 +677,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 const t = stores.triages.load(triage);
                 if (!t) return err({ type: 'Collaboration.TriageNotFound', triage });
                 if (t.state !== 'Decided') return err({ type: 'Collaboration.TriageNotProposable', triage });
-                return propose(stores, t, content, clock.now());
+                return propose(stores, t, content, timestampOf(clock.now()));
             });
         },
 
@@ -707,7 +707,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 }
                 const [first, ...rest] = open.map(({ proposal, instruction }) => ({ proposal: proposal.id, request: proposal.request, instruction }));
                 if (!first) return err({ type: 'NoRequests' });
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const run = await queueRequests(stores, ids, {
                     session: active.value,
                     requests: [...new Set(open.map((o) => o.proposal.request))],
@@ -743,7 +743,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 if (p.state !== 'Open') return err(notAllowed('reject', p.state));
                 const active = await storeVerifications(stores).makeActiveSession(p.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const rejected = proposalCommands.reject(p, { rejectedBy: actor.participant, rejectedByRole: actor.role, note, rejectedAt: at });
                 if (!rejected.ok) return rejected;
                 stores.proposals.save(rejected.value.Rejected.aggregate);
@@ -759,7 +759,7 @@ export function createConversation(deps: CollaborationDeps, needs: ConversationN
                 if (p.state !== 'Open') return err(notAllowed('withdraw', p.state));
                 const active = await storeVerifications(stores).makeActiveSession(p.session);
                 if (!active.ok) return active;
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const withdrawn = proposalCommands.withdraw(p, { withdrawnBy: actor.participant, withdrawnAt: at });
                 if (!withdrawn.ok) return withdrawn;
                 stores.proposals.save(withdrawn.value.Withdrawn.aggregate);
@@ -861,7 +861,7 @@ export async function sendIn(
         if (!p.ok) return p;
         mentioned.push(p.value);
     }
-    const at = deps.clock.now();
+    const at = timestampOf(deps.clock.now());
     const sent = requestCommands.send({
         id: knownRequestId(deps.ids.newId()),
         session: active.value,
@@ -881,7 +881,7 @@ export async function sendIn(
 }
 
 /** Records the runner's correction of the triages of a run's messages it answered instead of editing (decision 18). */
-export function overrideAnsweredTriages(stores: Stores, run: Collaboration.CompletedAgentRun, at: Date): void {
+export function overrideAnsweredTriages(stores: Stores, run: Collaboration.CompletedAgentRun, at: Timestamp): void {
     if (!run.reply) return;
     for (const r of run.reply.requests) {
         if (r.status !== 'Answered') continue;

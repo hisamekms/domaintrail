@@ -229,7 +229,7 @@ export interface Hints {
     readonly pattern?: string;
 }
 
-export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID';
+export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth';
 
 /** Smallest and largest number allowed by the hints, in steps of `step` (1 for Int, 0.01 for Decimal). */
 function range(h: Hints, step: number): [number, number] {
@@ -241,6 +241,40 @@ function range(h: Hints, step: number): [number, number] {
 }
 
 const decimal = (hundredths: number): string => String(hundredths / 100);
+
+/** The canonical text of the date and time types (ADR 0038), from a UTC instant. */
+const iso = (d: Date): string => d.toISOString();
+const two = (n: number): string => String(n).padStart(2, '0');
+/** Days of 2000–2099, the last days of months and February 29 among them: the dates the generated tests draw. */
+const day = fc.date({ min: new Date('2000-01-01T00:00:00Z'), max: new Date('2099-12-31T00:00:00Z'), noInvalidDate: true });
+const temporal = {
+    Timestamp: () => day.map(iso),
+    Date: () =>
+        fc.oneof(
+            day.map((d) => iso(d).slice(0, 10)),
+            fc.constantFrom('2024-02-29', '2025-12-31', '2026-01-01', '2026-04-30'),
+        ),
+    Time: () =>
+        fc.oneof(
+            fc
+                .tuple(fc.integer({ min: 0, max: 23 }), fc.integer({ min: 0, max: 59 }), fc.integer({ min: 0, max: 59 }))
+                .map(([h, m, x]) => `${two(h)}:${two(m)}:${two(x)}`),
+            fc.constantFrom('00:00:00', '23:59:59', '12:00:00'),
+        ),
+    YearMonth: () => fc.tuple(fc.integer({ min: 2000, max: 2099 }), fc.integer({ min: 1, max: 12 })).map(([y, m]) => `${y}-${two(m)}`),
+} as const;
+
+/** The forms of the date and time types: canonical text that is a value (no February 30, no 24:00). */
+const TEMPORAL_FORMS: Readonly<Record<'Date' | 'Time' | 'YearMonth' | 'Timestamp', RegExp>> = {
+    Date: /^\d{4}-\d{2}-\d{2}$/,
+    Time: /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,
+    YearMonth: /^\d{4}-(0[1-9]|1[0-2])$/,
+    Timestamp: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/,
+};
+const realDay = (text: string): boolean => {
+    const d = new Date(`${text.slice(0, 10)}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === text.slice(0, 10);
+};
 
 /** Values of a base type, within the hints where they apply. */
 export function base(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
@@ -256,7 +290,10 @@ export function base(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
         case 'Bool':
             return fc.boolean();
         case 'Timestamp':
-            return fc.date({ min: new Date('2000-01-01T00:00:00Z'), max: new Date('2100-01-01T00:00:00Z'), noInvalidDate: true });
+        case 'Date':
+        case 'Time':
+        case 'YearMonth':
+            return temporal[b]();
         case 'UUID':
         case 'String': {
             if (h.pattern !== undefined) return fc.stringMatching(new RegExp(h.pattern));
@@ -277,6 +314,9 @@ export function scalars(seed: number): Readonly<Record<Base, fc.Arbitrary<unknow
         Bool: of('Bool'),
         Timestamp: of('Timestamp'),
         UUID: of('UUID'),
+        Date: of('Date'),
+        Time: of('Time'),
+        YearMonth: of('YearMonth'),
     });
 }
 
@@ -621,7 +661,7 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
 // ---------------------------------------------------------------------------------------------------------------------
 // Policies (ADR 0022)
 
-/** Whether `v` is a value of a base type: Decimals are strings of digits, Timestamps valid Dates. */
+/** Whether `v` is a value of a base type: Decimals are strings of digits, dates and times their canonical text. */
 export function isBase(v: unknown, b: Base): boolean {
     switch (b) {
         case 'Int':
@@ -631,7 +671,10 @@ export function isBase(v: unknown, b: Base): boolean {
         case 'Bool':
             return typeof v === 'boolean';
         case 'Timestamp':
-            return v instanceof Date && !Number.isNaN(v.getTime());
+        case 'Date':
+        case 'YearMonth':
+        case 'Time':
+            return typeof v === 'string' && TEMPORAL_FORMS[b].test(v) && (b === 'Time' || realDay(b === 'YearMonth' ? `${v}-01` : v));
         case 'String':
         case 'UUID':
             return typeof v === 'string';

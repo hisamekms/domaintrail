@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { VOTE } from '@domaintrail/collaboration';
+import { timestampOf, VOTE } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { canVote, markIndex, names, quickReactions, reaction, reactionFits, reactionsOn, tallyOf } from './marks';
 import { applyEvent } from './state';
@@ -32,7 +32,7 @@ describe("the page's derivations", () => {
         participant,
         target,
         sign,
-        placedAt: '2026-11-01T09:00:00.000Z',
+        placedAt: timestampOf(new Date('2026-11-01T09:00:00.000Z')),
     });
     const message = { kind: 'Message', request: 'm1' } as const;
     const marks = [
@@ -95,7 +95,7 @@ describe("the page's derivations", () => {
                 participant: 'ann',
                 target: message,
                 sign: reaction('❤️'),
-                placedAt: '2026-11-01T09:00:00.000Z',
+                placedAt: timestampOf(new Date('2026-11-01T09:00:00.000Z')),
             },
         } as const;
         const once = applyEvent(base, placed).state;
@@ -110,7 +110,7 @@ describe("the page's derivations", () => {
                 participant: 'ann',
                 target: message,
                 sign: reaction('❤️'),
-                removedAt: '2026-11-01T09:01:00.000Z',
+                removedAt: timestampOf(new Date('2026-11-01T09:01:00.000Z')),
             },
         } as const;
         expect(applyEvent(once, removed)).toEqual({ state: { ...once, seq: 3, marks: [] }, refetch: false });
@@ -130,7 +130,7 @@ describe("the page's derivations", () => {
                 session: 's',
                 assumption: { run: 'r1', assumption: 0 },
                 approvedBy: 'dev:f',
-                approvedAt: '2026-11-01T09:00:00.000Z',
+                approvedAt: timestampOf(new Date('2026-11-01T09:00:00.000Z')),
             },
         } as const;
         const once = applyEvent({ ...state, seq: 1 }, approved).state;
@@ -140,7 +140,7 @@ describe("the page's derivations", () => {
                 session: 's',
                 assumption: { run: 'r1', assumption: 0 },
                 approvedBy: 'dev:f',
-                approvedAt: '2026-11-01T09:00:00.000Z',
+                approvedAt: timestampOf(new Date('2026-11-01T09:00:00.000Z')),
                 state: 'Approved',
             },
         ]);

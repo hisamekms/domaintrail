@@ -2,7 +2,7 @@
 // (`Sales.PersistentEvent`, `Billing.PersistentEvent`); every event, stored or not, is published to the subscribers.
 // Event ID, recording time and correlation are technical metadata, kept in an envelope `{ event, meta }` beside the
 // generated event (`dt guide metadata`).
-import type { Billing, Sales } from '../../generated/domain/index.js';
+import type { Billing, Sales, Timestamp } from '../../generated/domain/index.js';
 import type { Providers } from './providers.js';
 
 export type DomainEvent = Sales.DomainEvent | Billing.DomainEvent;
@@ -17,7 +17,7 @@ export interface Cause {
 export interface EventMeta extends Cause {
     readonly eventId: string;
     /** When the system recorded the event; the business time, if any, is a field of the event (`confirmedAt`). */
-    readonly recordedAt: Date;
+    readonly recordedAt: Timestamp;
 }
 
 export type Stored<E> = { readonly event: E; readonly meta: EventMeta };

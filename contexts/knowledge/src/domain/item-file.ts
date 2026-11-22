@@ -39,7 +39,7 @@
 // those written before titles were.
 //
 // Pure: reading and printing text. The store (`infrastructure/files.ts`) does the I/O; `dt check` reads the same.
-import { Knowledge, type Result } from '../generated/index.js';
+import { Knowledge, parseTimestamp, type Result, type Timestamp } from '../generated/index.js';
 
 /** The directory of the items in a workspace (`files` store), relative to its root. */
 export const KNOWLEDGE_DIR = 'knowledge';
@@ -326,12 +326,11 @@ class Fields {
         return found;
     }
 
-    time(key: string): Date {
+    time(key: string): Timestamp {
         const value = this.required(key);
-        const date = new Date(value);
-        if (!/^\d{4}-\d{2}-\d{2}T/.test(value) || Number.isNaN(date.getTime()))
-            throw new Unreadable(this.line(key), `'${this.name(key)}' is a time like 2026-11-05T09:00:00.000Z: not ${value}.`);
-        return date;
+        const t = parseTimestamp(value);
+        if (t === undefined) throw new Unreadable(this.line(key), `'${this.name(key)}' is a time like 2026-11-05T09:00:00.000Z: not ${value}.`);
+        return t;
     }
 
     unknown(known: readonly string[]): void {
@@ -504,8 +503,6 @@ function scalar(value: string): string {
     return /^[A-Za-z_][A-Za-z0-9_.@+\-/]*$/.test(value) && !RESERVED.test(value) ? value : JSON.stringify(value);
 }
 
-const time = (d: Date): string => d.toISOString();
-
 /** The file of an item: its front matter, a blank line, its text and one line break. */
 export function printItemFile(item: Knowledge.KnowledgeItem): string {
     const out = ['---'];
@@ -526,23 +523,23 @@ export function printItemFile(item: Knowledge.KnowledgeItem): string {
     list('about', about);
     list('conflictsWith', item.conflictsWith);
     if (item.createdIn !== undefined) out.push(`createdIn: ${scalar(item.createdIn)}`);
-    out.push(`createdAt: ${time(item.createdAt)}`, `updatedAt: ${time(item.updatedAt)}`);
+    out.push(`createdAt: ${item.createdAt}`, `updatedAt: ${item.updatedAt}`);
     if (item.bookmarked) out.push('bookmarked: true');
     const r = item.retirement;
     if (r !== undefined) {
         out.push('retired:');
         if (r.reason !== undefined) out.push(`  reason: ${r.reason}`);
         if (r.replacedBy !== undefined) out.push(`  replacedBy: ${r.replacedBy}`);
-        out.push(`  by: ${scalar(r.by)}`, `  at: ${time(r.at)}`);
+        out.push(`  by: ${scalar(r.by)}`, `  at: ${r.at}`);
         if (r.proposal !== undefined) out.push(`  proposal: ${r.proposal}`);
     }
     if (item.sources.length === 0) out.push('sources: []');
     else {
         out.push('sources:');
         for (const s of item.sources)
-            out.push(`  - session: ${scalar(s.session)}`, `    message: ${scalar(s.message)}`, `    at: ${time(s.at)}`, `    quote: ${scalar(s.quote)}`);
+            out.push(`  - session: ${scalar(s.session)}`, `    message: ${scalar(s.message)}`, `    at: ${s.at}`, `    quote: ${scalar(s.quote)}`);
     }
-    if (item.state === 'Deleted') out.push('state: deleted', `deletedBy: ${scalar(item.deletedBy)}`, `deletedAt: ${time(item.deletedAt)}`);
+    if (item.state === 'Deleted') out.push('state: deleted', `deletedBy: ${scalar(item.deletedBy)}`, `deletedAt: ${item.deletedAt}`);
     out.push('---', '', text);
     return `${out.join('\n')}\n`;
 }

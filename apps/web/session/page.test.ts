@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { timestampOf } from '@domaintrail/collaboration';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { EventMessage, Presence, SessionStateBody, ViewLocation } from '@domaintrail/collaboration/protocol';
@@ -227,7 +228,7 @@ describe('drafts', () => {
 });
 
 describe('the session state from the socket', () => {
-    const at = '2026-10-31T10:00:00.000Z';
+    const at = timestampOf(new Date('2026-10-31T10:00:00.000Z'));
     const revision = {
         id: 'r1',
         session: 's1',

@@ -36,7 +36,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { appendFile, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
-import { err, Knowledge, ok, type Result } from '../generated/index.js';
+import { err, Knowledge, ok, parseTimestamp, type Result, type Timestamp, timestampOf } from '../generated/index.js';
 import { applyExtraction as applyOperations, idempotencyKey, proposalsTouched, type DropReason } from '../domain/extraction.js';
 import { knowledgeItemCommands, withLiveConflicts } from '../domain/items.js';
 import { auditOf, auditOfProposal, imagesIn, redactionOf, sourceMessages, withoutReason } from '../domain/records.js';
@@ -92,7 +92,7 @@ export interface FilesKnowledgeStoreOptions {
     /** How long a deleted item can be restored (`DEFAULT_UNDO_WINDOW_MS`). */
     readonly undoWindowMs?: number;
     /** The clock (tests). */
-    readonly now?: () => Date;
+    readonly now?: () => Timestamp;
 }
 
 export interface FilesKnowledgeStore extends KnowledgeStore {
@@ -173,7 +173,7 @@ function auditJson(entry: Knowledge.AuditEntry): string {
         operation: entry.operation,
         actor,
         ...(entry.reason !== undefined && { reason: entry.reason }),
-        at: entry.at.toISOString(),
+        at: entry.at,
     });
 }
 
@@ -231,10 +231,10 @@ function auditOfJson(line: string): Knowledge.AuditEntry | undefined {
     const item = Knowledge.makeKnowledgeItemId(text(r.item));
     const version = Knowledge.makeItemVersion(number(r.version));
     const operation = AUDIT_OPERATIONS.find((o) => o === r.operation);
-    const at = new Date(text(r.at));
+    const at = parseTimestamp(text(r.at));
     const actor = actorOfJson(r.actor);
     const reason = r.reason === undefined ? undefined : Knowledge.makeReason(text(r.reason));
-    if (!item.ok || !version.ok || !operation || !actor || Number.isNaN(at.getTime()) || (reason && !reason.ok)) return undefined;
+    if (!item.ok || !version.ok || !operation || !actor || at === undefined || (reason && !reason.ok)) return undefined;
     return { item: item.value, version: version.value, operation, actor, ...(reason?.ok && { reason: reason.value }), at };
 }
 
@@ -280,16 +280,18 @@ function isAppliedRecord(r: unknown): r is AppliedRecord {
 
 /** Newest first: by the time an item was made, then by ID. */
 const newestFirst = (a: Knowledge.KnowledgeItemCommon, b: Knowledge.KnowledgeItemCommon): number =>
-    b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+    (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 
-const itemCursor = (item: Knowledge.KnowledgeItemCommon): string => `${item.createdAt.getTime()}:${item.id}`;
+const millis = (t: Timestamp): number => new Date(t).getTime();
+
+const itemCursor = (item: Knowledge.KnowledgeItemCommon): string => `${millis(item.createdAt)}:${item.id}`;
 
 function afterItemCursor(cursor: string): (item: Knowledge.KnowledgeItemCommon) => boolean {
     const m = /^(\d+):(kn_[0-9a-z]+)$/.exec(cursor);
     if (!m) throw new Error(`Not a cursor of the knowledge store: ${cursor}`);
     const time = Number(m[1]);
     const id = m[2];
-    return (item) => item.createdAt.getTime() < time || (item.createdAt.getTime() === time && item.id < id);
+    return (item) => millis(item.createdAt) < time || (millis(item.createdAt) === time && item.id < id);
 }
 
 /** Whether an item is listed under a search's `retired`. */
@@ -298,7 +300,7 @@ const listedUnder =
     (item: Knowledge.KnowledgeItemCommon): boolean =>
         retired === 'include' ? true : retired === 'only' ? isRetired(item) : !isRetired(item);
 
-/** A proposal's file: its JSON (`Date`s as ISO strings), one line per field. */
+/** A proposal's file: its JSON, one line per field. */
 const proposalFile = (p: Knowledge.RetirementProposal): string => `${JSON.stringify(p, null, 2)}\n`;
 const proposalFileName = (id: Knowledge.RetirementProposalId): string => `${id}.json`;
 
@@ -318,7 +320,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
     const imagesDir = path.join(dir, IMAGES_DIR);
     const proposalsDir = path.join(dir, PROPOSALS_DIR);
     const undoWindow = options.undoWindowMs ?? DEFAULT_UNDO_WINDOW_MS;
-    const now = options.now ?? (() => new Date());
+    const now = options.now ?? (() => timestampOf(new Date()));
 
     const checkProject = (project: Knowledge.ProjectName): void => {
         if (project !== options.project) throw new Error(`This knowledge store is project '${options.project}', not '${project}'.`);
@@ -460,7 +462,7 @@ export function createFilesKnowledgeStore(options: FilesKnowledgeStoreOptions): 
     async function sweepNow(): Promise<void> {
         const { items } = await itemsIn(deletedDir);
         const due = [...items.values()].filter(
-            (i): i is Knowledge.DeletedKnowledgeItem => i.state === 'Deleted' && i.deletedAt.getTime() + undoWindow <= now().getTime(),
+            (i): i is Knowledge.DeletedKnowledgeItem => i.state === 'Deleted' && millis(i.deletedAt) + undoWindow <= millis(now()),
         );
         if (due.length === 0) return;
         const dueIds = new Set<string>(due.map((i) => i.id));

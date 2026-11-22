@@ -5,7 +5,7 @@
 // after the event, and a batch or a queue would satisfy it as well. Billing's policies are `required` in
 // domaintrail.jsonc, so `Billing.BillingPolicyHandlers` must list every one, and the contract tests run them.
 // The new request carries the event's correlation ID and names the event as its cause.
-import type { Billing, Sales } from '../../generated/domain/index.js';
+import type { Billing, Sales, Timestamp } from '../../generated/domain/index.js';
 import { orderTotal } from '../domain/order-total.js';
 import type { Cause, InMemoryEventStore, Stored } from './event-store.js';
 import type { InvoiceRepository } from './repositories.js';
@@ -38,7 +38,7 @@ export interface RefundRequest {
     readonly order: Sales.OrderId;
     /** The order's invoice, if one was issued, with its state at the time of the request. */
     readonly invoice?: Pick<Billing.Invoice, 'id' | 'state'>;
-    readonly requestedAt: Date;
+    readonly requestedAt: Timestamp;
 }
 
 /** Subscribes the policies to the events they react to; returns the refund requests collected. */

@@ -267,7 +267,9 @@ export function cloudflareKnowledgeStore(settings: CloudflareKnowledgeStoreSetti
                 } while (cursor !== undefined);
             }
             // newest first, as the Worker lists them
-            return [...found.values()].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+            return [...found.values()].sort(
+                (a, b) => (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+            );
         },
 
         search,

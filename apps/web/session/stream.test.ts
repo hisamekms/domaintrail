@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { timestampOf, type Timestamp } from '@domaintrail/collaboration';
 import type { Me, Presence, SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { COMPOSER_DRAFT, composerScope, createMemoryDrafts, newDraft, scopeKey } from './drafts';
 import { NO_PEERS } from './presence';
@@ -31,7 +32,8 @@ type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 
-const at = (minute: number, second = 0): string => `2026-10-31T09:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}.000Z`;
+const at = (minute: number, second = 0): Timestamp =>
+    timestampOf(new Date(`2026-10-31T09:${String(minute).padStart(2, '0')}:${String(second).padStart(2, '0')}.000Z`));
 const v = { dtErrors: 0, dtesErrors: 0, dtesWarnings: 0, linkWarnings: 0, stale: false };
 const rev = (id: string, minute: number, origin: Record<string, string>, extra: object = {}): RevisionJson =>
     ({ id, session: 's', origin, contentHash: id, files: [], validation: v, takenAt: at(minute), state: 'Recorded', ...extra }) as unknown as RevisionJson;

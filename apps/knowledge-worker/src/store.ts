@@ -43,6 +43,9 @@ import {
     type ItemWithHistory,
     type Knowledge,
     type KnowledgeImage,
+    parseTimestamp,
+    type Timestamp,
+    timestampOf,
     type KnowledgeQuery,
     type KnowledgeStore,
     type KnowledgeItemVersionConflict,
@@ -101,6 +104,13 @@ interface ProposalRow {
     readonly state: string;
     readonly body: string;
 }
+
+/** A time of a row; one that is not a timestamp is a broken store, never input. */
+const storedTime = (text: string, at: string): Timestamp => {
+    const t = parseTimestamp(text);
+    if (t === undefined) throw new Error(`${at}: not a timestamp: ${text}`);
+    return t;
+};
 
 /** A row as the model's proposal; a row that is not one is a broken store, never input. */
 const proposalOf = (row: ProposalRow): Knowledge.RetirementProposal => retirementProposal(JSON.parse(row.body), `proposals[${row.id}]`);
@@ -213,7 +223,7 @@ export interface D1StoreOptions {
  * (`redactionsPage`, `attachImage`) serve routes the port has no call for.
  */
 export class D1KnowledgeStore implements KnowledgeStore {
-    private readonly now: () => Date;
+    private readonly now: () => Timestamp;
     private readonly caller: string;
 
     constructor(
@@ -221,7 +231,8 @@ export class D1KnowledgeStore implements KnowledgeStore {
         private readonly bucket: R2Bucket,
         options: D1StoreOptions,
     ) {
-        this.now = options.now ?? ((): Date => new Date());
+        const now = options.now ?? ((): Date => new Date());
+        this.now = (): Timestamp => timestampOf(now());
         this.caller = options.caller;
     }
 
@@ -334,7 +345,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
         const history = results.map((r, i): PastVersion => ({
             version: one(itemVersion)(r.version),
             content: itemContent(JSON.parse(r.content), `item_versions[${i}].content`),
-            replacedAt: new Date(r.replaced_at),
+            replacedAt: storedTime(r.replaced_at, `item_versions[${i}].replaced_at`),
         }));
         return { item, history };
     }
@@ -414,7 +425,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
         past: readonly { item: Knowledge.KnowledgeItemId; past: PastVersion }[],
         audit: readonly Knowledge.AuditEntry[],
     ): D1PreparedStatement[] {
-        const at = this.now().toISOString();
+        const at = this.now();
         const rows = JSON.stringify(
             items.map((i) => ({
                 id: i.id,
@@ -574,7 +585,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
                     ),
                     this.db
                         .prepare('INSERT INTO extractions (project, key, body_hash, outcome, applied_at) VALUES (?1, ?2, ?3, ?4, ?5)')
-                        .bind(project, key, hash, JSON.stringify(keep), this.now().toISOString()),
+                        .bind(project, key, hash, JSON.stringify(keep), this.now()),
                 ]);
             } catch (e) {
                 // the items changed meanwhile, or the same extraction was applied by a retry running alongside: decide again
@@ -1014,7 +1025,7 @@ export class D1KnowledgeStore implements KnowledgeStore {
     async putImage(project: Knowledge.ProjectName, image: KnowledgeImage): Promise<Knowledge.ImageId> {
         const id = one(imageIdOf)(randomId('img_'));
         await this.bucket.put(imageKey(project, id), image.bytes, { httpMetadata: { contentType: image.mediaType } });
-        const at = this.now().toISOString();
+        const at = this.now();
         await this.db.batch([
             this.db.prepare("INSERT INTO projects (name, visibility, created_at) VALUES (?1, 'open', ?2) ON CONFLICT DO NOTHING").bind(project, at),
             this.db

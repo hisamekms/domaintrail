@@ -66,7 +66,7 @@ describe('redactMessages', () => {
         const state = value(await use.sessionState({ session }));
         const kept = state.requests.find((r) => r.id === said.id);
         expect(kept).toMatchObject({ id: said.id, author: facilitatorId, body: REDACTED_BODY, sentAt: said.sentAt });
-        expect(kept?.redactedAt).toBeInstanceOf(Date);
+        expect(kept?.redactedAt).toEqual(expect.any(String));
         // the reply itself is not redacted
         expect(state.requests.find((r) => r.id === reply.id)?.body).toBe(text('それは控えておきます'));
         const frozen = state.runs[0]?.input.requests;

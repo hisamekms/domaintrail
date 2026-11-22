@@ -32,7 +32,7 @@ import {
     X,
     type LucideIcon,
 } from 'lucide-react';
-import { isInterviewCommandId } from '@domaintrail/collaboration';
+import { isInterviewCommandId, timestampOf } from '@domaintrail/collaboration';
 import type { ViewLocation } from '@domaintrail/collaboration/protocol';
 import { useDismiss } from '../shared/layout';
 import { motionMs, useGrow, useSwap } from '../shared/motion';
@@ -2116,7 +2116,7 @@ function Composer(props: {
                 author: session.me.participant.id,
                 targets: body.targets,
                 body: body.body,
-                sentAt: new Date().toISOString(),
+                sentAt: timestampOf(new Date()),
                 mentions: body.mentions ?? [],
                 ...(body.replyTo && { replyTo: body.replyTo }),
                 state: 'Sent',

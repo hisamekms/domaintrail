@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Collaboration as C } from '../generated/index.js';
+import { timestamp } from '../test-helpers.js';
 import type { Stores } from '../application/ports.js';
 import { agentRunCommands, sessionCommands } from '../domain/commands.js';
 import { createFileBlobs, openSessionBlobs } from './blobs.js';
@@ -52,8 +53,8 @@ const value = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T 
     if (!r.ok) throw new Error(`unexpected error: ${JSON.stringify(r.error)}`);
     return r.value;
 };
-const at = new Date('2026-10-31T09:00:00Z');
-const plus = (ms: number): Date => new Date(at.getTime() + ms);
+const at = timestamp('2026-10-31T09:00:00Z');
+const plus = (ms: number): Date => new Date(new Date(at).getTime() + ms);
 const facilitator = value(C.makeParticipantId('facilitator'));
 const sessionId = knownSessionId('00000000-0000-4000-8000-000000000001');
 const otherSession = knownSessionId('00000000-0000-4000-8000-000000000002');
@@ -131,6 +132,8 @@ describe('schema and transactions', () => {
 
     test('aggregates and events keep their dates through JSON', () => {
         expect(decodeJson(encodeJson({ a: at, b: [at], c: { $date: 1 }, d: 'x' }))).toEqual({ a: at, b: [at], c: { $date: 1 }, d: 'x' });
+        // written as when Timestamps were Dates: an older dt reads them
+        expect(encodeJson({ a: at })).toBe(`{"a":{"$date":"${at}"}}`);
     });
 
     test('the outbox is written in the transaction of the aggregates: a failure rolls both back', async () => {
@@ -195,7 +198,7 @@ describe('the run queue', () => {
 
     test('a claim takes the first queued run, once: a second claim waits while the first lease lives', async () => {
         const { db, uow, runs } = await queue();
-        expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), at))).toBe(runs[0].id);
+        expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), plus(0)))).toBe(runs[0].id);
         expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t2'), plus(10)))).toBeUndefined();
         expect((await uow.transaction((s) => s.runs.active(sessionId, plus(10))))?.lease).toEqual(lease('t1'));
         // the requests a run bundles are rows of their own
@@ -209,7 +212,7 @@ describe('the run queue', () => {
 
     test('heartbeats extend a live lease only; a released claim goes back to the queue', async () => {
         const { uow, runs } = await queue();
-        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), at));
+        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), plus(0)));
         expect(await uow.transaction((s) => s.runs.extend(runs[0].id, 't1', plus(500), plus(5000)))).toBe(true);
         expect(await uow.transaction((s) => s.runs.extend(runs[0].id, 'other', plus(500), plus(5000)))).toBe(false);
         expect(await uow.transaction((s) => s.runs.extend(runs[0].id, 't1', plus(6000), plus(9000)))).toBe(false);
@@ -220,22 +223,22 @@ describe('the run queue', () => {
 
     test('an expired claim of a queued run is dropped by the next claim', async () => {
         const { uow, runs } = await queue();
-        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1', 100), at));
+        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1', 100), plus(0)));
         expect((await uow.transaction((s) => s.runs.expired(plus(100)))).map((r) => r.run.id)).toEqual([runs[0].id]);
         expect(await uow.transaction((s) => s.runs.claimNext(sessionId, { owner: 'b', token: 't2', expiresAt: plus(1000) }, plus(200)))).toBe(runs[0].id);
     });
 
     test('serial: a running run blocks claims, and the store refuses a second running run or lease of a session', async () => {
         const { uow, runs } = await queue();
-        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), at));
+        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), plus(0)));
         const running = value(agentRunCommands.start(runs[0], { baseRevision: revision, startedAt: at })).Running.aggregate;
         await uow.transaction((s) => {
             s.runs.save(running);
             s.runs.endLease(running.id, 'done');
         });
         // no lease left, but a running run: no claim
-        expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t2'), at))).toBeUndefined();
-        expect((await uow.transaction((s) => s.runs.active(sessionId, at)))?.run.id).toBe(running.id);
+        expect(await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t2'), plus(0)))).toBeUndefined();
+        expect((await uow.transaction((s) => s.runs.active(sessionId, plus(0))))?.run.id).toBe(running.id);
         const second = value(agentRunCommands.start(runs[1], { baseRevision: revision, startedAt: at })).Running.aggregate;
         expect(await thrown(uow.transaction((s) => s.runs.save(second)))).toMatchObject(errorLike(/UNIQUE/));
         expect((await uow.transaction((s) => s.runs.load(runs[1].id)))?.run.state).toBe('Queued');
@@ -243,7 +246,7 @@ describe('the run queue', () => {
 
     test('ending a lease records the token it ended with', async () => {
         const { uow, runs } = await queue();
-        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), at));
+        await uow.transaction((s) => s.runs.claimNext(sessionId, lease('t1'), plus(0)));
         await uow.transaction((s) => s.runs.endLease(runs[0].id, 't1'));
         expect(await uow.transaction((s) => s.runs.load(runs[0].id))).toEqual({ run: runs[0], lease: undefined, completedWith: 't1' });
         expect(await thrown(uow.transaction((s) => s.runs.save(queued(9))))).toMatchObject(errorLike('never queued'));
@@ -378,12 +381,7 @@ describe('rows written before requests had several targets', () => {
         for (const r of fixture.runs)
             db.prepare('INSERT INTO agent_runs (id, session_id, seq, state, data) VALUES (?, ?, 1, ?, ?)').run(r.id, fixture.session.id, r.state, raw(r.data));
         for (const e of fixture.outbox)
-            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
-                fixture.session.id,
-                e.type,
-                raw(e.payload),
-                at.toISOString(),
-            );
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(fixture.session.id, e.type, raw(e.payload), at);
         const stored = JSON.stringify(db.prepare('SELECT data FROM requests').all());
         const uow = createUnitOfWork(db);
         const session = knownSessionId(fixture.session.id);
@@ -405,7 +403,7 @@ describe('rows written before requests had several targets', () => {
             ['Dismissed', [element]],
         ]);
         expect(requests.every((r) => !('target' in r) && C.checkRequest(r).length === 0)).toBe(true);
-        expect(requests[1].sentAt).toEqual(new Date('2026-10-31T11:48:36.979Z'));
+        expect(requests[1].sentAt).toEqual(timestamp('2026-10-31T11:48:36.979Z'));
         expect(plain(runs[0].input.requests.map((r) => r.targets))).toEqual([[], [element]]);
         expect(plain(runs[0].input.note)).toBe('税込で固定');
         expect(plain(events.map((e) => (e.event.type === 'Collaboration.RequestSent' ? e.event.targets : undefined)))).toEqual([[], [element]]);
@@ -502,12 +500,7 @@ describe("rows written before the agent's reply was structured", () => {
                 .run(r.id, fixture.session.id, i + 1, r.state, raw(r.data)),
         );
         for (const e of fixture.outbox)
-            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
-                fixture.session.id,
-                e.type,
-                raw(e.payload),
-                at.toISOString(),
-            );
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(fixture.session.id, e.type, raw(e.payload), at);
         const uow = createUnitOfWork(db);
         const session = knownSessionId(fixture.session.id);
         const { runs, events } = await uow.transaction((st) => ({ runs: st.runs.listBySession(session), events: st.outbox.readAfter(0, 10, session) }));
@@ -564,9 +557,9 @@ describe('change proposals written when a proposal was three texts', () => {
             request: ids.request,
             requestedBy: 'dev:bob',
             content: former,
-            proposedAt: at.toISOString(),
+            proposedAt: at,
             approvedBy: 'local:facilitator',
-            approvedAt: at.toISOString(),
+            approvedAt: at,
             edited,
             run: ids.run,
         };
@@ -583,12 +576,7 @@ describe('change proposals written when a proposal was three texts', () => {
             { type: 'Collaboration.ChangeProposed', proposalId: ids.proposal, content: former },
             { type: 'Collaboration.ProposalApproved', proposalId: ids.proposal, edited, run: ids.run },
         ])
-            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
-                ids.session,
-                payload.type,
-                raw(payload),
-                at.toISOString(),
-            );
+            db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(ids.session, payload.type, raw(payload), at);
         const stored = JSON.stringify(db.prepare('SELECT data FROM proposals').all());
         const uow = createUnitOfWork(db);
         const session = knownSessionId(ids.session);
@@ -709,10 +697,10 @@ describe('a `/` command written when `/guide` was `/es:next` or `/hint`', () => 
             startedBy: 'p1',
             opening: 'r1',
             language: 'Ja',
-            startedAt: { $date: at.toISOString() },
+            startedAt: { $date: at },
             answer: 'r2',
             next: { status: 'Big Picture まで', steps: [{ text: '例外を洗い出す', reason: '発行に例外がない', command: 'EsExceptions' }] },
-            answeredAt: { $date: at.toISOString() },
+            answeredAt: { $date: at },
         };
         db.prepare('INSERT INTO slash_commands (id, session_id, seq, opening_id, run_id, state, data) VALUES (?, ?, 1, ?, NULL, ?, ?)').run(
             command.id,
@@ -722,12 +710,7 @@ describe('a `/` command written when `/guide` was `/es:next` or `/hint`', () => 
             JSON.stringify(command),
         );
         const started = { type: 'Collaboration.SlashCommandStarted', commandId: 'c-legacy', session, kind, startedBy: 'p1', opening: 'r1', language: 'Ja' };
-        db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(
-            session,
-            started.type,
-            JSON.stringify(started),
-            at.toISOString(),
-        );
+        db.prepare('INSERT INTO outbox (session_id, type, payload, recorded_at) VALUES (?, ?, ?, ?)').run(session, started.type, JSON.stringify(started), at);
         const uow = createUnitOfWork(db);
         const { commands, events } = await uow.transaction((st) => ({
             commands: st.slashCommands.listBySession(session),

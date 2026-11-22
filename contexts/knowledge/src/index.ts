@@ -3,7 +3,7 @@
 // settings in domaintrail.jsonc, and the session's extraction (its use case, its timing and guards, its checkpoint).
 
 // ---- published language: the generated contracts (model/*.dt) --------------------------------------------------
-export { Knowledge, err, ok, type Result } from './generated/index.js';
+export { Knowledge, err, ok, parseTimestamp, type Result, type Timestamp, timestampOf } from './generated/index.js';
 
 // ---- published language: the commands of an item, an extraction's operations, what an item leaves behind --------
 export { FIRST_VERSION, knowledgeItemCommands, newSourcesOf, nextVersion, raisedOrigin, rewritesInPlace, withLiveConflicts } from './domain/items.js';

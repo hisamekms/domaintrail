@@ -337,7 +337,7 @@ describe('shared bookmarks', () => {
         const first = await store.setBookmark(project, id(1), true, user);
         if (!first.ok) throw new Error('expected bookmark to be set');
         expect(first.value).toMatchObject({ bookmarked: true, version: 1 });
-        expect(first.value.updatedAt.toISOString()).toBe(existing.updatedAt.toISOString());
+        expect(first.value.updatedAt).toBe(existing.updatedAt);
         expect((await store.search(project, {})).items.map((i) => i.id)).toEqual(before.items.map((i) => i.id));
         await store.setBookmark(project, id(1), true, user);
         expect((await store.audit(project, { item: id(1) })).items.map((a) => a.operation)).toEqual(['bookmark', 'add']);

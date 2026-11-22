@@ -1,5 +1,5 @@
 // Values of Knowledge for the unit tests: made through the generated constructors, so that a typo fails loudly.
-import { Knowledge } from './generated/index.js';
+import { Knowledge, parseTimestamp, type Timestamp } from './generated/index.js';
 import type { AppliedExtraction, KnowledgeQuery, KnowledgeStore } from './application/ports.js';
 import { applyExtraction, idempotencyKey } from './domain/extraction.js';
 
@@ -15,8 +15,15 @@ export const userName = (v: string): Knowledge.UserName => known(Knowledge.makeU
 export const reason = (v: string): Knowledge.Reason => known(Knowledge.makeReason(v));
 export const stickyRef = (v: string): Knowledge.StickyRef => known(Knowledge.makeStickyRef(v));
 
-export const at = new Date('2026-11-05T09:00:00Z');
-export const later = new Date('2026-11-05T09:05:00Z');
+/** The instant of an ISO 8601 text. */
+export const timestamp = (text: string): Timestamp => {
+    const t = parseTimestamp(text);
+    if (t === undefined) throw new Error(`invalid test timestamp: ${text}`);
+    return t;
+};
+
+export const at = timestamp('2026-11-05T09:00:00Z');
+export const later = timestamp('2026-11-05T09:05:00Z');
 
 /** The extraction `number` of a session. */
 export const extraction = (session: string, number: number): Knowledge.ExtractionRef => ({

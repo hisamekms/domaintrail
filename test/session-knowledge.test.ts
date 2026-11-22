@@ -15,7 +15,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { type AnswerTurn, createHttpAgentApi, DEFAULT_AGENT_TOOLS, type ExtractTurn, startExtractor } from '@domaintrail/agent';
 import { resolveConfig, type SessionSettings, startSessionServer } from '@domaintrail/dt';
-import { type AppliedExtraction, applyExtraction, idempotencyKey, Knowledge, type KnowledgeStore } from '@domaintrail/knowledge';
+import { type AppliedExtraction, applyExtraction, idempotencyKey, Knowledge, type KnowledgeStore, timestampOf } from '@domaintrail/knowledge';
 
 const dirs: string[] = [];
 const cleanups: (() => Promise<unknown>)[] = [];
@@ -67,7 +67,7 @@ function memoryStore(): KnowledgeStore & { readonly extractions: Knowledge.Extra
             const before = results.get(idempotencyKey(extraction.by));
             if (before) return { ...before, replayed: true };
             extractions.push(extraction);
-            const outcome = applyExtraction(extraction, (id) => items.get(id), new Date());
+            const outcome = applyExtraction(extraction, (id) => items.get(id), timestampOf(new Date()));
             for (const item of outcome.items) items.set(item.id, item);
             const result = { items: live(), dropped: outcome.dropped, replayed: false };
             results.set(idempotencyKey(extraction.by), result);

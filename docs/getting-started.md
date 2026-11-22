@@ -505,11 +505,11 @@ them with the generated constructors, never with a cast:
 
 ```ts
 // src/request.ts
-import { Booking } from '../generated/domain/index.js';
+import { Booking, type Timestamp } from '../generated/domain/index.js';
 import { reservationCommands } from './reservation-commands.js';
 
 /** Makes the domain values from plain input, then runs the command. */
-export function requestReservation(input: { room: string; start: Date; hours: number; attendees: number }) {
+export function requestReservation(input: { room: string; start: Timestamp; hours: number; attendees: number }) {
     const attendees = Booking.makeHeadcount(input.attendees); // Result: the value, or InvalidHeadcount
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
@@ -562,7 +562,7 @@ With `"runner": "bun"` the same file runs with `bun test` (add `"types": ["bun"]
 forgot its requirement, the test would say so with the shrunk counterexample:
 
 ```text
-Got error: Reservation.confirm({"state":"Requested",…,"attendees":2}, 1, new Date("2000-01-01T00:00:00.000Z")) succeeded, but requirement 'roomFits' does not hold: expected the error Booking.RoomTooSmall.
+Got error: Reservation.confirm({"state":"Requested",…,"attendees":2}, 1, "2000-01-01T00:00:00.000Z") succeeded, but requirement 'roomFits' does not hold: expected the error Booking.RoomTooSmall.
 ```
 
 What happens around the commands — loading, saving, publishing events — is outside the generated tests and covered by

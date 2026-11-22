@@ -74,7 +74,7 @@ await step('add an item priced in USD', () => app.addItem(order.id, { sku: 'USD-
 await step(
     'confirm the order (Billing issues the invoice)',
     () => app.confirmOrder(order.id),
-    (o) => `${o.id} (${o.state} at ${o.confirmedAt.toISOString()})`,
+    (o) => `${o.id} (${o.state} at ${o.confirmedAt})`,
 );
 
 const invoice = await shop.invoices.find((i) => i.order === order.id);
@@ -82,7 +82,7 @@ if (!invoice) throw new Error('the policy should have issued an invoice');
 await step(
     'pay the invoice',
     () => app.payInvoice(invoice.aggregate.id),
-    (i) => `${i.id} (${i.state} at ${i.paidAt.toISOString()})`,
+    (i) => `${i.id} (${i.state} at ${i.paidAt})`,
 );
 await step(
     'pay it again',

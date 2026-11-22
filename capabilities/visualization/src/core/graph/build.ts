@@ -80,6 +80,9 @@ export const PRIMITIVE_LABELS: Record<string, string> = {
     Decimal: '小数',
     Bool: '真偽値',
     Timestamp: '日時',
+    Date: '日付',
+    Time: '時刻',
+    YearMonth: '年月',
     UUID: 'UUID',
 };
 

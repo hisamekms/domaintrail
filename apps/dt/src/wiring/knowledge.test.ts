@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { Knowledge, projectFromDirName } from '@domaintrail/knowledge';
+import { Knowledge, projectFromDirName, timestampOf } from '@domaintrail/knowledge';
 import { resolveConfig, type ResolvedConfig } from '../config/config.js';
 import { approveSettings, checkApproved, type SettingsApproval, type TrustStore } from '../cli/trust.js';
 import { analyzeStormings } from '@domaintrail/storming';
@@ -83,7 +83,7 @@ describe('openKnowledgeStore', () => {
                         {
                             session: made(Knowledge.makeSessionRef('s1')),
                             message: made(Knowledge.makeMessageRef('m1')),
-                            at: new Date('2026-11-05T09:00:00Z'),
+                            at: timestampOf(new Date('2026-11-05T09:00:00Z')),
                             quote: made(Knowledge.makeQuote('so it is')),
                         },
                     ],

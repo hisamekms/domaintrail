@@ -1,7 +1,7 @@
 // Queueing a run, shared by the use cases that queue one (the facilitator's `queueRun`, an approval of proposals, a
 // triaged change request that goes straight to the queue): the requests frozen into the run's input, inside the
 // transaction that saves it.
-import { Collaboration, eventList, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, eventList, err, ok, type Result, type Timestamp } from '../generated/index.js';
 import { agentRunCommands } from '../domain/commands.js';
 import { knownAgentRunId } from '../domain/ids.js';
 import { nonEmpty } from '../domain/snapshot.js';
@@ -9,7 +9,7 @@ import type { IdGenerator, Stores } from './ports.js';
 import { storeVerifications } from './verifications.js';
 
 /** Appends a command's events to the outbox of its session. */
-export function publish(stores: Stores, session: Collaboration.SessionId, events: object, at: Date): void {
+export function publish(stores: Stores, session: Collaboration.SessionId, events: object, at: Timestamp): void {
     // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- every event of the collaboration model is persistent: `events` is a command's events object
     stores.outbox.append(session, eventList(events) as readonly Collaboration.PersistentEvent[], at);
 }
@@ -86,7 +86,7 @@ export async function queueRequests(
         readonly extra?: Omit<Collaboration.RunInput, 'requests'>;
         readonly queuedBy: Collaboration.ParticipantId;
         readonly queuedByRole: Collaboration.ParticipantRole;
-        readonly at: Date;
+        readonly at: Timestamp;
     },
 ): Promise<Result<Collaboration.QueuedAgentRun, FreezeError | Collaboration.FacilitatorOnly | Collaboration.DuplicateRequest | Collaboration.InputMismatch>> {
     const frozen = await freezeRequests(stores, args.session, args.requests);

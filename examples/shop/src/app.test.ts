@@ -1,6 +1,7 @@
 // Tests of the application layer: what the contract tests cannot see, because it happens around the commands —
 // saving with versions, recording and publishing events, the policies, and the checks before a command runs.
 import { describe, expect, test } from 'bun:test';
+import { timestampOf } from '../generated/domain/index.js';
 import { fixedProviders } from './app/providers.js';
 import { createShop } from './app/shop.js';
 import { verifications } from './app/verifications.js';
@@ -62,7 +63,7 @@ describe('use cases', () => {
         const { shop, order } = await confirmedOrder();
         const stale = await shop.orders.load(order.id);
         expect(await shop.app.changeNote(order.id, 'gift wrap')).toMatchObject({ ok: true });
-        const r = await shop.orders.save(stale!.aggregate, stale!.meta.version, new Date());
+        const r = await shop.orders.save(stale!.aggregate, stale!.meta.version, timestampOf(new Date()));
         expect(r).toEqual({ ok: false, error: { type: 'VersionConflict', id: order.id, expected: 4, actual: 5 } });
     });
 });
@@ -114,7 +115,7 @@ describe('policies', () => {
         const paid = await shop.app.payInvoice(invoice!.aggregate.id);
         expect(paid).toMatchObject({ ok: true, value: { state: 'Paid' } });
         const [stored] = shop.events.stored.filter((s) => s.event.type === 'Billing.InvoicePaid');
-        expect(stored.event).toEqual({ type: 'Billing.InvoicePaid', invoiceId: invoice!.aggregate.id, paidAt: expect.any(Date) });
+        expect(stored.event).toEqual({ type: 'Billing.InvoicePaid', invoiceId: invoice!.aggregate.id, paidAt: expect.any(String) });
     });
 
     test('cancelling a confirmed order records a refund request; cancelling a draft does not', async () => {
@@ -123,6 +124,8 @@ describe('policies', () => {
         const draft = await shop.app.placeOrder(order.customer);
         if (!draft.ok) throw new Error(draft.error.type);
         expect(await shop.app.cancelOrder(draft.value.id, 'Requested')).toMatchObject({ ok: true });
-        expect(shop.policies.refundRequests).toEqual([{ order: order.id, invoice: { id: expect.any(String), state: 'Open' }, requestedAt: expect.any(Date) }]);
+        expect(shop.policies.refundRequests).toEqual([
+            { order: order.id, invoice: { id: expect.any(String), state: 'Open' }, requestedAt: expect.any(String) },
+        ]);
     });
 });

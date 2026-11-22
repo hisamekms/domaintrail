@@ -91,8 +91,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 
 **The commands:**
 
-- `dt init` — inspect this project and propose source, knowledge and TypeScript output locations (`--format json` for AI;
-  `--apply` to create an unambiguous new config).
+- `dt init` — propose source, knowledge and TypeScript output locations (`--format json` for AI; `--apply` writes them).
 - `dt guide [topic]` — this reference, one section, or `--all`.
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
 - `dt migrate dtes` — rewrite `.dtes` files of earlier versions (v0.1: `actor`, `target` in a command → `by`,
@@ -377,7 +376,8 @@ context Sales {
   `references name: IdType -> Aggregate` (other aggregates, by ID only). Entities are owned by exactly one aggregate.
   An ID is held by its ID type: a `customerId: String` (or `UUID`) while `CustomerId` or `Customer` exists is a warning
   (M027).
-- Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
+- Primitive types: `String`, `Int`, `Decimal`, `Bool`, `UUID`, `Timestamp` (an instant), `Date`, `Time`, `YearMonth`
+  (no time zone; see [Dates and times](#dates-and-times)).
 - Multiplicity after the type: `?` (also `[0..1]`, which `dt fmt` writes as `?`), `[0..*]`, `[1..*]`, `[n..m]`.
 - Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`, `kind` (with its own
   fields, invariants, commands and `on` cases; see [Kinds of an aggregate](#kinds-of-an-aggregate)).
@@ -433,6 +433,53 @@ context Sales {
   a `string`, unchecked.
 - The generated code includes the constructor: `makeQuantity` checks the invariants and returns the first one
   violated (`makeSkuWith(checks)` when an invariant has no expression); see [Generated checks](#generated-checks).
+
+<!-- topic: dates -->
+### Dates and times
+
+Two kinds of value (ADR 0038): an **instant**, when something happened, the same everywhere; and a **value on a
+calendar or clock**, a business value without a time zone (a birth date, a closing time, a billing month).
+
+| Type | Meaning | Text | Generated TypeScript |
+|---|---|---|---|
+| `Timestamp` | an instant (UTC) | `2026-11-22T09:30:00.000Z` | `Timestamp` |
+| `Date` | a calendar date, no time zone | `2026-11-22` | `PlainDate` |
+| `Time` | a time of day, no time zone | `18:00:00` | `PlainTime` |
+| `YearMonth` | a month of a year, no time zone | `2026-11` | `PlainYearMonth` |
+
+```dt
+// booking/reservation.dt
+context Booking {
+  id ReservationId: UUID
+  error PastDate
+  primitive BirthDate: Date { value >= "1900-01-01" } // a domain primitive over a date
+  aggregate Reservation "来店予約" {
+    id: ReservationId
+    visitDate: Date "来店日"
+    startTime: Time "開始時刻"
+    endTime: Time "終了時刻"
+    billingMonth: YearMonth "請求月"
+    requestedAt: Timestamp "受付日時"
+    invariant ordered { startTime < endTime } // values of one type compare
+    invariant opensAtSix { startTime >= "06:00" } // a literal is a value of the type it is compared with
+    create command request(id: ReservationId, visitDate: Date, startTime: Time, endTime: Time, billingMonth: YearMonth, requestedAt: Timestamp, today: Date)
+      requires notPast { visitDate >= today } else PastDate // "today" is a parameter: commands are pure
+  }
+}
+```
+
+- Values of one type compare (`==`, `<`, `x in a..b`); values of different types never do (M009): turning an instant
+  into a date needs a time zone, decided in your code where it is known and passed in as a parameter of the right
+  type. There is no `now` or `today` in the DSL.
+- A string literal compared with one of these types is a value of that type, checked by `dt check` (`"2026-02-30"` is
+  not a `Date`; `"18:00"` is the `Time` `18:00:00`).
+- In TypeScript each is its canonical text, branded: it crosses JSON and `structuredClone` as it is, and orders as
+  its values do. Make one with `parseDate`, `parseTime`, `parseYearMonth`, `parseTimestamp` (each `undefined` for text
+  that is not a value) or `timestampOf(date)`, from the generated `_runtime.ts`; never with `as`.
+- Calculation (adding days, today in a time zone) is your code's. Temporal reads and prints the same text:
+  `Temporal.PlainDate.from(visitDate)`, and `parseDate(plainDate.toString())` back.
+- A time zone, when the business needs one, is stated explicitly (ADR 0038, a later stage): `ZonedDateTime` for a
+  value that is a time in a zone, a `TimeZone` field for an owner whose zone applies to its values.
 
 <!-- topic: unions -->
 ### Unions
@@ -1059,14 +1106,14 @@ context Tickets {
 
    ```dt
    fields Schedule "日程" {
-     requestedDate: CalendarDate "指定日"
-     plannedDate:   CalendarDate "予定日"
+     requestedDate: Date "指定日"
+     plannedDate:   Date "予定日"
    }
    aggregate DeliveryRequest "配達依頼" with Schedule {
      id: DeliveryRequestId
      invariant plannedNotBeforeRequested { plannedDate >= requestedDate }
-     command carryOver(newPlannedDate: CalendarDate) changes plannedDate
-     command changePromise(newDate: CalendarDate) changes requestedDate, plannedDate
+     command carryOver(newPlannedDate: Date) changes plannedDate
+     command changePromise(newDate: Date) changes requestedDate, plannedDate
    }
    ```
 
@@ -1703,13 +1750,13 @@ convenience: the contract has none).
 
 ```ts
 // src/confirm.ts — your code: the application around a command
-import { eventList, outcome, type Sales } from '../generated/domain/index.js';
+import { eventList, outcome, type Sales, type Timestamp } from '../generated/domain/index.js';
 
 export interface OrderStore {
     save(order: Sales.Order, events: readonly Sales.OrderEvent[]): Promise<void>;
 }
 
-export async function confirm(commands: Sales.OrderCommands, store: OrderStore, order: Sales.DraftOrder, at: Date): Promise<Sales.EmptyOrder | undefined> {
+export async function confirm(commands: Sales.OrderCommands, store: OrderStore, order: Sales.DraftOrder, at: Timestamp): Promise<Sales.EmptyOrder | undefined> {
     const r = commands.confirm(order, { at }); // the time is a parameter: the command is pure
     if (!r.ok) return r.error;
     const { aggregate, events } = outcome(r.value);
@@ -1981,7 +2028,7 @@ registers a suite with that runner, and the test file is a few lines:
 
 ```ts
 // examples/shop/src/contract.test.ts
-import { parseDecimal, type Sales as SalesTypes } from '../generated/domain/index.js';
+import { parseDecimal, timestampOf, type Sales as SalesTypes } from '../generated/domain/index.js';
 import { Billing, Common, Sales, register } from '../generated/domain/tests/index.js';
 import { billingPolicies } from './app/policies.js';
 import { customerCommands } from './domain/customer-commands.js';
@@ -2015,7 +2062,7 @@ const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
             unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' },
         },
     ],
-    confirmedAt: new Date('2026-10-24T09:00:00Z'),
+    confirmedAt: timestampOf(new Date('2026-10-24T09:00:00Z')),
 });
 let invoices = 0;
 const invoiceId = (): string => `00000000-0000-4000-8000-${String(++invoices).padStart(12, '0')}`;

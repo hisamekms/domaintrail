@@ -340,7 +340,7 @@ export function createAgentApi(deps: AgentApiDeps): AgentApi {
                     ...(sessionSoFar && { sessionSoFar }),
                     ...(sessionSoFarSince && { sessionSoFarSince }),
                     ...(journeys && { journeys }),
-                    ...(peopleEdits.length > 0 && { peopleEdits: peopleEdits.map((e) => ({ by: e.by, at: e.at.toISOString(), edit: e.edit })) }),
+                    ...(peopleEdits.length > 0 && { peopleEdits: peopleEdits.map((e) => ({ by: e.by, at: e.at, edit: e.edit })) }),
                 }));
             }
             case 'heartbeat': {

@@ -5,7 +5,7 @@
 // Both are the facilitator's (the one person's in Solo): a participant's are refused here (`FacilitatorOnly`); the
 // server turns them into requests the facilitator approves. The guide's marks are the journey file's
 // (`journeyFileMarks`, the `GuideMarkStore`).
-import { Collaboration, err, ok, type Result } from '../generated/index.js';
+import { Collaboration, err, ok, type Result, timestampOf, type Timestamp } from '../generated/index.js';
 import { journeyMarks, markAct, type GuideMarkStore } from '../domain/guide.js';
 import {
     applyJourneyAct,
@@ -131,7 +131,7 @@ export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
                 await uow.transaction(async (stores) => {
                     const active = await storeVerifications(stores).makeActiveSession(session);
                     if (!active.ok) return;
-                    const at = clock.now();
+                    const at = timestampOf(clock.now());
                     const current = stores.sessions.load(session)?.currentJourney;
                     const fact = actFact({ act, before, ...(current !== undefined && { current }), ...(labels && { labels }) });
                     if (!fact) return;
@@ -168,7 +168,7 @@ export function createJourneys(deps: CollaborationDeps): JourneyUseCases {
                 if (!active.ok) return active;
                 const found = stores.sessions.load(session);
                 if (!found || found.state !== 'Open') return err({ type: 'Collaboration.SessionAlreadyClosed' });
-                const at = clock.now();
+                const at = timestampOf(clock.now());
                 const chosen = sessionCommands.chooseJourney(found, { journey, chosenByRole: actor.role, chosenAt: at });
                 if (!chosen.ok) return chosen;
                 stores.sessions.save(chosen.value.Open.aggregate);
@@ -198,7 +198,7 @@ function postCompletionNote(
     session: Collaboration.ActiveSession,
     text: string,
     journeyNote: Collaboration.JourneyNote,
-    at: Date,
+    at: Timestamp,
 ): void {
     const body = Collaboration.makeText(text);
     if (!body.ok) return;

@@ -201,7 +201,7 @@ describe('generated checks', () => {
     });
 
     test('exists and implies over optional values, Timestamps by time', () => {
-        const t = (s: string) => new Date(s);
+        const t = (s: string) => new Date(s).toISOString(); // a Timestamp is its canonical text (ADR 0038)
         expect(Sales.checkPeriod({ from: t('2026-01-01') })).toEqual([]);
         expect(Sales.checkPeriod({ from: t('2026-01-01'), until: t('2026-01-01') })).toEqual([]);
         expect(Sales.checkPeriod({ from: t('2026-01-02'), until: t('2026-01-01') })).toEqual(['ordered']);
@@ -217,8 +217,9 @@ describe('generated checks', () => {
         expect(Sales.equalLine(line('1', 'ABC-0001'), line('2', 'ABC-0001'))).toBe(false);
         expect(Common.equalMoney(yen('1.50'), yen('1.5'))).toBe(true);
         expect(Common.equalMoney(yen('1'), { amount: '1', currency: 'USD' })).toBe(false);
-        expect(Sales.equalPeriod({ from: new Date(0) }, { from: new Date(0) })).toBe(true);
-        expect(Sales.equalPeriod({ from: new Date(0) }, { from: new Date(0), until: new Date(0) })).toBe(false);
+        const epoch = new Date(0).toISOString();
+        expect(Sales.equalPeriod({ from: epoch }, { from: epoch })).toBe(true);
+        expect(Sales.equalPeriod({ from: epoch }, { from: epoch, until: epoch })).toBe(false);
     });
 
     test('unions are equal by discriminator and fields, and checked by the invariants of their variant', () => {

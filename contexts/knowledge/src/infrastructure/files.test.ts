@@ -3,9 +3,9 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { Knowledge } from '../generated/index.js';
+import { Knowledge, type Timestamp, timestampOf } from '../generated/index.js';
 import { createFilesKnowledgeStore, readKnowledgeFiles, type FilesKnowledgeStore } from './files.js';
-import { content, extraction, itemId, reason, sessionRef, source, stickyRef, userName, version } from '../test-helpers.js';
+import { content, extraction, itemId, reason, sessionRef, source, stickyRef, timestamp, userName, version } from '../test-helpers.js';
 
 const project = 'shop' as Knowledge.ProjectName;
 const alice = userName('alice@example.com');
@@ -13,14 +13,14 @@ const alice = userName('alice@example.com');
 let root: string;
 let dir: string;
 let stateDir: string;
-let clock: Date;
+let clock: Timestamp;
 let store: FilesKnowledgeStore;
 
 beforeEach(async () => {
     root = await mkdtemp(path.join(tmpdir(), 'domaintrail-knowledge-'));
     dir = path.join(root, 'knowledge');
     stateDir = path.join(root, 'state');
-    clock = new Date('2026-11-05T09:00:00Z');
+    clock = timestamp('2026-11-05T09:00:00Z');
     store = createFilesKnowledgeStore({ dir, project, stateDir, undoWindowMs: 60_000, now: () => clock });
 });
 afterEach(async () => {
@@ -28,7 +28,7 @@ afterEach(async () => {
 });
 
 const tick = (ms: number): void => {
-    clock = new Date(clock.getTime() + ms);
+    clock = timestampOf(new Date(new Date(clock).getTime() + ms));
 };
 
 const add = (

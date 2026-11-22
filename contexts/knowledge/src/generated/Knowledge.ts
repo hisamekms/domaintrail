@@ -762,7 +762,7 @@ export interface Source {
  * @see contexts/knowledge/model/context.dt:88
  */
 export function equalSource(a: Source, b: Source): boolean {
-    return a.session === b.session && a.message === b.message && a.at.getTime() === b.at.getTime() && a.quote === b.quote;
+    return a.session === b.session && a.message === b.message && a.at === b.at && a.quote === b.quote;
 }
 
 /**
@@ -1042,7 +1042,7 @@ export interface AuditEntry {
  * @see contexts/knowledge/model/extraction.dt:81
  */
 export function equalAuditEntry(a: AuditEntry, b: AuditEntry): boolean {
-    return a.item === b.item && a.version === b.version && a.operation === b.operation && equalActor(a.actor, b.actor) && sameOptional(a.reason, b.reason, ($16: Reason, $17: Reason) => $16 === $17) && a.at.getTime() === b.at.getTime();
+    return a.item === b.item && a.version === b.version && a.operation === b.operation && equalActor(a.actor, b.actor) && sameOptional(a.reason, b.reason, ($16: Reason, $17: Reason) => $16 === $17) && a.at === b.at;
 }
 
 /**
@@ -2836,7 +2836,7 @@ export interface Retirement {
  * @see contexts/knowledge/model/retirement.dt:18
  */
 export function equalRetirement(a: Retirement, b: Retirement): boolean {
-    return sameOptional(a.reason, b.reason, ($21: string, $22: string) => $21 === $22) && sameOptional(a.replacedBy, b.replacedBy, ($23: KnowledgeItemId, $24: KnowledgeItemId) => $23 === $24) && a.by === b.by && a.at.getTime() === b.at.getTime() && sameOptional(a.proposal, b.proposal, ($25: RetirementProposalId, $26: RetirementProposalId) => $25 === $26);
+    return sameOptional(a.reason, b.reason, ($21: string, $22: string) => $21 === $22) && sameOptional(a.replacedBy, b.replacedBy, ($23: KnowledgeItemId, $24: KnowledgeItemId) => $23 === $24) && a.by === b.by && a.at === b.at && sameOptional(a.proposal, b.proposal, ($25: RetirementProposalId, $26: RetirementProposalId) => $25 === $26);
 }
 
 /**

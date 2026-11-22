@@ -19,6 +19,7 @@ import {
     openSessionBlobs,
     openSessionDatabase,
     type ReplyData,
+    timestampOf,
     toAgentReply,
 } from '@domaintrail/collaboration';
 import { createModelValidator, createSourceFormatter, createStickyEditor } from '@domaintrail/dt';
@@ -124,7 +125,7 @@ async function started(s: Session): Promise<{ id: C.SessionId; start: C.Recorded
 /** A request dismissed in an older session: no command dismisses any more, but such rows still load (ADR 0027, T12). */
 async function dismissedBefore(s: Session, request: C.SentRequest): Promise<void> {
     await s.deps.uow.transaction((stores) =>
-        stores.requests.save({ ...request, state: 'Dismissed', dismissedBy: facilitator, dismissedAt: new Date(s.clock.t) }),
+        stores.requests.save({ ...request, state: 'Dismissed', dismissedBy: facilitator, dismissedAt: timestampOf(new Date(s.clock.t)) }),
     );
 }
 

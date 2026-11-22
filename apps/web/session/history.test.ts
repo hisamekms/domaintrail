@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { timestampOf, type Timestamp } from '@domaintrail/collaboration';
 import type { SessionStateBody } from '@domaintrail/collaboration/protocol';
 import { answerBody } from './actions';
 import { cardRuns, messageMarks, quoteDisplay, updatedCards } from './cards';
@@ -9,7 +10,7 @@ type RunJson = SessionStateBody['runs'][number];
 type RequestJson = SessionStateBody['requests'][number];
 type RevisionJson = SessionStateBody['revisions'][number];
 
-const at = (minute: number): string => `2026-10-31T09:${String(minute).padStart(2, '0')}:00.000Z`;
+const at = (minute: number): Timestamp => timestampOf(new Date(`2026-10-31T09:${String(minute).padStart(2, '0')}:00.000Z`));
 const v = { dtErrors: 0, dtesErrors: 0, dtesWarnings: 0, linkWarnings: 0, stale: false };
 const rev = (id: string, minute: number, files: Record<string, string>): RevisionJson =>
     ({

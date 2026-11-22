@@ -2,6 +2,7 @@
 // Modeling and Storming (their analyses, as the app's validator runs them).
 import { analyzeDomain, type DomainModel } from '@domaintrail/modeling';
 import { analyzeStormings, isStormingFile, type Storming } from '@domaintrail/storming';
+import { parseTimestamp, type Timestamp } from './generated/index.js';
 
 /** What the validator gives for inline sources (keys are file names): the model and the stormings. */
 export async function check(files: Record<string, string>): Promise<{ model: DomainModel | undefined; stormings: Storming[]; stormingsComplete: boolean }> {
@@ -13,3 +14,10 @@ export async function check(files: Record<string, string>): Promise<{ model: Dom
     );
     return { model: domain.model, stormings: stormings.stormings, stormingsComplete: stormings.syntaxOk };
 }
+
+/** The instant of an ISO 8601 text. */
+export const timestamp = (text: string): Timestamp => {
+    const t = parseTimestamp(text);
+    if (t === undefined) throw new Error(`invalid test timestamp: ${text}`);
+    return t;
+};

@@ -10,7 +10,19 @@ import type {
     PrimitiveName,
     UnionModel,
 } from '@domaintrail/modeling';
-import { BINARY_OP_TEXT, applicableOutcomes, commandKinds, contextNames, elementOf, elementsIn, kindCase, kindOf, sharedContexts } from '@domaintrail/modeling';
+import {
+    BINARY_OP_TEXT,
+    applicableOutcomes,
+    canonicalTemporal,
+    commandKinds,
+    contextNames,
+    elementOf,
+    elementsIn,
+    isTemporal,
+    kindCase,
+    kindOf,
+    sharedContexts,
+} from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
 import {
@@ -72,6 +84,8 @@ interface Binding {
     ty: Ty;
     /** Whether `js` is already in parentheses as a whole. */
     wrapped?: boolean;
+    /** For a string literal: its text as written. */
+    literal?: string;
     /** For a `wrapped` binding: the expression inside the parentheses. */
     inner?: string;
     /** Whether `inner` can be an operand of `&&` as it is (it is not a `||`). */
@@ -99,7 +113,17 @@ const NOT_LAMBDA_NAMES: ReadonlySet<string> = new Set([
     'violated',
 ]);
 
-const BASE: Record<PrimitiveName, string> = { String: 'string', Int: 'number', Decimal: 'Decimal', Bool: 'boolean', Timestamp: 'Timestamp', UUID: 'string' };
+const BASE: Record<PrimitiveName, string> = {
+    String: 'string',
+    Int: 'number',
+    Decimal: 'Decimal',
+    Bool: 'boolean',
+    Timestamp: 'Timestamp',
+    UUID: 'string',
+    Date: 'PlainDate',
+    Time: 'PlainTime',
+    YearMonth: 'PlainYearMonth',
+};
 
 export const equalName = (el: { name: string }): string => `equal${el.name}`;
 export const checkName = (typeName: string): string => `check${typeName}`;
@@ -184,17 +208,19 @@ function primOf(t: Ty): PrimitiveName | undefined {
 
 const strip = (t: Ty): Ty => (t.k === 'opt' ? t.inner : t);
 
-/** A number for `<`, `==`, ranges: Decimals are carried as strings, Timestamps as Dates. */
-function scalar(b: Binding): string {
-    const t = strip(b.ty); // an optional value is guarded by exists(...) (M009)
-    const p = primOf(t);
-    if (p === 'Timestamp') return `${b.js}.getTime()`;
+/**
+ * A value for `<`, `==`, ranges: Decimals are compared by `decimalCompare`; dates and times are their canonical text,
+ * which orders as they do (ADR 0038), so a string literal compared with one is written in its canonical form.
+ */
+function scalar(b: Binding, other?: Binding): string {
+    const p = other && primOf(strip(other.ty));
+    if (b.literal !== undefined && isTemporal(p)) return quote(canonicalTemporal(p, b.literal) ?? b.literal);
     return b.js;
 }
 
 const isDecimal = (b: Binding): boolean => primOf(strip(b.ty)) === 'Decimal';
 const compare = (a: Binding, b: Binding, op: string): string =>
-    isDecimal(a) || isDecimal(b) ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0` : `${scalar(a)} ${op} ${scalar(b)}`;
+    isDecimal(a) || isDecimal(b) ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0` : `${scalar(a, b)} ${op} ${scalar(b, a)}`;
 
 export class ExprCompiler {
     /** Counter of temporaries (`$0`, `$1`, …), which no DSL name can collide with. */
@@ -250,7 +276,6 @@ export class ExprCompiler {
         const pa = primOf(s);
         const pb = primOf(strip(u));
         if (pa === 'Decimal' || pb === 'Decimal') return `decimalCompare(String(${a}), String(${b})) === 0`;
-        if (pa === 'Timestamp') return `${a}.getTime() === ${b}.getTime()`;
         return `${a} === ${b}`;
     }
 
@@ -288,7 +313,7 @@ export class ExprCompiler {
             case 'decimal':
                 return { js: quote(e.value), ty: { k: 'prim', name: 'Decimal', literal: true } };
             case 'string':
-                return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true } };
+                return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true }, literal: e.value };
             case 'name':
                 return this.name(e.name, scope);
             case 'member':
@@ -350,9 +375,9 @@ export class ExprCompiler {
                     case 'implies':
                         return wrapped(`${negate(l)} || ${r.js}`, true);
                     case 'eq':
-                        return wrapped(this.equal(strip(l.ty), l.js, r.js, strip(r.ty)));
+                        return wrapped(this.equal(strip(l.ty), scalar(l, r), scalar(r, l), strip(r.ty)));
                     case 'ne':
-                        return bool(`!(${this.equal(strip(l.ty), l.js, r.js, strip(r.ty))})`);
+                        return bool(`!(${this.equal(strip(l.ty), scalar(l, r), scalar(r, l), strip(r.ty))})`);
                     case 'lt':
                     case 'le':
                     case 'gt':

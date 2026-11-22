@@ -1,7 +1,7 @@
 // The contract tests generated from the model, registered with bun:test: every context, every aggregate's commands,
 // every domain primitive's constructor and Billing's policies (required in domaintrail.jsonc). Run `dt generate ts`
 // first (the config's `generate.ts.tests` writes them), then `bun test` in this directory.
-import { parseDecimal, type Sales as SalesTypes } from '../generated/domain/index.js';
+import { parseDecimal, timestampOf, type Sales as SalesTypes } from '../generated/domain/index.js';
 import { Billing, Common, Sales, register } from '../generated/domain/tests/index.js';
 import { billingPolicies } from './app/policies.js';
 import { customerCommands } from './domain/customer-commands.js';
@@ -35,7 +35,7 @@ const confirmed = (id: SalesTypes.OrderId): SalesTypes.ConfirmedOrder => ({
             unitPrice: { amount: ok(makeAmount(parseDecimal('12.50')!)), currency: 'USD' },
         },
     ],
-    confirmedAt: new Date('2026-10-24T09:00:00Z'),
+    confirmedAt: timestampOf(new Date('2026-10-24T09:00:00Z')),
 });
 let invoices = 0;
 const invoiceId = (): string => `00000000-0000-4000-8000-${String(++invoices).padStart(12, '0')}`;

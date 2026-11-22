@@ -5,7 +5,7 @@
 import { writeFile } from 'node:fs/promises';
 import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from 'node:sqlite';
 import * as path from 'node:path';
-import type { Collaboration } from '../generated/index.js';
+import { parseTimestamp, type Collaboration, type Timestamp } from '../generated/index.js';
 import type { Identity, IdentityKey, IdentityMode } from '../application/identity.js';
 import { markKey, signKey } from '../domain/marks.js';
 import type {
@@ -495,12 +495,19 @@ function integer(r: Row, column: string): number {
     return v;
 }
 
-/** JSON with dates kept as dates: `{"$date": "<ISO>"}`. */
+/** A Timestamp of our own rows: written as `toISOString()` text. */
+function timestamp(iso: string): Timestamp {
+    const t = parseTimestamp(iso);
+    if (t === undefined) throw new Error(`Not a timestamp: ${iso}`);
+    return t;
+}
+
+/**
+ * JSON with Timestamps marked: `{"$date": "<ISO>"}`, as when they were Dates. A string of the canonical form of a
+ * Timestamp is written so whatever it is: it reads back the same.
+ */
 export function encodeJson(value: unknown): string {
-    return JSON.stringify(value, function (this: Record<string, unknown>, key: string, v: unknown): unknown {
-        const raw = this[key];
-        return raw instanceof Date ? { $date: raw.toISOString() } : v;
-    });
+    return JSON.stringify(value, (key, v: unknown): unknown => (key !== '$date' && typeof v === 'string' && parseTimestamp(v) === v ? { $date: v } : v));
 }
 
 export function decodeJson(json: string): unknown {
@@ -509,7 +516,7 @@ export function decodeJson(json: string): unknown {
             const keys = Object.keys(v);
             if (keys.length === 1 && keys[0] === '$date') {
                 const iso: unknown = Object.values(v)[0];
-                if (typeof iso === 'string') return new Date(iso);
+                if (typeof iso === 'string') return timestamp(iso);
             }
         }
         return v;
@@ -914,11 +921,11 @@ function outbox(db: DatabaseSync): EventOutbox {
         // oxlint-disable-next-line typescript/no-unsafe-type-assertion -- the session of an outbox row, written from a SessionId
         session: text(r, 'session_id') as Collaboration.SessionId,
         event: decoded<Collaboration.PersistentEvent>(text(r, 'payload'), upgradeEvent),
-        recordedAt: new Date(text(r, 'recorded_at')),
+        recordedAt: timestamp(text(r, 'recorded_at')),
     });
     return {
         append(session, events, recordedAt) {
-            for (const event of events) append.run(params({ session, type: event.type, payload: encodeJson(event), at: recordedAt.toISOString() }));
+            for (const event of events) append.run(params({ session, type: event.type, payload: encodeJson(event), at: recordedAt }));
         },
         readAfter(cursor, limit, session) {
             const rows = session === undefined ? all.all(params({ cursor, limit })) : ofSession.all(params({ cursor, limit, session }));

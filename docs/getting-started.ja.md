@@ -494,11 +494,11 @@ export const reservationCommands: Booking.ReservationCommands = {
 
 ```ts
 // src/request.ts
-import { Booking } from '../generated/domain/index.js';
+import { Booking, type Timestamp } from '../generated/domain/index.js';
 import { reservationCommands } from './reservation-commands.js';
 
 /** 素の入力からドメインの値を作り、コマンドを実行する。 */
-export function requestReservation(input: { room: string; start: Date; hours: number; attendees: number }) {
+export function requestReservation(input: { room: string; start: Timestamp; hours: number; attendees: number }) {
     const attendees = Booking.makeHeadcount(input.attendees); // Result: 値か InvalidHeadcount
     if (!attendees.ok) return attendees;
     const slot: Booking.Slot = { start: input.start, hours: input.hours };
@@ -550,7 +550,7 @@ $ npx vitest run
 加えます）。もし `confirm` が要件の確認を忘れていたら、テストは縮小した反例を添えてそう伝えます。
 
 ```text
-Got error: Reservation.confirm({"state":"Requested",…,"attendees":2}, 1, new Date("2000-01-01T00:00:00.000Z")) succeeded, but requirement 'roomFits' does not hold: expected the error Booking.RoomTooSmall.
+Got error: Reservation.confirm({"state":"Requested",…,"attendees":2}, 1, "2000-01-01T00:00:00.000Z") succeeded, but requirement 'roomFits' does not hold: expected the error Booking.RoomTooSmall.
 ```
 
 コマンドの周り——読み込み、保存、イベントの発行——は生成されたテストの範囲外で、自分のテストで確かめます

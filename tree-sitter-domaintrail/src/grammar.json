@@ -1348,6 +1348,18 @@
         {
           "type": "STRING",
           "value": "UUID"
+        },
+        {
+          "type": "STRING",
+          "value": "Date"
+        },
+        {
+          "type": "STRING",
+          "value": "Time"
+        },
+        {
+          "type": "STRING",
+          "value": "YearMonth"
         }
       ]
     },
@@ -3507,6 +3519,18 @@
               {
                 "type": "STRING",
                 "value": "UUID"
+              },
+              {
+                "type": "STRING",
+                "value": "Date"
+              },
+              {
+                "type": "STRING",
+                "value": "Time"
+              },
+              {
+                "type": "STRING",
+                "value": "YearMonth"
               }
             ]
           },
