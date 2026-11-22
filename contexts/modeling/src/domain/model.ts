@@ -26,6 +26,7 @@ export type {
     FieldModel,
     InvariantModel,
     InitialModel,
+    KindModel,
     LabelSource,
     OutcomePatternModel,
     OutcomeModel,
@@ -37,7 +38,6 @@ export type {
     StateModel,
     TermModel,
     TransitionModel,
-    TransitionGroupModel,
     TypeExpr,
     VariantModel,
     VerifiedFor,
@@ -100,13 +100,36 @@ export const statesOf = (el: ElementModel): readonly M.StateModel[] => (el.kind 
 /** The commands of an aggregate; none for the other kinds. */
 export const commandsOf = (el: ElementModel): readonly M.CommandModel[] => (el.kind === 'aggregate' ? el.commands : []);
 
-/** Outcomes applicable to a kind, preserving common outcomes before matching group outcomes. */
-export const applicableOutcomes = (agg: AggregateModel, command: M.CommandModel, kind: string): M.OutcomeModel[] => [
-    ...command.outcomes,
-    ...agg.groups.filter((g) => g.values.includes(kind)).flatMap((g) => g.cases.filter((c) => c.command === command.name).flatMap((c) => c.outcomes)),
+/** The discriminator of an aggregate with kinds in the generated code and in expressions: the kind's name. */
+export const KIND_TAG = 'kind';
+
+/** The kinds of an aggregate (ADR 0037); none for the other elements and for an aggregate without kinds. */
+export const kindsOf = (el: ElementModel): readonly M.KindModel[] => (el.kind === 'aggregate' ? el.kinds : []);
+
+/** The kind of that name of an aggregate. */
+export const kindOf = (agg: AggregateModel, name: string | undefined): M.KindModel | undefined => agg.kinds.find((k) => k.name === name);
+
+/** The kinds a command exists for: its own kind, or every kind for a common command (`['*']` without kinds). */
+export const commandKinds = (agg: AggregateModel, c: M.CommandModel): string[] => (c.kind ? [c.kind] : agg.kinds.length ? agg.kinds.map((k) => k.name) : ['*']);
+
+/** The `on` case of a kind for a common command, if it has one. */
+export const kindCase = (agg: AggregateModel, kind: string, command: string): M.CommandCaseModel | undefined =>
+    kindOf(agg, kind)?.cases.find((c) => c.command === command);
+
+/**
+ * The outcomes of a command for a kind (`'*'` without kinds): its own, and those of the kind's `on` case. None for a
+ * command of another kind.
+ */
+export const applicableOutcomes = (agg: AggregateModel, command: M.CommandModel, kind: string): M.OutcomeModel[] =>
+    command.kind && command.kind !== kind ? [] : [...command.outcomes, ...(kindCase(agg, kind, command.name)?.outcomes ?? [])];
+
+/** The requirements of a command for a kind: the common ones first, then those of the kind's `on` case. */
+export const applicableRequirements = (agg: AggregateModel, command: M.CommandModel, kind: string): M.RequirementModel[] => [
+    ...command.requires,
+    ...(kindCase(agg, kind, command.name)?.requires ?? []),
 ];
 
-/** Initial and reached states for a kind; empty when the aggregate has no lifecycle selector. */
+/** Initial and reached states for a kind; empty when the aggregate has no kinds. */
 export const validStatesFor = (agg: AggregateModel, kind: string): readonly string[] => agg.validStates.find((v) => v.kind === kind)?.states ?? [];
 
 /** Whether generation needs a user-supplied check and mandatory contract tests. */
@@ -120,7 +143,7 @@ export function hasExternalObligations(model: M.DomainModel): boolean {
         if (el.kind !== 'aggregate') return false;
         if (el.states.some((s) => invariant(s.invariants))) return true;
         if (el.commands.some((c) => requirement(c.requires) || outcome(c.outcomes))) return true;
-        return el.groups.some((g) => g.cases.some((c) => requirement(c.requires) || outcome(c.outcomes)));
+        return el.kinds.some((k) => invariant(k.invariants) || k.cases.some((c) => requirement(c.requires) || outcome(c.outcomes)));
     });
 }
 
@@ -143,9 +166,10 @@ export const policiesReactingTo = (model: M.DomainModel, event: string): PolicyE
 /** The element's own fields, without those it takes from field sets. */
 export const ownFields = (el: ElementModel): FieldModel[] => fieldsOf(el).filter((f) => !f.fieldSet);
 
-/** Fields of an element, including state-specific fields of aggregates and the fields of every union variant. */
+/** Fields of an element, including kind- and state-specific fields of aggregates and the fields of every union variant. */
 export const allFieldsOf = (el: ElementModel): FieldModel[] => [
     ...fieldsOf(el),
+    ...kindsOf(el).flatMap((k) => k.fields),
     ...statesOf(el).flatMap((s) => s.fields),
     ...variantsOf(el).flatMap((v) => v.fields),
 ];
@@ -175,13 +199,11 @@ export const emittedEvents = (c: M.CommandModel): M.QualifiedName[] => [
     ...new Set([...c.emits.map((e) => e.event), ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event))]),
 ];
 
-/** Includes outcomes supplied by lifecycle groups of this aggregate. */
+/** The events a command may emit, with those of the kinds' `on` cases for it. */
 export const emittedEventsInAggregate = (agg: AggregateModel, c: M.CommandModel): M.QualifiedName[] => [
     ...new Set([
         ...emittedEvents(c),
-        ...agg.groups.flatMap((g) =>
-            g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => o.emits.map((e) => e.event))),
-        ),
+        ...agg.kinds.flatMap((k) => k.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.emits.map((e) => e.event)))),
     ]),
 ];
 
@@ -203,7 +225,8 @@ export const sameFieldType = (a: FieldModel, b: FieldModel): boolean =>
 
 /**
  * What a decision of a command gives for one of its outcomes (ADR 0019), from source state `from` (`undefined` for a
- * factory or an aggregate without states) to target state `to` (`undefined` without states):
+ * factory or an aggregate without states) to target state `to` (`undefined` without states), for the aggregate of kind
+ * `kind` (ADR 0037; `undefined` without kinds). A kind's fields count as common fields of that kind:
  *   - `set`: the fields the decision must give — every field for a factory; else the target's own fields that are not
  *     carried over, and the fields in `changes` that the outcome has;
  *   - `carried`: the fields taken from the input unchanged — the common fields not in `changes`, and the state-specific
@@ -216,16 +239,18 @@ export function outcomeFields(
     from: string | undefined,
     to: string | undefined,
     outcome?: M.OutcomeModel,
+    kind?: string,
 ): { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } {
     const own = (state: string | undefined): readonly FieldModel[] => agg.states.find((s) => s.name === state)?.fields ?? [];
+    const common = [...agg.fields, ...(kindOf(agg, kind ?? c.kind)?.fields ?? [])];
     const target = own(to);
-    if (c.factory) return { set: [...agg.fields, ...target], carried: [], dropped: [] };
+    if (c.factory) return { set: [...common, ...target], carried: [], dropped: [] };
     const source = own(from);
     const changes = new Set(outcome?.changes ?? c.changes);
     const keeps = (f: FieldModel): boolean => source.some((g) => g.name === f.name && sameFieldType(f, g));
     return {
-        set: [...agg.fields.filter((f) => changes.has(f.name)), ...target.filter((f) => !keeps(f) || changes.has(f.name))],
-        carried: [...agg.fields, ...target].filter((f) => !changes.has(f.name) && (agg.fields.includes(f) || keeps(f))),
+        set: [...common.filter((f) => changes.has(f.name)), ...target.filter((f) => !keeps(f) || changes.has(f.name))],
+        carried: [...common, ...target].filter((f) => !changes.has(f.name) && (common.includes(f) || keeps(f))),
         dropped: source.filter((f) => !target.some((g) => g.name === f.name && sameFieldType(f, g))),
     };
 }

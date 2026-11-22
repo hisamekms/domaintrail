@@ -937,7 +937,7 @@
               },
               {
                 "type": "SYMBOL",
-                "name": "transition_group"
+                "name": "kind"
               }
             ]
           }
@@ -965,74 +965,34 @@
         }
       ]
     },
-    "transition_group": {
+    "kind": {
       "type": "SEQ",
       "members": [
         {
           "type": "STRING",
-          "value": "transitions"
-        },
-        {
-          "type": "STRING",
-          "value": "for"
+          "value": "kind"
         },
         {
           "type": "FIELD",
-          "name": "field",
+          "name": "name",
           "content": {
             "type": "SYMBOL",
-            "name": "_feature_name"
+            "name": "identifier"
           }
         },
         {
           "type": "CHOICE",
           "members": [
             {
-              "type": "SEQ",
-              "members": [
-                {
-                  "type": "STRING",
-                  "value": "=="
-                },
-                {
-                  "type": "SYMBOL",
-                  "name": "enum_value_selector"
-                }
-              ]
+              "type": "FIELD",
+              "name": "label",
+              "content": {
+                "type": "SYMBOL",
+                "name": "string"
+              }
             },
             {
-              "type": "SEQ",
-              "members": [
-                {
-                  "type": "STRING",
-                  "value": "in"
-                },
-                {
-                  "type": "SEQ",
-                  "members": [
-                    {
-                      "type": "SYMBOL",
-                      "name": "enum_value_selector"
-                    },
-                    {
-                      "type": "REPEAT",
-                      "content": {
-                        "type": "SEQ",
-                        "members": [
-                          {
-                            "type": "STRING",
-                            "value": "|"
-                          },
-                          {
-                            "type": "SYMBOL",
-                            "name": "enum_value_selector"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                }
-              ]
+              "type": "BLANK"
             }
           ]
         },
@@ -1047,6 +1007,14 @@
             "members": [
               {
                 "type": "SYMBOL",
+                "name": "_data_member"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "command"
+              },
+              {
+                "type": "SYMBOL",
                 "name": "initial"
               },
               {
@@ -1059,61 +1027,6 @@
         {
           "type": "STRING",
           "value": "}"
-        }
-      ]
-    },
-    "enum_value_selector": {
-      "type": "CHOICE",
-      "members": [
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "FIELD",
-              "name": "enum",
-              "content": {
-                "type": "SYMBOL",
-                "name": "identifier"
-              }
-            },
-            {
-              "type": "STRING",
-              "value": "."
-            },
-            {
-              "type": "FIELD",
-              "name": "value",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_value_name"
-              }
-            }
-          ]
-        },
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "FIELD",
-              "name": "enum",
-              "content": {
-                "type": "SYMBOL",
-                "name": "qualified_name"
-              }
-            },
-            {
-              "type": "STRING",
-              "value": "::"
-            },
-            {
-              "type": "FIELD",
-              "name": "value",
-              "content": {
-                "type": "SYMBOL",
-                "name": "_value_name"
-              }
-            }
-          ]
         }
       ]
     },
@@ -3478,7 +3391,7 @@
               },
               {
                 "type": "STRING",
-                "value": "transitions"
+                "value": "kind"
               },
               {
                 "type": "STRING",

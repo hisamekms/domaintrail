@@ -7,13 +7,11 @@ import { generateTypeScript } from './typescript.js';
 
 const SOURCE = `context Sales {
   id RequestId: UUID
-  enum Kind { COLLECT DROP_OFF }
-  event Collected
-  event Received
+  event Collected { requestId: RequestId }
+  event Received { requestId: RequestId }
   error Invalid
   aggregate Request {
     id: RequestId
-    readonly kind: Kind
     ready: Bool
     state Unassigned
     state Assigned
@@ -21,8 +19,6 @@ const SOURCE = `context Sales {
     state Holding
     state Accepted
     state Rejected
-    initial Unassigned
-    create command open(id: RequestId, kind: Kind) { outcome opened: -> Unassigned }
     command assign() { outcome assigned: Unassigned -> Assigned }
     command complete()
     command inspect(passed: Bool) {
@@ -33,13 +29,15 @@ const SOURCE = `context Sales {
       outcome approved: Assigned -> Assigned select { passed } emits Collected
       outcome denied: Assigned -> Assigned select { not passed } emits Received
     }
-    transitions for kind == Kind.COLLECT {
+    kind COLLECT {
+      create command openCollect(id: RequestId) { outcome opened: -> Unassigned }
       on complete {
         requires canCollect { ready } else Invalid
         outcome collected: Assigned -> CollectDone emits Collected
       }
     }
-    transitions for kind == Kind.DROP_OFF {
+    kind DROP_OFF {
+      create command openDropOff(id: RequestId) { outcome opened: -> Unassigned }
       on complete { outcome received: Assigned -> Holding emits Received }
     }
   }
@@ -110,11 +108,11 @@ commands.complete(invalid);
         const selected = runtime.checkInspectRequestChoice({})({ kind: 'COLLECT', state: 'Assigned' }, { passed: true });
         expect(selected).toEqual({ accepted: true, rejected: false });
         expect(runtime.checkCompleteRequestChoice({})({ kind: 'COLLECT', state: 'Assigned' })).toEqual({ collected: true, received: false });
-        expect(runtime.checkCompleteRequestRequires({ kind: 'COLLECT', state: 'Assigned', ready: false })).toBe('group0_canCollect');
+        expect(runtime.checkCompleteRequestRequires({ kind: 'COLLECT', state: 'Assigned', ready: false })).toBe('COLLECT_canCollect');
         expect(runtime.checkCompleteRequestRequires({ kind: 'DROP_OFF', state: 'Assigned', ready: false })).toBeUndefined();
         const helper = await import(path.join(dir, '_runtime.ts'));
         const decide = helper.decideNamed()(
-            { fields: ['kind', 'ready'], states: { Assigned: [], Accepted: [], Rejected: [] } },
+            { fields: ['ready'], kinds: { COLLECT: [], DROP_OFF: [] }, states: { Assigned: [], Accepted: [], Rejected: [] } },
             { accepted: 'Accepted', rejected: 'Rejected' },
             () => ({ ok: true, value: { accepted: { set: {}, events: {} } } }),
             { availability: { aggregate: 'Sales.Request', kindField: 'kind', commands: { inspect: { COLLECT: ['Assigned'] } } }, command: 'inspect' },
@@ -177,19 +175,15 @@ Tests.contract({}, { external: { Request: { inspect: { accepted: () => true } } 
     }
 });
 
-test('a grouped factory outcome fixes the produced kind without relying on parameter names', async () => {
+test('a factory of a kind fixes the produced kind, named in its set', async () => {
     const result = await check({
         'factory.dt': `context X {
       id TaskId: UUID
-      enum Kind { A B }
       aggregate Task {
         id: TaskId
-        readonly kind: Kind
         state Start
-        initial Start
-        create command open(id: TaskId)
-        transitions for kind == Kind.A { on open { outcome openedA: -> Start } }
-        transitions for kind == Kind.B { on open { outcome openedB: -> Start } }
+        kind A { create command openA(id: TaskId) { outcome openedA: -> Start } }
+        kind B { create command openB(id: TaskId) { outcome openedB: -> Start } }
       }
     }`,
     });
@@ -200,6 +194,7 @@ test('a grouped factory outcome fixes the produced kind without relying on param
     expect(code).toContain('aggregate: BStartTask');
     expect(code).toContain("readonly kind: 'A'");
     expect(code).toContain("readonly kind: 'B'");
+    expect(code).toContain("set: { readonly kind: 'A' } & { readonly id: TaskId }");
 });
 
 test('an annotated invariant makes its external check mandatory in contract options', async () => {

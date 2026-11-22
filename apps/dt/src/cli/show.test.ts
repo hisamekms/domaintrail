@@ -7,21 +7,20 @@ import { check } from '../test-helpers.js';
 test('dt show exposes kind-specific named outcomes and selection obligations', async () => {
     const source = `context Delivery {
       id RequestId: UUID
-      enum Kind { COLLECT DROP_OFF }
-      event Collected
-      event Delivered
+      event Collected { requestId: RequestId }
+      event Delivered { requestId: RequestId }
       aggregate Request {
         id: RequestId
-        readonly kind: Kind
         state Unassigned
         state Done
-        initial Unassigned
-        create command open(id: RequestId, kind: Kind) { outcome opened: -> Unassigned }
         command finish()
-        transitions for kind == Kind.COLLECT {
+        kind COLLECT "回収" {
+          depot: String
+          create command openCollect(id: RequestId, depot: String) { outcome opened: -> Unassigned }
           on finish { outcome collected: Unassigned -> Done emits Collected }
         }
-        transitions for kind == Kind.DROP_OFF {
+        kind DROP_OFF {
+          create command openDropOff(id: RequestId) { outcome opened: -> Unassigned }
           on finish { outcome delivered: Unassigned -> Done select "carrier confirmed" @externalCheck("carrier service") emits Delivered }
         }
       }
@@ -42,7 +41,10 @@ test('dt show exposes kind-specific named outcomes and selection obligations', a
     });
     const lines = showText(result.model!, { kind: 'command', agg: aggregate, command: finish });
     expect(lines.some((line) => line.includes('delivered') && line.includes('for DROP_OFF') && line.includes('select external'))).toBe(true);
-    expect(showText(result.model!, { kind: 'element', el: aggregate }).some((line) => line.includes('kind COLLECT: valid states Unassigned, Done'))).toBe(true);
+    const text = showText(result.model!, { kind: 'element', el: aggregate });
+    expect(text.some((line) => line.includes('kind COLLECT: valid states Unassigned, Done'))).toBe(true);
+    expect(text.some((line) => line.includes('kind COLLECT "回収"'))).toBe(true);
+    expect(text.some((line) => line.includes('create command openCollect(id: RequestId, depot: String) (kind COLLECT)'))).toBe(true);
     const delivered = lookup(result.model!, 'Delivered');
     if (!('found' in delivered)) throw new Error('event missing');
     expect(showJson(result.model!, delivered.found)).toMatchObject({ usedBy: { emittedBy: ['Delivery.Request.finish'] } });

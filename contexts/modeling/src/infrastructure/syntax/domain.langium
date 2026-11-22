@@ -73,20 +73,19 @@ Aggregate:
     'aggregate' name=ID label=STRING? WithFieldSets? '{' members+=AggregateMember* '}';
 
 AggregateMember:
-    DataMember | State | Command | Initial | TransitionGroup;
+    DataMember | State | Command | Initial | Kind;
 
 Initial:
     'initial' state=[State:ID];
 
-TransitionGroup:
-    'transitions' 'for' field=FeatureName (('==' values+=EnumValueSelector) | ('in' values+=EnumValueSelector ('|' values+=EnumValueSelector)*))
-    '{' members+=TransitionGroupMember* '}';
+// `kind Name { … }` (ADR 0037): one of the kinds of the aggregate, fixed when it is made. Its fields and invariants add
+// to the common ones; its commands (its create commands among them) are for this kind only; `on command { … }` gives
+// the outcomes of a common command for this kind.
+Kind:
+    'kind' name=ID label=STRING? '{' members+=KindMember* '}';
 
-EnumValueSelector:
-    (enum=[EnumDecl:QualifiedName] '::' | enum=[EnumDecl:ID] '.') value=ValueName;
-
-TransitionGroupMember:
-    Initial | CommandCase;
+KindMember:
+    DataMember | Command | Initial | CommandCase;
 
 CommandCase:
     'on' command=[Command:FeatureName] '{' (requirements+=Requirement | outcomes+=Outcome)* '}';
@@ -234,7 +233,7 @@ FeatureName returns string:
     ID | 'id' | 'value' | 'by' | 'persistent' | 'fields' | 'with' | 'requires' | 'else' | 'when' | 'changes' | 'verified' | 'of' | 'for' | 'policy'
     | 'context' | 'shared' | 'terms' | 'primitive' | 'enum' | 'union' | 'entity' | 'aggregate' | 'state' | 'owns' | 'references' | 'create'
     | 'command' | 'emits' | 'errors' | 'event' | 'error' | 'invariant'
-    | 'readonly' | 'initial' | 'transitions' | 'on' | 'outcome' | 'select'
+    | 'readonly' | 'initial' | 'kind' | 'on' | 'outcome' | 'select'
     | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
 
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never

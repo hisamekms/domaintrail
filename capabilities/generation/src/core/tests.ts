@@ -1,6 +1,19 @@
 import * as posix from 'node:path/posix';
 import type { AggregateModel, CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PolicyElement } from '@domaintrail/modeling';
-import { applicableOutcomes, BINARY_OP_TEXT, contextNames, elementOf, elementsIn, fieldsOf, invariantsOf, statesOf, variantsOf } from '@domaintrail/modeling';
+import {
+    applicableOutcomes,
+    BINARY_OP_TEXT,
+    commandKinds,
+    contextNames,
+    elementOf,
+    elementsIn,
+    fieldsOf,
+    invariantsOf,
+    kindCase,
+    statesOf,
+    validStatesFor,
+    variantsOf,
+} from '@domaintrail/modeling';
 import type { DomainPrimitive } from './checks.js';
 import {
     aggregateInvariants,
@@ -15,7 +28,18 @@ import {
     requiresWithName,
     unionInvariants,
 } from './checks.js';
-import { aggregateParamName, choiceCheckName, commandTypeName, commandsInterfaceName, makeTypeName, policyHandlersName, stateTypeName } from './naming.js';
+import {
+    KIND_TAG,
+    aggregateParamName,
+    choiceCheckName,
+    commandTypeName,
+    commandsInterfaceName,
+    kindTypeName,
+    makeTypeName,
+    pairTypeName,
+    policyHandlersName,
+    stateTypeName,
+} from './naming.js';
 import type { PolicyMode } from './typescript.js';
 // the version of domaintrail, which the generated tests state (outside the package: the root package is domaintrail)
 import { version as VERSION } from '../../../../package.json' with { type: 'json' };
@@ -497,6 +521,42 @@ class TestsEmitter {
                     const states = el.states;
                     const invs = aggregateInvariants(el);
                     const examples = (key: string): string => `options.examples?.${el.name}?.${key}`;
+                    if (el.kinds.length) {
+                        // kinds (ADR 0037): a value per kind (and state), its tags constant; checked by the aggregate's check
+                        const check = invs.length ? this.violated(el.name, el.name, invs) : '() => []';
+                        const holds = invs.length ? this.holds(el.name, el.name, invs) : undefined;
+                        const kindTag = (k: string): string => `${KIND_TAG}: fc.constant('${k}' as const)`;
+                        if (!states.length) {
+                            for (const k of el.kinds) {
+                                const type = kindTypeName(el, k.name);
+                                add(
+                                    type,
+                                    valid(type, `testing.cast<${this.type(type)}>(${this.record([kindTag(k.name)], [...el.fields, ...k.fields])})`, holds),
+                                );
+                            }
+                            add(
+                                el.name,
+                                `testing.withExamples(given.${el.name} ?? fc.oneof(${el.kinds.map((k) => `a.${kindTypeName(el, k.name)}`).join(', ')}), ${examples('aggregates')}, ${check}, '${ctx}.${el.name}')`,
+                            );
+                            break;
+                        }
+                        for (const k of el.kinds)
+                            for (const s of states.filter((x) => validStatesFor(el, k.name).includes(x.name))) {
+                                const type = pairTypeName(el, k.name, s.name);
+                                const raw = `testing.cast<${this.type(type)}>(${this.record([`state: fc.constant('${s.name}' as const)`, kindTag(k.name)], [...el.fields, ...k.fields, ...s.fields])})`;
+                                add(type, valid(type, raw, holds));
+                            }
+                        for (const s of states) {
+                            const type = stateTypeName(el, s);
+                            const pairs = el.kinds
+                                .filter((k) => validStatesFor(el, k.name).includes(s.name))
+                                .map((k) => `a.${pairTypeName(el, k.name, s.name)}`);
+                            const raw = pairs.length ? `fc.oneof(${pairs.join(', ')})` : 'fc.constant(undefined as never)';
+                            add(type, `testing.withExamples(given.${type} ?? ${raw}, ${examples(`states?.${s.name}`)}, ${check}, '${ctx}.${type}')`);
+                        }
+                        add(el.name, `given.${el.name} ?? fc.oneof(${states.map((s) => `a.${stateTypeName(el, s)}`).join(', ')})`);
+                        break;
+                    }
                     if (!states.length) {
                         const check = invs.length ? this.violated(el.name, el.name, invs) : '() => []';
                         const raw = `testing.cast<${this.type(el.name)}>(${this.record([], el.fields)})`;
@@ -509,11 +569,7 @@ class TestsEmitter {
                     for (const s of states) {
                         const type = stateTypeName(el, s);
                         const check = invs.length ? this.violated(type, el.name, invs) : '() => []';
-                        const allKinds = el.lifecycleField ? el.validStates.filter((v) => v.states.includes(s.name)).map((v) => v.kind) : [];
-                        const base = `testing.cast<${this.type(type)}>(${this.record([`state: fc.constant('${s.name}' as const)`], [...el.fields, ...s.fields])})`;
-                        const raw = el.lifecycleField
-                            ? `${base}.filter((value) => ([${allKinds.map((k) => `'${k}'`).join(', ')}] as readonly string[]).includes(value.${el.lifecycleField}))`
-                            : base;
+                        const raw = `testing.cast<${this.type(type)}>(${this.record([`state: fc.constant('${s.name}' as const)`], [...el.fields, ...s.fields])})`;
                         add(
                             type,
                             `testing.withExamples(${valid(type, raw, invs.length ? this.holds(type, el.name, invs) : undefined)}, ${examples(`states?.${s.name}`)}, ${check}, '${ctx}.${type}')`,
@@ -542,7 +598,7 @@ class TestsEmitter {
             if (el.kind !== 'aggregate') continue;
             for (const c of el.commands) {
                 const t = commandTypeName(el, c);
-                const requirements = [...c.requires, ...el.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires))];
+                const requirements = [...c.requires, ...el.kinds.flatMap((k) => kindCase(el, k.name, c.name)?.requires ?? [])];
                 if (hasDeclared(requirements)) out.push(`readonly ${t}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
             }
         }
@@ -586,7 +642,17 @@ class TestsEmitter {
         if (!c.legacy) return this.namedCommandCase(agg, c);
         const states = agg.states;
         const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
-        const subject = c.factory ? [] : [states.length ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})` : `a.${agg.name}`];
+        const subject = c.factory
+            ? []
+            : [
+                  states.length
+                      ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})`
+                      : agg.kinds.length
+                        ? `fc.oneof(${commandKinds(agg, c)
+                              .map((k) => `a.${kindTypeName(agg, k)}`)
+                              .join(', ')})`
+                        : `a.${agg.name}`,
+              ];
         // the parameters as one record, an optional one left out or given (none without parameters)
         const input = `fc.tuple(${[...subject, ...(c.params.length ? [this.record([], c.params)] : [])].join(', ')})`;
         const t = commandTypeName(agg, c);
@@ -628,28 +694,34 @@ class TestsEmitter {
     }
 
     private namedCommandCase(agg: AggregateModel, c: CommandModel): string {
-        const kinds = agg.lifecycleField ? agg.validStates.map((v) => v.kind) : ['*'];
-        const all = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
+        const hasKinds = agg.kinds.length > 0;
+        const kinds = commandKinds(agg, c);
+        const all = [...new Set(kinds.flatMap((k) => applicableOutcomes(agg, c, k)))];
+        // the inputs: per kind, the states the command takes there (ADR 0037), else its source states
+        const pairs = hasKinds
+            ? kinds.flatMap((k) => [...new Set(applicableOutcomes(agg, c, k).flatMap((o) => o.from))].map((from) => pairTypeName(agg, k, from)))
+            : [];
         const sources = [...new Set(all.flatMap((o) => o.from))];
-        const subject = c.factory ? [] : [agg.states.length ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})` : `a.${agg.name}`];
-        const tuple = `fc.tuple(${[...subject, ...(c.params.length ? [this.record([], c.params)] : [])].join(', ')})`;
-        const allowed = kinds.flatMap((kind) => applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => `${kind}:${from}`)));
-        const input =
-            c.factory || !agg.lifecycleField
-                ? tuple
-                : `${tuple}.filter(([subject]) => [${allowed.map((x) => `'${x}'`).join(', ')}].includes(String((subject as ${this.ctx}.${agg.name}).${agg.lifecycleField}) + ':' + String((subject as ${this.ctx}.${agg.name}).state)))`;
+        const subject = c.factory
+            ? []
+            : [
+                  hasKinds
+                      ? `fc.oneof(${pairs.map((p) => `a.${p}`).join(', ')})`
+                      : agg.states.length
+                        ? `fc.oneof(${sources.map((s) => `a.${stateTypeName(agg, s)}`).join(', ')})`
+                        : `a.${agg.name}`,
+              ];
+        const input = `fc.tuple(${[...subject, ...(c.params.length ? [this.record([], c.params)] : [])].join(', ')})`;
         const invs = aggregateInvariants(agg);
         const declaredInvs = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
         const requirements = [
             ...c.requires.map((r) => ({ key: r.name, requirement: r })),
-            ...agg.groups.flatMap((g, i) =>
-                g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires.map((r) => ({ key: `group${i}_${r.name}`, requirement: r }))),
-            ),
+            ...agg.kinds.flatMap((k) => (kindCase(agg, k.name, c.name)?.requires ?? []).map((r) => ({ key: `${k.name}_${r.name}`, requirement: r }))),
         ];
         const declaredReqs = requirements.filter((x) => !x.requirement.expr).map((x) => `'${x.key}'`);
         const t = commandTypeName(agg, c);
         const outcomes = all.map((o) => {
-            const applies = agg.lifecycleField ? kinds.filter((kind) => applicableOutcomes(agg, c, kind).includes(o)) : [];
+            const applies = hasKinds ? kinds.filter((kind) => applicableOutcomes(agg, c, kind).includes(o)) : [];
             return `{ name: '${o.name}', to: '${o.to}', from: [${o.from.map((s) => `'${s}'`).join(', ')}], kinds: [${applies.map((k) => `'${k}'`).join(', ')}] }`;
         });
         const counts = all.flatMap((o) =>
@@ -681,7 +753,7 @@ class TestsEmitter {
             `    stateful: ${agg.states.length > 0},`,
             `    counted: [${counts.join(', ')}],`,
             `    outcomes: [${outcomes.join(', ')}],`,
-            ...(agg.lifecycleField ? [`    kindField: '${agg.lifecycleField}',`, `    validStates: ${JSON.stringify(agg.validStates)},`] : []),
+            ...(hasKinds ? [`    kindField: '${KIND_TAG}',`, `    validStates: ${JSON.stringify(agg.validStates)},`] : []),
             `    choices: ${this.ctx}.${choiceCheckName(agg, c)}(${all.some((o) => o.select?.kind === 'external') ? `options.external.${agg.name}.${c.name}` : '{}'}),`,
             `}, options),`,
         ].join('\n');
@@ -803,9 +875,9 @@ class TestsEmitter {
                 .filter(
                     (c) =>
                         !c.legacy &&
-                        [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))].some(
-                            (o) => o.select?.kind === 'external',
-                        ),
+                        commandKinds(agg, c)
+                            .flatMap((k) => applicableOutcomes(agg, c, k))
+                            .some((o) => o.select?.kind === 'external'),
                 )
                 .map((c) => ({ agg, c })),
         );
@@ -818,10 +890,8 @@ class TestsEmitter {
                 for (const c of el.commands) {
                     const required = [
                         ...c.requires.filter((r) => !r.expr && r.externalReason).map((r) => r.name),
-                        ...el.groups.flatMap((g, i) =>
-                            g.cases
-                                .filter((x) => x.command === c.name)
-                                .flatMap((x) => x.requires.filter((r) => !r.expr && r.externalReason).map((r) => `group${i}_${r.name}`)),
+                        ...el.kinds.flatMap((k) =>
+                            (kindCase(el, k.name, c.name)?.requires ?? []).filter((r) => !r.expr && r.externalReason).map((r) => `${k.name}_${r.name}`),
                         ),
                     ];
                     if (required.length)
@@ -911,7 +981,7 @@ class TestsEmitter {
                 ),
             ),
             ...externalChoices.flatMap(({ agg, c }) =>
-                [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))]
+                [...new Set(commandKinds(agg, c).flatMap((k) => applicableOutcomes(agg, c, k)))]
                     .filter((o) => o.select?.kind === 'external')
                     .map(
                         (o) =>

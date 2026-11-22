@@ -59,11 +59,7 @@ function aggregateNames(model: DomainModel | null, id: string): { name: string; 
 function aggregateKinds(model: DomainModel | null, id: string): { name: string; label?: string }[] {
     const aggregate = model?.elements.find((element) => element.id === id);
     if (aggregate?.kind !== 'aggregate') return [];
-    const enumElement = model?.elements.find((element) => String(element.id) === aggregate.lifecycleEnum);
-    return aggregate.validStates.map((entry) => ({
-        name: entry.kind,
-        label: enumElement?.kind === 'enum' ? enumElement.values.find((value) => value.name === entry.kind)?.label : undefined,
-    }));
+    return aggregate.kinds.map((k) => ({ name: k.name, ...(k.label !== undefined && { label: k.label }) }));
 }
 
 /** The Live View page: composes the shell with the left column's lists and detail (the inspector), the view workspace and, in a session, the chat. */

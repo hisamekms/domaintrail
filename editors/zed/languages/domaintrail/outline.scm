@@ -22,6 +22,7 @@
 (terms "terms" @name) @item
 
 (state "state" @context name: (_) @name) @item
+(kind "kind" @context name: (_) @name) @item
 (command "create"? @context "command" @context name: (_) @name) @item
 (invariant "invariant" @context name: (_) @name) @item
 (variant name: (_) @name) @item

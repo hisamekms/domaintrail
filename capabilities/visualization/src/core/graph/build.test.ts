@@ -56,18 +56,20 @@ describe('State View graph', () => {
     test('filters each kind to valid states and exposes named outcome choice status', async () => {
         const source = `context S {
           id AId: UUID
-          enum Kind { COLLECT DROP_OFF }
           aggregate A {
             id: AId
-            readonly kind: Kind
             state Open
             state Collected
             state Holding
-            initial Open
-            create command start(id: AId, kind: Kind) { outcome started: -> Open }
             command finish()
-            transitions for kind == Kind.COLLECT { on finish { outcome collected: Open -> Collected } }
-            transitions for kind == Kind.DROP_OFF { on finish { outcome holding: Open -> Holding select "confirmed" @externalCheck("carrier") } }
+            kind COLLECT {
+              create command startCollect(id: AId) { outcome started: -> Open }
+              on finish { outcome collected: Open -> Collected }
+            }
+            kind DROP_OFF {
+              create command startDropOff(id: AId) { outcome started: -> Open }
+              on finish { outcome holding: Open -> Holding select "confirmed" @externalCheck("carrier") }
+            }
           }
         }`;
         const model = (await check({ 'a.dt': source })).model!;
@@ -79,6 +81,9 @@ describe('State View graph', () => {
         expect(dropOff.nodes.map((node) => node.id)).toContain('S.A#Holding');
         expect(dropOff.nodes.map((node) => node.id)).not.toContain('S.A#Collected');
         expect(collect.edges.find((edge) => edge.outcome === 'collected')).toMatchObject({ choiceStatus: 'single' });
+        // a kind's own commands only: the factory of DROP_OFF is not on the graph of COLLECT
+        expect(collect.edges.some((edge) => edge.label?.en.name.includes('startDropOff'))).toBe(false);
+        expect(collect.edges.some((edge) => edge.label?.en.name.includes('startCollect'))).toBe(true);
         expect(dropOff.edges.find((edge) => edge.outcome === 'holding')).toMatchObject({
             choiceStatus: 'external',
             choiceText: 'confirmed',

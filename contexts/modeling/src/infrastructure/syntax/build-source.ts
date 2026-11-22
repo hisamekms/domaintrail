@@ -5,7 +5,7 @@ import type { AstNode, Reference } from 'langium';
 import {
     isAggregate,
     isInitial,
-    isTransitionGroup,
+    isKind,
     isCommandCase,
     isBinaryExpr,
     isBoolLiteral,
@@ -41,7 +41,7 @@ import {
     isVerifiedDecl,
     type Command,
     type Outcome,
-    type TransitionGroup,
+    type Kind,
     type Context,
     type ContextElement,
     type DataMember,
@@ -63,7 +63,7 @@ import { docComment, docCommentBlock } from './labels.js';
 import type { FieldLike, ModelIndex } from './model-index.js';
 import { rangeSiteOf, siteOf, type FileResolver } from './site.js';
 import { regexSource } from './regex-source.js';
-import { commandId, elementId, stateId } from '../../domain/ids.js';
+import { commandId, elementId, kindId, stateId } from '../../domain/ids.js';
 import type * as src from '../../domain/source-model.js';
 
 /** Builds the model as written of the elements of `index` (the sources parse: every declaration has its name). */
@@ -212,19 +212,25 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         state: ref<src.StateDecl>(i, 'state', i.state),
         at: site(i),
     });
-    const group = (g: TransitionGroup): src.TransitionGroupDecl => ({
-        kind: 'transitionGroup',
-        name: g.field,
-        field: g.field,
-        values: g.values.map((v) => ({ enum: ref<src.EnumDecl>(v, 'enum', v.enum), value: v.value, at: site(v) })),
-        initials: g.members.filter(isInitial).map(initial),
-        cases: g.members.filter(isCommandCase).map((c) => ({
+    const kind = (aggId: string, k: Kind): src.KindDecl => ({
+        ...declared(k),
+        kind: 'kind',
+        id: kindId(aggId, k.name),
+        members: k.members.flatMap((m): src.KindMember[] =>
+            isCommand(m)
+                ? [command(aggId, m)]
+                : isInitial(m)
+                  ? [{ ...initial(m), kind: 'initial', name: m.state.$refText }]
+                  : isCommandCase(m)
+                    ? []
+                    : [dataMember(m)],
+        ),
+        cases: k.members.filter(isCommandCase).map((c) => ({
             command: ref<src.CommandDecl>(c, 'command', c.command),
             requirements: c.requirements.map(requirement),
             outcomes: c.outcomes.map(outcome),
             at: site(c),
         })),
-        at: site(g),
     });
     const command = (aggId: string, c: Command): src.CommandDecl => {
         const out: src.CommandDecl = {
@@ -240,6 +246,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
             emits: c.emits.map(emit),
             errors: refs<src.ErrorDecl>(c, 'errors', c.errors),
             outcomes: c.outcomes.map(outcome),
+            ...(isKind(c.$container) && { ofKind: c.$container.name }),
         };
         decls.set(c, out);
         return out;
@@ -294,8 +301,8 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                           ? command(id, m)
                           : isInitial(m)
                             ? { ...initial(m), kind: 'initial', name: m.state.$refText }
-                            : isTransitionGroup(m)
-                              ? group(m)
+                            : isKind(m)
+                              ? kind(id, m)
                               : dataMember(m),
                 ),
             };

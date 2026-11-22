@@ -1,6 +1,6 @@
 import { camel } from '@domaintrail/kernel';
 import type { RuleSink } from '../diagnostics.js';
-import { commandsOf, identityField, includedFields, type SourceModel } from '../source-model.js';
+import { commandsOf, kindsOf, identityField, includedFields, type SourceModel } from '../source-model.js';
 
 /**
  * M017 (warning): an event that a command of an aggregate emits has a field of that aggregate's ID type (its own or
@@ -14,9 +14,7 @@ export function checkEventIds(model: SourceModel, rules: RuleSink): void {
         if (idType?.kind !== 'id') continue; // reported by M013
         const checked = new Set<unknown>();
         for (const cmd of commandsOf(agg)) {
-            const grouped = agg.members
-                .filter((m) => m.kind === 'transitionGroup')
-                .flatMap((g) => g.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
+            const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
             for (const e of [...cmd.emits, ...[...cmd.outcomes, ...grouped].flatMap((o) => o.emits)]) {
                 const ev = e.event.target;
                 if (!ev || checked.has(ev)) continue;

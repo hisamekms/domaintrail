@@ -24,6 +24,10 @@
           "named": true
         },
         {
+          "type": "kind",
+          "named": true
+        },
+        {
           "type": "owns_field",
           "named": true
         },
@@ -33,10 +37,6 @@
         },
         {
           "type": "state",
-          "named": true
-        },
-        {
-          "type": "transition_group",
           "named": true
         }
       ]
@@ -761,36 +761,6 @@
     }
   },
   {
-    "type": "enum_value_selector",
-    "named": true,
-    "fields": {
-      "enum": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          },
-          {
-            "type": "qualified_name",
-            "named": true
-          }
-        ]
-      },
-      "value": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      }
-    }
-  },
-  {
     "type": "error_declaration",
     "named": true,
     "fields": {
@@ -1164,6 +1134,66 @@
       "types": [
         {
           "type": "external_check",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "kind",
+    "named": true,
+    "fields": {
+      "label": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "string",
+            "named": true
+          }
+        ]
+      },
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "command",
+          "named": true
+        },
+        {
+          "type": "command_case",
+          "named": true
+        },
+        {
+          "type": "field",
+          "named": true
+        },
+        {
+          "type": "initial",
+          "named": true
+        },
+        {
+          "type": "invariant",
+          "named": true
+        },
+        {
+          "type": "owns_field",
+          "named": true
+        },
+        {
+          "type": "reference_field",
           "named": true
         }
       ]
@@ -2319,40 +2349,6 @@
     }
   },
   {
-    "type": "transition_group",
-    "named": true,
-    "fields": {
-      "field": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      }
-    },
-    "children": {
-      "multiple": true,
-      "required": true,
-      "types": [
-        {
-          "type": "command_case",
-          "named": true
-        },
-        {
-          "type": "enum_value_selector",
-          "named": true
-        },
-        {
-          "type": "initial",
-          "named": true
-        }
-      ]
-    }
-  },
-  {
     "type": "union_declaration",
     "named": true,
     "fields": {
@@ -2611,10 +2607,6 @@
     "named": false
   },
   {
-    "type": "::",
-    "named": false
-  },
-  {
     "type": "<",
     "named": false
   },
@@ -2793,6 +2785,10 @@
     "named": false
   },
   {
+    "type": "kind",
+    "named": false
+  },
+  {
     "type": "line_comment",
     "named": true,
     "extra": true
@@ -2863,10 +2859,6 @@
   },
   {
     "type": "terms",
-    "named": false
-  },
-  {
-    "type": "transitions",
     "named": false
   },
   {

@@ -3,6 +3,7 @@ import {
     isCommand,
     isFieldSet,
     isInvariant,
+    isKind,
     isState,
     type Aggregate,
     type AggregateMember,
@@ -18,6 +19,8 @@ import {
     type FieldSet,
     type IdType,
     type Invariant,
+    type Kind,
+    type KindMember,
     type Model,
     type OwnsField,
     type PrimitiveDecl,
@@ -90,13 +93,18 @@ export function includedFields(el: WithFieldSets): { field: FieldLike; fieldSet:
 
 export const fieldsOf = (members: readonly DataMember[]): FieldLike[] => members.filter((m): m is FieldLike => !isInvariant(m));
 
-export const invariantsOf = (members: readonly (DataMember | State | Command | AggregateMember)[]): Invariant[] => members.filter(isInvariant);
+export const invariantsOf = (members: readonly (DataMember | State | Command | AggregateMember | KindMember)[]): Invariant[] => members.filter(isInvariant);
 
 export const commonFields = (agg: Aggregate): FieldLike[] =>
     agg.members.filter((m): m is FieldLike => m.$type === 'Field' || m.$type === 'OwnsField' || m.$type === 'ReferenceField');
 
 export const statesOf = (agg: Aggregate): State[] => agg.members.filter(isState);
-export const commandsOf = (agg: Aggregate): Command[] => agg.members.filter(isCommand);
+/** The kinds of an aggregate (ADR 0037). */
+export const kindsOf = (agg: Aggregate): Kind[] => agg.members.filter(isKind);
+/** Every command of an aggregate: the common ones, then those of each kind. */
+export const commandsOf = (agg: Aggregate): Command[] => [...agg.members.filter(isCommand), ...kindsOf(agg).flatMap((k) => k.members.filter(isCommand))];
+/** The common commands of an aggregate (declared outside its kinds). */
+export const commonCommandsOf = (agg: Aggregate): Command[] => agg.members.filter(isCommand);
 
 /** Discriminator property of a union declared without `by`. */
 const DEFAULT_DISCRIMINATOR = 'kind';

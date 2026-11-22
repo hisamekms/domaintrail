@@ -20,11 +20,14 @@ import type {
 import type { Location } from '@domaintrail/kernel';
 import {
     applicableOutcomes,
+    commandKinds,
     contextNames,
     elementOf,
     elementsIn,
     emitApplies,
     emittedEvents,
+    emittedEventsInAggregate,
+    kindCase,
     outcomeFields,
     ownFields,
     validStatesFor,
@@ -36,6 +39,7 @@ import {
     COMMAND_ERRORS_NAME,
     DOMAIN_EVENT_TYPE,
     EVENT_TAG,
+    KIND_TAG,
     PERSISTENT_EVENT_TYPE,
     NO_CHANGES_TYPE,
     NO_EVENTS_TYPE,
@@ -55,6 +59,10 @@ import {
     decisionTypeName,
     inputTypeName,
     invalidTypeName,
+    isKindName,
+    kindTypeName,
+    notForKindTypeName,
+    pairTypeName,
     makeTypeName,
     outputsVary,
     paramsArgName,
@@ -156,6 +164,8 @@ export type ${NO_CHANGES_TYPE} = { readonly [nothing]?: never };
 export interface Shape {
     readonly fields: readonly string[];
     readonly states?: { readonly [state: string]: readonly string[] };
+    /** The fields of each kind on top of the common ones (ADR 0037); its name is the aggregate's \`kind\`. */
+    readonly kinds?: { readonly [kind: string]: readonly string[] };
 }
 
 type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A : never;
@@ -188,18 +198,30 @@ export interface ChoiceVerifier {
     readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
 }
 
+/** The command's contract takes only the kinds that have it: another kind is a caller's bug, not a domain error. */
+const notForKind = (availability: Availability, command: string, subject: any): Error =>
+    new Error(\`DomainTrail command contract violated: \${availability.aggregate}.\${command} is not a command of kind '\${String(subject?.${KIND_TAG})}' (kinds: \${Object.keys(availability.commands[command] ?? {}).join(', ')}).\`);
+
 /** The command's contract takes only its source states: another state is a caller's bug, not a domain error. */
 const notASource = (subject: any, sources: readonly string[]): Error =>
     new Error(\`DomainTrail command contract violated: state '\${String(subject?.${STATE_TAG})}' is not a source state of this command (sources: \${sources.join(', ')}).\`);
 
-const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>>, where: CommandOf | undefined, verify: ChoiceVerifier | undefined): Decide<D> =>
+const decideWith = <D>(
+    shape: Shape,
+    decision: D,
+    targets: Readonly<Record<string, string>>,
+    where: CommandOf | undefined,
+    verify: ChoiceVerifier | undefined,
+    by: '${STATE_TAG}' | '${KIND_TAG}' = '${STATE_TAG}',
+): Decide<D> =>
     ((...args: any[]) => {
         const subject = args[0];
         if (where !== undefined) {
             const sources = sourcesFor(where.availability, where.command, subject);
-            if (!sources.includes(subject?.${STATE_TAG})) throw notASource(subject, sources);
+            if (sources === undefined) throw notForKind(where.availability, where.command, subject);
+            if (!where.availability.stateless && !sources.includes(subject?.${STATE_TAG})) throw notASource(subject, sources);
         }
-        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.${STATE_TAG}]) as ((...args: any[]) => Result<object, unknown>) | undefined;
+        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.[by]]) as ((...args: any[]) => Result<object, unknown>) | undefined;
         if (handler === undefined) throw notASource(subject, Object.keys(decision as object));
         const r = handler(...args);
         if (!r.ok) return r;
@@ -217,7 +239,10 @@ const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<strin
             if (o === undefined) continue;
             const to = targets[name] ?? name;
             const aggregate: Record<string, unknown> = shape.states ? { ${STATE_TAG}: to } : {};
-            for (const f of [...shape.fields, ...(shape.states?.[to] ?? [])]) {
+            // the kind (ADR 0037): the one a factory's \`set\` names, else the input's, which never changes
+            const kind = shape.kinds ? String('${KIND_TAG}' in o.set ? o.set.${KIND_TAG} : subject?.${KIND_TAG}) : undefined;
+            if (kind !== undefined) aggregate.${KIND_TAG} = kind;
+            for (const f of [...shape.fields, ...(kind === undefined ? [] : (shape.kinds?.[kind] ?? [])), ...(shape.states?.[to] ?? [])]) {
                 const v = f in o.set ? o.set[f] : subject?.[f];
                 if (v !== undefined) aggregate[f] = v;
             }
@@ -267,22 +292,51 @@ export const decideNamed = <D>() => <const Targets extends Readonly<Record<strin
     return decideWith(shape, decision, targets, where, verify) as Decide<D, Targets>;
 };
 
+/** The command a decision with one function per kind makes (ADR 0037): assignable to the command's contract. */
+export type DecideByKind<D, Targets = {}> = <S extends { readonly ${KIND_TAG}: keyof D }>(
+    subject: S,
+    ...args: ArgsAfterFirst<D[keyof D]>
+) => { [K in keyof D]: DecidedBy<D[K], Targets> }[S['${KIND_TAG}']];
+
+/**
+ * Construct a named-outcome command of several kinds from its decision, one function per kind (a generated
+ * \`<Command><Aggregate>Decision\` keyed by kind), as \`decideNamed\` does: the call runs the function of the aggregate's kind,
+ * after the check of its kind and state.
+ *
+ *     suspend: decideByKind<Logistics.SuspendPickupSiteDecision>()(Logistics.PickupSiteShape, { suspended: 'Suspended' }, { Store: (site) => …, Center: (site) => … }, { availability: Logistics.PickupSiteAvailability, command: 'suspend' })
+ */
+export const decideByKind = <D>() => <const Targets extends Readonly<Record<string, string>>>(
+    shape: Shape,
+    targets: Targets,
+    decision: D,
+    where: CommandOf,
+    verify?: ChoiceVerifier,
+): DecideByKind<D, Targets> => {
+    if (where.availability.commands[where.command] === undefined)
+        throw new Error(\`DomainTrail: \${where.availability.aggregate} has no command '\${where.command}' that takes an aggregate.\`);
+    return decideWith(shape, decision, targets, where, verify, '${KIND_TAG}') as unknown as DecideByKind<D, Targets>;
+};
+
 /**
  * Where the commands of an aggregate can be called, as data (a generated \`<Aggregate>Availability\`): for each command
- * that is not a factory, its source states per kind of the lifecycle selector \`kindField\`, or under \`'*'\` for an
+ * that is not a factory, its source states per kind (\`kindField\`, ADR 0037; a kind without the command has none), or under \`'*'\` for an
  * aggregate without one.
  */
 export interface Availability {
     /** The aggregate's qualified name (\`Context.Aggregate\`). */
     readonly aggregate: string;
+    /** The discriminator of the kinds (\`${KIND_TAG}\`) of an aggregate with kinds. */
     readonly kindField?: string;
+    /** An aggregate with kinds and no states: a command is available on the kinds that have it. */
+    readonly stateless?: true;
+    /** Per command, the kinds that have it (\`'*'\` without kinds), with its source states for each. */
     readonly commands: { readonly [command: string]: { readonly [kind: string]: readonly string[] } };
 }
 
 /**
  * The error of a command called through its any-state entry on an aggregate whose state is not one of the command's
  * source states: \`state\` is the aggregate's state, \`expected\` the states the command can be called in, and \`kind\` the
- * aggregate's kind when it has a lifecycle selector. It tells apart every state rejection from the command's own errors.
+ * aggregate's kind when it has kinds. It tells apart every state rejection from the command's own errors.
  */
 export type CommandUnavailable<A extends string = string, C extends string = string, S extends string = string, E extends string = string, K extends string = never> = {
     readonly type: 'CommandUnavailable';
@@ -292,19 +346,34 @@ export type CommandUnavailable<A extends string = string, C extends string = str
     readonly expected: readonly E[];
 } & ([K] extends [never] ? {} : { readonly kind: K });
 
-/** The source states of a command for the subject's kind; none when the command has none for that kind. */
-const sourcesFor = (availability: Availability, command: string, subject: any): readonly string[] => {
-    const byKind = availability.commands[command];
-    if (byKind === undefined) throw new Error(\`DomainTrail: \${availability.aggregate} has no command '\${command}' that takes an aggregate.\`);
-    return byKind[availability.kindField === undefined ? '*' : String(subject?.[availability.kindField])] ?? [];
+/**
+ * The error of a command called through its any-state entry on an aggregate of a kind that does not have the command
+ * (ADR 0037): \`kind\` is the aggregate's kind, \`expected\` the kinds that have the command. Unlike
+ * \`CommandUnavailable\`, it never passes later: the kind of an aggregate never changes.
+ */
+export type CommandNotForKind<A extends string = string, C extends string = string, K extends string = string, E extends string = string> = {
+    readonly type: 'CommandNotForKind';
+    readonly aggregate: A;
+    readonly command: C;
+    readonly kind: K;
+    readonly expected: readonly E[];
 };
 
-/** Whether the command can be called on the aggregate: its state is a source state of the command for its kind. */
-export const isAvailable = (availability: Availability, command: string, subject: { readonly ${STATE_TAG}: string }): boolean =>
-    sourcesFor(availability, command, subject).includes(subject.${STATE_TAG});
+/** The source states of a command for the subject's kind; \`undefined\` when its kind does not have the command. */
+const sourcesFor = (availability: Availability, command: string, subject: any): readonly string[] | undefined => {
+    const byKind = availability.commands[command];
+    if (byKind === undefined) throw new Error(\`DomainTrail: \${availability.aggregate} has no command '\${command}' that takes an aggregate.\`);
+    return byKind[availability.kindField === undefined ? '*' : String(subject?.[availability.kindField])];
+};
+
+/** Whether the command can be called on the aggregate: its kind has it, and its state is a source state for its kind. */
+export const isAvailable = (availability: Availability, command: string, subject: object): boolean => {
+    const sources = sourcesFor(availability, command, subject);
+    return sources !== undefined && (availability.stateless === true || sources.includes((subject as { readonly ${STATE_TAG}?: string }).${STATE_TAG} ?? ''));
+};
 
 /** The commands that can be called on the aggregate in its state (and kind), in declaration order. */
-export const availableCommands = (availability: Availability, subject: { readonly ${STATE_TAG}: string }): string[] =>
+export const availableCommands = (availability: Availability, subject: object): string[] =>
     Object.keys(availability.commands).filter((command) => isAvailable(availability, command, subject));
 
 /**
@@ -320,6 +389,15 @@ export const fromAnyState = (availability: Availability, commands: object): obje
             (subject: any, ...args: any[]): unknown => {
                 const sources = sourcesFor(availability, command, subject);
                 const kind = availability.kindField === undefined ? undefined : String(subject?.[availability.kindField]);
+                if (sources === undefined)
+                    return err({
+                        type: 'CommandNotForKind',
+                        aggregate: availability.aggregate,
+                        command,
+                        kind,
+                        expected: Object.keys(availability.commands[command] ?? {}),
+                    });
+                if (availability.stateless) return (commands as Record<string, (...a: any[]) => unknown>)[command]!(subject, ...args);
                 if (!sources.length)
                     throw new Error(\`DomainTrail command contract violated: \${availability.aggregate}.\${command} has no source state for \${availability.kindField} '\${kind}'.\`);
                 if (sources.includes(subject.${STATE_TAG})) return (commands as Record<string, (...a: any[]) => unknown>)[command]!(subject, ...args);
@@ -604,7 +682,18 @@ class ContextEmitter {
             .filter((line) => !/^\s*(\/\*\*|\*|\/\/)/.test(line))
             .join('\n');
         const uses = (n: string): boolean => new RegExp(`(^|[^\\w$.])${n}\\b`, 'm').test(code);
-        const runtime = ['Availability', 'CommandUnavailable', 'Decimal', 'Err', NO_CHANGES_TYPE, NO_EVENTS_TYPE, 'Result', 'Shape', 'Timestamp'].filter(uses);
+        const runtime = [
+            'Availability',
+            'CommandNotForKind',
+            'CommandUnavailable',
+            'Decimal',
+            'Err',
+            NO_CHANGES_TYPE,
+            NO_EVENTS_TYPE,
+            'Result',
+            'Shape',
+            'Timestamp',
+        ].filter(uses);
         const values = ['availableCommands', 'decimalCompare', 'distinct', 'err', 'fromAnyState', 'isAvailable', 'ok', 'sameList', 'sameOptional'].filter((n) =>
             new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(code),
         );
@@ -824,34 +913,10 @@ class ContextEmitter {
 
     private aggregate(agg: AggregateModel): void {
         const states = agg.states;
-        if (states.length === 0) {
+        if (agg.kinds.length) this.kindTypes(agg);
+        else if (states.length === 0) {
             this.jsdoc([...describedLines(agg), ...invariantLines(agg.invariants), seeLine(agg.location)]);
             this.iface(agg.name, this.fieldSets(agg), [], ownFields(agg));
-        } else if (agg.lifecycleField) {
-            this.jsdoc([
-                `Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`,
-                ...invariantLines(agg.invariants),
-                seeLine(agg.location),
-            ]);
-            this.iface(commonTypeName(agg), this.fieldSets(agg), [], ownFields(agg));
-            for (const s of states) {
-                const pairs = agg.validStates.filter((v) => v.states.includes(s.name));
-                for (const pair of pairs) {
-                    this.out.push('');
-                    this.jsdoc([...describedLines(s), ...invariantLines(s.invariants), seeLine(s.location)]);
-                    this.iface(
-                        this.pairType(agg, pair.kind, s.name),
-                        [commonTypeName(agg)],
-                        [`readonly ${STATE_TAG}: '${s.name}';`, `readonly ${agg.lifecycleField}: '${pair.kind}';`],
-                        s.fields,
-                    );
-                }
-                this.out.push('');
-                this.line(`export type ${stateTypeName(agg, s)} = ${pairs.map((p) => this.pairType(agg, p.kind, s.name)).join(' | ') || 'never'};`);
-            }
-            this.out.push('');
-            this.jsdoc([...describedLines(agg), seeLine(agg.location)]);
-            this.line(`export type ${agg.name} = ${states.map((s) => stateTypeName(agg, s)).join(' | ')};`);
         } else {
             this.jsdoc([
                 `Fields shared by every state of ${agg.label ? `${agg.label} (${agg.name})` : agg.name}.`,
@@ -901,20 +966,7 @@ class ContextEmitter {
             }
             this.line('}');
         }
-        const events = [
-            ...new Set(
-                commands.flatMap((c) =>
-                    c.legacy
-                        ? emittedEvents(c)
-                        : [
-                              ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event)),
-                              ...agg.groups.flatMap((g) =>
-                                  g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.emits.map((e) => e.event))),
-                              ),
-                          ],
-                ),
-            ),
-        ];
+        const events = [...new Set(commands.flatMap((c) => (c.legacy ? emittedEvents(c) : emittedEventsInAggregate(agg, c))))];
         if (events.length > 0) {
             this.out.push('');
             this.jsdoc([`Events that the commands of ${agg.name} may emit.`, seeLine(agg.location)]);
@@ -929,75 +981,111 @@ class ContextEmitter {
      * aggregate in any state. Factories take no aggregate and have none.
      */
     private availability(agg: AggregateModel): void {
-        const commands = agg.states.length ? agg.commands.filter((c) => !c.factory) : [];
+        const commands = agg.states.length || agg.kinds.length ? agg.commands.filter((c) => !c.factory) : [];
         if (!commands.length) return;
+        const stateless = !agg.states.length;
         const states = agg.states.map((s) => s.name);
-        const kinds = agg.lifecycleField ? agg.validStates.map((v) => v.kind) : ['*'];
-        const valid = (kind: string): readonly string[] => (agg.lifecycleField ? validStatesFor(agg, kind) : states);
-        /** The source states of a command for a kind, in the order the states are declared. */
+        const hasKinds = agg.kinds.length > 0;
+        const kinds = hasKinds ? agg.kinds.map((k) => k.name) : ['*'];
+        const valid = (kind: string): readonly string[] => (hasKinds ? validStatesFor(agg, kind) : states);
+        /** The source states of a command for a kind, in the order the states are declared (none for a kind without it). */
         const sources = (c: CommandModel, kind: string): string[] => {
+            if (!commandKinds(agg, c).includes(kind)) return [];
             const from = c.legacy ? c.transitions.flatMap((t) => t.from) : applicableOutcomes(agg, c, kind).flatMap((o) => o.from);
             return states.filter((s) => from.includes(s) && valid(kind).includes(s));
         };
+        /** The type of the aggregate of a kind in a state (`'*'` without kinds; `undefined` without states). */
+        const typeOf = (kind: string, state: string | undefined): string =>
+            state === undefined ? kindTypeName(agg, kind) : hasKinds ? this.pairType(agg, kind, state) : stateTypeName(agg, state);
         const self = aggregateParamName(agg);
         const lit = (names: readonly string[]): string => names.map((n) => `'${n}'`).join(' | ') || 'never';
 
         this.out.push('');
         this.jsdoc([
-            `Where the commands of ${agg.name} can be called: the source states of each command${agg.lifecycleField ? ` per ${agg.lifecycleField}` : ''}.`,
+            stateless
+                ? `Which kinds have the commands of ${agg.name}.`
+                : `Where the commands of ${agg.name} can be called: the source states of each command${hasKinds ? ' per kind (a kind without the command has none)' : ''}.`,
             'Data for `isAvailable`, `availableCommands` and `fromAnyState` of the runtime.',
             seeLine(agg.location),
         ]);
         this.line(`export const ${availabilityName(agg)}: Availability = {`);
         this.line(`    aggregate: ${quote(agg.id)},`);
-        if (agg.lifecycleField) this.line(`    kindField: ${quote(agg.lifecycleField)},`);
+        if (hasKinds) this.line(`    kindField: ${quote(KIND_TAG)},`);
+        if (stateless) this.line('    stateless: true,');
         this.line('    commands: {');
         for (const c of commands) {
-            const byKind = kinds.map((k) => `${quote(k)}: [${sources(c, k).map(quote).join(', ')}]`).join(', ');
+            const byKind = commandKinds(agg, c)
+                .map((k) => `${quote(k)}: [${sources(c, k).map(quote).join(', ')}]`)
+                .join(', ');
             this.line(`        ${c.name}: { ${byKind} },`);
         }
         this.line('    },');
         this.line('};');
 
         for (const c of commands) {
-            const input =
-                agg.lifecycleField && !c.legacy
-                    ? kinds.flatMap((k) => sources(c, k).map((s) => this.pairType(agg, k, s)))
-                    : unique(kinds.flatMap((k) => sources(c, k))).map((s) => stateTypeName(agg, s));
+            const own = commandKinds(agg, c);
+            const input = stateless ? own.map((k) => typeOf(k, undefined)) : own.flatMap((k) => sources(c, k).map((s) => typeOf(k, s)));
             const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
-            const unavailable = kinds.flatMap((k) => {
-                const from = sources(c, k);
-                const others = valid(k).filter((s) => !from.includes(s));
-                // no source state for a kind: the command cannot be called on that kind at all (a caller's bug)
-                if (!from.length || !others.length) return [];
-                const kind = agg.lifecycleField ? `, ${quote(k)}` : '';
-                return [`CommandUnavailable<${quote(agg.id)}, ${quote(c.name)}, ${lit(others)}, ${lit(from)}${kind}>`];
-            });
-            const where = agg.lifecycleField ? kinds.map((k) => `${k}: ${sources(c, k).join(' | ') || 'none'}`).join('; ') : sources(c, '*').join(' | ');
+            const unavailable = stateless
+                ? []
+                : own.flatMap((k) => {
+                      const from = sources(c, k);
+                      const others = valid(k).filter((s) => !from.includes(s));
+                      // no source state for a kind that has the command: it can never be called on that kind (a caller's bug)
+                      if (!from.length || !others.length) return [];
+                      const kind = hasKinds ? `, ${quote(k)}` : '';
+                      return [`CommandUnavailable<${quote(agg.id)}, ${quote(c.name)}, ${lit(others)}, ${lit(from)}${kind}>`];
+                  });
+            const without = hasKinds ? kinds.filter((k) => !own.includes(k)) : [];
+            const where = stateless
+                ? `kind ${own.join(' | ')}`
+                : hasKinds
+                  ? own.map((k) => `${k}: ${sources(c, k).join(' | ') || 'none'}`).join('; ')
+                  : sources(c, '*').join(' | ');
             this.out.push('');
-            this.jsdoc([`Whether ${agg.name}.${c.name} can be called on the ${self} in its state (${where}).`, seeLine(c.location)]);
+            this.jsdoc([
+                `Whether ${agg.name}.${c.name} can be called on the ${self} in its ${stateless ? 'kind' : hasKinds ? 'kind and state' : 'state'} (${where}).`,
+                seeLine(c.location),
+            ]);
             this.line(
                 `export const ${canName(agg, c)} = (${self}: ${agg.name}): ${self} is ${input.join(' | ') || 'never'} => isAvailable(${availabilityName(agg)}, ${quote(c.name)}, ${self});`,
             );
+            if (!stateless) {
+                this.out.push('');
+                this.jsdoc([
+                    `The error of ${agg.name}.${c.name} called through \`${anyStateFunctionName(agg)}\` on the ${self} when its state is not one of its source states.`,
+                    seeLine(c.location),
+                ]);
+                this.line(`export type ${unavailableTypeName(agg, c)} = ${unavailable.join(' | ') || 'never'};`);
+            }
+            if (hasKinds) {
+                this.out.push('');
+                this.jsdoc([
+                    `The error of ${agg.name}.${c.name} called through \`${anyStateFunctionName(agg)}\` on the ${self} of a kind that does not have it${without.length ? ` (${without.join(', ')})` : ''}: it never can be.`,
+                    seeLine(c.location),
+                ]);
+                this.line(
+                    `export type ${notForKindTypeName(agg, c)} = ${without.length ? `CommandNotForKind<${quote(agg.id)}, ${quote(c.name)}, ${lit(without)}, ${lit(own)}>` : 'never'};`,
+                );
+            }
             this.out.push('');
             this.jsdoc([
-                `The error of ${agg.name}.${c.name} called through \`${anyStateFunctionName(agg)}\` on the ${self} when its state is not one of its source states.`,
+                hasKinds
+                    ? `${agg.name}.${c.name} for the ${self} of any kind${stateless ? '' : ' in any state'}: the command where it can be called (${where})${stateless ? '' : `, \`${unavailableTypeName(agg, c)}\` in another state`}, \`${notForKindTypeName(agg, c)}\` for another kind.`
+                    : `${agg.name}.${c.name} for the ${self} in any state: the command in a source state (${where}), and \`${unavailableTypeName(agg, c)}\` in another.`,
                 seeLine(c.location),
             ]);
-            this.line(`export type ${unavailableTypeName(agg, c)} = ${unavailable.join(' | ') || 'never'};`);
-            this.out.push('');
-            this.jsdoc([
-                `${agg.name}.${c.name} for the ${self} in any state: the command in a source state (${where}), and \`${unavailableTypeName(agg, c)}\` in another.`,
-                seeLine(c.location),
-            ]);
-            // a kind without a source state of the command never can have it called (the kind is fixed): not accepted
-            const callable = kinds.filter((k) => sources(c, k).length);
+            // a kind that has the command but no source state of it never can have it called (the kind is fixed): not accepted
+            const callable = hasKinds ? kinds.filter((k) => !own.includes(k) || stateless || sources(c, k).length) : kinds.filter((k) => sources(c, k).length);
             const subject =
-                callable.length === kinds.length ? agg.name : callable.flatMap((k) => valid(k).map((s) => this.pairType(agg, k, s))).join(' | ') || 'never';
+                callable.length === kinds.length
+                    ? agg.name
+                    : callable.flatMap((k) => (stateless ? [typeOf(k, undefined)] : valid(k).map((s) => typeOf(k, s)))).join(' | ') || 'never';
+            const errors = [...(stateless ? [] : [`Err<${unavailableTypeName(agg, c)}>`]), ...(hasKinds ? [`Err<${notForKindTypeName(agg, c)}>`] : [])];
             this.line(`export type ${anyStateTypeName(agg, c)} = (`);
             this.line(`    ${self}: ${subject},`);
             for (const p of params) this.line(`    ${p},`);
-            this.line(`) => ReturnType<${commandTypeName(agg, c)}> | Err<${unavailableTypeName(agg, c)}>;`);
+            this.line(`) => ReturnType<${commandTypeName(agg, c)}> | ${errors.join(' | ')};`);
         }
 
         this.out.push('');
@@ -1030,36 +1118,95 @@ class ContextEmitter {
     }
 
     private pairType(agg: AggregateModel, kind: string, state: string): string {
-        return `${kind}${stateTypeName(agg, state)}`;
+        return pairTypeName(agg, kind, state);
+    }
+
+    /**
+     * The types of an aggregate with kinds (ADR 0037): its common fields; per kind (and state), the common fields, the
+     * kind's and the state's, tagged with `kind` (and `state`); the union per kind, per state and of all; a guard per kind.
+     */
+    private kindTypes(agg: AggregateModel): void {
+        const states = agg.states;
+        const title = agg.label ? `${agg.label} (${agg.name})` : agg.name;
+        this.jsdoc([`Fields shared by every kind${states.length ? ' and state' : ''} of ${title}.`, ...invariantLines(agg.invariants), seeLine(agg.location)]);
+        this.iface(commonTypeName(agg), this.fieldSets(agg), [], ownFields(agg));
+        for (const k of agg.kinds) {
+            const kindTag = `readonly ${KIND_TAG}: '${k.name}';`;
+            if (!states.length) {
+                this.out.push('');
+                this.jsdoc([...describedLines(k), ...invariantLines(k.invariants), seeLine(k.location)]);
+                this.iface(kindTypeName(agg, k.name), [commonTypeName(agg)], [kindTag], k.fields);
+                continue;
+            }
+            const valid = states.filter((s) => validStatesFor(agg, k.name).includes(s.name));
+            for (const s of valid) {
+                this.out.push('');
+                this.jsdoc([
+                    `${k.label ?? k.name} in ${s.label ?? s.name}.`,
+                    ...invariantLines(k.invariants),
+                    ...invariantLines(s.invariants),
+                    seeLine(s.location),
+                ]);
+                this.iface(
+                    this.pairType(agg, k.name, s.name),
+                    [commonTypeName(agg)],
+                    [`readonly ${STATE_TAG}: '${s.name}';`, kindTag],
+                    [...k.fields, ...s.fields],
+                );
+            }
+            this.out.push('');
+            this.jsdoc([...describedLines(k), seeLine(k.location)]);
+            this.line(`export type ${kindTypeName(agg, k.name)} = ${valid.map((s) => this.pairType(agg, k.name, s.name)).join(' | ') || 'never'};`);
+        }
+        for (const s of states) {
+            const pairs = agg.kinds.filter((k) => validStatesFor(agg, k.name).includes(s.name)).map((k) => this.pairType(agg, k.name, s.name));
+            this.out.push('');
+            this.jsdoc([...describedLines(s), seeLine(s.location)]);
+            this.line(`export type ${stateTypeName(agg, s)} = ${pairs.join(' | ') || 'never'};`);
+        }
+        this.out.push('');
+        this.jsdoc([...describedLines(agg), seeLine(agg.location)]);
+        this.line(`export type ${agg.name} = ${agg.kinds.map((k) => kindTypeName(agg, k.name)).join(' | ')};`);
+        const self = aggregateParamName(agg);
+        for (const k of agg.kinds) {
+            this.out.push('');
+            this.jsdoc([`Whether the ${self} is of kind ${k.name}${k.label ? ` (${k.label})` : ''}.`, seeLine(k.location)]);
+            this.line(
+                `export const ${isKindName(agg, k.name)} = (${self}: ${agg.name}): ${self} is ${kindTypeName(agg, k.name)} => ${self}.${KIND_TAG} === '${k.name}';`,
+            );
+        }
     }
 
     /** Explicit ADR 0035 outcomes, keyed by their names rather than by target states. */
     private commandNamed(agg: AggregateModel, c: CommandModel): void {
         const self = aggregateParamName(agg);
         const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
-        const errorNames = [
-            ...new Set([...c.errors, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.requires.map((r) => r.error)))]),
-        ];
+        const kinds = commandKinds(agg, c);
+        const hasKinds = agg.kinds.length > 0;
+        const errorNames = [...new Set([...c.errors, ...kinds.flatMap((k) => kindCase(agg, k, c.name)?.requires.map((r) => r.error) ?? [])])];
         const errors = errorNames.length ? errorNames.map((e) => this.ref(e)).join(' | ') : 'never';
-        const kinds = agg.lifecycleField ? agg.validStates.map((v) => v.kind) : ['*'];
-        const all = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
+        const all = [...new Set(kinds.flatMap((k) => applicableOutcomes(agg, c, k)))];
         const sources = agg.states.length ? agg.states.map((s) => s.name) : [''];
+        /** The aggregate of a kind (`'*'` without kinds) in a state (`''` without states). */
+        const typeOf = (kind: string, state: string): string =>
+            hasKinds
+                ? agg.states.length
+                    ? this.pairType(agg, kind, state)
+                    : kindTypeName(agg, kind)
+                : agg.states.length
+                  ? stateTypeName(agg, state)
+                  : agg.name;
         const inputs = c.factory
             ? []
             : kinds.flatMap((kind) =>
                   sources.flatMap((from) => {
                       const applicable = applicableOutcomes(agg, c, kind).filter((o) => !agg.states.length || o.from.includes(from));
                       if (!applicable.length) return [];
-                      return [
-                          {
-                              kind,
-                              from,
-                              applicable,
-                              type: agg.lifecycleField ? this.pairType(agg, kind, from) : agg.states.length ? stateTypeName(agg, from) : agg.name,
-                          },
-                      ];
+                      return [{ kind, from, applicable, type: typeOf(kind, from) }];
                   }),
               );
+        // with kinds (ADR 0037): the inputs grouped by kind, for a contract and a decision keyed by kind
+        const byKindInputs = hasKinds ? [...new Set(inputs.map((x) => x.kind))].map((kind) => ({ kind, inputs: inputs.filter((x) => x.kind === kind) })) : [];
         if (c.params.length) {
             this.jsdoc([`The parameters of ${agg.name}.${c.name}, by name.`, seeLine(c.location)]);
             this.line(`export interface ${paramsTypeName(agg, c)} {`);
@@ -1084,18 +1231,20 @@ class ContextEmitter {
                 }
             const outcomes = [...byName.values()].map(({ outcome: o, kinds: applicableKinds }): Outcome => ({
                 key: o.name,
-                first: `aggregate: ${agg.lifecycleField ? applicableKinds.map((k) => this.pairType(agg, k, o.to)).join(' | ') : stateTypeName(agg, o.to)}`,
+                first: `aggregate: ${applicableKinds.map((k) => typeOf(k, o.to)).join(' | ')}`,
                 emits: [...o.emits],
             }));
             this.line(`export type ${commandTypeName(agg, c)} = (`);
             for (const p of params) this.line(`    ${p},`);
             this.result(') => ', outcomes, errors, '', ';');
+        } else if (hasKinds) {
+            this.byKind(agg, c, self, params, errors, byKindInputs, false);
         } else {
             const input = inputs.map((x) => x.type).join(' | ') || 'never';
             const resultOf = (x: (typeof inputs)[number]): Outcome[] =>
                 x.applicable.map((o): Outcome => ({
                     key: o.name,
-                    first: `aggregate: ${agg.lifecycleField ? this.pairType(agg, x.kind, o.to) : agg.states.length ? stateTypeName(agg, o.to) : agg.name}`,
+                    first: `aggregate: ${typeOf(x.kind, o.to)}`,
                     emits: [...o.emits],
                 }));
             if (inputs.length === 1) {
@@ -1116,11 +1265,14 @@ class ContextEmitter {
             }
         }
         this.out.push('');
+        const keyed = !c.factory && byKindInputs.length > 1;
         this.jsdoc([
-            `Decision of ${agg.name}.${c.name}; each named outcome gives only its set fields and events.`,
+            keyed
+                ? `Decision of ${agg.name}.${c.name}, one function per kind; each named outcome gives only its set fields and events.`
+                : `Decision of ${agg.name}.${c.name}; each named outcome gives only its set fields and events.`,
             c.factory || !agg.states.length
                 ? 'Use decideNamed with an outcome-to-target map to form the aggregate.'
-                : `Use decideNamed with an outcome-to-target map to form the aggregate, and \`{ availability: ${availabilityName(agg)}, command: ${quote(c.name)} }\` to check the source states.`,
+                : `Use ${keyed ? 'decideByKind' : 'decideNamed'} with an outcome-to-target map to form the aggregate, and \`{ availability: ${availabilityName(agg)}, command: ${quote(c.name)} }\` to check the ${keyed ? 'kind and the ' : ''}source states.`,
             seeLine(c.location),
         ]);
         if (c.factory) {
@@ -1132,15 +1284,19 @@ class ContextEmitter {
                     else byName.set(o.name, { outcome: o, kinds: [kind] });
                 }
             const decisionOutcomes = [...byName.values()].map(({ outcome: o, kinds: applicableKinds }): Outcome => {
-                const fields = this.setType(outcomeFields(agg, c, undefined, o.to, o).set);
-                const set = agg.lifecycleField
-                    ? applicableKinds.map((kind) => `Omit<${fields}, '${agg.lifecycleField}'> & { readonly ${agg.lifecycleField}: '${kind}' }`).join(' | ')
-                    : fields;
+                // a factory of a kind names it in `set` (ADR 0037): the runtime makes the aggregate of that kind
+                const set = hasKinds
+                    ? applicableKinds
+                          .map((kind) => `{ readonly ${KIND_TAG}: '${kind}' } & ${this.setType(outcomeFields(agg, c, undefined, o.to, o, kind).set)}`)
+                          .join(' | ')
+                    : this.setType(outcomeFields(agg, c, undefined, o.to, o).set);
                 return { key: o.name, first: `set: ${set}`, emits: [...o.emits] };
             });
             this.line(`export type ${decisionTypeName(agg, c)} = (`);
             for (const p of params) this.line(`    ${p},`);
             this.result(') => ', decisionOutcomes, errors, '', ';');
+        } else if (hasKinds) {
+            this.byKind(agg, c, self, params, errors, byKindInputs, true);
         } else {
             const input = inputs.map((x) => x.type).join(' | ') || 'never';
             const resultOf = (x: (typeof inputs)[number]): Outcome[] =>
@@ -1168,32 +1324,95 @@ class ContextEmitter {
         }
     }
 
+    /**
+     * The contract (`decision` false) or the decision of a named command of an aggregate with kinds (ADR 0037): for the
+     * inputs of one kind, a function of its source states; for several kinds, a function generic over the input whose
+     * result is that of its kind (`{ Store: …; Center: … }[S['kind']]`), and a decision with one function per kind
+     * (`decideByKind`). Within a kind, the outcomes of its source states are one union.
+     */
+    private byKind(
+        agg: AggregateModel,
+        c: CommandModel,
+        self: string,
+        params: string[],
+        errors: string,
+        groups: { kind: string; inputs: { kind: string; from: string; applicable: OutcomeModel[]; type: string }[] }[],
+        decision: boolean,
+    ): void {
+        const name = decision ? decisionTypeName(agg, c) : commandTypeName(agg, c);
+        const outcomesOf = (g: (typeof groups)[number]): Outcome[] => {
+            const byName = new Map<string, { o: OutcomeModel; firsts: Set<string> }>();
+            for (const x of g.inputs)
+                for (const o of x.applicable) {
+                    const first = decision
+                        ? this.setType(outcomeFields(agg, c, x.from || undefined, o.to, o, g.kind).set)
+                        : agg.states.length
+                          ? this.pairType(agg, g.kind, o.to)
+                          : kindTypeName(agg, g.kind);
+                    const found = byName.get(o.name) ?? { o, firsts: new Set<string>() };
+                    found.firsts.add(first);
+                    byName.set(o.name, found);
+                }
+            return [...byName.values()].map(({ o, firsts }) => ({
+                key: o.name,
+                first: `${decision ? 'set' : 'aggregate'}: ${[...firsts].join(' | ')}`,
+                emits: [...o.emits],
+            }));
+        };
+        const inputOf = (g: (typeof groups)[number]): string => g.inputs.map((x) => x.type).join(' | ') || 'never';
+        if (groups.length <= 1) {
+            const g = groups[0] ?? { kind: '', inputs: [] };
+            this.line(`export type ${name} = (`);
+            this.line(`    ${self}: ${inputOf(g)},`);
+            for (const p of params) this.line(`    ${p},`);
+            if (!g.inputs.length) this.line(') => never;');
+            else this.result(') => ', outcomesOf(g), errors, '', ';');
+            return;
+        }
+        if (decision) {
+            this.line(`export type ${name} = {`);
+            for (const g of groups)
+                this.result(`    readonly ${g.kind}: (${[`${self}: ${inputOf(g)}`, ...params].join(', ')}) => `, outcomesOf(g), errors, '    ', ';');
+            this.line('};');
+            return;
+        }
+        this.line(`export type ${name} = <S extends ${groups.map(inputOf).join(' | ')}>(`);
+        this.line(`    ${self}: S,`);
+        for (const p of params) this.line(`    ${p},`);
+        this.line(') => {');
+        for (const g of groups) this.result(`    readonly ${g.kind}: `, outcomesOf(g), errors, '    ', ';');
+        this.line(`}[S['${KIND_TAG}']];`);
+    }
+
     /** The fields of an aggregate as data for `decide` (`OrderShape`): the common fields, and each state's own fields. */
     private shape(agg: AggregateModel): void {
         const states = agg.states;
         const list = (fields: readonly FieldModel[]): string => `[${fields.map((f) => `'${f.name}'`).join(', ')}]`;
         this.jsdoc([
-            `The fields of ${agg.name} as data for \`decide\`: the common fields${states.length ? ', and the fields of each state on top of them' : ''}.`,
+            `The fields of ${agg.name} as data for \`decide\`: the common fields${agg.kinds.length ? ', the fields of each kind' : ''}${states.length ? ', and the fields of each state on top of them' : ''}.`,
             seeLine(agg.location),
         ]);
-        if (states.length === 0) {
+        if (states.length === 0 && !agg.kinds.length) {
             this.line(`export const ${shapeName(agg)}: Shape = { fields: ${list(agg.fields)} };`);
             return;
         }
         this.line(`export const ${shapeName(agg)}: Shape = {`);
         this.line(`    fields: ${list(agg.fields)},`);
-        this.line(`    states: { ${states.map((s) => `${s.name}: ${list(s.fields)}`).join(', ')} },`);
+        if (agg.kinds.length) this.line(`    kinds: { ${agg.kinds.map((k) => `${k.name}: ${list(k.fields)}`).join(', ')} },`);
+        if (states.length) this.line(`    states: { ${states.map((s) => `${s.name}: ${list(s.fields)}`).join(', ')} },`);
         this.line('};');
     }
 
     private command(agg: AggregateModel, c: CommandModel): void {
         const stateful = agg.states.length > 0;
+        // without states, an aggregate with kinds (ADR 0037): a kind's command takes and makes the aggregate of its kind
+        const whole = c.kind ? kindTypeName(agg, c.kind) : agg.name;
         const stateUnion = (names: readonly string[]): string =>
             stateful
                 ? unique(names)
                       .map((n) => stateTypeName(agg, n))
                       .join(' | ')
-                : agg.name;
+                : whole;
         const transitions = stateful ? c.transitions : [];
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
         // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
@@ -1209,7 +1428,9 @@ class ContextEmitter {
         const outcomes = (from: string | undefined, targets: readonly string[], decision: boolean): Outcome[] =>
             (stateful ? unique(targets) : [undefined]).map((to) => ({
                 key: to ?? agg.name,
-                first: decision ? `set: ${this.setType(outcomeFields(agg, c, from, to).set)}` : `aggregate: ${to ? stateTypeName(agg, to) : agg.name}`,
+                first: decision
+                    ? `set: ${c.factory && c.kind ? `{ readonly ${KIND_TAG}: '${c.kind}' } & ` : ''}${this.setType(outcomeFields(agg, c, from, to).set)}`
+                    : `aggregate: ${to ? stateTypeName(agg, to) : whole}`,
                 emits: c.emits.filter((e) => emitApplies(e, from, to)),
             }));
         const requires = requirementLines(c.requires, (e) => this.ref(e));
@@ -1289,14 +1510,9 @@ class ContextEmitter {
     private requiresCheck(agg: AggregateModel, c: CommandModel): string[] {
         const states = agg.states;
         const sources = unique(
-            c.legacy
-                ? c.transitions.flatMap((t) => t.from)
-                : [
-                      ...c.outcomes.flatMap((o) => o.from),
-                      ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes.flatMap((o) => o.from))),
-                  ],
+            c.legacy ? c.transitions.flatMap((t) => t.from) : commandKinds(agg, c).flatMap((k) => applicableOutcomes(agg, c, k).flatMap((o) => o.from)),
         );
-        const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') || 'never' : agg.name;
+        const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') || 'never' : c.kind ? kindTypeName(agg, c.kind) : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
         const params = c.params.length ? { name: paramsArgName(agg), type: paramsTypeName(agg, c) } : undefined;
         return this.checks.requires(agg, c, commandTypeName(agg, c), subject, params);

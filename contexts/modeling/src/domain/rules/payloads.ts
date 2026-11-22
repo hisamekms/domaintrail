@@ -2,6 +2,7 @@ import { emitApplies } from '../model.js';
 import type { RuleSink } from '../diagnostics.js';
 import {
     commandsOf,
+    kindsOf,
     commonFields,
     fieldsOf,
     identityField,
@@ -93,7 +94,7 @@ export function checkPayloadNames(model: SourceModel, rules: RuleSink): void {
             const legacy = cmd.transitions.flatMap((t) =>
                 (cmd.factory ? [undefined] : t.from.map((r) => r.target)).flatMap((from) => t.to.map((r) => ({ from, to: r.target }))),
             );
-            const cases = agg.members.filter((m) => m.kind === 'transitionGroup').flatMap((g) => g.cases.filter((c) => c.command.text === cmd.name));
+            const cases = kindsOf(agg).flatMap((g) => g.cases.filter((c) => c.command.text === cmd.name));
             const named = [...cmd.outcomes, ...cases.flatMap((c) => c.outcomes)];
             const outcomes = [
                 ...legacy,

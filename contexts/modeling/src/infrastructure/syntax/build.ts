@@ -3,7 +3,7 @@ import type { Location } from '@domaintrail/kernel';
 import {
     isAggregate,
     isInitial,
-    isTransitionGroup,
+    isKind,
     isCommandCase,
     isBinaryExpr,
     isBoolLiteral,
@@ -37,7 +37,7 @@ import {
     isVerifiedDecl,
     type Command,
     type Outcome,
-    type TransitionGroup,
+    type Kind,
     type ContextElement,
     type Expression,
     type Invariant,
@@ -60,13 +60,14 @@ import {
     fieldsOf,
     includedFields,
     invariantsOf,
+    kindsOf,
     primitiveInvariants,
     statesOf,
     type FieldLike,
     type ModelIndex,
     type WithFieldSets,
 } from './model-index.js';
-import { commandId, contextName, elementId, qualifiedName, stateId } from '../../domain/ids.js';
+import { commandId, contextName, elementId, kindId, qualifiedName, stateId } from '../../domain/ids.js';
 import type {
     BinaryOp,
     CommandModel,
@@ -161,9 +162,11 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                     invariants: invariantsOf(el.members).map(invariant),
                     states: statesOf(el).map((s) => state(id, s, loc, field)),
                     commands: commandsOf(el).map((c) => command(id, c, loc, field)),
-                    initials: el.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: [] })),
-                    groups: el.members.filter(isTransitionGroup).map(group),
-                    ...lifecycleOf(el),
+                    initials: [
+                        ...el.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: [] })),
+                        ...kindsOf(el).flatMap((k) => k.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: [k.name] }))),
+                    ],
+                    kinds: kindsOf(el).map((k) => kind(id, k, loc, field)),
                     validStates: validStatesOf(el),
                 };
             }
@@ -335,14 +338,8 @@ function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, fi
         params: c.params.map(field),
         transitions: c.transitions.map((t) => ({ from: t.from.map((r) => r.$refText), to: t.to.map((r) => r.$refText) })),
         outcomes: c.outcomes.map(outcome),
-        legacy:
-            c.transitions.length > 0 ||
-            c.changes.length > 0 ||
-            c.emits.length > 0 ||
-            (c.outcomes.length === 0 &&
-                !c.$container.members
-                    .filter(isTransitionGroup)
-                    .some((g) => g.members.filter(isCommandCase).some((section) => section.command.$refText === c.name))),
+        legacy: c.transitions.length > 0 || c.changes.length > 0 || c.emits.length > 0 || (c.outcomes.length === 0 && !kindCases(c).length),
+        ...(isKind(c.$container) && { kind: c.$container.name }),
         requires: c.requirements.map(requirement),
         changes: [...c.changes],
         emits: c.emits.map((e) => ({
@@ -382,61 +379,62 @@ function outcome(o: Outcome): import('../../domain/model.js').OutcomeModel {
     };
 }
 
-function group(g: TransitionGroup): import('../../domain/model.js').TransitionGroupModel {
+/** The `on` cases of the kinds of a command's aggregate for that command. */
+function kindCases(c: Command): import('./generated/ast.js').CommandCase[] {
+    const agg = AstUtils.getContainerOfType(c, isAggregate);
+    return agg ? kindsOf(agg).flatMap((k) => k.members.filter(isCommandCase).filter((x) => x.command.$refText === c.name)) : [];
+}
+
+function kind(aggId: ElementId, k: Kind, loc: (n: AstNode) => Location, field: (f: FieldLike) => FieldModel): import('../../domain/model.js').KindModel {
     return {
-        field: g.field,
-        enum: g.values[0]?.enum.ref ? qname(g.values[0].enum.ref) : qualifiedName(g.values[0]?.enum.$refText ?? ''),
-        values: g.values.map((v) => v.value),
-        initials: g.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: g.values.map((v) => v.value) })),
-        cases: g.members
+        id: kindId(aggId, k.name),
+        name: k.name,
+        ...described(k),
+        fields: k.members.filter((m): m is FieldLike => m.$type === 'Field' || m.$type === 'OwnsField' || m.$type === 'ReferenceField').map(field),
+        invariants: invariantsOf(k.members).map(invariant),
+        cases: k.members
             .filter(isCommandCase)
             .map((c) => ({ command: c.command.$refText, requires: c.requirements.map(requirement), outcomes: c.outcomes.map(outcome) })),
+        location: loc(k),
     };
 }
 
-function lifecycleOf(agg: import('./generated/ast.js').Aggregate): { lifecycleField?: string; lifecycleEnum?: QualifiedName } {
-    const first = agg.members.find(isTransitionGroup);
-    return first
-        ? {
-              lifecycleField: first.field,
-              lifecycleEnum: first.values[0]?.enum.ref ? qname(first.values[0].enum.ref) : qualifiedName(first.values[0]?.enum.$refText ?? ''),
-          }
-        : {};
-}
-
+/**
+ * The states each kind of an aggregate can be in (ADR 0037): from its initial states — those declared for every kind
+ * and for it, and the targets of its create commands — through the outcomes and transitions of the commands it has.
+ */
 function validStatesOf(agg: import('./generated/ast.js').Aggregate): import('../../domain/model.js').ValidKindStatesModel[] {
-    const groups = agg.members.filter(isTransitionGroup);
-    if (!groups.length) return [];
-    const values = groups.flatMap((g) => g.values.map((v) => v.value));
-    const enumDecl = groups[0]?.values[0]?.enum.ref;
-    const kinds = enumDecl?.values.map((v) => v.name) ?? [...new Set(values)];
+    const kinds = kindsOf(agg);
+    if (!kinds.length) return [];
     const common = agg.members.filter(isInitial).map((i) => i.state.$refText);
-    return kinds.map((kind) => {
-        const selected = groups.filter((g) => g.values.some((v) => v.value === kind));
-        const seen = new Set([...common, ...selected.flatMap((g) => g.members.filter(isInitial).map((i) => i.state.$refText))]);
+    const commands = commandsOf(agg);
+    return kinds.map((k) => {
+        const mine = commands.filter((c) => !isKind(c.$container) || c.$container === k);
+        const cases = k.members.filter(isCommandCase);
+        const outcomes = (c: Command): Outcome[] => [...c.outcomes, ...cases.filter((x) => x.command.$refText === c.name).flatMap((x) => x.outcomes)];
+        const created = mine
+            .filter((c) => c.factory)
+            .flatMap((c) => [...c.transitions.flatMap((t) => t.to.map((r) => r.$refText)), ...outcomes(c).map((o) => o.to.$refText)]);
+        const seen = new Set([...common, ...k.members.filter(isInitial).map((i) => i.state.$refText), ...created]);
         let changed = true;
         while (changed) {
             changed = false;
-            for (const c of agg.members.filter((m): m is Command => m.$type === 'Command')) {
-                for (const t of c.factory ? [] : c.transitions)
-                    if (t.to.length === 1 && t.from.some((f) => seen.has(f.$refText))) {
-                        const target = t.to[0]!.$refText;
-                        if (!seen.has(target)) {
-                            seen.add(target);
-                            changed = true;
-                        }
+            for (const c of mine.filter((x) => !x.factory)) {
+                const reached = [
+                    ...c.transitions.filter((t) => t.from.some((f) => seen.has(f.$refText))).flatMap((t) => t.to.map((r) => r.$refText)),
+                    ...outcomes(c)
+                        .filter((o) => o.from.some((f) => seen.has(f.$refText)))
+                        .map((o) => o.to.$refText),
+                ];
+                for (const target of reached)
+                    if (!seen.has(target)) {
+                        seen.add(target);
+                        changed = true;
                     }
-                const cases = selected.flatMap((g) => g.members.filter(isCommandCase).filter((x) => x.command.$refText === c.name));
-                for (const o of [...c.outcomes, ...cases.flatMap((x) => x.outcomes)]) {
-                    if (!c.factory && o.from.some((f) => seen.has(f.$refText))) {
-                        if (!seen.has(o.to.$refText)) {
-                            seen.add(o.to.$refText);
-                            changed = true;
-                        }
-                    }
-                }
             }
         }
-        return { kind, states: [...seen] };
+        // a kind made elsewhere (no create command, no initial state) may be in any state
+        const declared = statesOf(agg).map((s) => s.name);
+        return { kind: k.name, states: seen.size ? declared.filter((s) => seen.has(s)) : declared };
     });
 }

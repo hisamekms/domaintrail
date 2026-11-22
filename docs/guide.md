@@ -78,7 +78,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 
 - `owns x: T` — an entity or value held by the aggregate; `references x: XId -> X` — another aggregate, by ID only.
 - `invariant name { expr }` — holds whenever the aggregate (or, inside a `state`, that state) exists.
-- `state S { … }` — a lifecycle state with its own fields; without states, commands have no transitions.
+- `state S { … }` — what changes in its life (own fields); `kind K { … }` — what is fixed at creation (`dt guide kinds`).
 - `create command c(…) -> S` — makes a new aggregate; it takes the new ID as a parameter (commands are pure).
 - `A | B -> C | D` — the command runs in `A` or `B` and ends in `C` or `D`; one transition per source state.
 - `requires name { expr } else E` — the command is accepted only if; otherwise it returns `E` (the first one failing).
@@ -379,7 +379,8 @@ context Sales {
   (M027).
 - Primitive types: `String`, `Int`, `Decimal`, `Bool`, `Timestamp`, `UUID`.
 - Multiplicity after the type: `?` (also `[0..1]`, which `dt fmt` writes as `?`), `[0..*]`, `[1..*]`, `[n..m]`.
-- Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`.
+- Aggregate members: fields, `invariant`, `state` (with its own fields and invariants), `command`, `kind` (with its own
+  fields, invariants, commands and `on` cases; see [Kinds of an aggregate](#kinds-of-an-aggregate)).
 - A command is written in this order: parameters and label, transitions, `requires` (see
   [Command requirements](#command-requirements)), `changes` (see [Command changes](#command-changes)), `emits` (see
   [Command events](#command-events)), `errors`.
@@ -436,8 +437,11 @@ context Sales {
 <!-- topic: unions -->
 ### Unions
 
-A value whose shape depends on a kind fixed when it is made (a tagged union). Use a union for a classification that
-never changes, and aggregate states for a lifecycle that commands move through.
+A value whose shape depends on a kind fixed when it is made (a tagged union). Use a union for a value that varies (a
+payer, a payment method), aggregate states for a lifecycle that commands move through, and the kinds of an aggregate
+for what the aggregate itself is: its fields, rules and commands by kind (see [Kinds of an aggregate](#kinds-of-an-aggregate)).
+A union held by an aggregate is a value: its variant fields are not seen by the aggregate's rules, and a command replaces
+it whole.
 
 ```dt
 // sales/payment.dt
@@ -637,59 +641,131 @@ context Billing { // other files open the context without a name
 - Labels appear in the Live View and as JSDoc in the generated TypeScript; identifiers and generated type names stay
   English.
 
-<!-- topic: kind-lifecycles -->
-### Kind-specific lifecycles and named outcomes
+<!-- topic: kinds -->
+### Kinds of an aggregate
 
-Use a required `readonly` enum field when one aggregate has several lifecycles. `initial` names the starting state;
-each `transitions for` group adds outcomes only for its selected enum value. Commands outside the groups are shared.
+An aggregate whose kinds are fixed when it is made, and differ in fields, rules, commands or lifecycle, declares each
+kind with `kind Name { … }` (ADR 0037). The aggregate is then a sum of its kinds with a common part: not inheritance.
+A kind adds to the common fields, invariants and commands; it never overrides them.
 
 ```dt
-// delivery/request.dt
-context Delivery {
-  id RequestId: UUID
-  enum Kind { COLLECT DROP_OFF }
-  event Collected {
-    requestId: RequestId
+// logistics/pickup-site.dt
+context Logistics {
+  id PickupSiteId: UUID
+  primitive StoreCode: String
+  primitive DockCount: Int { value >= 1 }
+  event StoreRegistered {
+    pickupSiteId: PickupSiteId
   }
-  event Received {
-    requestId: RequestId
+  event CenterRegistered {
+    pickupSiteId: PickupSiteId
   }
-  aggregate Request {
-    id: RequestId
-    readonly kind: Kind
-    state Unassigned
-    state Assigned
-    state Collected
-    state Holding
-    initial Unassigned
-    create command open(id: RequestId, kind: Kind) {
-      outcome opened: -> Unassigned
-    }
-    command assign() {
-      outcome assigned: Unassigned -> Assigned
-    }
-    command finish()
-    transitions for kind == Kind.COLLECT {
-      on finish {
-        outcome collected: Assigned -> Collected
-          emits Collected
+  event SiteSuspended {
+    pickupSiteId: PickupSiteId
+  }
+  error DocksInUse
+
+  aggregate PickupSite "集荷先" {
+    id: PickupSiteId // common to every kind
+    name: String
+    state Active // states are common
+    state Suspended
+    initial Active // optional: a kind starts where its create commands end
+    command suspend() // common: its outcomes are in every kind's `on suspend`
+
+    kind Store "出荷店舗" {
+      readonly storeCode: StoreCode // only in this kind; never changes
+      closingTime: String
+      create command registerStore(id: PickupSiteId, name: String, storeCode: StoreCode, closingTime: String) {
+        outcome registered: -> Active
+          emits StoreRegistered
+      }
+      command changeClosingTime(newClosingTime: String) { // only for this kind
+        outcome changed: Active -> Active
+          changes closingTime
+      }
+      on suspend {
+        outcome suspended: Active -> Suspended
+          emits SiteSuspended
       }
     }
-    transitions for kind == Kind.DROP_OFF {
-      on finish {
-        outcome received: Assigned -> Holding
-          select "運送会社が受領を確認した" @externalCheck("運送会社のシステムに照会する")
-          emits Received
+
+    kind DistributionCenter "配送センター" {
+      dockCount: DockCount
+      invariant fewDocks { dockCount <= 100 } // sees the common fields and this kind's
+      create command registerCenter(id: PickupSiteId, name: String, dockCount: DockCount) {
+        outcome registered: -> Active
+          emits CenterRegistered
+      }
+      on suspend {
+        requires noOpenDocks { dockCount < 100 } else DocksInUse // after the common requirements
+        outcome suspended: Active -> Suspended
+          select { dockCount < 50 }
+          emits SiteSuspended
+        outcome deferred: Active -> Active
+          select { dockCount >= 50 }
       }
     }
   }
 }
 ```
 
-`Kind.COLLECT` is a local enum value. Use `OtherContext.Kind::COLLECT` for a qualified enum, since `.` already
-separates context and type names. A group may select several values with `kind in Kind.COLLECT | Kind.DROP_OFF`.
-The kind is fixed at creation. For each kind, DomainTrail derives valid states from its initial states and outcomes;
-restored data and migrations remain the application's responsibility.
+Choose by one question: **does it change during the aggregate's life?**
+
+- It changes: a `state` (with the fields of that state).
+- It is fixed at creation and the aggregate differs by it in fields, rules or commands: a `kind`.
+- A value that varies (a payer, a payment method) and has no identity or commands of its own: a `union`.
+- Kinds that share almost nothing (no common commands): separate aggregates, with a `fields` set for what they share.
+- A classification that changes nothing else: a `readonly` enum field (M031 warns about kinds that declare nothing).
+
+The rules (`dt check`; M030 errors, M031 warnings):
+
+- **Fields.** A kind's fields exist in every aggregate of that kind. Its invariants, its commands and its `on` cases see
+  the common fields and its own; the common invariants and commands see the common fields only (M010 names the kind
+  of a field out of scope). A kind's field is named like no common field and no state's field (M002), and no field of
+  an aggregate with kinds is named `kind`: that is the discriminator. A field every kind declares with the same type
+  is common (M031).
+- **The kind is fixed.** The create commands are declared in the kinds: the one that makes the aggregate fixes its kind.
+  An aggregate with kinds has no common `create command`, and each kind has one when the aggregate has any. Nothing
+  changes the kind. A business change of kind ends one aggregate and makes another (a `policy` may link them), or is a
+  `state`.
+- **States are common.** A kind starts where its create commands end (and in its `initial` states, if declared), and
+  reaches the states its outcomes lead to: `dt show` lists them per kind. A state no kind reaches is M031.
+- **A command of a kind** belongs to that kind only. Command names are unique in the aggregate.
+- **A common command's behaviour is in exactly one place**: in the command (outcomes, or for an aggregate without
+  states `changes` and `emits`) for every kind, or in an `on` case in **every** kind, the command then having none.
+  Write it in the command when every kind does the same (`command suspend() { outcome suspended: Active -> Suspended }`);
+  use `on` cases only when the kinds differ (other requirements, outcomes or events). Cases that are all alike are M031.
+  Mixing the two, or a kind without its case, is M030: a new kind must decide every such command; nothing falls back to
+  a common behaviour. The command's `requires` apply to every kind, before those of the kind's case.
+- With kinds and states, commands name their outcomes (`outcome name: A -> B`), not the shorthand `A -> B`.
+- Without states, a kind's commands use the form of an aggregate without states (`changes`, `emits`).
+
+A union of states with optional fields guarded by a classification (`type == SiteType.STORE implies exists(storeCode)`)
+is the shape of kinds: M031 says so.
+
+**Generated code.** The aggregate is a union of its kinds (`StorePickupSite | DistributionCenterPickupSite`), each of
+its kind–state types (`StoreActivePickupSite`, …) with `kind` and `state`; `ActivePickupSite` is the union per state,
+`PickupSiteCommon` the common fields. `isStorePickupSite` narrows by kind. A command of a kind takes only that kind's
+aggregate, and the decision of a create command names its kind in `set` (`{ kind: 'Store', … }`). A common command
+decided in the kinds' `on` cases has one decision function per kind, and its result is that of the input's kind:
+
+```ts
+// your code: a common command decided per kind
+suspend: decideByKind<Logistics.SuspendPickupSiteDecision>()(
+    Logistics.PickupSiteShape,
+    { suspended: 'Suspended' },
+    {
+        Store: (site) => ok({ suspended: { set: {}, events: { 'Logistics.SiteSuspended': suspended(site) } } }),
+        DistributionCenter: (site) => (site.dockCount < 100 ? decideCenter(site) : err({ type: 'Logistics.DocksInUse' })),
+    },
+    { availability: Logistics.PickupSiteAvailability, command: 'suspend' },
+),
+```
+ A command called
+through `anyStatePickupSiteCommands` on an aggregate of a kind that does not have it returns `CommandNotForKind` (it
+never passes: the kind is fixed), apart from `CommandUnavailable` for a state (it may pass later). Through the
+command's own type, another kind is a caller's bug and throws. See [Decisions and `decide`](#decisions-and-decide).
 
 Each `outcome` has a stable name, source states, one target state, and its own `changes` and `emits`. If a command has
 multiple outcomes from the same source, each needs `select { Boolean expression }`. A decision that depends on an
@@ -697,7 +773,7 @@ external system can use `select "decision" @externalCheck("why it is external")`
 check. An unexpressed `select`, `requires`, or `invariant` appears as a warning in `dt check` and blocks
 `dt check --for-generation` unless annotated with `@externalCheck`. The annotation records an obligation; it is not
 proof that a check ran. The State View can filter by kind and marks each outcome's selection status. `dt show` lists
-the valid states and named outcomes per kind.
+the valid states and named outcomes per kind; restored data and migrations remain the application's responsibility.
 
 <!-- topic: expressions -->
 ### Invariant expressions
@@ -1353,7 +1429,9 @@ description.
   not around a screen, a table or a noun.
 - Write the invariants as expressions where the DSL can (see [Invariant expressions](#invariant-expressions)), and as
   a label or `///` where it cannot. Keep aggregates small; refer to another aggregate by its ID.
-- States (a union of states) when the allowed commands depend on where the thing is in its life.
+- States (a union of states) when the allowed commands depend on where the thing is in its life; kinds (`kind K { … }`)
+  when the aggregate is made as one of several kinds that differ in fields, rules or commands. Ask whether it changes
+  during the aggregate's life: then a state; fixed at creation: a kind (not an enum field with optional fields, M031).
 
 **The DSL's types, not strings.** `dt check` warns about the first two (M026, M027).
 - A closed set of values is an `enum` (`enum Plan { Basic Premium }`): not a `union` whose variants have no fields,
@@ -1667,17 +1745,20 @@ export type AcceptReview = (
 
 **Commands in any state.** A command's type takes only its source states (`ConfirmOrder` takes a `DraftOrder`), so calling it in another state
 does not compile. An aggregate loaded from a store can be in any state, and the model already says which states each
-command takes. For every aggregate with states, the generated module therefore also has, for each command that is not
-a factory (ADR 0036):
+command takes. For every aggregate with states or kinds, the generated module therefore also has, for each command that
+is not a factory (ADR 0036, 0037):
 
 - `can<Command><Aggregate>(aggregate)`: whether the command can be called in the aggregate's state; a type guard that
   narrows the aggregate to the command's input.
 - `<Command><Aggregate>Unavailable`: the error of calling the command in another state, a `CommandUnavailable` of the
-  runtime: `{ type: 'CommandUnavailable', aggregate, command, state, expected }` (and `kind` with a lifecycle selector),
-  where `state` is the aggregate's state and `expected` the command's source states. It is `never` when every state is
-  a source state.
-- `<Command><Aggregate>FromAnyState`: the command for an aggregate in any state: its own result, or `Err` of
-  `…Unavailable`.
+  runtime: `{ type: 'CommandUnavailable', aggregate, command, state, expected }` (and `kind` with kinds), where `state`
+  is the aggregate's state and `expected` the command's source states. It is `never` when every state is a source
+  state. An aggregate with kinds and no states has none.
+- `<Command><Aggregate>NotForKind` (with kinds): the error of calling a command of another kind, a `CommandNotForKind`
+  of the runtime: `{ type: 'CommandNotForKind', aggregate, command, kind, expected }`, where `expected` lists the kinds
+  that have the command. It never passes for that aggregate (its kind is fixed); `never` for a common command.
+- `<Command><Aggregate>FromAnyState`: the command for an aggregate in any state (and kind): its own result, or `Err`
+  of `…Unavailable` (or `…NotForKind`).
 
 Once per aggregate, it also has `anyState<Aggregate>Commands(commands)`, your commands for an aggregate in any state (a
 state that is not a source state gives `…Unavailable` without calling the command), `available<Aggregate>Commands(aggregate)`,
@@ -3379,7 +3460,7 @@ storming](#diagnostics-of-a-storming).
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
 | M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `count(…)` / `length(…)` |
-| M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them |
+| M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them; a kind's fields only inside its kind |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
 | M013 | aggregates and entities have an `id` field of their own ID type |
@@ -3397,8 +3478,10 @@ storming](#diagnostics-of-a-storming).
 | M025 | a context's description (`///` above `context X`) is written once across the files of the context; each later one names the first |
 | M026 | (warning) a union has a variant with fields; one whose variants have none is an `enum` |
 | M027 | (warning) a field or parameter named `<stem>Id` (`ID`; `Ids` / `IDs` for several) is not typed `String`, `UUID` or the base of the ID type when `<Stem>Id` (`<Stem>ID`) is an ID type or `<Stem>` an aggregate or entity: of its context or a shared one, else of exactly one other context (none for a field of a shared context); it takes the ID type |
-| M028 | lifecycle declarations: a selector uses one required readonly enum field, each kind has an initial state, outcomes have valid sources and targets, outcome names are unique, and choice and external-check annotations are well formed |
+| M028 | lifecycle declarations: a kind (or, without kinds, the aggregate with named outcomes) has an initial state, outcomes have valid sources and targets and change the fields of their kind, outcome names are unique, and choice and external-check annotations are well formed |
 | M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
+| M030 | the kinds of an aggregate (ADR 0037): a common command has its behaviour in itself or in an `on` case of every kind, never both; an `on` case names a common command that is not a factory; the create commands are the kinds', one per kind; no field is named `kind`; with states, commands name their outcomes |
+| M031 | (warning) kinds that declare nothing (a readonly enum field); `on` cases of a common command that are alike in every kind (a common behaviour); a field every kind declares with the same type (a common field); a state no kind reaches; optional fields an aggregate without kinds requires only for some values of an enum field (the fields of kinds) |
 | G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |

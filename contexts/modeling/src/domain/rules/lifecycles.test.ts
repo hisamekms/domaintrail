@@ -1,36 +1,37 @@
 import { describe, expect, test } from 'bun:test';
 import { check, checkSales, codes } from '../../test-helpers.js';
 import { generationGateDiagnostics } from './generation-gate.js';
-import { applicableOutcomes, hasExternalObligations, validStatesFor } from '../model.js';
+import { applicableOutcomes, commandKinds, hasExternalObligations, validStatesFor } from '../model.js';
 import { formatDomain } from '../../infrastructure/syntax/format.js';
 
+/** A request with two kinds (ADR 0037): `complete` is common, its outcomes are in each kind's `on complete`. */
 const BASE = `
   id RequestId: UUID
-  enum CollectionKind { COLLECT DROP_OFF }
-  event Collected
-  event Received
-  event Delivered
+  event Collected { requestId: RequestId }
+  event Received { requestId: RequestId }
+  event Delivered { requestId: RequestId }
   error Invalid
   aggregate Request {
     id: RequestId
-    readonly kind: CollectionKind
     state Unassigned
     state Assigned
     state CollectDone
     state Holding
     state Delivered
-    initial Unassigned
-    create command open(id: RequestId, kind: CollectionKind) {
-      outcome opened: -> Unassigned
-    }
     command assign() {
       outcome assigned: Unassigned -> Assigned
     }
     command complete()
-    transitions for kind == CollectionKind.COLLECT {
+    kind COLLECT {
+      create command openCollect(id: RequestId) {
+        outcome opened: -> Unassigned
+      }
       on complete { outcome collected: Assigned -> CollectDone emits Collected }
     }
-    transitions for kind == CollectionKind.DROP_OFF {
+    kind DROP_OFF {
+      create command openDropOff(id: RequestId) {
+        outcome opened: -> Unassigned
+      }
       on complete {
         outcome received: Assigned -> Holding emits Received
         outcome delivered: Holding -> Delivered emits Delivered
@@ -53,15 +54,16 @@ describe('kind-specific lifecycle', () => {
         expect(codes(a)).toEqual([]);
         const agg = a.model!.elements.find((e) => e.kind === 'aggregate')!;
         if (agg.kind !== 'aggregate') throw new Error('aggregate missing');
+        expect(agg.kinds.map((k) => k.name)).toEqual(['COLLECT', 'DROP_OFF']);
         expect(validStatesFor(agg, 'COLLECT')).toEqual(['Unassigned', 'Assigned', 'CollectDone']);
         expect(validStatesFor(agg, 'DROP_OFF')).toEqual(['Unassigned', 'Assigned', 'Holding', 'Delivered']);
-        expect(
-            applicableOutcomes(
-                agg,
-                agg.commands.find((c) => c.name === 'complete')!,
-                'COLLECT',
-            ).map((o) => o.name),
-        ).toEqual(['collected']);
+        const complete = agg.commands.find((c) => c.name === 'complete')!;
+        expect(applicableOutcomes(agg, complete, 'COLLECT').map((o) => o.name)).toEqual(['collected']);
+        const openCollect = agg.commands.find((c) => c.name === 'openCollect')!;
+        expect(openCollect.kind).toBe('COLLECT');
+        expect(commandKinds(agg, openCollect)).toEqual(['COLLECT']);
+        expect(applicableOutcomes(agg, openCollect, 'DROP_OFF')).toEqual([]);
+        expect(commandKinds(agg, complete)).toEqual(['COLLECT', 'DROP_OFF']);
     });
 
     test('detects duplicate outcome names and missing choice rules', async () => {
@@ -87,40 +89,39 @@ describe('kind-specific lifecycle', () => {
         expect(hasExternalObligations(a.model!)).toBe(false);
     });
 
-    test('rejects missing kind initial state and readonly changes', async () => {
-        const text = BASE.replace('initial Unassigned', '').replace(
-            'outcome assigned: Unassigned -> Assigned',
-            'outcome assigned: Unassigned -> Assigned changes kind',
-        );
-        const a = await checkSales(text);
-        expect(a.diagnostics.some((d) => d.message.includes('no initial state'))).toBe(true);
-        expect(a.diagnostics.some((d) => d.message.includes("Readonly field 'kind'"))).toBe(true);
-    });
-
-    test('composes overlapping groups and multiple initial states', async () => {
-        const text = BASE.replace(
-            'transitions for kind == CollectionKind.COLLECT {',
-            'transitions for kind in CollectionKind.COLLECT | CollectionKind.DROP_OFF { initial Assigned }\n    transitions for kind == CollectionKind.COLLECT {',
-        );
+    test('a kind starts where its create commands end; an initial state of a kind adds to them', async () => {
+        const text = BASE.replace('kind COLLECT {', 'kind COLLECT {\n      initial Assigned');
         const a = await checkSales(text);
         expect(codes(a)).toEqual([]);
         const agg = a.model!.elements.find((e) => e.kind === 'aggregate')!;
         if (agg.kind !== 'aggregate') throw new Error('aggregate missing');
+        expect(agg.initials).toContainEqual({ state: 'Assigned', kinds: ['COLLECT'] });
         expect(validStatesFor(agg, 'COLLECT')).toContain('Assigned');
-        expect(validStatesFor(agg, 'DROP_OFF')).toContain('Assigned');
     });
 
-    test('qualified enum selectors use :: and formatter preserves named clauses', async () => {
-        const source = `context Shared { enum K { A } } context Sales {
+    test('a kind field changed by a common outcome, and a readonly kind field changed, are errors', async () => {
+        const text = BASE.replace('kind COLLECT {', 'kind COLLECT {\n      readonly route: String\n      depot: String')
+            .replace('outcome assigned: Unassigned -> Assigned', 'outcome assigned: Unassigned -> Assigned changes depot')
+            .replace(
+                'on complete { outcome collected: Assigned -> CollectDone emits Collected }',
+                'on complete { outcome collected: Assigned -> CollectDone changes route emits Collected }',
+            );
+        const a = await checkSales(text);
+        expect(a.diagnostics.some((d) => d.code === 'M028' && d.message.includes("Field 'depot' exists only in kind 'COLLECT'"))).toBe(true);
+        expect(a.diagnostics.some((d) => d.message.includes("Readonly field 'route'"))).toBe(true);
+    });
+
+    test('formats kinds and keeps their clauses', async () => {
+        const source = `context Sales {
           id RId: UUID
-          aggregate R { id: RId readonly kind: Shared.K state S initial S command go()
-            transitions for kind == Shared.K::A { on go { outcome same: S -> S select "human" @externalCheck("external policy") } }
+          aggregate R { id: RId state S command go()
+            kind A { create command makeA(id: RId) { outcome made: -> S } on go { outcome same: S -> S select "human" @externalCheck("external policy") } }
           }
         }`;
         const a = await check({ 'model.dt': source });
         expect(codes(a)).toEqual([]);
         const formatted = formatDomain(source);
-        expect(formatted).toContain('Shared.K::A');
+        expect(formatted).toContain('    kind A {\n');
         expect(formatted).toContain('@externalCheck("external policy")');
         expect(formatDomain(formatted)).toBe(formatted);
     });
@@ -148,15 +149,6 @@ describe('kind-specific lifecycle', () => {
             .replace('outcome delivered: Holding -> Delivered emits Delivered', 'outcome delivered: Assigned -> Delivered emits Delivered');
         const a = await checkSales(text);
         expect(a.diagnostics.some((d) => d.code === 'M010' && d.message.includes("'ready'"))).toBe(false);
-    });
-
-    test('create cases cannot have kind-dependent requirements', async () => {
-        const text = BASE.replace(
-            'on complete { outcome collected:',
-            'on open { requires allowed { true } else Invalid outcome alternate: -> Unassigned }\n      on complete { outcome collected:',
-        );
-        const a = await checkSales(text);
-        expect(a.diagnostics.some((d) => d.code === 'M028' && d.message.includes('group-specific requirements'))).toBe(true);
     });
 
     test('primitive external obligations survive in the typed model', async () => {

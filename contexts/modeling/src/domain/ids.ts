@@ -4,6 +4,7 @@
  *   element        Sales.Order
  *   state          Sales.Order#Confirmed
  *   command        Sales.Order:confirm
+ *   kind           Sales.Order/Store
  * Renaming an element changes its ID (the layout for it is recomputed). The builders make the Typed Model's names and
  * IDs here, and only here.
  */
@@ -18,6 +19,7 @@ export const contextName = (name: string): ContextName => as<ContextName>(name);
 export const elementId = (ctx: string, name: string): ElementId => as<ElementId>(`${ctx}.${name}`);
 export const stateId = (aggregateId: string, state: string): ElementId => as<ElementId>(`${aggregateId}#${state}`);
 export const commandId = (aggregateId: string, command: string): ElementId => as<ElementId>(`${aggregateId}:${command}`);
+export const kindId = (aggregateId: string, kind: string): ElementId => as<ElementId>(`${aggregateId}/${kind}`);
 /** The qualified name of an element (`Sales.Order`); a reference as written when it does not resolve. */
 export const qualifiedName = (text: string): QualifiedName => as<QualifiedName>(text);
 /** The stable ID of the element a qualified name names (the same text). */

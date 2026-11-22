@@ -1,6 +1,8 @@
 import type { RuleSink } from '../diagnostics.js';
 import {
     commandsOf,
+    kindFields,
+    kindsOf,
     commonFields,
     duplicates,
     fieldsOf,
@@ -66,7 +68,21 @@ function checkAggregate(agg: AggregateDecl, rules: RuleSink): void {
         }
     }
 
-    const invariants = [...invariantsOf(agg.members), ...states.flatMap((s) => invariantsOf(s.members))];
+    // kinds (ADR 0037): distinct names; their fields neither repeat nor shadow a common or a state's field
+    const kinds = kindsOf(agg);
+    unique(kinds, (k) => `Kind '${k.name}' is declared more than once in '${agg.name}'.`, rules);
+    const stateFieldNames = new Set(states.flatMap((s) => fieldsOf(s.members).map((f) => f.name)));
+    for (const k of kinds) {
+        const fields = kindFields(k);
+        unique(fields, (f) => `Field '${f.name}' is declared more than once in kind '${k.name}'.`, rules);
+        for (const f of fields) {
+            if (commonNames.has(f.name)) rules.error('M002', `Field '${f.name}' of kind '${k.name}' shadows the common field of '${agg.name}'.`, f.nameAt);
+            else if (stateFieldNames.has(f.name))
+                rules.error('M002', `Field '${f.name}' of kind '${k.name}' has the name of a field of a state of '${agg.name}'.`, f.nameAt);
+        }
+    }
+
+    const invariants = [...invariantsOf(agg.members), ...states.flatMap((s) => invariantsOf(s.members)), ...kinds.flatMap((k) => invariantsOf(k.members))];
     unique(invariants, (i) => `Invariant '${i.name}' is declared more than once in '${agg.name}'.`, rules);
 
     const commands = commandsOf(agg);
@@ -74,7 +90,7 @@ function checkAggregate(agg: AggregateDecl, rules: RuleSink): void {
     for (const c of commands) {
         unique(c.params, (p) => `Parameter '${p.name}' is declared more than once in command '${c.name}'.`, rules);
         unique(c.requirements, (r) => `Requirement '${r.name}' is declared more than once in command '${c.name}'.`, rules);
-        for (const g of agg.members.filter((m) => m.kind === 'transitionGroup'))
+        for (const g of kindsOf(agg))
             for (const section of g.cases.filter((x) => x.command.text === c.name))
                 unique(section.requirements, (r) => `Requirement '${r.name}' is declared more than once in 'on ${c.name}'.`, rules);
         const names = c.changes.map((ch) => ch.name);

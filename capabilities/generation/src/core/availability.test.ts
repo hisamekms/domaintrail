@@ -148,63 +148,71 @@ availableDeliveryRequestCommands(request) satisfies ('assign' | 'cancel' | 'ship
 
 const KINDS = `context Delivery {
   id RequestId: UUID
-  enum Kind { COLLECT DROP_OFF }
   aggregate Request {
     id: RequestId
-    readonly kind: Kind
     state Unassigned
     state Assigned
     state CollectDone
     state Holding
     state Delivered
-    initial Unassigned
-    create command open(id: RequestId, kind: Kind) { outcome opened: -> Unassigned }
     command assign() { outcome assigned: Unassigned -> Assigned }
     command complete()
-    command release()
-    transitions for kind == Kind.COLLECT {
+    kind COLLECT {
+      create command openCollect(id: RequestId) { outcome opened: -> Unassigned }
       on complete { outcome collected: Assigned -> CollectDone }
     }
-    transitions for kind == Kind.DROP_OFF {
+    kind DROP_OFF {
+      create command openDropOff(id: RequestId) { outcome opened: -> Unassigned }
       on complete {
         outcome received: Assigned -> Holding select { true }
         outcome delivered: Holding -> Delivered select { true }
       }
-      on release { outcome released: Holding -> Delivered }
+      command release() { outcome released: Holding -> Delivered }
     }
   }
 }`;
 
-test('availability follows the kind: sources and errors per kind, and a command without sources for a kind throws', async () => {
+test('availability follows the kind: sources and errors per kind, and a command of another kind is CommandNotForKind', async () => {
     const result = await check({ 'delivery.dt': KINDS });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const delivery = generateTypeScript(result.model!).find((f) => f.path === 'Delivery.ts')!.content;
     expect(delivery).toContain("    kindField: 'kind',");
     expect(delivery).toContain("        complete: { 'COLLECT': ['Assigned'], 'DROP_OFF': ['Assigned', 'Holding'] },");
-    expect(delivery).toContain("        release: { 'COLLECT': [], 'DROP_OFF': ['Holding'] },");
+    expect(delivery).toContain("        release: { 'DROP_OFF': ['Holding'] },");
     expect(delivery).toContain(
         "export type CompleteRequestUnavailable = CommandUnavailable<'Delivery.Request', 'complete', 'Unassigned' | 'CollectDone', 'Assigned', 'COLLECT'> | CommandUnavailable<'Delivery.Request', 'complete', 'Unassigned' | 'Delivered', 'Assigned' | 'Holding', 'DROP_OFF'>;",
     );
+    expect(delivery).toContain("export type ReleaseRequestNotForKind = CommandNotForKind<'Delivery.Request', 'release', 'COLLECT', 'DROP_OFF'>;");
+    expect(delivery).toContain('export type CompleteRequestNotForKind = never;');
 
     await inGenerated(
         KINDS,
         `import type * as Delivery from './Delivery.js';
-import { anyStateRequestCommands, canCompleteRequest } from './Delivery.js';
+import { anyStateRequestCommands, canCompleteRequest, isCOLLECTRequest } from './Delivery.js';
 declare const commands: Delivery.RequestCommands;
 declare const request: Delivery.Request;
 const r = anyStateRequestCommands(commands).complete(request);
-if (!r.ok && r.error.kind === 'COLLECT') r.error.expected satisfies readonly 'Assigned'[];
+if (!r.ok && r.error.type === 'CommandUnavailable' && r.error.kind === 'COLLECT') r.error.expected satisfies readonly 'Assigned'[];
 if (canCompleteRequest(request)) commands.complete(request);
+if (isCOLLECTRequest(request)) request.kind satisfies 'COLLECT';
 declare const collect: Delivery.COLLECTAssignedRequest;
-declare const dropOff: Delivery.DROP_OFFAssignedRequest;
-// @ts-expect-error release has no source state for COLLECT: the any-state entry does not take it
-anyStateRequestCommands(commands).release(collect);
-anyStateRequestCommands(commands).release(dropOff);
+declare const dropOff: Delivery.DROP_OFFHoldingRequest;
+// the strict entry takes the kinds that have the command only
+// @ts-expect-error release is a command of DROP_OFF
+commands.release(collect);
+commands.release(dropOff);
+// the any-state entry takes any kind, and answers another with CommandNotForKind
+const rr = anyStateRequestCommands(commands).release(collect);
+if (!rr.ok && rr.error.type === 'CommandNotForKind') {
+  rr.error.kind satisfies 'COLLECT';
+  rr.error.expected satisfies readonly 'DROP_OFF'[];
+}
 `,
         async (dir) => {
             const generated = await import(path.join(dir, 'Delivery.ts'));
             const commands = {
-                open: () => undefined,
+                openCollect: () => undefined,
+                openDropOff: () => undefined,
                 assign: () => undefined,
                 complete: () => ({ ok: true, value: 'called' }),
                 release: () => ({ ok: true, value: 'called' }),
@@ -226,10 +234,14 @@ anyStateRequestCommands(commands).release(dropOff);
             expect(rejected.error.expected).not.toBe(generated.RequestAvailability.commands.complete.COLLECT);
             expect(anyState.complete({ id: 'r', kind: 'DROP_OFF', state: 'Holding' })).toEqual({ ok: true, value: 'called' });
             expect(generated.canCompleteRequest({ id: 'r', kind: 'COLLECT', state: 'Holding' })).toBe(false);
-            // the kind never changes: a command without a source state for it is a caller's bug
-            expect(() => anyState.release({ id: 'r', kind: 'COLLECT', state: 'Assigned' })).toThrow('DomainTrail command contract violated');
-            expect(generated.canReleaseRequest({ id: 'r', kind: 'COLLECT', state: 'Assigned' })).toBe(false);
+            // the kind never changes: a command of another kind never passes, and says so apart from a state rejection
+            expect(anyState.release({ id: 'r', kind: 'COLLECT', state: 'Assigned' })).toEqual({
+                ok: false,
+                error: { type: 'CommandNotForKind', aggregate: 'Delivery.Request', command: 'release', kind: 'COLLECT', expected: ['DROP_OFF'] },
+            });
+            expect(generated.canReleaseRequest({ id: 'r', kind: 'COLLECT', state: 'Holding' })).toBe(false);
             expect(generated.availableRequestCommands({ id: 'r', kind: 'DROP_OFF', state: 'Holding' })).toEqual(['complete', 'release']);
+            expect(generated.availableRequestCommands({ id: 'r', kind: 'COLLECT', state: 'Holding' })).toEqual([]);
         },
     );
 });
@@ -310,6 +322,14 @@ export const open: Delivery.OpenDeliveryRequest = decideNamed<Delivery.OpenDeliv
         // Holding is a source state of complete for DROP_OFF only
         expect(() => complete({ id: 'r', kind: 'COLLECT', state: 'Holding' })).toThrow('(sources: Assigned).');
         expect(complete({ id: 'r', kind: 'DROP_OFF', state: 'Holding' })).toEqual({ ok: true, value: {} });
+        // a command of another kind is a contract violation of the strict entry
+        const release = runtime.decideNamed()(generated.RequestShape, {}, () => ({ ok: true, value: {} }), {
+            availability: generated.RequestAvailability,
+            command: 'release',
+        });
+        expect(() => release({ id: 'r', kind: 'COLLECT', state: 'Holding' })).toThrow(
+            "Delivery.Request.release is not a command of kind 'COLLECT' (kinds: DROP_OFF).",
+        );
     } finally {
         await rm(dir, { recursive: true, force: true });
     }
