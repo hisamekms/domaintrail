@@ -85,6 +85,13 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                 declaration(req, req.name, rules);
             }
 
+        // a common command with a behaviour of its own and kind cases too is M030's: no outcome errors that follow from it
+        const mixed = new Set(
+            commands.filter(
+                (c) =>
+                    !c.ofKind && (c.outcomes.length || c.transitions.length || c.changes.length || c.emits.length) && kinds.some((k) => casesOf(k, c).length),
+            ),
+        );
         const common = commonFields(agg);
         const stateNames = new Set(statesOf(agg).map((s) => s.name));
         /** The fields an outcome of a command may change: the common ones, and those of the kind it is for. */
@@ -130,7 +137,7 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                 ...kinds.flatMap((k) => casesOf(k, cmd).flatMap((c) => c.outcomes.map((o) => ({ o, kind: k })))),
             ];
             // outcome names are unique per kind: the common ones and those of one kind's case
-            for (const k of kinds.length ? kinds : [undefined]) {
+            for (const k of mixed.has(cmd) ? [] : kinds.length ? kinds : [undefined]) {
                 const names = new Set<string>();
                 for (const { o } of all.filter((x) => x.kind === undefined || x.kind === own || x.kind === k)) {
                     if (names.has(o.name)) rules.error('M028', `Outcome '${o.name}' is declared more than once in command '${cmd.name}'.`, o.nameAt);
@@ -173,7 +180,7 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                         }
                 }
             }
-            for (const cmd of commands) {
+            for (const cmd of commands.filter((c) => !mixed.has(c))) {
                 const outcomes = applicable(cmd, kind);
                 for (const o of outcomes) {
                     if (cmd.factory && !initial.has(o.to.text))

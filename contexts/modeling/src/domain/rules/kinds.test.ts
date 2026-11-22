@@ -79,6 +79,8 @@ describe('aggregate kinds (ADR 0037)', () => {
     test('a common behaviour and an on case for the same command, and a kind without its case, are errors', async () => {
         const mixed = await checkSales(SITE.replace('command suspend()', 'command suspend() { outcome suspended: Active -> Paused }'));
         expect(messages(mixed, 'M030').filter((m) => m.includes('either common or in every kind'))).toHaveLength(2);
+        // the mix is reported once per case, without the outcome errors that follow from it
+        expect(messages(mixed, 'M028')).toEqual([]);
         const missing = await checkSales(
             SITE.replace(
                 `      on suspend {
