@@ -1360,6 +1360,7 @@
         {
           "type": "STRING",
           "value": "YearMonth"
+<<<<<<< HEAD
         },
         {
           "type": "STRING",
@@ -1372,6 +1373,8 @@
         {
           "type": "STRING",
           "value": "TimeZone"
+=======
+>>>>>>> origin/main
         }
       ]
     },
@@ -3543,6 +3546,7 @@
               {
                 "type": "STRING",
                 "value": "YearMonth"
+<<<<<<< HEAD
               },
               {
                 "type": "STRING",
@@ -3555,6 +3559,8 @@
               {
                 "type": "STRING",
                 "value": "TimeZone"
+=======
+>>>>>>> origin/main
               }
             ]
           },

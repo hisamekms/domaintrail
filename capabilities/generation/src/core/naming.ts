@@ -16,6 +16,7 @@ export const RUNTIME_NAMES = [
     'parseYearMonth',
     'parseTimestamp',
     'timestampOf',
+<<<<<<< HEAD
     'PlainDateTime',
     'ZonedDateTime',
     'TimeZone',
@@ -24,6 +25,8 @@ export const RUNTIME_NAMES = [
     'parseTimeZone',
     'instantOf',
     'zonedCompare',
+=======
+>>>>>>> origin/main
     'ok',
     'err',
     'decide',

@@ -82,6 +82,7 @@ describe('canonical text', () => {
         expect(canonicalTemporal('Timestamp', '2026-11-22T09:30:00+09:00')).toBeUndefined();
     });
 });
+<<<<<<< HEAD
 
 describe('date and time in a time zone, and time zones (ADR 0038, stage 2)', () => {
     const zoned = (rule: string) => `
@@ -131,3 +132,5 @@ describe('date and time in a time zone, and time zones (ADR 0038, stage 2)', () 
         expect(canonicalTemporal('TimeZone', 'Europe/London')).toBe('Europe/London');
     });
 });
+=======
+>>>>>>> origin/main

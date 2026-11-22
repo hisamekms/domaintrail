@@ -412,6 +412,7 @@ export const parseTimestamp = (text: string): Timestamp | undefined => {
 
 /** The instant of a JavaScript `Date` (an invalid one throws: it is no instant). */
 export const timestampOf = (date: Date): Timestamp => date.toISOString() as Timestamp;
+<<<<<<< HEAD
 /** DSL `DateTime`: a date and a time of day without a time zone, `YYYY-MM-DDTHH:MM:SS`. Make it with `parseDateTime`. */
 export type PlainDateTime = Canonical<'PlainDateTime'>;
 /**
@@ -469,3 +470,5 @@ export const zonedCompare = (a: ZonedDateTime, b: ZonedDateTime): -1 | 0 | 1 => 
     const [x, y] = [instantOf(a), instantOf(b)];
     return x < y ? -1 : x > y ? 1 : 0;
 };
+=======
+>>>>>>> origin/main

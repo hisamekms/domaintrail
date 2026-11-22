@@ -18,7 +18,11 @@ export function nameKeywords(grammar: Grammar): Set<string> {
     return out;
 }
 
+<<<<<<< HEAD
 const PRIMITIVES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth', 'DateTime', 'ZonedDateTime', 'TimeZone'];
+=======
+const PRIMITIVES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth'];
+>>>>>>> origin/main
 /** Keywords that start a declaration in a context: read as a field's name inside a block, a `}` may be missing above. */
 const DECLARATIONS = new Set([
     'context',

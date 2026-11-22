@@ -54,7 +54,11 @@ const KEYWORDS = new Set([
     'true',
     'false',
 ]);
+<<<<<<< HEAD
 const PRIMITIVES = new Set(['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth', 'DateTime', 'ZonedDateTime', 'TimeZone']);
+=======
+const PRIMITIVES = new Set(['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth']);
+>>>>>>> origin/main
 
 const TOKEN = /(\/\*[\s\S]*?\*\/)|(\/\/\/[^\n]*)|(\/\/[^\n]*)|("(?:\\.|[^"\\\n])*"?)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)|(\s+|[^\sA-Za-z_\d"/]+|\/)/g;
 

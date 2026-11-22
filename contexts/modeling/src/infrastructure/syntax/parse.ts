@@ -161,7 +161,11 @@ const LINK_TARGETS: Record<string, (el: ContextElement) => boolean> = {
         isIdType(el) || isPrimitiveDecl(el) || isVerifiedDecl(el) || isEnumDecl(el) || isValueObject(el) || isUnionDecl(el) || isEntity(el) || isAggregate(el),
 };
 
+<<<<<<< HEAD
 const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth', 'DateTime', 'ZonedDateTime', 'TimeZone'];
+=======
+const PRIMITIVE_TYPES = ['String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth'];
+>>>>>>> origin/main
 
 /**
  * The names of the right kind visible where an unresolved reference is: for a simple name the elements of its context,

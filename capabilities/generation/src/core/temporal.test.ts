@@ -102,6 +102,7 @@ void e; void t;
     );
     expect(r.stdout.toString() + r.stderr.toString()).toBe('');
 });
+<<<<<<< HEAD
 
 test('stage 2: a ZonedDateTime is checked against its zone, and ordered by instant', async () => {
     const a = await check({
@@ -140,3 +141,5 @@ test('stage 2: a ZonedDateTime is checked against its zone, and ordered by insta
     expect(rt.parseDateTime('2026-12-01T06:30')).toBe('2026-12-01T06:30:00');
     expect(rt.parseDateTime('2026-12-01 06:30')).toBeUndefined();
 });
+=======
+>>>>>>> origin/main
