@@ -4,6 +4,7 @@
 - Date: 2026-11-09
 - Amends: [ADR 0014](0014-command-transitions.md), [ADR 0016](0016-collection-constraints-and-declared-invariants.md), [ADR 0017](0017-command-requirements.md), [ADR 0018](0018-command-events-contract.md), [ADR 0019](0019-command-changes-and-decisions.md), [ADR 0020](0020-generated-checks-and-contract-tests.md)
 - Amended by: [ADR 0036](0036-commands-in-any-state.md) (`decideNamed` checks the source states; commands in any state)
+- Amended by: [ADR 0038](0038-date-and-time.md) (the date and time types and their comparison)
 - Superseded by: [ADR 0037](0037-aggregate-kinds.md) (the `readonly` enum selector and `transitions for`; named
   outcomes, choice rules, `initial` and the restore boundary stay)
 
