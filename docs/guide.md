@@ -446,12 +446,9 @@ calendar or clock**, a business value without a time zone (a birth date, a closi
 | `Date` | a calendar date, no time zone | `2026-11-22` | `PlainDate` |
 | `Time` | a time of day, no time zone | `18:00:00` | `PlainTime` |
 | `YearMonth` | a month of a year, no time zone | `2026-11` | `PlainYearMonth` |
-<<<<<<< HEAD
 | `DateTime` | a date and time of day, no time zone | `2026-11-22T06:30:00` | `PlainDateTime` |
 | `ZonedDateTime` | a date and time in a time zone | `2026-12-01T10:00:00+09:00[Asia/Tokyo]` | `ZonedDateTime` |
 | `TimeZone` | an IANA time zone | `Asia/Tokyo` | `TimeZone` |
-=======
->>>>>>> origin/main
 
 ```dt
 // booking/reservation.dt
@@ -484,7 +481,6 @@ context Booking {
   that is not a value) or `timestampOf(date)`, from the generated `_runtime.ts`; never with `as`.
 - Calculation (adding days, today in a time zone) is your code's. Temporal reads and prints the same text:
   `Temporal.PlainDate.from(visitDate)`, and `parseDate(plainDate.toString())` back.
-<<<<<<< HEAD
 - A time zone is stated explicitly, in one of two ways. A value that is a time in a zone (a meeting at 10:00 in
   Tokyo) is a `ZonedDateTime`: its offset must be the zone's at that time (`dt check` and `parseZonedDateTime` say
   so), it orders by instant (`zonedCompare` in generated checks), and `instantOf` gives its `Timestamp`. A zone that
@@ -514,10 +510,6 @@ context Booking {
   }
 }
 ```
-=======
-- A time zone, when the business needs one, is stated explicitly (ADR 0038, a later stage): `ZonedDateTime` for a
-  value that is a time in a zone, a `TimeZone` field for an owner whose zone applies to its values.
->>>>>>> origin/main
 
 <!-- topic: unions -->
 ### Unions

@@ -83,12 +83,9 @@ export const PRIMITIVE_LABELS: Record<string, string> = {
     Date: '日付',
     Time: '時刻',
     YearMonth: '年月',
-<<<<<<< HEAD
     DateTime: '日付と時刻',
     ZonedDateTime: 'タイムゾーン付き日時',
     TimeZone: 'タイムゾーン',
-=======
->>>>>>> origin/main
     UUID: 'UUID',
 };
 

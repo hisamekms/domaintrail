@@ -421,19 +421,11 @@ export type ElementKind = 'id' | 'primitive' | 'verified' | 'enum' | 'valueObjec
 
 /**
  * The primitive types of the language.
-<<<<<<< HEAD
  * The built-in types. Date, Time, YearMonth and DateTime are values on a calendar or clock without a time zone;
  * Timestamp is an instant; ZonedDateTime a date and time in a time zone; TimeZone an IANA time zone (ADR 0038).
  * @see contexts/modeling/model/model.dt:31
  */
 export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
-=======
- * The built-in types. Date, Time and YearMonth are values on a calendar or clock without a time zone; Timestamp is
- * an instant (ADR 0038).
- * @see contexts/modeling/model/model.dt:31
- */
-export type PrimitiveName = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth';
->>>>>>> origin/main
 
 /**
  * An element of a context: each kind has exactly its own parts.

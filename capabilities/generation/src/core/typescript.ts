@@ -101,12 +101,9 @@ const PRIMITIVES: Record<PrimitiveName, string> = {
     Date: 'PlainDate',
     Time: 'PlainTime',
     YearMonth: 'PlainYearMonth',
-<<<<<<< HEAD
     DateTime: 'PlainDateTime',
     ZonedDateTime: 'ZonedDateTime',
     TimeZone: 'TimeZone',
-=======
->>>>>>> origin/main
 };
 
 const RUNTIME = `${HEADER}
@@ -522,7 +519,6 @@ export const parseTimestamp = (text: string): Timestamp | undefined => {
 
 /** The instant of a JavaScript \`Date\` (an invalid one throws: it is no instant). */
 export const timestampOf = (date: Date): Timestamp => date.toISOString() as Timestamp;
-<<<<<<< HEAD
 /** DSL \`DateTime\`: a date and a time of day without a time zone, \`YYYY-MM-DDTHH:MM:SS\`. Make it with \`parseDateTime\`. */
 export type PlainDateTime = Canonical<'PlainDateTime'>;
 /**
@@ -580,8 +576,6 @@ export const zonedCompare = (a: ZonedDateTime, b: ZonedDateTime): -1 | 0 | 1 => 
     const [x, y] = [instantOf(a), instantOf(b)];
     return x < y ? -1 : x > y ? 1 : 0;
 };
-=======
->>>>>>> origin/main
 `;
 
 /**
@@ -813,17 +807,13 @@ class ContextEmitter {
             'PlainDate',
             'PlainTime',
             'PlainYearMonth',
-<<<<<<< HEAD
             'PlainDateTime',
             'ZonedDateTime',
             'TimeZone',
-=======
->>>>>>> origin/main
             'Result',
             'Shape',
             'Timestamp',
         ].filter(uses);
-<<<<<<< HEAD
         const values = [
             'availableCommands',
             'decimalCompare',
@@ -836,11 +826,6 @@ class ContextEmitter {
             'sameOptional',
             'zonedCompare',
         ].filter((n) => new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(code));
-=======
-        const values = ['availableCommands', 'decimalCompare', 'distinct', 'err', 'fromAnyState', 'isAvailable', 'ok', 'sameList', 'sameOptional'].filter((n) =>
-            new RegExp(`(^|[^\\w$.])${n}\\(`, 'm').test(code),
-        );
->>>>>>> origin/main
         const imports = [
             ...(runtime.length ? [`import type { ${runtime.join(', ')} } from './_runtime.js';`] : []),
             ...(values.length ? [`import { ${values.join(', ')} } from './_runtime.js';`] : []),

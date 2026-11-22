@@ -229,11 +229,7 @@ export interface Hints {
     readonly pattern?: string;
 }
 
-<<<<<<< HEAD
 export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
-=======
-export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth';
->>>>>>> origin/main
 
 /** Smallest and largest number allowed by the hints, in steps of `step` (1 for Int, 0.01 for Decimal). */
 function range(h: Hints, step: number): [number, number] {
@@ -266,7 +262,6 @@ const temporal = {
             fc.constantFrom('00:00:00', '23:59:59', '12:00:00'),
         ),
     YearMonth: () => fc.tuple(fc.integer({ min: 2000, max: 2099 }), fc.integer({ min: 1, max: 12 })).map(([y, m]) => `${y}-${two(m)}`),
-<<<<<<< HEAD
     DateTime: () => fc.tuple(temporalDay(), temporalTime()).map(([d, t]) => `${d}T${t}`),
     TimeZone: () => fc.constantFrom(...ZONES),
     // an instant seen in a zone: its local date and time with the zone's offset then (daylight saving time included)
@@ -307,10 +302,6 @@ function zoned(at: Date, zone: string): string {
     return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}[${zone}]`;
 }
 
-=======
-} as const;
-
->>>>>>> origin/main
 /** The forms of the date and time types: canonical text that is a value (no February 30, no 24:00). */
 const TEMPORAL_FORMS: Readonly<Record<'Date' | 'Time' | 'YearMonth' | 'Timestamp', RegExp>> = {
     Date: /^\d{4}-\d{2}-\d{2}$/,
@@ -318,7 +309,6 @@ const TEMPORAL_FORMS: Readonly<Record<'Date' | 'Time' | 'YearMonth' | 'Timestamp
     YearMonth: /^\d{4}-(0[1-9]|1[0-2])$/,
     Timestamp: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/,
 };
-<<<<<<< HEAD
 const knownZone = (zone: string): boolean => {
     try {
         return new Intl.DateTimeFormat('en-US', { timeZone: zone }).resolvedOptions().timeZone === zone;
@@ -326,8 +316,6 @@ const knownZone = (zone: string): boolean => {
         return false;
     }
 };
-=======
->>>>>>> origin/main
 const realDay = (text: string): boolean => {
     const d = new Date(`${text.slice(0, 10)}T00:00:00Z`);
     return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === text.slice(0, 10);
@@ -350,12 +338,9 @@ export function base(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
         case 'Date':
         case 'Time':
         case 'YearMonth':
-<<<<<<< HEAD
         case 'DateTime':
         case 'ZonedDateTime':
         case 'TimeZone':
-=======
->>>>>>> origin/main
             return temporal[b]();
         case 'UUID':
         case 'String': {
@@ -380,12 +365,9 @@ export function scalars(seed: number): Readonly<Record<Base, fc.Arbitrary<unknow
         Date: of('Date'),
         Time: of('Time'),
         YearMonth: of('YearMonth'),
-<<<<<<< HEAD
         DateTime: of('DateTime'),
         ZonedDateTime: of('ZonedDateTime'),
         TimeZone: of('TimeZone'),
-=======
->>>>>>> origin/main
     });
 }
 
@@ -744,7 +726,6 @@ export function isBase(v: unknown, b: Base): boolean {
         case 'YearMonth':
         case 'Time':
             return typeof v === 'string' && TEMPORAL_FORMS[b].test(v) && (b === 'Time' || realDay(b === 'YearMonth' ? `${v}-01` : v));
-<<<<<<< HEAD
         case 'DateTime':
             return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(v) && realDay(v);
         case 'TimeZone':
@@ -753,8 +734,6 @@ export function isBase(v: unknown, b: Base): boolean {
             const m = typeof v === 'string' ? /^(.+)\[([^\]]+)\]$/.exec(v) : null;
             return !!m && knownZone(m[2]!) && zoned(new Date(m[1]!), m[2]!) === v;
         }
-=======
->>>>>>> origin/main
         case 'String':
         case 'UUID':
             return typeof v === 'string';

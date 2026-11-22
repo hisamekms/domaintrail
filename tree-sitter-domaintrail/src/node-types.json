@@ -2647,13 +2647,10 @@
     "named": false
   },
   {
-<<<<<<< HEAD
     "type": "DateTime",
     "named": false
   },
   {
-=======
->>>>>>> origin/main
     "type": "Decimal",
     "named": false
   },
@@ -2670,13 +2667,10 @@
     "named": false
   },
   {
-<<<<<<< HEAD
     "type": "TimeZone",
     "named": false
   },
   {
-=======
->>>>>>> origin/main
     "type": "Timestamp",
     "named": false
   },
@@ -2689,13 +2683,10 @@
     "named": false
   },
   {
-<<<<<<< HEAD
     "type": "ZonedDateTime",
     "named": false
   },
   {
-=======
->>>>>>> origin/main
     "type": "[",
     "named": false
   },

@@ -1,10 +1,6 @@
 # ADR 0038: Dates, times and time zones
 
-<<<<<<< HEAD
 - Status: accepted, implemented (stages 1 and 2)
-=======
-- Status: accepted; stage 1 implemented
->>>>>>> origin/main
 - Date: 2026-11-22
 - Amends: [ADR 0035](0035-kind-specific-lifecycles.md) (the target-independent semantics of `Timestamp`), the
   representation of `Timestamp` in generated TypeScript
@@ -113,16 +109,11 @@ writes the same canonical text, so stored JSON stays readable as it is. Code tha
 
 ## Stages
 
-<<<<<<< HEAD
 Stage 1: `Date`, `Time`, `YearMonth` and the rework of `Timestamp`. Stage 2: `DateTime`, `ZonedDateTime`, `TimeZone`.
 The decisions above cover both; the second stage adds types, not semantics. A `TimeZone` is spelled as the time zone
 data spells it (`asia/tokyo` is read as `Asia/Tokyo`; an alias such as `Asia/Calcutta` is kept as written). Time zone
 data comes from the engine (`Intl` in JavaScript), needed only to check a `ZonedDateTime`'s offset and a zone's ID
 where a value is made; comparing reads the offset in the value.
-=======
-Stage 1: `Date`, `Time`, `YearMonth` and the rework of `Timestamp`. Stage 2: `DateTime`, `ZonedDateTime`, `TimeZone`,
-when a model needs them. The decisions above cover both; the second stage adds types, not semantics.
->>>>>>> origin/main
 
 ## Rejected alternatives
 
