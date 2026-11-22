@@ -52,7 +52,7 @@ exports[`dt generate ts writes the same files with the same contents for the exa
   "Billing.ts": "174ac7e2cbd02ba745bff3ac894d485c8535ee572627287e0334ae4428aee116",
   "Common.ts": "ff827cbf80b315494c052998627355e8088a33c98f1fe18d94510dbe1a40d8c7",
   "Sales.ts": "be47357625ed45e5e96c3ff4917af18e0e850f0ac5f8d4398f1022d75db8cd13",
-  "_runtime.ts": "b111c87ff8b00ecdbee3449ff1743c84f839b1f502764545021d642d8ac46f87",
+  "_runtime.ts": "94f926623e1195e448adad17f60479a50903c5ceb3bcb5b154a0bbc898c10ac8",
   "index.ts": "4d3e88b042004cc4639047a0b4d04eef324ade013e3303a74d8497a3049c2baa",
   "tests/Billing.ts": "3ffbba3beb52f50aa189db3349d27f913a80ce9cbea363dab09fafc9edcac3e2",
   "tests/Common.ts": "8691d4b52229a36b0f6d91290425c77257a9f4b0b42dc87b4d3ba4e67638bfe1",

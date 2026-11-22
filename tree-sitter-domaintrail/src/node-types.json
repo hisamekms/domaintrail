@@ -2647,6 +2647,10 @@
     "named": false
   },
   {
+    "type": "DateTime",
+    "named": false
+  },
+  {
     "type": "Decimal",
     "named": false
   },
@@ -2663,6 +2667,10 @@
     "named": false
   },
   {
+    "type": "TimeZone",
+    "named": false
+  },
+  {
     "type": "Timestamp",
     "named": false
   },
@@ -2672,6 +2680,10 @@
   },
   {
     "type": "YearMonth",
+    "named": false
+  },
+  {
+    "type": "ZonedDateTime",
     "named": false
   },
   {

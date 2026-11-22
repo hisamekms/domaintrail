@@ -398,6 +398,9 @@ class TestsEmitter {
                 Date: 'PlainDate',
                 Time: 'PlainTime',
                 YearMonth: 'PlainYearMonth',
+                DateTime: 'PlainDateTime',
+                ZonedDateTime: 'ZonedDateTime',
+                TimeZone: 'TimeZone',
             }[name] ?? 'unknown'
         );
     }
@@ -913,7 +916,7 @@ class TestsEmitter {
         });
         const needsExternal = externalChoices.length > 0 || externalDeclared.length > 0;
         // the runtime types the casts of base values name (`testing.cast<Decimal>(…)`)
-        const runtimeTypes = ['Decimal', 'Timestamp', 'PlainDate', 'PlainTime', 'PlainYearMonth'].filter((t) =>
+        const runtimeTypes = ['Decimal', 'Timestamp', 'PlainDate', 'PlainTime', 'PlainYearMonth', 'PlainDateTime', 'ZonedDateTime', 'TimeZone'].filter((t) =>
             new RegExp(`<${t}>`).test(defsText + groupsText),
         );
         const body = [

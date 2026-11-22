@@ -82,3 +82,52 @@ describe('canonical text', () => {
         expect(canonicalTemporal('Timestamp', '2026-11-22T09:30:00+09:00')).toBeUndefined();
     });
 });
+
+describe('date and time in a time zone, and time zones (ADR 0038, stage 2)', () => {
+    const zoned = (rule: string) => `
+      id MeetingId: UUID
+      aggregate Meeting {
+        id: MeetingId
+        startsAt: ZonedDateTime
+        endsAt: ZonedDateTime
+        wakeUpAt: DateTime
+        zone: TimeZone
+        invariant rule { ${rule} }
+      }
+    `;
+
+    test('a ZonedDateTime orders by instant, a DateTime by text, a TimeZone only equals', async () => {
+        for (const rule of [
+            'startsAt < endsAt',
+            'startsAt >= "2026-12-01T10:00:00+09:00[Asia/Tokyo]"',
+            'wakeUpAt > "2026-12-01T06:30"',
+            'zone == "asia/tokyo"',
+            'zone != "UTC"',
+        ]) {
+            const a = await checkSales(zoned(rule));
+            expect({ rule, errors: a.diagnostics.filter((d) => d.severity === 'error') }).toEqual({ rule, errors: [] });
+        }
+    });
+
+    test('a zoned literal needs the offset its zone has then; a zone must exist; zones have no order', async () => {
+        expect(M009(await checkSales(zoned('startsAt < "2026-07-01T10:00:00+09:00[America/New_York]"')))).toHaveLength(1);
+        expect(M009(await checkSales(zoned('zone == "Mars/Base"')))).toEqual(['"Mars/Base" is not a TimeZone: write an IANA time zone ID such as Asia/Tokyo.']);
+        expect(M009(await checkSales(zoned('zone < "Asia/Tokyo"')))).toEqual(["A TimeZone has no order: compare it with '==' or '!='."]);
+        expect(M009(await checkSales(zoned('zone < zone')))).toEqual(["Operator '<' cannot be applied to 'TimeZone' and 'TimeZone'."]);
+        expect(M009(await checkSales(zoned('startsAt < wakeUpAt')))).toEqual([
+            "Operator '<' compares 'ZonedDateTime' with 'DateTime'; values of different date and time types are not comparable.",
+        ]);
+    });
+
+    test('canonical text of the stage 2 types', () => {
+        expect(canonicalTemporal('DateTime', '2026-12-01T06:30')).toBe('2026-12-01T06:30:00');
+        expect(canonicalTemporal('ZonedDateTime', '2026-12-01T10:00:00+09:00[asia/tokyo]')).toBe('2026-12-01T10:00:00+09:00[Asia/Tokyo]');
+        expect(canonicalTemporal('ZonedDateTime', '2026-07-01T10:00:00-04:00[America/New_York]')).toBe('2026-07-01T10:00:00-04:00[America/New_York]');
+        expect(canonicalTemporal('ZonedDateTime', '2026-01-01T10:00:00-04:00[America/New_York]')).toBeUndefined(); // winter: -05:00
+        expect(canonicalTemporal('ZonedDateTime', '2026-01-01T10:00:00Z[UTC]')).toBe('2026-01-01T10:00:00+00:00[UTC]');
+        // the repeated hour of a daylight saving change: the offset tells the two times apart
+        expect(canonicalTemporal('ZonedDateTime', '2026-11-01T01:30:00-04:00[America/New_York]')).toBeDefined();
+        expect(canonicalTemporal('ZonedDateTime', '2026-11-01T01:30:00-05:00[America/New_York]')).toBeDefined();
+        expect(canonicalTemporal('TimeZone', 'Europe/London')).toBe('Europe/London');
+    });
+});

@@ -229,7 +229,7 @@ export interface Hints {
     readonly pattern?: string;
 }
 
-export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth';
+export type Base = 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
 
 /** Smallest and largest number allowed by the hints, in steps of `step` (1 for Int, 0.01 for Decimal). */
 function range(h: Hints, step: number): [number, number] {
@@ -262,7 +262,45 @@ const temporal = {
             fc.constantFrom('00:00:00', '23:59:59', '12:00:00'),
         ),
     YearMonth: () => fc.tuple(fc.integer({ min: 2000, max: 2099 }), fc.integer({ min: 1, max: 12 })).map(([y, m]) => `${y}-${two(m)}`),
+    DateTime: () => fc.tuple(temporalDay(), temporalTime()).map(([d, t]) => `${d}T${t}`),
+    TimeZone: () => fc.constantFrom(...ZONES),
+    // an instant seen in a zone: its local date and time with the zone's offset then (daylight saving time included)
+    ZonedDateTime: () =>
+        fc
+            .tuple(fc.date({ min: new Date('2000-01-01T00:00:00Z'), max: new Date('2099-12-31T00:00:00Z'), noInvalidDate: true }), fc.constantFrom(...ZONES))
+            .map(([d, z]) => zoned(d, z)),
 } as const;
+
+/** Time zones the generated tests draw: with and without daylight saving time, east and west, a half-hour offset. */
+const ZONES = ['UTC', 'Asia/Tokyo', 'America/New_York', 'Europe/London', 'Australia/Adelaide', 'Asia/Kolkata'] as const;
+function temporalDay(): fc.Arbitrary<string> {
+    return day.map((d) => iso(d).slice(0, 10));
+}
+function temporalTime(): fc.Arbitrary<string> {
+    return fc
+        .tuple(fc.integer({ min: 0, max: 23 }), fc.integer({ min: 0, max: 59 }), fc.integer({ min: 0, max: 59 }))
+        .map(([h, m, x]) => `${two(h)}:${two(m)}:${two(x)}`);
+}
+/** `YYYY-MM-DDTHH:MM:SS±HH:MM[Zone]` of an instant in a zone, from the time zone data. */
+function zoned(at: Date, zone: string): string {
+    const parts = Object.fromEntries(
+        new Intl.DateTimeFormat('en-US', {
+            timeZone: zone,
+            hourCycle: 'h23',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            timeZoneName: 'longOffset',
+        })
+            .formatToParts(at)
+            .map((p) => [p.type, p.value]),
+    );
+    const offset = /^GMT([+-]\d{2}:\d{2})$/.exec(parts.timeZoneName ?? '')?.[1] ?? '+00:00';
+    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}:${parts.second}${offset}[${zone}]`;
+}
 
 /** The forms of the date and time types: canonical text that is a value (no February 30, no 24:00). */
 const TEMPORAL_FORMS: Readonly<Record<'Date' | 'Time' | 'YearMonth' | 'Timestamp', RegExp>> = {
@@ -270,6 +308,13 @@ const TEMPORAL_FORMS: Readonly<Record<'Date' | 'Time' | 'YearMonth' | 'Timestamp
     Time: /^([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,
     YearMonth: /^\d{4}-(0[1-9]|1[0-2])$/,
     Timestamp: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d\.\d{3}Z$/,
+};
+const knownZone = (zone: string): boolean => {
+    try {
+        return new Intl.DateTimeFormat('en-US', { timeZone: zone }).resolvedOptions().timeZone === zone;
+    } catch {
+        return false;
+    }
 };
 const realDay = (text: string): boolean => {
     const d = new Date(`${text.slice(0, 10)}T00:00:00Z`);
@@ -293,6 +338,9 @@ export function base(b: Base, h: Hints = {}): fc.Arbitrary<unknown> {
         case 'Date':
         case 'Time':
         case 'YearMonth':
+        case 'DateTime':
+        case 'ZonedDateTime':
+        case 'TimeZone':
             return temporal[b]();
         case 'UUID':
         case 'String': {
@@ -317,6 +365,9 @@ export function scalars(seed: number): Readonly<Record<Base, fc.Arbitrary<unknow
         Date: of('Date'),
         Time: of('Time'),
         YearMonth: of('YearMonth'),
+        DateTime: of('DateTime'),
+        ZonedDateTime: of('ZonedDateTime'),
+        TimeZone: of('TimeZone'),
     });
 }
 
@@ -675,6 +726,14 @@ export function isBase(v: unknown, b: Base): boolean {
         case 'YearMonth':
         case 'Time':
             return typeof v === 'string' && TEMPORAL_FORMS[b].test(v) && (b === 'Time' || realDay(b === 'YearMonth' ? `${v}-01` : v));
+        case 'DateTime':
+            return typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/.test(v) && realDay(v);
+        case 'TimeZone':
+            return typeof v === 'string' && knownZone(v);
+        case 'ZonedDateTime': {
+            const m = typeof v === 'string' ? /^(.+)\[([^\]]+)\]$/.exec(v) : null;
+            return !!m && knownZone(m[2]!) && zoned(new Date(m[1]!), m[2]!) === v;
+        }
         case 'String':
         case 'UUID':
             return typeof v === 'string';

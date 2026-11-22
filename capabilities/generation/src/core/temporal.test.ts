@@ -102,3 +102,41 @@ void e; void t;
     );
     expect(r.stdout.toString() + r.stderr.toString()).toBe('');
 });
+
+test('stage 2: a ZonedDateTime is checked against its zone, and ordered by instant', async () => {
+    const a = await check({
+        'meeting.dt': `context Meeting {
+  id MeetingId: UUID
+  aggregate Meeting {
+    id: MeetingId
+    startsAt: ZonedDateTime
+    endsAt: ZonedDateTime
+    zone: TimeZone
+    invariant ordered { startsAt < endsAt }
+    invariant notTokyo { zone != "asia/tokyo" }
+  }
+}`,
+    });
+    expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-zoned-'));
+    dirs.push(dir);
+    const files = generateTypeScript(a.model!);
+    for (const f of files) await writeFile(path.join(dir, f.path), f.content);
+    const code = files.find((f) => f.path === 'Meeting.ts')!.content;
+    expect(code).toContain('zonedCompare(meeting.startsAt, meeting.endsAt) < 0');
+    expect(code).toContain("meeting.zone === 'Asia/Tokyo'");
+    const meeting = await import(path.join(dir, 'Meeting.ts'));
+    const rt = await import(path.join(dir, '_runtime.ts'));
+    // 10:00 in Tokyo is 01:00 UTC, before 09:00 in London (UTC in winter): ordered by instant, not by text
+    const tokyo = rt.parseZonedDateTime('2026-12-01T10:00:00+09:00[Asia/Tokyo]');
+    const london = rt.parseZonedDateTime('2026-12-01T09:00:00Z[Europe/London]');
+    expect(london).toBe('2026-12-01T09:00:00+00:00[Europe/London]');
+    expect(meeting.checkMeeting({ id: 'm', startsAt: tokyo, endsAt: london, zone: 'UTC' })).toEqual([]);
+    expect(meeting.checkMeeting({ id: 'm', startsAt: london, endsAt: tokyo, zone: 'Asia/Tokyo' })).toEqual(['ordered', 'notTokyo']);
+    expect(rt.instantOf(tokyo)).toBe('2026-12-01T01:00:00.000Z');
+    expect(rt.parseZonedDateTime('2026-01-01T10:00:00-04:00[America/New_York]')).toBeUndefined();
+    expect(rt.parseTimeZone('asia/tokyo')).toBe('Asia/Tokyo');
+    expect(rt.parseTimeZone('Mars/Base')).toBeUndefined();
+    expect(rt.parseDateTime('2026-12-01T06:30')).toBe('2026-12-01T06:30:00');
+    expect(rt.parseDateTime('2026-12-01 06:30')).toBeUndefined();
+});

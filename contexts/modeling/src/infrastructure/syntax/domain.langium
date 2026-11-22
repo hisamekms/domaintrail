@@ -172,7 +172,7 @@ TypeRef:
     primitive=PrimitiveType | decl=[TypeDecl:QualifiedName];
 
 PrimitiveType returns string:
-    'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth';
+    'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
 
 Multiplicity:
     optional?='?' | '[' lower=INT '..' (upper=INT | unbounded?='*') ']';
@@ -240,7 +240,7 @@ FeatureName returns string:
 // read alone in an expression: it is written after a `.` (`Op.and`).
 ValueName returns string:
     FeatureName | 'not' | 'in' | 'and' | 'or' | 'implies' | 'true' | 'false' | 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID'
-    | 'Date' | 'Time' | 'YearMonth';
+    | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
 
 QualifiedName returns string:
     ID ('.' ID)*;

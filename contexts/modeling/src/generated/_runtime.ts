@@ -412,3 +412,60 @@ export const parseTimestamp = (text: string): Timestamp | undefined => {
 
 /** The instant of a JavaScript `Date` (an invalid one throws: it is no instant). */
 export const timestampOf = (date: Date): Timestamp => date.toISOString() as Timestamp;
+/** DSL `DateTime`: a date and a time of day without a time zone, `YYYY-MM-DDTHH:MM:SS`. Make it with `parseDateTime`. */
+export type PlainDateTime = Canonical<'PlainDateTime'>;
+/**
+ * DSL `ZonedDateTime`: a date and time in a time zone, `YYYY-MM-DDTHH:MM:SS±HH:MM[Zone]` (RFC 9557, the text of
+ * `Temporal.ZonedDateTime`). Its offset is the zone's at that time. Make it with `parseZonedDateTime`.
+ */
+export type ZonedDateTime = Canonical<'ZonedDateTime'>;
+/** DSL `TimeZone`: an IANA time zone ID, `Asia/Tokyo`. Make it with `parseTimeZone`. */
+export type TimeZone = Canonical<'TimeZone'>;
+
+/** The date and time of `YYYY-MM-DDTHH:MM:SS` (or `…THH:MM`), or `undefined` when it is not one. */
+export const parseDateTime = (text: string): PlainDateTime | undefined => {
+    const m = /^(\d{4}-\d{2}-\d{2})T(.+)$/.exec(text);
+    const date = m ? parseDate(m[1]!) : undefined;
+    const time = m ? parseTime(m[2]!) : undefined;
+    return date && time ? ((date + 'T' + time) as PlainDateTime) : undefined;
+};
+
+/** The time zone of an IANA ID, spelled as the time zone data spells it (`asia/tokyo` is `Asia/Tokyo`); else `undefined`. */
+export const parseTimeZone = (text: string): TimeZone | undefined => {
+    if (!/^[A-Za-z][A-Za-z0-9_+\-/]*$/.test(text)) return undefined;
+    try {
+        return new Intl.DateTimeFormat('en-US', { timeZone: text }).resolvedOptions().timeZone as TimeZone;
+    } catch {
+        return undefined;
+    }
+};
+
+/** The offset of a time zone at an instant, `±HH:MM`, from the time zone data. */
+const zoneOffset = (zone: string, epochMs: number): string => {
+    const part = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' }).formatToParts(new Date(epochMs)).find((p) => p.type === 'timeZoneName');
+    const m = /^GMT(?:([+-]\d{2}):(\d{2}))?$/.exec(part ? part.value : '');
+    return m && m[1] ? m[1] + ':' + m[2] : '+00:00';
+};
+
+/**
+ * The date and time in a time zone of `YYYY-MM-DDTHH:MM:SS±HH:MM[Zone]` (`Z` for `+00:00`), or `undefined` when it
+ * is not one: the offset must be the zone's at that time.
+ */
+export const parseZonedDateTime = (text: string): ZonedDateTime | undefined => {
+    const m = /^(.+?)(Z|[+-]\d{2}:\d{2})\[([^\]]+)\]$/.exec(text);
+    const local = m ? parseDateTime(m[1]!) : undefined;
+    const zone = m ? parseTimeZone(m[3]!) : undefined;
+    if (!m || !local || !zone) return undefined;
+    const offset = m[2] === 'Z' ? '+00:00' : m[2]!;
+    const at = Date.parse(local + offset);
+    return Number.isNaN(at) || zoneOffset(zone, at) !== offset ? undefined : ((local + offset + '[' + zone + ']') as ZonedDateTime);
+};
+
+/** The instant of a date and time in a time zone, from its offset (no time zone data needed). */
+export const instantOf = (zoned: ZonedDateTime): Timestamp => timestampOf(new Date(zoned.slice(0, zoned.indexOf('['))));
+
+/** The order of two dates and times in a time zone: by instant (DSL `<` on `ZonedDateTime`). */
+export const zonedCompare = (a: ZonedDateTime, b: ZonedDateTime): -1 | 0 | 1 => {
+    const [x, y] = [instantOf(a), instantOf(b)];
+    return x < y ? -1 : x > y ? 1 : 0;
+};
