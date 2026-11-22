@@ -32,7 +32,6 @@
 (variant name: (identifier) @constant)
 (state name: (identifier) @constant)
 (initial state: (identifier) @constant)
-(enum_value_selector value: (identifier) @constant)
 (transition from: (identifier) @constant)
 (transition to: (identifier) @constant)
 (outcome name: (identifier) @label)
@@ -50,7 +49,7 @@
 ; Fields and parameters
 
 (field name: (identifier) @property)
-(transition_group field: (identifier) @property)
+(kind name: (identifier) @type)
 (owns_field name: (identifier) @property)
 (reference_field name: (identifier) @property)
 (term_entry name: (identifier) @property)
@@ -90,7 +89,7 @@
   "aggregate"
   "state"
   "initial"
-  "transitions"
+  "kind"
   "on"
   "outcome"
   "select"
@@ -131,7 +130,6 @@
   "<"
   ">"
   "->"
-  "::"
   "=>"
   "|"
   "-"

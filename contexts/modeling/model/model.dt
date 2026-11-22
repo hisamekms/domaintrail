@@ -119,12 +119,11 @@ context Modeling {
       invariants: InvariantModel[0..*]
       states: StateModel[0..*]
       commands: CommandModel[0..*]
-      /// Lifecycle declarations; empty for aggregates using the legacy transition form.
+      /// Lifecycle declarations; empty for aggregates using the legacy transition form. A kind's `initial` names it.
       initials: InitialModel[0..*]
-      groups: TransitionGroupModel[0..*]
-      /// The one readonly enum discriminator, when groups are present.
-      lifecycleField: String?
-      lifecycleEnum: QualifiedName?
+      /// `kind Name { … }` (ADR 0037): the kinds of the aggregate, fixed when it is made; empty without kinds.
+      kinds: KindModel[0..*]
+      /// The states each kind can be in (from its initial states through its outcomes); empty without kinds.
       validStates: ValidKindStatesModel[0..*]
     }
     event {
@@ -265,12 +264,15 @@ context Modeling {
     states: String[0..*]
   }
 
-  value TransitionGroupModel {
-    field: String
-    enum: QualifiedName
-    values: String[0..*]
-    initials: InitialModel[0..*]
+  /// A kind of an aggregate: its own fields and invariants (added to the common ones) and the outcomes it gives the
+  /// common commands that have none (`on command { … }`). Its own commands are the aggregate's commands with its name.
+  value KindModel with Described {
+    id: ElementId
+    name: String
+    fields: FieldModel[0..*]
+    invariants: InvariantModel[0..*]
     cases: CommandCaseModel[0..*]
+    location: Location
   }
 
   value CommandCaseModel {
@@ -342,6 +344,8 @@ context Modeling {
     outcomes: OutcomeModel[0..*]
     /// True when the command uses the pre-ADR transition/changes/emits form.
     legacy: Bool
+    /// The kind the command belongs to (declared in `kind Name { … }`); absent for a common command.
+    kind: String?
     /// Preconditions over the parameters and the aggregate's current data (`requires`).
     requires: RequirementModel[0..*]
     /// `changes`: the fields the command may change, as written — common fields, and state-specific fields it would

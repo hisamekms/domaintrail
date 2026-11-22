@@ -63,6 +63,8 @@ export type NoChanges = { readonly [nothing]?: never };
 export interface Shape {
     readonly fields: readonly string[];
     readonly states?: { readonly [state: string]: readonly string[] };
+    /** The fields of each kind on top of the common ones (ADR 0037); its name is the aggregate's `kind`. */
+    readonly kinds?: { readonly [kind: string]: readonly string[] };
 }
 
 type ArgsAfterFirst<F> = F extends (first: any, ...args: infer A) => unknown ? A : never;
@@ -95,18 +97,30 @@ export interface ChoiceVerifier {
     readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
 }
 
+/** The command's contract takes only the kinds that have it: another kind is a caller's bug, not a domain error. */
+const notForKind = (availability: Availability, command: string, subject: any): Error =>
+    new Error(`DomainTrail command contract violated: ${availability.aggregate}.${command} is not a command of kind '${String(subject?.kind)}' (kinds: ${Object.keys(availability.commands[command] ?? {}).join(', ')}).`);
+
 /** The command's contract takes only its source states: another state is a caller's bug, not a domain error. */
 const notASource = (subject: any, sources: readonly string[]): Error =>
     new Error(`DomainTrail command contract violated: state '${String(subject?.state)}' is not a source state of this command (sources: ${sources.join(', ')}).`);
 
-const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>>, where: CommandOf | undefined, verify: ChoiceVerifier | undefined): Decide<D> =>
+const decideWith = <D>(
+    shape: Shape,
+    decision: D,
+    targets: Readonly<Record<string, string>>,
+    where: CommandOf | undefined,
+    verify: ChoiceVerifier | undefined,
+    by: 'state' | 'kind' = 'state',
+): Decide<D> =>
     ((...args: any[]) => {
         const subject = args[0];
         if (where !== undefined) {
             const sources = sourcesFor(where.availability, where.command, subject);
-            if (!sources.includes(subject?.state)) throw notASource(subject, sources);
+            if (sources === undefined) throw notForKind(where.availability, where.command, subject);
+            if (!where.availability.stateless && !sources.includes(subject?.state)) throw notASource(subject, sources);
         }
-        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.state]) as ((...args: any[]) => Result<object, unknown>) | undefined;
+        const handler = (typeof decision === 'function' ? decision : (decision as any)[subject?.[by]]) as ((...args: any[]) => Result<object, unknown>) | undefined;
         if (handler === undefined) throw notASource(subject, Object.keys(decision as object));
         const r = handler(...args);
         if (!r.ok) return r;
@@ -124,7 +138,10 @@ const decideWith = <D>(shape: Shape, decision: D, targets: Readonly<Record<strin
             if (o === undefined) continue;
             const to = targets[name] ?? name;
             const aggregate: Record<string, unknown> = shape.states ? { state: to } : {};
-            for (const f of [...shape.fields, ...(shape.states?.[to] ?? [])]) {
+            // the kind (ADR 0037): the one a factory's `set` names, else the input's, which never changes
+            const kind = shape.kinds ? String('kind' in o.set ? o.set.kind : subject?.kind) : undefined;
+            if (kind !== undefined) aggregate.kind = kind;
+            for (const f of [...shape.fields, ...(kind === undefined ? [] : (shape.kinds?.[kind] ?? [])), ...(shape.states?.[to] ?? [])]) {
                 const v = f in o.set ? o.set[f] : subject?.[f];
                 if (v !== undefined) aggregate[f] = v;
             }
@@ -174,22 +191,51 @@ export const decideNamed = <D>() => <const Targets extends Readonly<Record<strin
     return decideWith(shape, decision, targets, where, verify) as Decide<D, Targets>;
 };
 
+/** The command a decision with one function per kind makes (ADR 0037): assignable to the command's contract. */
+export type DecideByKind<D, Targets = {}> = <S extends { readonly kind: keyof D }>(
+    subject: S,
+    ...args: ArgsAfterFirst<D[keyof D]>
+) => { [K in keyof D]: DecidedBy<D[K], Targets> }[S['kind']];
+
+/**
+ * Construct a named-outcome command of several kinds from its decision, one function per kind (a generated
+ * `<Command><Aggregate>Decision` keyed by kind), as `decideNamed` does: the call runs the function of the aggregate's kind,
+ * after the check of its kind and state.
+ *
+ *     suspend: decideByKind<Logistics.SuspendPickupSiteDecision>()(Logistics.PickupSiteShape, { suspended: 'Suspended' }, { Store: (site) => …, Center: (site) => … }, { availability: Logistics.PickupSiteAvailability, command: 'suspend' })
+ */
+export const decideByKind = <D>() => <const Targets extends Readonly<Record<string, string>>>(
+    shape: Shape,
+    targets: Targets,
+    decision: D,
+    where: CommandOf,
+    verify?: ChoiceVerifier,
+): DecideByKind<D, Targets> => {
+    if (where.availability.commands[where.command] === undefined)
+        throw new Error(`DomainTrail: ${where.availability.aggregate} has no command '${where.command}' that takes an aggregate.`);
+    return decideWith(shape, decision, targets, where, verify, 'kind') as unknown as DecideByKind<D, Targets>;
+};
+
 /**
  * Where the commands of an aggregate can be called, as data (a generated `<Aggregate>Availability`): for each command
- * that is not a factory, its source states per kind of the lifecycle selector `kindField`, or under `'*'` for an
+ * that is not a factory, its source states per kind (`kindField`, ADR 0037; a kind without the command has none), or under `'*'` for an
  * aggregate without one.
  */
 export interface Availability {
     /** The aggregate's qualified name (`Context.Aggregate`). */
     readonly aggregate: string;
+    /** The discriminator of the kinds (`kind`) of an aggregate with kinds. */
     readonly kindField?: string;
+    /** An aggregate with kinds and no states: a command is available on the kinds that have it. */
+    readonly stateless?: true;
+    /** Per command, the kinds that have it (`'*'` without kinds), with its source states for each. */
     readonly commands: { readonly [command: string]: { readonly [kind: string]: readonly string[] } };
 }
 
 /**
  * The error of a command called through its any-state entry on an aggregate whose state is not one of the command's
  * source states: `state` is the aggregate's state, `expected` the states the command can be called in, and `kind` the
- * aggregate's kind when it has a lifecycle selector. It tells apart every state rejection from the command's own errors.
+ * aggregate's kind when it has kinds. It tells apart every state rejection from the command's own errors.
  */
 export type CommandUnavailable<A extends string = string, C extends string = string, S extends string = string, E extends string = string, K extends string = never> = {
     readonly type: 'CommandUnavailable';
@@ -199,19 +245,34 @@ export type CommandUnavailable<A extends string = string, C extends string = str
     readonly expected: readonly E[];
 } & ([K] extends [never] ? {} : { readonly kind: K });
 
-/** The source states of a command for the subject's kind; none when the command has none for that kind. */
-const sourcesFor = (availability: Availability, command: string, subject: any): readonly string[] => {
-    const byKind = availability.commands[command];
-    if (byKind === undefined) throw new Error(`DomainTrail: ${availability.aggregate} has no command '${command}' that takes an aggregate.`);
-    return byKind[availability.kindField === undefined ? '*' : String(subject?.[availability.kindField])] ?? [];
+/**
+ * The error of a command called through its any-state entry on an aggregate of a kind that does not have the command
+ * (ADR 0037): `kind` is the aggregate's kind, `expected` the kinds that have the command. Unlike
+ * `CommandUnavailable`, it never passes later: the kind of an aggregate never changes.
+ */
+export type CommandNotForKind<A extends string = string, C extends string = string, K extends string = string, E extends string = string> = {
+    readonly type: 'CommandNotForKind';
+    readonly aggregate: A;
+    readonly command: C;
+    readonly kind: K;
+    readonly expected: readonly E[];
 };
 
-/** Whether the command can be called on the aggregate: its state is a source state of the command for its kind. */
-export const isAvailable = (availability: Availability, command: string, subject: { readonly state: string }): boolean =>
-    sourcesFor(availability, command, subject).includes(subject.state);
+/** The source states of a command for the subject's kind; `undefined` when its kind does not have the command. */
+const sourcesFor = (availability: Availability, command: string, subject: any): readonly string[] | undefined => {
+    const byKind = availability.commands[command];
+    if (byKind === undefined) throw new Error(`DomainTrail: ${availability.aggregate} has no command '${command}' that takes an aggregate.`);
+    return byKind[availability.kindField === undefined ? '*' : String(subject?.[availability.kindField])];
+};
+
+/** Whether the command can be called on the aggregate: its kind has it, and its state is a source state for its kind. */
+export const isAvailable = (availability: Availability, command: string, subject: object): boolean => {
+    const sources = sourcesFor(availability, command, subject);
+    return sources !== undefined && (availability.stateless === true || sources.includes((subject as { readonly state?: string }).state ?? ''));
+};
 
 /** The commands that can be called on the aggregate in its state (and kind), in declaration order. */
-export const availableCommands = (availability: Availability, subject: { readonly state: string }): string[] =>
+export const availableCommands = (availability: Availability, subject: object): string[] =>
     Object.keys(availability.commands).filter((command) => isAvailable(availability, command, subject));
 
 /**
@@ -227,6 +288,15 @@ export const fromAnyState = (availability: Availability, commands: object): obje
             (subject: any, ...args: any[]): unknown => {
                 const sources = sourcesFor(availability, command, subject);
                 const kind = availability.kindField === undefined ? undefined : String(subject?.[availability.kindField]);
+                if (sources === undefined)
+                    return err({
+                        type: 'CommandNotForKind',
+                        aggregate: availability.aggregate,
+                        command,
+                        kind,
+                        expected: Object.keys(availability.commands[command] ?? {}),
+                    });
+                if (availability.stateless) return (commands as Record<string, (...a: any[]) => unknown>)[command]!(subject, ...args);
                 if (!sources.length)
                     throw new Error(`DomainTrail command contract violated: ${availability.aggregate}.${command} has no source state for ${availability.kindField} '${kind}'.`);
                 if (sources.includes(subject.state)) return (commands as Record<string, (...a: any[]) => unknown>)[command]!(subject, ...args);

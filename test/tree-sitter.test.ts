@@ -65,22 +65,22 @@ describe('tree-sitter grammar', () => {
         expect(problems('context A { aggregate G { command c() -> } }')).not.toEqual([]);
     });
 
-    test('parses lifecycle groups, named outcomes, readonly fields and external checks', () => {
+    test('parses kinds, named outcomes, readonly fields and external checks', () => {
         const source = `context Delivery {
-          enum Kind { COLLECT DROP_OFF }
           error Unavailable
           aggregate Request {
-            readonly kind: Kind
             state Open
             state Done
             initial Open
             command finish() {
               requires available "available" @externalCheck("inventory service") else Unavailable
-              outcome done: Open -> Done select { kind == Kind.COLLECT }
               errors Unavailable
             }
-            transitions for kind in Kind.COLLECT | Kind.DROP_OFF {
+            kind COLLECT "回収" {
+              readonly depot: String
+              invariant named { length(depot) > 0 }
               initial Open
+              create command openCollect(depot: String) { outcome opened: -> Open }
               on finish { outcome held: Open -> Done select "carrier confirmed" @externalCheck("carrier service") }
             }
           }

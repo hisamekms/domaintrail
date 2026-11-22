@@ -1,6 +1,6 @@
 import type { Diagnostic } from '@domaintrail/kernel';
 import { RuleSink } from '../diagnostics.js';
-import { commandsOf, invariantsOf, statesOf, type AggregateDecl, type SourceModel } from '../source-model.js';
+import { commandsOf, kindsOf, invariantsOf, statesOf, type AggregateDecl, type SourceModel } from '../source-model.js';
 
 /** Extra checks required before any generator writes a file. M029 is reserved for unexpressed decisions. */
 export function generationGateDiagnostics(model: SourceModel): Diagnostic[] {
@@ -22,7 +22,7 @@ export function generationGateDiagnostics(model: SourceModel): Diagnostic[] {
         if (el.kind !== 'aggregate') continue;
         const agg: AggregateDecl = el;
         for (const s of statesOf(agg)) for (const i of invariantsOf(s.members)) decision('Invariant', i.name, i.expr, i.externalReason, i.at);
-        const groups = agg.members.filter((m) => m.kind === 'transitionGroup');
+        const groups = kindsOf(agg);
         for (const c of commandsOf(agg)) {
             for (const r of c.requirements) decision('Requirement', r.name, r.expr, r.externalReason, r.at);
             const outcomes = [...c.outcomes, ...groups.flatMap((g) => g.cases.filter((x) => x.command.text === c.name).flatMap((x) => x.outcomes))];

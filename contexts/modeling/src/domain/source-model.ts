@@ -146,15 +146,16 @@ export interface CommandCaseDecl {
     at: Site;
 }
 
-export interface TransitionGroupDecl {
-    kind: 'transitionGroup';
-    name: string;
-    field: string;
-    values: { enum: Ref<EnumDecl>; value: string; at: Site }[];
-    initials: InitialDecl[];
+/** `kind Name { … }` of an aggregate (ADR 0037): its fields, invariants, commands, initial states and `on` cases. */
+export interface KindDecl extends Declared {
+    kind: 'kind';
+    /** Stable ID (`Sales.Order/Store`). */
+    id: string;
+    members: KindMember[];
     cases: CommandCaseDecl[];
-    at: Site;
 }
+
+export type KindMember = DataMember | CommandDecl | InitialMemberDecl;
 
 export interface InitialMemberDecl extends InitialDecl {
     kind: 'initial';
@@ -176,9 +177,11 @@ export interface CommandDecl extends Declared {
     emits: EmitDecl[];
     errors: Ref<ErrorDecl>[];
     outcomes: OutcomeDecl[];
+    /** The kind the command is declared in; absent for a common command. */
+    ofKind?: string;
 }
 
-export type AggregateMember = DataMember | StateDecl | CommandDecl | InitialMemberDecl | TransitionGroupDecl;
+export type AggregateMember = DataMember | StateDecl | CommandDecl | InitialMemberDecl | KindDecl;
 
 export type EnumValueDecl = Declared;
 
@@ -414,7 +417,21 @@ export const commonFields = (agg: AggregateDecl): FieldDecl[] => fieldsOf(agg.me
 
 export const statesOf = (agg: AggregateDecl): StateDecl[] => agg.members.filter((m): m is StateDecl => m.kind === 'state');
 
-export const commandsOf = (agg: AggregateDecl): CommandDecl[] => agg.members.filter((m): m is CommandDecl => m.kind === 'command');
+/** The kinds of an aggregate (ADR 0037). */
+export const kindsOf = (agg: AggregateDecl): KindDecl[] => agg.members.filter((m): m is KindDecl => m.kind === 'kind');
+
+/** The commands declared outside the kinds of an aggregate. */
+export const commonCommandsOf = (agg: AggregateDecl): CommandDecl[] => agg.members.filter((m): m is CommandDecl => m.kind === 'command');
+
+/** Every command of an aggregate: the common ones, then those of each kind. */
+export const commandsOf = (agg: AggregateDecl): CommandDecl[] => [
+    ...commonCommandsOf(agg),
+    ...kindsOf(agg).flatMap((k) => k.members.filter((m): m is CommandDecl => m.kind === 'command')),
+];
+
+/** The fields of a kind. */
+export const kindFields = (k: KindDecl): FieldDecl[] =>
+    k.members.filter((m): m is FieldDecl => m.kind === 'field' || m.kind === 'owns' || m.kind === 'references');
 
 /** The field sets an element names with `with`, resolved, each once, in order. */
 export const fieldSetsOf = (el: WithFieldSets): FieldSetDecl[] => [...new Set(el.fieldSets.map((r) => r.target).filter((f): f is FieldSetDecl => !!f))];

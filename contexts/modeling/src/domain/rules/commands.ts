@@ -2,6 +2,8 @@ import { emitApplies } from '../model.js';
 import type { RuleSink } from '../diagnostics.js';
 import {
     commandsOf,
+    kindFields,
+    kindsOf,
     commonFields,
     fieldsOf,
     identityField,
@@ -32,7 +34,7 @@ export function checkCommands(model: SourceModel, rules: RuleSink): void {
     for (const agg of aggregatesOf(model)) {
         const stateful = statesOf(agg).length > 0;
         for (const cmd of commandsOf(agg)) {
-            if (cmd.outcomes.length || agg.members.some((m) => m.kind === 'transitionGroup' && m.cases.some((c) => c.command.text === cmd.name))) continue;
+            if (cmd.outcomes.length || kindsOf(agg).some((k) => k.cases.some((c) => c.command.text === cmd.name))) continue;
             const label = `${cmd.factory ? 'Factory command' : 'Command'} '${cmd.name}'`;
             if (!stateful) {
                 if (cmd.transitions.length > 0) {
@@ -212,7 +214,12 @@ const quotedList = (names: string[]): string => names.map((n) => `'${n}'`).join(
 export function checkChangedPath(agg: AggregateDecl, name: string, at: Site, rules: RuleSink): boolean {
     const [root, ...rest] = name.split('.');
     if (!rest.length) return false;
-    const fields = [...includedFields(agg).map((x) => x.field), ...commonFields(agg), ...statesOf(agg).flatMap((s) => fieldsOf(s.members))];
+    const fields = [
+        ...includedFields(agg).map((x) => x.field),
+        ...commonFields(agg),
+        ...kindsOf(agg).flatMap(kindFields),
+        ...statesOf(agg).flatMap((s) => fieldsOf(s.members)),
+    ];
     const field = fields.find((f) => f.name === root);
     if (!field) {
         const names = [...new Set(fields.map((f) => f.name))].filter((f) => f !== identityField(agg)?.name);
@@ -256,8 +263,11 @@ export function checkChanges(model: SourceModel, rules: RuleSink): void {
         const states = statesOf(agg);
         const fieldIn = (s: StateDecl | undefined, name: string): FieldDecl | undefined => s && fieldsOf(s.members).find((f) => f.name === name);
         const identity = identityField(agg)?.name;
+        const kinds = kindsOf(agg);
         for (const cmd of commandsOf(agg)) {
             if (!cmd.changes.length) continue;
+            // a kind's command also changes the fields of its kind (ADR 0037)
+            const own = [...common, ...kinds.filter((k) => k.name === cmd.ofKind).flatMap(kindFields)];
             if (cmd.factory) {
                 const hint = `remove 'changes ${cmd.changes.map((c) => c.name).join(', ')}'; the decision of '${cmd.name}' gives every field`;
                 rules.error(
@@ -275,7 +285,22 @@ export function checkChanges(model: SourceModel, rules: RuleSink): void {
                     rules.error('M021', `Field '${name}' is the identity of '${agg.name}' and never changes.`, at, `remove '${name}' from 'changes'`);
                     continue;
                 }
-                if (common.some((f) => f.name === name)) continue;
+                const field = own.find((f) => f.name === name);
+                if (field) {
+                    if (field.readonly)
+                        rules.error('M021', `Readonly field '${name}' cannot be changed by command '${cmd.name}'.`, at, `remove '${name}' from 'changes'`);
+                    continue;
+                }
+                const inKinds = kinds.filter((k) => kindFields(k).some((f) => f.name === name)).map((k) => k.name);
+                if (inKinds.length) {
+                    rules.error(
+                        'M021',
+                        `Field '${name}' exists only in kind ${quotedList(inKinds)}, and '${cmd.name}' is ${cmd.ofKind ? `a command of kind '${cmd.ofKind}'` : 'a common command'}.`,
+                        at,
+                        `change '${name}' in a command of kind '${inKinds[0]}' (or in its 'on ${cmd.name}' case), or make '${name}' a common field`,
+                    );
+                    continue;
+                }
                 const where = states.filter((s) => fieldIn(s, name)).map((s) => s.name);
                 if (!where.length) {
                     const fields = [...common.map((f) => f.name), ...states.flatMap((s) => fieldsOf(s.members).map((f) => f.name))].filter(

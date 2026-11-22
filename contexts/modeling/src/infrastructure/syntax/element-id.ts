@@ -5,6 +5,7 @@ import {
     isCommand,
     isContext,
     isContextElement,
+    isKind,
     isState,
     type Aggregate,
     type Command,
@@ -24,7 +25,8 @@ export function elementIdOf(node: AstNode | undefined): string | undefined {
         }
         if (isCommand(n)) {
             const c = n as Command;
-            return commandId(idOfContextElement(c.$container), c.name);
+            // a command of a kind (ADR 0037) belongs to the kind's aggregate
+            return commandId(idOfContextElement(isKind(c.$container) ? c.$container.$container : c.$container), c.name);
         }
         if (n.$type === 'Terms' && n.$container && isContext(n.$container)) {
             return contextId((n.$container as Context).name);

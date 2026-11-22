@@ -1,8 +1,6 @@
 # ADR 0037: Aggregate kinds
 
-- Status: proposed
-- Note: the syntax inside a kind (`on` cases, the placement of `requires`) is a sketch; the grammar is settled with
-  the implementation.
+- Status: accepted, implemented
 - Date: 2026-11-22
 - Supersedes: [ADR 0035](0035-kind-specific-lifecycles.md) (its lifecycle selector: `readonly` enum field and
   `transitions for`; its named outcomes, choice rules, `initial`, `@externalCheck` and restore boundary stay)
@@ -103,7 +101,10 @@ aggregate PickupSite "集荷先" {
   aggregate and makes another (a `policy` may link them), or is a `state`. The events of a create command should carry
   enough to tell its kind; the kind is not a field to restate.
 - **`initial`** on the aggregate applies to every kind; inside a kind, to that kind (ADR 0035's rule, with the kind
-  block as the selector).
+  block as the selector). It is optional with kinds: a kind also starts where its create commands end. A kind of an
+  aggregate made elsewhere (no create command, no initial state) may be in any state.
+- **Kind names** are told apart from state names: a kind is not named like a state (the generated kind–state types
+  join the two names).
 
 ### Commands: common or of one kind, behaviour in exactly one place
 
@@ -119,7 +120,11 @@ aggregate PickupSite "集荷先" {
 - The common command's `requires` apply in every kind, before the requirements of the kind's `on` case (ADR 0035's
   order); the first failing requirement decides the error.
 - ADR 0035's `transitions for` groups and the `readonly` enum selector are removed: `kind` replaces them. Its named
-  outcomes and choice rules (`select`, `@externalCheck`) are unchanged.
+  outcomes and choice rules (`select`, `@externalCheck`) are unchanged. Two kinds' cases may name an outcome alike;
+  outcome names are unique per kind.
+- With kinds and states, commands name their outcomes; the shorthand `A -> B` is an error there. Without states, an
+  `on` case has nothing to hold (its outcomes need states): a common command's behaviour is common, and what differs by
+  kind is a command of that kind (in the form of an aggregate without states: `changes`, `emits`).
 
 ### Values and aggregates
 
@@ -137,6 +142,12 @@ tool for what the aggregate itself is.
   by `kind` (the kind's name) and `state`. An aggregate with kinds cannot have a common field named `kind`.
 - A command of one kind, and the `on` case of a common command, take the aggregate of that kind (and of the source
   states): the strict entry constrains the kind at compile time.
+- A common command decided in the kinds' `on` cases has a contract generic over the input, whose result is that of the
+  input's kind (`{ Store: …; Center: … }[S['kind']]`), and a decision with one function per kind, implemented with the
+  runtime's `decideByKind` (as `decide` keys its handlers by state). A decision of several kinds as one function would
+  have a conditional type no implementation could satisfy without a cast.
+- The kind's fields are in the aggregate's shape (`kinds`); the runtime puts the kind on the aggregate a decision
+  makes: from `set` for a create command (whose decision names its kind there), from the input otherwise.
 - The generated `is<Kind><Aggregate>` guards narrow an aggregate of unknown kind; the generated per-kind types support
   an exhaustive `switch` over `kind`, so a new kind is a compile error in every switch that does not handle it.
 - **Two entries.** The strict entry (the command's own type) takes the narrowed aggregate. The any-state entry of
@@ -156,7 +167,7 @@ tool for what the aggregate itself is.
 
 ### `dt check`
 
-Errors:
+Errors (M030 unless noted):
 
 - a common command with outcomes and an `on` case in some kind; a common command without outcomes and a kind without
   its `on` case;
@@ -164,9 +175,10 @@ Errors:
 - a kind without a create command; a `create command` in the common part of an aggregate with kinds;
 - a command name declared twice in the aggregate (in common, in kinds, or both);
 - a kind's field named like a common field or a state's field; a common field named `kind`;
-- `changes` naming the kind.
+- a kind named like a state; the transition shorthand with kinds and states;
+- a field of a kind in `changes` of a common command or outcome, or in a rule outside its kind (M021, M028, M010).
 
-Warnings:
+Warnings (M031):
 
 - a state no kind can reach;
 - kinds of which none declares a field, an invariant, a command or an `on` case: a `readonly` enum field says the
@@ -179,7 +191,7 @@ The exhaustiveness of code over the kinds is the target language's (the generate
 
 ### Guide
 
-`dt guide` gets a `kinds` topic. The aggregate grammar in `dsl-quick` and `aggregates` lists `kind` next to `state`;
+`dt guide` gets a `kinds` topic (replacing `kind-lifecycles`). The aggregate grammar in `dsl-quick` and `aggregates` lists `kind` next to `state`;
 `modeling-practice` states the one-question rule (changes: `state`; fixed at creation: `kind`; a varying value:
 `union`; kinds that share almost nothing: separate aggregates, with a field set for what they share). The `unions`
 topic points to `kinds` for what an aggregate is.

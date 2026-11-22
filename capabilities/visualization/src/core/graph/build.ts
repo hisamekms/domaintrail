@@ -492,7 +492,8 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
     const edges: GraphEdge[] = [];
     const valid = agg.kind === 'aggregate' && kind ? new Set(agg.validStates.find((v) => v.kind === kind)?.states ?? []) : undefined;
     const states = statesOf(agg).filter((s) => !valid || valid.has(s.name));
-    const commands = commandsOf(agg);
+    // with a kind selected, the commands that kind has (ADR 0037)
+    const commands = commandsOf(agg).filter((c) => !kind || !c.kind || c.kind === kind);
     const stateful = states.length > 0;
 
     if (stateful) {
@@ -522,8 +523,8 @@ export function buildStateGraph(agg: ElementModel, model: DomainModel, labels: T
 
     const stateNode = (name: string): string | undefined => (stateful ? states.find((s) => s.name === name)?.id : agg.id);
     for (const c of commands) {
-        const groups = agg.kind === 'aggregate' ? agg.groups.filter((g) => !kind || g.values.includes(kind)) : [];
-        const named = [...c.outcomes, ...groups.flatMap((g) => g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes))];
+        const kinds = agg.kind === 'aggregate' ? agg.kinds.filter((k) => !kind || k.name === kind) : [];
+        const named = [...c.outcomes, ...kinds.flatMap((k) => k.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes))];
         const pairs: Array<{ source: string | undefined; target: string | undefined; from?: string; to?: string; outcome?: OutcomeModel }> = stateful
             ? [
                   ...c.transitions.flatMap((t) => {

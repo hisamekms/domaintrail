@@ -22,6 +22,8 @@ import {
     type InvariantModel,
     type OutcomeModel,
     invariantsOf,
+    kindCase,
+    emittedEventsInAggregate,
     outcomeFields,
     outcomePatternText,
     policiesReactingTo,
@@ -105,7 +107,7 @@ export function outcomesOf(agg: AggregateModel, c: CommandModel): Outcome[] {
             for (const to of t.to) if (!pairs.some(([f, g]) => f === from && g === to)) pairs.push([from, to]);
         }
     }
-    if (!pairs.length && !c.outcomes.length && !agg.groups.some((g) => g.cases.some((x) => x.command === c.name))) pairs.push([undefined, undefined]);
+    if (!pairs.length && !c.outcomes.length && !agg.kinds.some((k) => kindCase(agg, k.name, c.name))) pairs.push([undefined, undefined]);
     const legacy = pairs.map(([from, to]) => {
         const fields = outcomeFields(agg, c, from, to);
         return {
@@ -121,7 +123,7 @@ export function outcomesOf(agg: AggregateModel, c: CommandModel): Outcome[] {
     });
     const named = (outcome: OutcomeModel, kinds?: readonly string[]): Outcome[] =>
         (c.factory ? [undefined] : outcome.from).map((from) => {
-            const fields = outcomeFields(agg, c, from, outcome.to, outcome);
+            const fields = outcomeFields(agg, c, from, outcome.to, outcome, kinds?.length === 1 ? kinds[0] : undefined);
             return {
                 name: outcome.name,
                 ...(kinds && { kinds }),
@@ -137,10 +139,8 @@ export function outcomesOf(agg: AggregateModel, c: CommandModel): Outcome[] {
         });
     return [
         ...legacy,
-        ...c.outcomes.flatMap((o) => named(o)),
-        ...agg.groups.flatMap((g) =>
-            g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => named(o, g.values))),
-        ),
+        ...c.outcomes.flatMap((o) => named(o, c.kind ? [c.kind] : undefined)),
+        ...agg.kinds.flatMap((k) => (kindCase(agg, k.name, c.name)?.outcomes ?? []).flatMap((o) => named(o, [k.name]))),
     ];
 }
 
@@ -440,7 +440,10 @@ const emitsText = (o: Outcome, ctx: string): string =>
 function commandLines(model: DomainModel, agg: AggregateModel, c: CommandModel, indent: string, detail: boolean): string[] {
     const ctx = agg.context;
     const i2 = `${indent}  `;
-    const lines = [...docLines(c.doc, indent), `${indent}${c.factory ? 'create ' : ''}command ${signature(c, ctx)}${quoted(c.label)}${at(c.location)}`];
+    const lines = [
+        ...docLines(c.doc, indent),
+        `${indent}${c.factory ? 'create ' : ''}command ${signature(c, ctx)}${quoted(c.label)}${c.kind ? ` (kind ${c.kind})` : ''}${at(c.location)}`,
+    ];
     for (const p of policiesRunning(model, agg.id, c.name))
         lines.push(`${i2}// triggered by policy ${nameFrom(ctx, p.id)}${quoted(p.label)} when ${nameFrom(ctx, p.policy.event)}`.trimEnd());
     for (const t of c.transitions) lines.push(`${i2}${[t.from.join(' | '), '->', t.to.join(' | ')].filter(Boolean).join(' ')}`);
@@ -484,15 +487,7 @@ function commandLines(model: DomainModel, agg: AggregateModel, c: CommandModel, 
             .join(', ');
         return `${nameFrom(ctx, id)}${quoted(el.label)}${fields ? ` { ${fields} }` : ''}${at(el.location)}`;
     };
-    const events = [
-        ...new Set([
-            ...c.emits.map((e) => e.event),
-            ...agg.groups.flatMap((g) =>
-                g.cases.filter((section) => section.command === c.name).flatMap((section) => section.outcomes.flatMap((o) => o.emits.map((e) => e.event))),
-            ),
-            ...c.outcomes.flatMap((o) => o.emits.map((e) => e.event)),
-        ]),
-    ];
+    const events = emittedEventsInAggregate(agg, c);
     if (events.length) lines.push(`${i2}events`, ...events.map((e) => `${i2}  ${payload(e)}`));
     lines.push(c.errors.length ? `${i2}errors` : `${i2}errors none`, ...c.errors.map((e) => `${i2}  ${payload(e)}`));
     return lines;
@@ -580,6 +575,17 @@ function elementText(model: DomainModel, el: ElementModel): string[] {
     for (const v of variantsOf(el)) {
         lines.push(...docLines(v.doc, '  '), `  ${v.name}${quoted(v.label)}`, ...fieldLines(v.fields, ctx, '    '), ...invariantLines(v.invariants, '    '));
     }
+    if (el.kind === 'aggregate' && el.kinds.length)
+        lines.push(
+            '',
+            ...el.kinds.flatMap((k) => [
+                ...docLines(k.doc, '  '),
+                `  kind ${k.name}${quoted(k.label)}${at(k.location)}`,
+                ...fieldLines(k.fields, ctx, '    '),
+                ...invariantLines(k.invariants, '    '),
+                ...k.cases.map((x) => `    on ${x.command}: ${x.outcomes.map((o) => `${o.name} (${o.from.join(' | ')} -> ${o.to})`).join(', ')}`),
+            ]),
+        );
     if (el.kind === 'aggregate' && el.states.length) lines.push('', ...el.states.flatMap((s) => stateLines(s, ctx, '  ')));
     if (el.kind === 'aggregate' && el.validStates.length)
         lines.push('', ...el.validStates.map((v) => `  kind ${v.kind}: valid states ${v.states.join(', ') || 'none'}`));

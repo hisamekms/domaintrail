@@ -10,10 +10,21 @@ import type {
     PrimitiveName,
     UnionModel,
 } from '@domaintrail/modeling';
-import { BINARY_OP_TEXT, applicableOutcomes, contextNames, elementOf, elementsIn, sharedContexts } from '@domaintrail/modeling';
+import { BINARY_OP_TEXT, applicableOutcomes, commandKinds, contextNames, elementOf, elementsIn, kindCase, kindOf, sharedContexts } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
-import { RUNTIME_NAMES, TS_RESERVED, commonTypeName, invalidTypeName, makeTypeName, stateTypeName } from './naming.js';
+import {
+    KIND_TAG,
+    RUNTIME_NAMES,
+    STATE_TAG,
+    TS_RESERVED,
+    commonTypeName,
+    invalidTypeName,
+    kindTypeName,
+    makeTypeName,
+    pairTypeName,
+    stateTypeName,
+} from './naming.js';
 import { aggregateParamName, choiceCheckName, choiceChecksTypeName, commandTypeName, paramsArgName, paramsTypeName } from './naming.js';
 
 /**
@@ -121,7 +132,12 @@ const UUID_INVARIANT: InvariantModel = {
 export const primitiveInvariants = (p: DomainPrimitive): readonly InvariantModel[] => (p.base === 'UUID' ? [UUID_INVARIANT, ...p.invariants] : p.invariants);
 
 /** Every invariant of an aggregate: its own, then those of each state (names are unique across them, M002). */
-export const aggregateInvariants = (agg: AggregateModel): InvariantModel[] => [...agg.invariants, ...agg.states.flatMap((s) => s.invariants)];
+/** Every invariant of an aggregate: the common ones, those of each state and those of each kind. */
+export const aggregateInvariants = (agg: AggregateModel): InvariantModel[] => [
+    ...agg.invariants,
+    ...agg.states.flatMap((s) => s.invariants),
+    ...agg.kinds.flatMap((k) => k.invariants),
+];
 
 /** Every invariant of a union: those of each variant. */
 export const unionInvariants = (u: UnionModel): InvariantModel[] => u.variants.flatMap((v) => v.invariants);
@@ -485,22 +501,25 @@ interface Param {
     type: string;
 }
 
-/** The states a named command can actually receive, preserving kind–state restrictions in generated checks. */
+/** The states (and kinds) a named command can actually receive, preserving kind–state restrictions in generated checks. */
 function namedSubjectType(agg: AggregateModel, c: CommandModel): string {
-    if (!agg.states.length) return agg.name;
-    if (!agg.lifecycleField) {
-        const sources = [
-            ...new Set(
-                [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))].flatMap((o) => o.from),
-            ),
-        ];
+    if (!agg.kinds.length) {
+        if (!agg.states.length) return agg.name;
+        const sources = [...new Set(applicableOutcomes(agg, c, '*').flatMap((o) => o.from))];
         return sources.map((from) => stateTypeName(agg, from)).join(' | ') || 'never';
     }
-    const pairs = agg.validStates.flatMap(({ kind }) =>
-        applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => `${kind}${stateTypeName(agg, from)}`)),
-    );
+    const kinds = commandKinds(agg, c);
+    if (!agg.states.length) return kinds.map((k) => kindTypeName(agg, k)).join(' | ') || 'never';
+    const pairs = kinds.flatMap((kind) => applicableOutcomes(agg, c, kind).flatMap((o) => o.from.map((from) => pairTypeName(agg, kind, from))));
     return [...new Set(pairs)].join(' | ') || 'never';
 }
+
+/** The fields a decision rule of a command sees for a kind (`'*'` without kinds) and a source state. */
+const decisionFields = (agg: AggregateModel, kind: string, from: string | undefined): FieldModel[] => [
+    ...agg.fields,
+    ...(kindOf(agg, kind)?.fields ?? []),
+    ...(agg.states.find((s) => s.name === from)?.fields ?? []),
+];
 
 /** Equality guards preserve TypeScript's discriminant narrowing, unlike Array.includes. */
 function matchesAny(subject: string, field: string, values: readonly string[]): string | undefined {
@@ -524,9 +543,15 @@ export class CheckWriter {
 
     /** Predicate values for every named outcome; external choices have mandatory typed slots. */
     choices(agg: AggregateModel, c: CommandModel): string[] {
-        const outcomes = [...c.outcomes, ...agg.groups.flatMap((g) => g.cases.filter((x) => x.command === c.name).flatMap((x) => x.outcomes))];
+        // each outcome with the kind it is for: a kind's command or `on` case (ADR 0037), or every kind
+        const outcomes = [
+            ...c.outcomes.map((o) => ({ o, kind: c.kind })),
+            ...agg.kinds.flatMap((k) => (kindCase(agg, k.name, c.name)?.outcomes ?? []).map((o) => ({ o, kind: k.name as string | undefined }))),
+        ];
         if (!outcomes.length) return [];
-        const external = outcomes.filter((o) => o.select?.kind === 'external');
+        // an outcome name may be used by several kinds' cases (ADR 0037): one slot and one value per name
+        const names = [...new Set(outcomes.map(({ o }) => o.name))];
+        const external = names.filter((n) => outcomes.some(({ o }) => o.name === n && o.select?.kind === 'external'));
         const subject = aggregateParamName(agg);
         const parameters = paramsArgName(agg);
         const args = [
@@ -534,14 +559,10 @@ export class CheckWriter {
             ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
         ];
         const signature = args.map((a) => `${a.name}: ${a.type}`).join(', ');
-        const lines = [
-            `export type ${choiceChecksTypeName(agg, c)} = { ${external.map((o) => `readonly ${o.name}: (${signature}) => boolean`).join('; ')} };`,
-            '',
-        ];
-        const choices = outcomes.map((o) => {
+        const lines = [`export type ${choiceChecksTypeName(agg, c)} = { ${external.map((n) => `readonly ${n}: (${signature}) => boolean`).join('; ')} };`, ''];
+        const choices = outcomes.map(({ o, kind }) => {
             const choice = o.select;
-            const first = agg.states.find((state) => state.name === o.from[0]);
-            const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, [...agg.fields, ...(first?.fields ?? [])]);
+            const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, decisionFields(agg, kind ?? '*', o.from[0]));
             for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
             const code =
                 choice?.kind === 'expression'
@@ -549,28 +570,38 @@ export class CheckWriter {
                     : choice?.kind === 'external'
                       ? `checks.${o.name}(${args.map((a) => a.name).join(', ')})`
                       : 'true';
-            const group = agg.groups.find((g) => g.cases.some((x) => x.command === c.name && x.outcomes.includes(o)));
+            const caseKind = kind !== undefined && kind !== c.kind ? kind : undefined;
             const guards = c.factory
                 ? []
                 : [
                       ...(agg.states.length ? [matchesAny(subject, 'state', o.from)] : []),
-                      ...(group && agg.lifecycleField ? [matchesAny(subject, agg.lifecycleField, group.values)] : []),
+                      ...(caseKind ? [matchesAny(subject, KIND_TAG, [caseKind])] : []),
                   ].filter((guard): guard is string => guard !== undefined);
-            return `${o.name}: ${guards.length ? `(${guards.map((guard) => `(${guard})`).join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`;
+            return {
+                name: o.name,
+                value: `${guards.length ? `(${guards.map((guard) => `(${guard})`).join(' && ')}) && (` : ''}${code}${guards.length ? ')' : ''}`,
+            };
         });
-        const body = `return { ${choices.join(', ')} };`;
+        const merged = names.map((n) => {
+            const parts = choices.filter((x) => x.name === n).map((x) => x.value);
+            return `${n}: ${parts.length === 1 ? parts[0] : parts.map((p) => `(${p})`).join(' || ')}`;
+        });
+        const body = `return { ${merged.join(', ')} };`;
         lines.push(
-            `export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${outcomes.map((o) => `readonly ${o.name}: boolean`).join('; ')} } {`,
+            `export function ${choiceCheckName(agg, c)}(checks: ${choiceChecksTypeName(agg, c)}): (${signature}) => { ${names.map((n) => `readonly ${n}: boolean`).join('; ')} } {`,
         );
         lines.push(`    return (${params(args, body)}) => { ${body} };`);
         lines.push('}');
         return lines;
     }
 
-    /** Common requirements followed by matching `on` requirements in source order. */
+    /** Common requirements followed by those of the `on` case of the aggregate's kind. */
     namedRequirements(agg: AggregateModel, c: CommandModel): string[] {
-        const groups = agg.groups.flatMap((g, i) => g.cases.filter((x) => x.command === c.name).map((x) => ({ group: g, index: i, case: x })));
-        if (!c.requires.length && !groups.some((g) => g.case.requires.length)) return [];
+        const cases = agg.kinds.flatMap((k) => {
+            const x = kindCase(agg, k.name, c.name);
+            return x ? [{ kind: k.name, case: x }] : [];
+        });
+        if (!c.requires.length && !cases.some((g) => g.case.requires.length)) return [];
         const type = commandTypeName(agg, c);
         const subject = aggregateParamName(agg);
         const parameters = paramsArgName(agg);
@@ -580,11 +611,17 @@ export class CheckWriter {
         ];
         const sig = args.map((a) => `${a.name}: ${a.type}`).join(', ');
         const names = args.map((a) => a.name).join(', ');
-        const allSources = [...c.outcomes, ...groups.flatMap((g) => g.case.outcomes)].flatMap((o) => o.from);
+        const allSources = [...c.outcomes, ...cases.flatMap((g) => g.case.outcomes)].flatMap((o) => o.from);
         const entries = [
-            ...c.requires.map((r) => ({ requirement: r, key: r.name, group: undefined as (typeof groups)[number] | undefined, sources: allSources })),
-            ...groups.flatMap((g) =>
-                g.case.requires.map((r) => ({ requirement: r, key: `group${g.index}_${r.name}`, group: g, sources: g.case.outcomes.flatMap((o) => o.from) })),
+            ...c.requires.map((r) => ({ requirement: r, key: r.name, kind: c.kind, inCase: false, sources: allSources })),
+            ...cases.flatMap((g) =>
+                g.case.requires.map((r) => ({
+                    requirement: r,
+                    key: `${g.kind}_${r.name}`,
+                    kind: g.kind as string | undefined,
+                    inCase: true,
+                    sources: g.case.outcomes.flatMap((o) => o.from),
+                })),
             ),
         ];
         const external = entries.filter(({ requirement }) => !requirement.expr);
@@ -593,15 +630,13 @@ export class CheckWriter {
         if (external.length) {
             lines.push(`export type ${declaredRequiresName(type)} = { ${external.map((x) => `readonly ${x.key}: (${sig}) => boolean`).join('; ')} };`, '');
         }
-        const body = entries.map(({ requirement, key, group, sources }) => {
-            const first = agg.states.find((state) => state.name === sources[0]);
-            const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, [...agg.fields, ...(first?.fields ?? [])]);
+        const body = entries.map(({ requirement, key, kind, inCase, sources }) => {
+            const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, decisionFields(agg, kind ?? '*', sources[0]));
             for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
             const holds = requirement.expr ? this.compiler.compile(requirement.expr, scope).js : `checks.${key}(${names})`;
             const check = `if (!(${holds})) return '${key}';`;
-            if (!group) return check;
-            if (c.factory || !agg.lifecycleField) return check;
-            const guards = [matchesAny(subject, agg.lifecycleField, group.group.values), matchesAny(subject, 'state', sources)].filter(
+            if (!inCase || c.factory) return check;
+            const guards = [matchesAny(subject, KIND_TAG, [kind!]), matchesAny(subject, 'state', sources)].filter(
                 (guard): guard is string => guard !== undefined,
             );
             return `if (${guards.map((guard) => `(${guard})`).join(' && ')}) { ${check} }`;
@@ -847,6 +882,7 @@ export class CheckWriter {
      * state (the common part's and the state's) and for any state.
      */
     aggregate(agg: AggregateModel): string[] {
+        if (agg.kinds.length) return this.kindsAggregate(agg);
         const all = aggregateInvariants(agg);
         if (!all.length && !agg.states.length) return [];
         const subject = subjectName(agg.name);
@@ -923,6 +959,99 @@ export class CheckWriter {
                 namesType(all.map((i) => i.name)),
                 declared && agg.name,
                 [`switch (${subject}.state) {`, ...states.map((s) => `    case '${s.name}': return ${call(s)};`), '}'],
+            ),
+        );
+        return out;
+    }
+
+    /**
+     * The checks of an aggregate with kinds (ADR 0037): the common invariants (`check<Agg>Common`), those of a kind with
+     * the common ones (`check<Kind><Agg>`), those of a state with the common ones (`check<State><Agg>`), and all that
+     * apply to an aggregate in its kind and state (`check<Agg>`).
+     */
+    private kindsAggregate(agg: AggregateModel): string[] {
+        const all = aggregateInvariants(agg);
+        const subject = subjectName(agg.name);
+        const states = agg.states;
+        const declared = hasDeclared(all);
+        const model = this.env.model;
+        const common = commonTypeName(agg);
+        const commonDeclared = hasDeclared(agg.invariants);
+        const out: string[] = [];
+        if (declared) {
+            const slot = (type: string) => `${subject}: ${type}`;
+            out.push(
+                ...this.declaredType(agg.name, agg.location, [
+                    ...agg.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: slot(common) })),
+                    ...states.flatMap((s) => s.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: slot(stateTypeName(agg, s)) }))),
+                    ...agg.kinds.flatMap((k) => k.invariants.filter((i) => !i.expr).map((i) => ({ name: i.name, args: slot(kindTypeName(agg, k.name)) }))),
+                ]),
+            );
+        }
+        out.push(
+            ...this.checkFunction(
+                [`The invariants of ${agg.name} (those of every kind${states.length ? ' and state' : ''}) that an aggregate violates, in declaration order.`],
+                agg.location,
+                common,
+                { name: subject, type: common },
+                namesType(agg.invariants.map((i) => i.name)),
+                commonDeclared && agg.name,
+                collect(items(this.compiler, agg.invariants, fieldScope(model, subject, agg.fields), subject), ''),
+            ),
+            '',
+        );
+        const commonCall = commonDeclared ? `${checkWithName(common)}(checks)(${subject})` : `${checkName(common)}(${subject})`;
+        const call = (type: string, own: boolean): string =>
+            declared && own ? `${checkWithName(type)}(checks)(${subject})` : `${checkName(type)}(${subject})`;
+        for (const k of agg.kinds.filter((x) => x.invariants.length)) {
+            const type = kindTypeName(agg, k.name);
+            out.push(
+                ...this.checkFunction(
+                    [`The invariants of ${agg.name} of kind ${k.name} (the common ones and the kind's) that an aggregate violates, in declaration order.`],
+                    k.location,
+                    type,
+                    { name: subject, type },
+                    namesType([...agg.invariants, ...k.invariants].map((i) => i.name)),
+                    declared && agg.name,
+                    collect(items(this.compiler, k.invariants, fieldScope(model, subject, [...agg.fields, ...k.fields]), subject), ''),
+                    commonCall,
+                ),
+                '',
+            );
+        }
+        for (const s of states) {
+            const type = stateTypeName(agg, s);
+            out.push(
+                ...this.checkFunction(
+                    [`The invariants of ${agg.name} in state ${s.name} (the common ones and the state's) that an aggregate violates, in declaration order.`],
+                    s.location,
+                    type,
+                    { name: subject, type },
+                    namesType([...agg.invariants, ...s.invariants].map((i) => i.name)),
+                    declared && agg.name,
+                    collect(items(this.compiler, s.invariants, fieldScope(model, subject, [...agg.fields, ...s.fields]), subject), ''),
+                    commonCall,
+                ),
+                '',
+            );
+        }
+        // the state's check (with the common invariants), then the invariants of the aggregate's kind
+        const init = states.length
+            ? `${states.map((s) => `${subject}.${STATE_TAG} === '${s.name}' ? ${call(stateTypeName(agg, s), true)}`).join(' : ')} : []`
+            : commonCall;
+        const kindItems = agg.kinds.flatMap((k) =>
+            items(this.compiler, k.invariants, fieldScope(model, subject, [...agg.fields, ...k.fields]), subject, `${subject}.${KIND_TAG} === '${k.name}'`),
+        );
+        out.push(
+            ...this.checkFunction(
+                [`The invariants of ${agg.name} in its kind${states.length ? ' and state' : ''} that an aggregate violates.`],
+                agg.location,
+                agg.name,
+                { name: subject, type: agg.name },
+                namesType(all.map((i) => i.name)),
+                declared && agg.name,
+                collect(kindItems, ''),
+                init,
             ),
         );
         return out;

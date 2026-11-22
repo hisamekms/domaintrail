@@ -9,6 +9,8 @@ import {
     includedFields,
     invariantsOf,
     isShared,
+    kindFields,
+    kindsOf,
     lookup,
     lookupVisible,
     primitiveInvariants,
@@ -20,6 +22,7 @@ import {
     type Expr,
     type FieldDecl,
     type InvariantDecl,
+    type KindDecl,
     type ParamDecl,
     type RequirementDecl,
     type SourceModel,
@@ -107,28 +110,61 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
             ]),
         );
 
+    // Fields of the kinds (ADR 0037): seen only inside their kind.
+    const kinds = kindsOf(agg);
+    const kindOnly = (except?: string): Map<string, Hidden> => {
+        const m = new Map<string, string[]>();
+        for (const k of kinds) if (k.name !== except) for (const f of kindFields(k)) if (!common.has(f.name)) m.set(f.name, [...(m.get(f.name) ?? []), k.name]);
+        return new Map(
+            [...m].map(([name, where]) => [
+                name,
+                {
+                    message: `Field '${name}' exists only in kind ${quoted(where)} and is not in scope here.`,
+                    hint: `write the rule inside 'kind ${where[0]} { … }' (an invariant, or its command or 'on' case), or make '${name}' a common field of '${agg.name}'`,
+                },
+            ]),
+        );
+    };
+    const withKind = (k: KindDecl | undefined): Map<string, FieldDecl | ParamDecl> =>
+        k ? new Map([...common, ...kindFields(k).map((f): [string, FieldDecl] => [f.name, f])]) : common;
+    const kindNamed = (name: string | undefined): KindDecl | undefined => kinds.find((k) => k.name === name);
+
     // Aggregate-level invariants: common fields only, applied to every state.
     for (const inv of invariantsOf(agg.members)) {
-        checkInvariant(inv, { ctx, fields: common, hidden: stateOnly(), lambdas: [], present: new Set() }, model, rules);
+        checkInvariant(inv, { ctx, fields: common, hidden: new Map([...stateOnly(), ...kindOnly()]), lambdas: [], present: new Set() }, model, rules);
     }
+    // Kind-level invariants: common + that kind's own fields, applied to every state of the kind.
+    for (const k of kinds)
+        for (const inv of invariantsOf(k.members))
+            checkInvariant(
+                inv,
+                { ctx, fields: withKind(k), hidden: new Map([...stateOnly(), ...kindOnly(k.name)]), lambdas: [], present: new Set() },
+                model,
+                rules,
+            );
     // State-level invariants: common + that state's own fields.
     for (const s of states) {
         const fields = new Map(common);
         for (const f of fieldsOf(s.members)) fields.set(f.name, f);
-        const hidden = stateOnly(s.name);
+        const hidden = new Map([...stateOnly(s.name), ...kindOnly()]);
         for (const name of fields.keys()) hidden.delete(name);
         for (const inv of invariantsOf(s.members)) {
             checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, model, rules);
         }
     }
     for (const cmd of commandsOf(agg)) {
-        if (cmd.requirements.length) checkRequirements(agg, cmd, common, ctx, model, rules);
-        for (const outcome of cmd.outcomes) checkChoice(outcome, cmd, common, ctx, model, rules);
-        for (const group of agg.members.filter((m) => m.kind === 'transitionGroup')) {
-            for (const c of group.cases.filter((c) => c.command.text === cmd.name)) {
+        // a kind's command sees its kind's fields; a common command the common ones
+        const own = kindNamed(cmd.ofKind);
+        if (cmd.requirements.length) checkRequirements(agg, cmd, withKind(own), kindOnly(own?.name), ctx, model, rules);
+        for (const outcome of cmd.outcomes) checkChoice(outcome, cmd, withKind(own), ctx, model, rules);
+        for (const k of kinds) {
+            for (const c of k.cases.filter((c) => c.command.text === cmd.name)) {
                 const sources = c.outcomes.flatMap((o) => o.from.map((r) => r.target)).filter((s): s is StateDecl => !!s);
-                for (const r of c.requirements) checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, common, ctx, model, rules, sources);
-                for (const outcome of c.outcomes) checkChoice(outcome, cmd, common, ctx, model, rules);
+                for (const r of c.requirements) {
+                    checkDeclared(r, rules);
+                    checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, withKind(k), ctx, model, rules, sources, kindOnly(k.name));
+                }
+                for (const outcome of c.outcomes) checkChoice(outcome, cmd, withKind(k), ctx, model, rules);
             }
         }
     }
@@ -165,6 +201,7 @@ function checkDecisionExpr(
     model: SourceModel,
     rules: RuleSink,
     sources: StateDecl[] = [],
+    hidden: Map<string, Hidden> = new Map(),
 ): void {
     if (!expr) return;
     const fields = new Map(cmd.factory ? [] : common);
@@ -175,7 +212,7 @@ function checkDecisionExpr(
             if (rest.every((s) => fieldsOf(s.members).some((g) => g.name === f.name && sameType(memberType(g), ty)))) fields.set(f.name, f);
         }
     for (const p of cmd.params) fields.set(p.name, p);
-    const t = new ExprChecker(model, rules).check(expr, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() });
+    const t = new ExprChecker(model, rules).check(expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
     if (t.k !== 'error' && !isBool(t)) rules.error('M008', `${label} must be a Bool expression, but has type '${showType(t)}'.`, at);
 }
 
@@ -203,13 +240,14 @@ function checkRequirements(
     agg: AggregateDecl,
     cmd: CommandDecl,
     common: Map<string, FieldDecl | ParamDecl>,
+    kindHidden: Map<string, Hidden>,
     ctx: string,
     model: SourceModel,
     rules: RuleSink,
 ): void {
     const states = statesOf(agg);
     const fields = new Map<string, FieldDecl | ParamDecl>();
-    const hidden = new Map<string, Hidden>();
+    const hidden = new Map<string, Hidden>(cmd.factory ? [] : kindHidden);
     if (cmd.factory) {
         const all = [...common.keys(), ...statesHaving(states, common).keys()];
         for (const name of all) {
@@ -220,9 +258,7 @@ function checkRequirements(
         }
     } else {
         for (const [name, f] of common) fields.set(name, f);
-        const grouped = agg.members
-            .filter((m) => m.kind === 'transitionGroup')
-            .flatMap((g) => g.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
+        const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
         const sources = [
             ...new Set([
                 ...cmd.transitions.flatMap((t) => t.from.map((r) => r.target)),

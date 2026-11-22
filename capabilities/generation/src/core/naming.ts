@@ -28,7 +28,10 @@ export const RUNTIME_NAMES = [
     'decimalCompare',
     'Availability',
     'CommandUnavailable',
+    'CommandNotForKind',
     'CommandOf',
+    'DecideByKind',
+    'decideByKind',
     'isAvailable',
     'availableCommands',
     'fromAnyState',
@@ -45,6 +48,8 @@ export const COMMAND_ERRORS_NAME = 'commandErrors';
 export const VERIFIED_PREFIX = 'verified:';
 /** Discriminant property of generated aggregate state types. */
 export const STATE_TAG = 'state';
+/** Discriminant property of the kinds of an aggregate (ADR 0037). */
+export const KIND_TAG = 'kind';
 
 export const pascal = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -55,6 +60,13 @@ interface Named {
 export const commonTypeName = (agg: Named): string => `${agg.name}Common`;
 export const stateTypeName = (agg: Named, state: Named | string): string => `${typeof state === 'string' ? state : state.name}${agg.name}`;
 export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd.name)}${agg.name}`;
+/** An aggregate of one kind (ADR 0037), in any state: `StorePickupSite`. */
+export const kindTypeName = (agg: Named, kind: Named | string): string => `${typeof kind === 'string' ? kind : kind.name}${agg.name}`;
+/** An aggregate of one kind in one state: `StoreActivePickupSite`. */
+export const pairTypeName = (agg: Named, kind: Named | string, state: Named | string): string =>
+    `${typeof kind === 'string' ? kind : kind.name}${stateTypeName(agg, state)}`;
+/** The guard of an aggregate's kind: `isStorePickupSite`. */
+export const isKindName = (agg: Named, kind: Named | string): string => `is${kindTypeName(agg, kind)}`;
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
 /** What a command decides, e.g. `ConfirmOrderDecision`: implemented by the user, turned into the command by `decide`. */
 export const decisionTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Decision`;
@@ -71,6 +83,8 @@ export const availabilityName = (agg: Named): string => `${agg.name}Availability
 export const canName = (agg: Named, cmd: Named): string => `can${commandTypeName(agg, cmd)}`;
 /** The error of a command called in a state that is not one of its source states (`CancelOrderUnavailable`). */
 export const unavailableTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Unavailable`;
+/** The error of a command called on an aggregate of a kind that does not have it (`ChangeClosingTimePickupSiteNotForKind`). */
+export const notForKindTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}NotForKind`;
 /** A command for an aggregate in any state (`CancelOrderFromAnyState`). */
 export const anyStateTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}FromAnyState`;
 /** The commands of an aggregate for an aggregate in any state (`OrderCommandsFromAnyState`). */
@@ -193,23 +207,34 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         out.push({ name: el.name, origin: `aggregate '${el.name}'`, at });
         out.push({ name: shapeName(el), origin: `the shape of '${el.name}'`, at });
         out.push({ name: restoreName(el), origin: `the trusted restore function of '${el.name}'`, at });
-        const lifecycleKinds = [...new Set(el.members.filter((m) => m.kind === 'transitionGroup').flatMap((g) => g.values.map((v) => v.value)))];
-        if (states.length > 0) {
+        const kinds = firstByName(written.kindsOf(el));
+        if (states.length > 0 || kinds.length > 0) {
             out.push({ name: commonTypeName(el), origin: `common fields of '${el.name}'`, at });
             const commonDeclared = written.invariantsOf(el.members).some((i) => !i.expr);
             out.push({ name: `check${commonTypeName(el)}${commonDeclared ? 'With' : ''}`, origin: `the check of the invariants of '${el.name}'`, at });
             for (const s of states) {
                 out.push({ name: stateTypeName(el, s), origin: `state '${el.name}.${s.name}'`, at: s.nameAt });
-                for (const kind of lifecycleKinds)
-                    out.push({ name: `${kind}${stateTypeName(el, s)}`, origin: `kind–state '${el.name}.${kind}.${s.name}'`, at: s.nameAt });
+                for (const k of kinds) out.push({ name: pairTypeName(el, k, s), origin: `kind–state '${el.name}.${k.name}.${s.name}'`, at: s.nameAt });
+            }
+            for (const k of kinds) {
+                out.push({ name: kindTypeName(el, k), origin: `kind '${el.name}.${k.name}'`, at: k.nameAt });
+                out.push({ name: isKindName(el, k), origin: `the guard of kind '${el.name}.${k.name}'`, at: k.nameAt });
+                if (written.invariantsOf(k.members).length)
+                    out.push(
+                        ...checkNames(
+                            kindTypeName(el, k),
+                            written.invariantsOf(k.members).some((i) => !i.expr),
+                            k.nameAt,
+                        ),
+                    );
             }
         }
         const commands = firstByName(written.commandsOf(el));
         if (commands.length > 0) {
             out.push({ name: commandsInterfaceName(el), origin: `commands of '${el.name}'`, at });
         }
-        // where the commands can be called (ADR 0036): for an aggregate with states and a command that takes one
-        const available = states.length > 0 ? commands.filter((c) => !c.factory) : [];
+        // where the commands can be called (ADR 0036, 0037): for an aggregate with states or kinds, and a command that takes one
+        const available = states.length > 0 || kinds.length > 0 ? commands.filter((c) => !c.factory) : [];
         if (available.length > 0) {
             out.push({ name: availabilityName(el), origin: `the availability of the commands of '${el.name}'`, at });
             out.push({ name: availableCommandsName(el), origin: `the available commands of '${el.name}'`, at });
@@ -218,11 +243,16 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
             for (const c of available) {
                 const origin = `the availability of '${el.name}.${c.name}'`;
                 out.push({ name: canName(el, c), origin, at: c.nameAt }, { name: unavailableTypeName(el, c), origin, at: c.nameAt });
+                if (kinds.length) out.push({ name: notForKindTypeName(el, c), origin, at: c.nameAt });
                 out.push({ name: anyStateTypeName(el, c), origin, at: c.nameAt });
             }
         }
-        const invs = [...written.invariantsOf(el.members), ...states.flatMap((s) => written.invariantsOf(s.members))];
-        if (invs.length) {
+        const invs = [
+            ...written.invariantsOf(el.members),
+            ...states.flatMap((s) => written.invariantsOf(s.members)),
+            ...kinds.flatMap((k) => written.invariantsOf(k.members)),
+        ];
+        if (invs.length || kinds.length) {
             const declared = invs.some((i) => !i.expr);
             out.push(...checkNames(el.name, declared, at));
             for (const s of states) out.push(...checkNames(stateTypeName(el, s), false, s.nameAt).map((n) => (declared ? { ...n, name: `${n.name}With` } : n)));
@@ -232,7 +262,7 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
             out.push({ name: commandTypeName(el, c), origin: `command '${el.name}.${c.name}'`, at: cat });
             if (c.params.length) out.push({ name: paramsTypeName(el, c), origin: `the parameters of '${el.name}.${c.name}'`, at: cat });
             out.push({ name: decisionTypeName(el, c), origin: `the decision of '${el.name}.${c.name}'`, at: cat });
-            const groupCases = el.members.filter((m) => m.kind === 'transitionGroup').flatMap((g) => g.cases.filter((x) => x.command.text === c.name));
+            const groupCases = kinds.flatMap((k) => k.cases.filter((x) => x.command.text === c.name));
             if (c.outcomes.length || groupCases.length) {
                 out.push({ name: choiceChecksTypeName(el, c), origin: `choice checks of '${el.name}.${c.name}'`, at: cat });
                 out.push({ name: choiceCheckName(el, c), origin: `choice checker of '${el.name}.${c.name}'`, at: cat });
@@ -249,7 +279,7 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
         }
         if (
             commands.some((c) => c.emits.length > 0 || c.outcomes.some((o) => o.emits.length > 0)) ||
-            el.members.some((m) => m.kind === 'transitionGroup' && m.cases.some((x) => x.outcomes.some((o) => o.emits.length > 0)))
+            kinds.some((k) => k.cases.some((x) => x.outcomes.some((o) => o.emits.length > 0)))
         ) {
             out.push({ name: aggregateEventTypeName(el), origin: `the union of the events of '${el.name}'`, at });
         }

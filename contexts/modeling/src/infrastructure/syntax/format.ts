@@ -250,7 +250,7 @@ class Layout {
             this.block(node, node.members, indent);
             for (const m of node.members) if (ast.isInvariant(m)) this.expressionBody(m, inner);
         } else if (ast.isEventDecl(node) || ast.isErrorDecl(node)) this.block(node, node.members, indent);
-        else if (ast.isTransitionGroup(node)) {
+        else if (ast.isKind(node)) {
             this.block(node, node.members, indent);
             for (const m of node.members) this.element(m, inner);
         } else if (ast.isCommandCase(node)) {

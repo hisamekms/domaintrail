@@ -12,6 +12,7 @@ import { checkEventIds } from '../domain/rules/events.js';
 import { checkFieldSets } from '../domain/rules/field-sets.js';
 import { checkIdioms } from '../domain/rules/idioms.js';
 import { checkInvariants } from '../domain/rules/expressions.js';
+import { checkKinds } from '../domain/rules/kinds.js';
 import { checkLifecycles } from '../domain/rules/lifecycles.js';
 import { checkLabels } from '../domain/rules/labels.js';
 import { checkNames } from '../domain/rules/names.js';
@@ -67,6 +68,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkVerified(sourceModel, rules);
         checkCommands(sourceModel, rules);
         checkLifecycles(sourceModel, rules);
+        checkKinds(sourceModel, rules);
         checkFactoryIds(sourceModel, rules);
         checkChanges(sourceModel, rules);
         checkEventIds(sourceModel, rules);

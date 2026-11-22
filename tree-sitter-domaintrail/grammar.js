@@ -26,7 +26,7 @@ const FEATURE_KEYWORDS = [
   'id', 'value', 'by', 'persistent', 'fields', 'with', 'requires', 'else', 'when', 'changes', 'verified', 'of', 'for', 'policy',
   'context', 'shared', 'terms', 'primitive', 'enum', 'union', 'entity', 'aggregate', 'state', 'owns', 'references', 'create',
   'command', 'emits', 'errors', 'event', 'error', 'invariant',
-  'readonly', 'initial', 'transitions', 'on', 'outcome', 'select',
+  'readonly', 'initial', 'kind', 'on', 'outcome', 'select',
   'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains',
 ];
 
@@ -176,19 +176,14 @@ module.exports = grammar({
       field('body', $.aggregate_body),
     ),
 
-    aggregate_body: ($) => seq('{', repeat(choice($._data_member, $.state, $.command, $.initial, $.transition_group)), '}'),
+    aggregate_body: ($) => seq('{', repeat(choice($._data_member, $.state, $.command, $.initial, $.kind)), '}'),
 
     initial: ($) => seq('initial', field('state', $.identifier)),
 
-    transition_group: ($) => seq(
-      'transitions', 'for', field('field', $._feature_name),
-      choice(seq('==', $.enum_value_selector), seq('in', pipeSep1($.enum_value_selector))),
-      '{', repeat(choice($.initial, $.command_case)), '}',
-    ),
-
-    enum_value_selector: ($) => choice(
-      seq(field('enum', $.identifier), '.', field('value', $._value_name)),
-      seq(field('enum', $.qualified_name), '::', field('value', $._value_name)),
+    // `kind Name { … }` (ADR 0037): one of the kinds of an aggregate, fixed when it is made
+    kind: ($) => seq(
+      'kind', field('name', $.identifier), optional(field('label', $.string)),
+      '{', repeat(choice($._data_member, $.command, $.initial, $.command_case)), '}',
     ),
 
     command_case: ($) => seq('on', field('command', $._feature_name), '{', repeat(choice($.requirement, $.outcome)), '}'),
