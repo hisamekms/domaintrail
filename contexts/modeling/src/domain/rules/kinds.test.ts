@@ -164,6 +164,12 @@ describe('aggregate kinds (ADR 0037)', () => {
         expect(messages(unreached, 'M031')).toEqual(["No kind of 'Site' reaches state 'Closed'."]);
     });
 
+    test('M031: on cases alike in every kind are a common behaviour; cases that differ are not', async () => {
+        const alike = await checkSales(SITE.replace('        requires fewDocks { dockCount < 50 } else DocksInUse\n', ''));
+        expect(messages(alike, 'M031')).toEqual(["Every kind of 'Site' decides 'suspend' alike in its 'on suspend' case: the behaviour is common."]);
+        expect(messages(await checkSales(SITE), 'M031')).toEqual([]);
+    });
+
     test('M031: optional fields required for some values of an enum field are the fields of kinds', async () => {
         const a = await checkSales(`
           id SId: UUID

@@ -184,6 +184,8 @@ Warnings (M031):
 - kinds of which none declares a field, an invariant, a command or an `on` case: a `readonly` enum field says the
   same (as M026 says for a union without fields);
 - a field declared with the same name and type in every kind: it is common;
+- `on` cases of a common command that are alike in every kind: its behaviour is common (agents wrote the same case in
+  every kind in trials; the rule leads them to the common form);
 - an optional field required by an invariant only for some values of an enum field
   (`<field> == E.V implies exists(f)`): the shape of a kind; the message names `kind` and `dt guide kinds`.
 

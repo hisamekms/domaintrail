@@ -734,6 +734,8 @@ The rules (`dt check`; M030 errors, M031 warnings):
 - **A command of a kind** belongs to that kind only. Command names are unique in the aggregate.
 - **A common command's behaviour is in exactly one place**: in the command (outcomes, or for an aggregate without
   states `changes` and `emits`) for every kind, or in an `on` case in **every** kind, the command then having none.
+  Write it in the command when every kind does the same (`command suspend() { outcome suspended: Active -> Suspended }`);
+  use `on` cases only when the kinds differ (other requirements, outcomes or events). Cases that are all alike are M031.
   Mixing the two, or a kind without its case, is M030: a new kind must decide every such command; nothing falls back to
   a common behaviour. The command's `requires` apply to every kind, before those of the kind's case.
 - With kinds and states, commands name their outcomes (`outcome name: A -> B`), not the shorthand `A -> B`.
@@ -3479,7 +3481,7 @@ storming](#diagnostics-of-a-storming).
 | M028 | lifecycle declarations: a kind (or, without kinds, the aggregate with named outcomes) has an initial state, outcomes have valid sources and targets and change the fields of their kind, outcome names are unique, and choice and external-check annotations are well formed |
 | M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
 | M030 | the kinds of an aggregate (ADR 0037): a common command has its behaviour in itself or in an `on` case of every kind, never both; an `on` case names a common command that is not a factory; the create commands are the kinds', one per kind; no field is named `kind`; with states, commands name their outcomes |
-| M031 | (warning) kinds that declare nothing (a readonly enum field); a field every kind declares with the same type (a common field); a state no kind reaches; optional fields an aggregate without kinds requires only for some values of an enum field (the fields of kinds) |
+| M031 | (warning) kinds that declare nothing (a readonly enum field); `on` cases of a common command that are alike in every kind (a common behaviour); a field every kind declares with the same type (a common field); a state no kind reaches; optional fields an aggregate without kinds requires only for some values of an enum field (the fields of kinds) |
 | G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
 | L002 | (warning) a term is not used by any field or parameter |

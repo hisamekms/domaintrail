@@ -37,6 +37,7 @@ const quoted = (names: readonly string[]): string => names.map((n) => `'${n}'`).
  *
  * M031 (warnings):
  *   - kinds of which none declares anything: a readonly enum field says the same;
+ *   - a common command every kind decides alike in its `on` case: its behaviour is common;
  *   - a field every kind declares with the same type: a common field;
  *   - a state no kind reaches;
  *   - an aggregate without kinds whose invariants require optional fields for some values of an enum field (`kind ==
@@ -165,7 +166,38 @@ function checkTag(agg: AggregateDecl, kinds: KindDecl[], rules: RuleSink): void 
         );
 }
 
+/** An `on` case as text, to tell whether two kinds decide a command alike. */
+function caseText(c: KindDecl['cases'][number]): string {
+    const mult = (m: { optional: boolean; lower?: number; upper?: number; unbounded: boolean } | undefined): string =>
+        !m ? '' : m.optional ? '?' : `[${m.lower ?? ''}..${m.unbounded ? '*' : (m.upper ?? '')}]`;
+    return JSON.stringify([
+        c.requirements.map((r) => [r.name, r.expr?.text ?? r.label ?? '', r.externalReason ?? '', r.error.text]),
+        c.outcomes.map((o) => [
+            o.name,
+            o.from.map((f) => f.text),
+            o.to.text,
+            o.changes.map((x) => x.name),
+            o.emits.map((e) => `${e.event.text}${mult(e.multiplicity)}`),
+            o.select ? [o.select.expr?.text ?? '', o.select.text ?? '', o.select.externalReason ?? ''] : null,
+        ]),
+    ]);
+}
+
 function checkIdioms(agg: AggregateDecl, kinds: KindDecl[], rules: RuleSink): void {
+    // a common command every kind decides alike: its behaviour is common
+    if (kinds.length > 1)
+        for (const cmd of commonCommandsOf(agg)) {
+            const cases = kinds.map((k) => k.cases.find((c) => c.command.target === cmd));
+            if (cases.some((c) => !c)) continue; // M030
+            const texts = cases.map((c) => caseText(c!));
+            if (texts.every((t) => t === texts[0]))
+                rules.warning(
+                    'M031',
+                    `Every kind of '${agg.name}' decides '${cmd.name}' alike in its 'on ${cmd.name}' case: the behaviour is common.`,
+                    cmd.nameAt,
+                    `write the outcomes (and requirements) once in 'command ${cmd.name}(…) { … }', and remove the 'on ${cmd.name}' cases; use 'on' only for what differs by kind`,
+                );
+        }
     const empty = (k: KindDecl): boolean => !k.members.length && !k.cases.length;
     if (kinds.every(empty))
         rules.warning(
