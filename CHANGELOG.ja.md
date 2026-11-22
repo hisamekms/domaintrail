@@ -10,6 +10,99 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 従ってください。このファイルはパッケージに含まれています: `node_modules/domaintrail/CHANGELOG.ja.md`（英語版は
 `CHANGELOG.md`）。
 
+## [0.15.0] - 2026-11-22
+
+### 追加
+
+- 集約の種類: `kind Name { … }` は、集約が作られたときに決まり生涯変わらない種類を宣言します。種類は、固有の
+  フィールド、不変条件、コマンド（その種類の作成コマンドを含む）を持ちます。共通コマンドをその種類でどう処理するかは
+  `on` ケースで決めます。集約は共通部分を持つ種類の直和で、継承ではありません。種類は共通のフィールド、不変条件、
+  コマンドに追加するだけで、上書きはしません。共通コマンドの振る舞いは、そのコマンド自身に書くか、すべての種類の
+  `on` ケースに書くかのどちらか一方です。ADR 0037 と `dt guide kinds` を参照してください。
+- 種類に関する `dt check` のルール。M030（エラー）は次の場合に報告します。
+  - 共通の振る舞いと種類の `on` ケースが混在しているか、`on` ケースのない種類がある
+  - 共通コマンド以外のコマンドやファクトリーに対する `on` ケースがある
+  - 共通の `create command` がある、または作成コマンドのない種類がある
+  - `kind` という名前のフィールドがある、または状態と同じ名前の種類がある
+  - 種類と状態の両方を持つ集約で、遷移の省略形を使っている
+
+  M031（警告）は次の場合に報告します。
+  - どの種類も何も宣言していない（readonly な enum フィールドで足ります）
+  - すべての種類が同じフィールドを宣言している（共通のフィールドです）
+  - すべての種類で同じ内容の `on` ケースがある（振る舞いは共通です）
+  - どの種類からも到達しない状態がある
+  - 種類を持たない集約が、enum フィールドの一部の値のときだけ任意フィールドを必須にしている（種類の形です）
+
+  種類のフィールドは、その種類の中でだけ参照できます（M010）。変更できるのも、その種類のコマンドだけです
+  （M021、M028）。
+- 種類を持つ集約に対する生成 TypeScript。
+  - 種類ごと、種類と状態の組ごとに、`kind` を付けた型を生成します。`PickupSite` はその種類の union です。
+  - 種類ごとの判定関数 `is<Kind><Aggregate>` を生成します。
+  - 種類のコマンドは、その種類の集約だけを受け取ります。
+  - 種類ごとに処理する共通コマンドについては、種類をキーにした contract（`{ Store: …; Center: … }[S['kind']]`）と、
+    種類ごとに 1 つの関数を持つ decision を生成します。decision は runtime に追加した `decideByKind` で実装します。
+
+  `anyState<Aggregate>Commands` を通して別の種類のコマンドを呼ぶと、新しい `CommandNotForKind`
+  （`{ type: 'CommandNotForKind', aggregate, command, kind, expected }`）を返します。種類は変わらないため、
+  `CommandUnavailable` と違って後から通るようになることはありません。コマンド自身の型を通して別の種類で呼んだ場合は、
+  呼び出し側の誤りとして例外を投げます。
+- 日付と時刻の型（ADR 0038、`dt guide dates`）。
+  - `Date`、`Time`、`YearMonth`、`DateTime`: タイムゾーンを持たない、暦や時計の上の値です。
+  - `ZonedDateTime`: タイムゾーン付きの日時です。`2026-12-01T10:00:00+09:00[Asia/Tokyo]` のような RFC 9557 の
+    テキストで表します。オフセットは、その時点でのそのタイムゾーンのオフセットと一致しなければならず、瞬間として
+    比較します。
+  - `TimeZone`: IANA のタイムゾーンです。等しいかどうかだけを比較できます。
+
+  同じ型の値どうし、およびその型の文字列リテラルと比較できます。リテラルは `dt check` が検査します
+  （`"2026-02-30"` は `Date` ではありません）。型の異なる値どうしは比較できません（M009）。タイムゾーンが分かる
+  利用者のコードで変換し、結果をパラメータとして渡してください。TypeScript では、各型を正規形のテキストに型ブランドを
+  付けた型（`PlainDate`、`PlainTime`、`PlainYearMonth`、`PlainDateTime`、`ZonedDateTime`、`TimeZone`）で表します。
+  runtime は `parseDate`、`parseTime`、`parseYearMonth`、`parseDateTime`、`parseZonedDateTime`、`parseTimeZone`、
+  `parseTimestamp`、`timestampOf` で値を作り、タイムゾーン付きの値のために `instantOf` と `zonedCompare` を持ちます。
+  Temporal は同じテキストを読み書きできます。生成コードは Temporal に依存しません。
+- `changes` にパスを書いた場合（`changes schedule.plannedDate`）、これまでは 2 つの構文エラーになっていました。
+  今後は M021 が、代わりに書くべき内容とともに報告します。
+
+### 変更
+
+- `Timestamp` は JavaScript の `Date` ではなく、正規形のテキスト（`2026-11-22T09:30:00.000Z`、ミリ秒まで含む UTC）に
+  型ブランドを付けた型として生成します。JSON や `structuredClone` をそのまま通り、`<` や `===` で比較できます。
+  `Date` を `JSON.stringify` したときも同じテキストになるため、JSON で保存したデータはそのまま読めます。
+- 種類のフィールドにも `readonly` を書けます。
+
+### 削除
+
+- 0.13.0 のライフサイクルセレクター（`readonly` の enum フィールドと `transitions for kind == E.X { … }`）を削除しました。
+  種類が置き換えます。
+
+### アップグレード手順
+
+- **`Timestamp`**: TypeScript を再生成し、コンパイラが報告する箇所を次のように直してください。
+  - `Timestamp` は `new Date()` ではなく、`timestampOf(new Date())` か `parseTimestamp(text)` で作ります。
+  - 比較は `getTime()` ではなく、`<` や `===` で行います。
+  - `t.toISOString()` は `t` に置き換えます。
+  - 日付の計算をする箇所では `new Date(t)` を使い、`timestampOf(…)` で `Timestamp` に戻します。
+
+  `Timestamp` のパラメータに値を渡すクロックは、`timestampOf(new Date())` を返すようにしてください。JSON で保存した
+  データはそのまま読めます。ドライバが `Date` オブジェクトを返す保存先（日付型のカラムを持つデータベースなど）では、
+  `Timestamp` を読み込む箇所で `parseTimestamp`（または `timestampOf`）を通してください。contract test の
+  オプションで渡す例では、`Timestamp` を文字列で書きます。
+- **`transitions for`**: 次のように書き換えてください。
+  - `readonly kind: E` と `transitions for kind == E.X { on c { … } }` は、`kind X { on c { … } }` にします。
+    enum は、ほかで使っている場合だけ残します。
+  - 作成コマンドは、種類ごとに 1 つずつ、各種類の中へ移します。
+  - enum の特定の値のときだけ持つフィールドは、その種類の中へ移し、`?` を外します。
+  - 共通の outcome とグループの outcome を両方持っていた共通コマンドは、共通の outcome をすべての種類の
+    `on` ケースに移します。
+
+  実装では、種類ごとに処理する共通コマンドを、種類ごとに 1 つの関数を渡す `decideByKind` で実装します。生成される
+  decision の JSDoc にも書かれています。
+- **新しいキーワード**: `kind`、`Date`、`Time`、`YearMonth`、`DateTime`、`ZonedDateTime`、`TimeZone` です。
+  これらと同じ名前の宣言は名前を変えてください。`kind` という名前のフィールドは、種類を持つ集約の中を除き、
+  そのまま使えます。`transitions` はキーワードではなくなりました。
+- **新しい生成名**: `<Kind><Aggregate>`、`is<Kind><Aggregate>`、`<Command><Aggregate>NotForKind`、runtime の日付と
+  時刻の名前が増えました。`dt check` がこれらについて M011 を報告した場合は、宣言の名前を変えてください。
+
 ## [0.14.0] - 2026-11-18
 
 ### 追加
@@ -1088,6 +1181,7 @@ domaintrail の各バージョンの変更点です。形式は [Keep a Changelo
 - Live View（`dt view`）: コンテキストマップ、構造図（3 段階）、カタログ、状態遷移図、ソースを表示するインスペクタ、問題と
   変更の一覧。保存のたびに更新されます。日本語と英語、ライトとダーク。
 
+[0.15.0]: https://github.com/hisamekms/domaintrail/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/hisamekms/domaintrail/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/hisamekms/domaintrail/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0

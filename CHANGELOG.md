@@ -9,6 +9,93 @@ code).
 **After upgrading domaintrail**, read the **Upgrading** section of every version between the one you had and the new
 one, oldest first, and follow its steps. This file is in the package: `node_modules/domaintrail/CHANGELOG.md`.
 
+## [0.15.0] - 2026-11-22
+
+### Added
+
+- Kinds of an aggregate: `kind Name { … }` declares a kind the aggregate is made as and keeps for its life, with its own
+  fields, invariants, commands (its create commands among them) and `on` cases that decide a common command for it. The
+  aggregate is a sum of its kinds with a common part, not inheritance: a kind adds to the common fields, invariants and
+  commands and never overrides them. A common command has its behaviour in itself, or in an `on` case in every kind,
+  never both. See ADR 0037 and `dt guide kinds`.
+- `dt check` rules for kinds. M030 (errors) covers:
+  - a common behaviour mixed with kind cases, or a kind without its case;
+  - an `on` case for a command that is not common, or for a factory;
+  - a common `create command`, or a kind without one;
+  - a field named `kind`, or a kind named like a state;
+  - the transition shorthand where the aggregate has both kinds and states.
+
+  M031 (warnings) covers:
+  - kinds that declare nothing (a readonly enum field says the same);
+  - a field that every kind declares the same (it is a common field);
+  - `on` cases that are alike in every kind (the behaviour is common);
+  - a state that no kind reaches;
+  - optional fields that an aggregate without kinds requires only for some values of an enum field (the shape of kinds).
+
+  A kind's fields are in scope only inside the kind (M010), and only its commands change them (M021, M028).
+- Generated TypeScript for kinds:
+  - a type per kind, and per kind and state, tagged with `kind`; `PickupSite` is the union of its kinds;
+  - an `is<Kind><Aggregate>` guard;
+  - commands of a kind that take only that kind's aggregate;
+  - for a common command decided per kind, a contract keyed by kind (`{ Store: …; Center: … }[S['kind']]`) and a
+    decision with one function per kind, implemented with the runtime's new `decideByKind`.
+
+  Through `anyState<Aggregate>Commands`, a command of another kind returns the new `CommandNotForKind`
+  (`{ type: 'CommandNotForKind', aggregate, command, kind, expected }`). Unlike `CommandUnavailable`, it never passes,
+  because a kind never changes. Through the command's own type, another kind throws, as a caller's bug.
+- Date and time types (ADR 0038, `dt guide dates`):
+  - `Date`, `Time`, `YearMonth` and `DateTime`: values on a calendar or clock, without a time zone;
+  - `ZonedDateTime`: a date and time in a time zone, as RFC 9557 text such as `2026-12-01T10:00:00+09:00[Asia/Tokyo]`.
+    Its offset must be the zone's at that time, and it orders by instant;
+  - `TimeZone`: an IANA time zone, which only equals.
+
+  Values of one type compare with each other and with string literals of that type. `dt check` checks those literals:
+  `"2026-02-30"` is not a `Date`. Values of different types never compare (M009): convert them in your code, where the
+  time zone is known, and pass the result in as a parameter. In TypeScript each type is branded canonical text
+  (`PlainDate`, `PlainTime`, `PlainYearMonth`, `PlainDateTime`, `ZonedDateTime`, `TimeZone`). The runtime makes values
+  with `parseDate`, `parseTime`, `parseYearMonth`, `parseDateTime`, `parseZonedDateTime`, `parseTimeZone`,
+  `parseTimestamp` and `timestampOf`, and has `instantOf` and `zonedCompare` for zoned values. Temporal reads and prints
+  the same text; the generated code does not depend on it.
+- A path in `changes` (`changes schedule.plannedDate`) is reported by M021 with what to write instead, instead of two
+  syntax errors.
+
+### Changed
+
+- `Timestamp` is generated as branded canonical text (`2026-11-22T09:30:00.000Z`, UTC with milliseconds), no longer as
+  a JavaScript `Date`. It crosses JSON and `structuredClone` as it is, and compares with `<` and `===`.
+  `JSON.stringify` of a `Date` writes the same text, so stored JSON stays readable.
+- `readonly` may be written on the fields of a kind.
+
+### Removed
+
+- The lifecycle selector of 0.13.0 (a `readonly` enum field with `transitions for kind == E.X { … }`). Kinds replace it.
+
+### Upgrading
+
+- **`Timestamp`**: regenerate the TypeScript, then fix what the compiler reports:
+  - make a `Timestamp` with `timestampOf(new Date())` or `parseTimestamp(text)`, not `new Date()`;
+  - compare with `<` and `===`, not `getTime()`;
+  - write `t`, not `t.toISOString()`;
+  - where you calculate with dates, use `new Date(t)`, then `timestampOf(…)` to get back.
+
+  A clock that feeds `Timestamp` parameters returns `timestampOf(new Date())`. Data stored as JSON reads back unchanged.
+  A store whose driver returns `Date` objects (a database column of a date type) needs `parseTimestamp` (or
+  `timestampOf`) where it loads a `Timestamp`. In contract test options, examples give `Timestamp` values as strings.
+- **`transitions for`**:
+  - rewrite `readonly kind: E` with `transitions for kind == E.X { on c { … } }` as `kind X { on c { … } }`, and keep the
+    enum only if something else uses it;
+  - move each create command into its kind, one per kind;
+  - move the fields that only one value of the enum has into that kind, without `?`;
+  - a common command whose outcomes were common and grouped at once: give its common outcomes to every kind's case.
+
+  In the implementation, a common command decided per kind uses `decideByKind` with one function per kind. The JSDoc of
+  its generated decision says so.
+- **New keywords**: `kind`, `Date`, `Time`, `YearMonth`, `DateTime`, `ZonedDateTime` and `TimeZone`. Rename a declaration
+  that has one of these names. A field named `kind` stays valid, except in an aggregate with kinds. `transitions` is no
+  longer a keyword.
+- **New generated names**: `<Kind><Aggregate>`, `is<Kind><Aggregate>`, `<Command><Aggregate>NotForKind` and the runtime's
+  date and time names. If `dt check` reports M011 for one of them, rename your declaration.
+
 ## [0.14.0] - 2026-11-18
 
 ### Added
@@ -1089,6 +1176,7 @@ The first published version.
 - The Live View (`dt view`): the context map, the structure diagram (three levels), the catalog, the state diagram,
   the inspector with the source, problems and changes, updated on every save; in Japanese or English, light or dark.
 
+[0.15.0]: https://github.com/hisamekms/domaintrail/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/hisamekms/domaintrail/compare/v0.13.1...v0.14.0
 [0.13.1]: https://github.com/hisamekms/domaintrail/compare/v0.13.0...v0.13.1
 [0.13.0]: https://github.com/hisamekms/domaintrail/compare/v0.12.0...v0.13.0
