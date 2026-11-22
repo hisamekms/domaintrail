@@ -4,6 +4,8 @@
 - Date: 2026-11-18
 - Amends: [ADR 0011](0011-generated-code-boundary.md), [ADR 0019](0019-command-changes-and-decisions.md),
   [ADR 0035](0035-kind-specific-lifecycles.md)
+- Amended by: [ADR 0037](0037-aggregate-kinds.md) (a command not for the aggregate's kind: `CommandNotForKind` from
+  the any-state entry)
 
 ## Context
 
