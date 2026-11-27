@@ -281,6 +281,23 @@ function sameTy(a: Ty, b: Ty): boolean {
     return true;
 }
 
+/** Type implied by a semantic IR expression, including type and context symbols. */
+export function irTy(env: CheckEnv, e: ExprModel): Ty | undefined {
+    const node = exprModelIndex(env.ir, env.model).get(e);
+    if (node?.type) {
+        if (node.type.tag === true) return { k: 'enum' };
+        return tyFromIr(env, node.type);
+    }
+    const symbol = node?.symbol;
+    if (symbol?.kind === 'type') {
+        const el = elementOf(env.model, symbol.id);
+        if (el?.kind === 'enum') return { k: 'enumType', el };
+        if (el?.kind === 'union') return { k: 'unionType', el };
+    }
+    if (symbol?.kind === 'context') return { k: 'ctx', name: symbol.id };
+    return undefined;
+}
+
 const describeTy = (t: Ty): string =>
     t.k === 'list'
         ? `list<${describeTy(t.elem)}>`
@@ -404,26 +421,11 @@ export class ExprCompiler {
     compile(e: ExprModel, scope: Scope): Binding {
         const result = this.compileNode(e, scope);
         const node = this.irNode(e);
-        if (this.env.ir && node?.type && !syntheticUuidExpressions.has(e)) {
-            const symbol = node.symbol;
-            let expected: Ty;
-            if (symbol?.kind === 'enumValue' || symbol?.kind === 'unionTag' || symbol?.kind === 'discriminator') expected = { k: 'enum' };
-            else if (symbol?.kind === 'context') expected = { k: 'ctx', name: symbol.id };
-            else if (symbol?.kind === 'type') {
-                const declared = elementOf(this.env.model, symbol.id);
-                expected =
-                    declared?.kind === 'enum'
-                        ? { k: 'enumType', el: declared }
-                        : declared?.kind === 'union'
-                          ? { k: 'unionType', el: declared }
-                          : tyFromIr(this.env, node.type);
-            } else expected = tyFromIr(this.env, node.type);
+        const expected = this.env.ir && !syntheticUuidExpressions.has(e) ? irTy(this.env, e) : undefined;
+        if (expected) {
             if (!sameTy(result.ty, expected)) {
                 irTypeMismatches++;
-                if (irTypeMismatchDetails.length < 100)
-                    irTypeMismatchDetails.push(
-                        `${node.source}: compiler ${describeTy(result.ty)}, IR ${node.type.name}/${node.type.cardinality} (${describeTy(expected)})`,
-                    );
+                irTypeMismatchDetails.push(`${node?.source ?? e.k} | ${describeTy(result.ty)} | ${describeTy(expected)}`);
             }
         }
         return result;
