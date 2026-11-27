@@ -12,6 +12,7 @@ import type {
 } from '@domaintrail/modeling';
 import {
     exprModelIndex,
+    fieldBounds,
     applicableOutcomes,
     BINARY_OP_TEXT,
     commandKinds,
@@ -278,12 +279,6 @@ const literal = (h: Record<string, number | string>): string =>
         .join(', ')} }`.replace('{  }', '{}');
 
 /** `lower` and `upper` of a field's multiplicity (`upper` absent: unbounded). */
-function bounds(f: FieldModel): { lower: number; upper?: number } {
-    const m = /^\[(\d+)\.\.(\d+|\*)\]$/.exec(f.multiplicity);
-    if (m) return { lower: Number(m[1]), ...(m[2] !== '*' && { upper: Number(m[2]) }) };
-    return f.cardinality === 'nonEmpty' ? { lower: 1 } : { lower: 0 };
-}
-
 /** How often an `emits` entry emits its event, when the types do not express it (other than `?`, `[0..*]`, `[1..*]`). */
 const counted = (e: { lower: number; upper?: number }): boolean =>
     !((e.lower === 1 && e.upper === 1) || (e.lower === 0 && e.upper === 1) || (e.lower <= 1 && e.upper === undefined));
@@ -372,7 +367,7 @@ class TestsEmitter {
         if (f.cardinality === 'one') return b;
         if (this.optionalAt(f)) return `testing.optionalAt(depth, ${b})`;
         if (f.cardinality === 'optional') return b;
-        const { lower, upper } = bounds(f);
+        const { lower, upper } = fieldBounds(f);
         if (lower === 0 && this.onCycle(f)) return `testing.manyAt(depth, ${b}${upper !== undefined ? `, ${upper}` : ''})`;
         return `testing.many(${b}, ${lower}${upper !== undefined ? `, ${upper}` : ''})`;
     }
@@ -774,7 +769,7 @@ class TestsEmitter {
 
     /** A field of the input of a policy's command (or of a value in it), for `testing.policyCases`. */
     private inputField(f: FieldModel, outer: ReadonlySet<string> = new Set()): string {
-        const { lower, upper } = bounds(f);
+        const { lower, upper } = fieldBounds(f);
         const many = f.cardinality === 'many' || f.cardinality === 'nonEmpty';
         return `{ name: '${f.name}', optional: ${f.cardinality === 'optional'}, many: ${many}${many ? `, lower: ${lower}${upper !== undefined ? `, upper: ${upper}` : ''}` : ''}, valid: ${this.validOf(f, outer)} }`;
     }

@@ -120,6 +120,16 @@ export const kindCase = (agg: AggregateModel, kind: string, command: string): M.
  * The outcomes of a command for a kind (`'*'` without kinds): its own, and those of the kind's `on` case. None for a
  * command of another kind.
  */
+/**
+ * The bounds of a field's multiplicity: `[n..m]` as written, else from its cardinality (`?` and `[0..*]` from 0,
+ * `[1..*]` from 1). The one reading of a Typed Model field's multiplicity for consumers.
+ */
+export function fieldBounds(f: FieldModel): { lower: number; upper?: number } {
+    const m = /^\[(\d+)\.\.(\d+|\*)\]$/.exec(f.multiplicity);
+    if (m) return { lower: Number(m[1]), ...(m[2] !== '*' && { upper: Number(m[2]) }) };
+    return f.cardinality === 'nonEmpty' ? { lower: 1 } : { lower: 0 };
+}
+
 export const applicableOutcomes = (agg: AggregateModel, command: M.CommandModel, kind: string): M.OutcomeModel[] =>
     command.kind && command.kind !== kind ? [] : [...command.outcomes, ...(kindCase(agg, kind, command.name)?.outcomes ?? [])];
 

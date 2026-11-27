@@ -18,6 +18,7 @@ export {
     contextNames,
     contextOf,
     elementOf,
+    fieldBounds,
     elementsIn,
     emitApplies,
     emitSuffix,
