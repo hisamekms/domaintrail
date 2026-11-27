@@ -149,6 +149,8 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
 
         const applicable = (cmd: CommandDecl, kind: KindDecl | undefined): OutcomeDecl[] =>
             cmd.ofKind && cmd.ofKind !== kind?.name ? [] : [...cmd.outcomes, ...casesOf(kind, cmd).flatMap((c) => c.outcomes)];
+        if (!stateNames.size && kinds.length) continue; // kinds without a lifecycle: nothing to reach
+
         for (const lifecycle of lifecyclesOf(agg)) {
             const { kind: label } = lifecycle;
             const kind = kinds.find((k) => k.name === lifecycle.kind);
