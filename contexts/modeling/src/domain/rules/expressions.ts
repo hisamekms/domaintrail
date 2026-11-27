@@ -36,7 +36,13 @@ export interface ExpressionFact {
     expression: Expr;
     type?: Ty;
     comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
-    symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
+    symbol?: {
+        kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type' | 'unionTag' | 'context';
+        name: string;
+        declaration?: object;
+        id?: string;
+        binding?: Expr;
+    };
     paths?: string[];
     scope?: {
         owner: object;
@@ -692,7 +698,10 @@ class ExprChecker {
             this.symbols.set(node, { kind: 'type', name, declaration: decl });
             return { k: 'unionType', decl };
         }
-        if (this.model.contexts.includes(name)) return { k: 'ctx', name };
+        if (this.model.contexts.includes(name)) {
+            this.symbols.set(node, { kind: 'context', name, id: name });
+            return { k: 'ctx', name };
+        }
         const hidden = scope.hidden.get(name);
         if (hidden) {
             this.rules.error('M010', hidden.message, node.at, hidden.hint);
@@ -752,7 +761,11 @@ class ExprChecker {
                 return ERROR;
             }
             case 'unionType':
-                if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
+                const variant = recv.decl.variants.find((v) => v.name === m);
+                if (variant) {
+                    this.symbols.set(e, { kind: 'unionTag', name: m, declaration: variant });
+                    return tagOf(recv.decl);
+                }
                 this.rules.error(
                     'M001',
                     `Union '${recv.decl.name}' has no variant '${m}'.`,

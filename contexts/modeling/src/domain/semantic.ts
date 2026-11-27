@@ -22,6 +22,7 @@ import { enumValueId, fieldId, invariantId, kindId, onCaseId, outcomeId, shortha
 import {
     commandsOf,
     fieldsOf,
+    includedFields,
     invariantsOf,
     kindsOf,
     statesOf,
@@ -57,6 +58,8 @@ const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNul
         case 'state':
         case 'kind':
         case 'enumValue':
+        case 'unionTag':
+        case 'context':
         case 'type':
             return kind;
     }
@@ -121,7 +124,7 @@ function expression(
     const children = expressionChildren(expr);
     const fact = facts?.get(expr);
     const found = fact?.symbol;
-    const id = found?.declaration ? declarationIds?.get(found.declaration) : undefined;
+    const id = found?.id ?? (found?.declaration ? declarationIds?.get(found.declaration) : undefined);
     const symbol =
         found?.kind === 'lambdaVariable'
             ? { id: found.binding ? (expressionIds?.get(found.binding) ?? '') : '', kind: 'lambda' as const, name: found.name }
@@ -635,12 +638,15 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     roots.forEach(({ expr }) => indexExpressions(expr, 'root'));
     for (const el of model.elements) {
         declarationIds.set(el, el.id);
+        if ('fieldSets' in el) for (const { field } of includedFields(el)) declarationIds.set(field, fieldId(el.id, field.name));
         if ('members' in el) for (const field of fieldsOf(el.members)) declarationIds.set(field, fieldId(el.id, field.name));
         if (el.kind === 'enum') for (const value of el.values) declarationIds.set(value, enumValueId(el.id, value.name));
         if (el.kind === 'aggregate') for (const state of statesOf(el)) declarationIds.set(state, state.id);
         if (el.kind === 'union')
-            for (const variant of el.variants)
+            for (const variant of el.variants) {
+                declarationIds.set(variant, variantId(el.id, variant.name));
                 for (const field of fieldsOf(variant.members)) declarationIds.set(field, fieldId(variantId(el.id, variant.name), field.name));
+            }
         if (el.kind === 'aggregate') {
             for (const state of statesOf(el)) for (const field of fieldsOf(state.members)) declarationIds.set(field, fieldId(state.id, field.name));
             for (const command of commandsOf(el)) {

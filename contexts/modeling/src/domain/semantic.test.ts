@@ -304,6 +304,36 @@ describe('Semantic IR', () => {
         expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one' });
     });
 
+    test('projects union tags, context qualifiers, and field set fields under the using element ID', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'symbols.dt',
+                text: `context Shared {
+                  enum Status { Open Closed }
+                }
+                context Shop {
+                  fields Tenanted { tenant: Int }
+                  value Order with Tenanted { status: Shared.Status invariant valid { status == Shared.Status.Open and tenant > 0 } }
+                  id UserId: UUID
+                  id AccessId: UUID
+                  union Actor { INTERNAL_USER { userId: UserId } EXTERNAL_PARTY { name: String } }
+                  aggregate Access { id: AccessId actor: Actor invariant internal { actor.kind == Actor.INTERNAL_USER } }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        expect(nodes.find((node) => node.source.includes('INTERNAL_USER'))?.symbol).toEqual({
+            id: 'Shop.Actor|INTERNAL_USER',
+            kind: 'unionTag',
+            name: 'INTERNAL_USER',
+        });
+        expect(nodes.find((node) => node.source === 'Shared')?.symbol).toEqual({ id: 'Shared', kind: 'context', name: 'Shared' });
+        expect(nodes.find((node) => node.source === 'tenant')?.symbol).toEqual({ id: 'Shop.Order.tenant', kind: 'field', name: 'tenant' });
+    });
+
     test('projects declared, primitive, enum, optional, list and non-empty types', async () => {
         const analysis = await analyzeDomain([
             {

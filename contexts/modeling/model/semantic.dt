@@ -25,7 +25,7 @@ context Modeling {
     enumValue
     onCase
   }
-  enum SemanticSymbolKind { field parameter lambda state kind enumValue type }
+  enum SemanticSymbolKind { field parameter lambda state kind enumValue type unionTag context }
   enum SemanticCardinality { one optional many nonEmpty }
   enum SemanticComparisonKind {
     primitive
