@@ -8,6 +8,7 @@ import type {
     FieldModel,
     InvariantModel,
     PrimitiveName,
+    SemanticIR,
     UnionModel,
 } from '@domaintrail/modeling';
 import {
@@ -69,6 +70,8 @@ export type Ty =
 export interface CheckEnv {
     model: DomainModel;
     ctx: string;
+    /** The Semantic IR of the model (internal, beta), when the caller built one; step 3 moves name resolution onto it. */
+    ir?: SemanticIR;
     /** TypeScript type of an element by qualified name, importing its context as a type. */
     typeRef(qname: string): string;
     /** A generated function of an element's context (`equalMoney` of `Common.Money`), importing the context as a value. */

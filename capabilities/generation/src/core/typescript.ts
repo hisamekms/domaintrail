@@ -14,6 +14,7 @@ import type {
     PolicyElement,
     PrimitiveName,
     RequirementModel,
+    SemanticIR,
     TypeExpr,
     UnionModel,
 } from '@domaintrail/modeling';
@@ -593,6 +594,7 @@ export function generateTypeScript(
     tests?: TestsOptions,
     policies: Readonly<Record<string, PolicyMode>> = {},
     modules: Readonly<Record<string, string>> = {},
+    options: { ir?: SemanticIR } = {},
 ): GeneratedFile[] {
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     // a context of another package by its module, one of the same directory by relative path
@@ -605,7 +607,7 @@ export function generateTypeScript(
         for (const ctx of contexts) {
             files.push({
                 path: posix.join(dir, `${ctx}.ts`),
-                content: new ContextEmitter(model, ctx, (other) => moduleOf(dir, other), policies[ctx] ?? 'optional').emit(),
+                content: new ContextEmitter(model, ctx, (other) => moduleOf(dir, other), policies[ctx] ?? 'optional', options.ir).emit(),
             });
         }
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
@@ -707,10 +709,12 @@ class ContextEmitter {
         /** Import specifier of another context's module. */
         private readonly moduleOf: (ctx: string) => string,
         private readonly policies: PolicyMode,
+        private readonly ir?: SemanticIR,
     ) {
         this.checks = new CheckWriter({
             model,
             ctx,
+            ir: this.ir,
             typeRef: (qname) => this.ref(qname),
             valueRef: (qname, name) => {
                 const ctx = qname.slice(0, qname.indexOf('.'));
