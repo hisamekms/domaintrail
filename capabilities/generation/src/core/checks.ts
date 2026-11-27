@@ -457,9 +457,9 @@ export class ExprCompiler {
                     case 'implies':
                         return wrapped(`${negate(l)} || ${r.js}`, true);
                     case 'eq':
-                        return wrapped(this.equal(strip(l.ty), scalar(l, r), scalar(r, l), strip(r.ty)));
+                        return wrapped(this.comparisonEqual(e, l, r));
                     case 'ne':
-                        return bool(`!(${this.equal(strip(l.ty), scalar(l, r), scalar(r, l), strip(r.ty))})`);
+                        return bool(`!(${this.comparisonEqual(e, l, r)})`);
                     case 'lt':
                     case 'le':
                     case 'gt':
@@ -488,6 +488,24 @@ export class ExprCompiler {
         }
         if (symbol?.kind === 'context') return { k: 'ctx', name: symbol.id };
         return undefined;
+    }
+
+    /**
+     * `l == r` by the IR's comparison fact (ADR 0016): structural and entity comparisons call the element's equality
+     * function, the others compare scalars. Optionality is stripped as before: M009 rejects an unguarded optional, and
+     * the IR types a guarded one as present. Lists keep `equal()`'s `sameList` form.
+     */
+    private comparisonEqual(e: Extract<ExprModel, { k: 'binary' }>, l: TypedBinding, r: TypedBinding): string {
+        const comparison = this.irNode(e)?.comparison;
+        if (!comparison || comparison === 'notComparable') throw new Error(`'${this.irNode(e)?.source ?? '=='}' has no comparable IR fact`);
+        const [t, u] = [strip(l.ty), strip(r.ty)];
+        const structural = comparison === 'valueObjectStructural' || comparison === 'unionStructural' || comparison === 'entityId';
+        if (structural && t.k !== 'list') {
+            const s = t.k === 'struct' || t.k === 'union' ? t : u.k === 'struct' || u.k === 'union' ? u : undefined;
+            if (!s) throw new Error(`'${this.irNode(e)?.source}' is a ${comparison} comparison without an element type`);
+            return `${this.env.valueRef(s.el.id, equalName(s.el))}(${scalar(l, r)}, ${scalar(r, l)})`;
+        }
+        return this.equal(t, scalar(l, r), scalar(r, l), u);
     }
 
     private name(e: Extract<ExprModel, { k: 'name' }>, scope: Scope): Binding {
