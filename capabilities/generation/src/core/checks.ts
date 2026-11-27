@@ -53,7 +53,7 @@ export type Struct = ElementOf<'valueObject' | 'entity'>;
 
 /** The type of a value in an expression, resolved against the Typed Model. */
 export type Ty =
-    | { k: 'prim'; name: PrimitiveName; literal?: boolean }
+    | { k: 'prim'; name: PrimitiveName }
     /** An ID or domain primitive. */
     | { k: 'dp'; el: DomainPrimitive }
     /** An enum value, or the discriminator of a union (both are strings). */
@@ -84,7 +84,6 @@ export interface CheckEnv {
 
 interface Binding {
     js: string;
-    ty: Ty;
     /** Whether `js` is already in parentheses as a whole. */
     wrapped?: boolean;
     /** For a string literal: its text as written. */
@@ -94,6 +93,7 @@ interface Binding {
     /** Whether `inner` can be an operand of `&&` as it is (it is not a `||`). */
     tight?: boolean;
 }
+type TypedBinding = Binding & { ty: Ty };
 
 /** `!x`, with parentheses unless `x` already has them. */
 export const negate = (b: Binding): string => (b.wrapped ? `!${b.js}` : `!(${b.js})`);
@@ -276,15 +276,15 @@ const strip = (t: Ty): Ty => (t.k === 'opt' ? t.inner : t);
  * A value for `<`, `==`, ranges: Decimals are compared by `decimalCompare`; dates and times are their canonical text,
  * which orders as they do (ADR 0038), so a string literal compared with one is written in its canonical form.
  */
-function scalar(b: Binding, other?: Binding): string {
+function scalar(b: TypedBinding, other?: TypedBinding): string {
     const p = other && primOf(strip(other.ty));
     if (b.literal !== undefined && isTemporal(p)) return quote(canonicalTemporal(p, b.literal) ?? b.literal);
     return b.js;
 }
 
-const isDecimal = (b: Binding): boolean => primOf(strip(b.ty)) === 'Decimal';
-const isZoned = (b: Binding): boolean => primOf(strip(b.ty)) === 'ZonedDateTime';
-const compare = (a: Binding, b: Binding, op: string): string =>
+const isDecimal = (b: TypedBinding): boolean => primOf(strip(b.ty)) === 'Decimal';
+const isZoned = (b: TypedBinding): boolean => primOf(strip(b.ty)) === 'ZonedDateTime';
+const compare = (a: TypedBinding, b: TypedBinding, op: string): string =>
     isDecimal(a) || isDecimal(b)
         ? `decimalCompare(String(${a.js}), String(${b.js})) ${op} 0`
         : isZoned(a) || isZoned(b) // by instant (ADR 0038)
@@ -370,9 +370,10 @@ export class ExprCompiler {
         }
     }
 
-    compile(e: ExprModel, scope: Scope): Binding {
+    compile(e: ExprModel, scope: Scope): TypedBinding {
         const result = this.compileNode(e, scope);
-        if (!this.env.ir || syntheticUuidExpressions.has(e)) return result;
+        // the generator's own UUID invariant has no source: `matches(value, …)` is a Bool over the UUID's text
+        if (syntheticUuidExpressions.has(e)) return { ...result, ty: { k: 'prim', name: e.k === 'matches' ? 'Bool' : 'UUID' } };
         const type = this.irTy(e);
         if (!type) throw new Error(`expression '${this.irNode(e)?.source ?? e.k}' has no IR type`);
         return { ...result, ty: type };
@@ -382,7 +383,7 @@ export class ExprCompiler {
         const irNode = this.irNode(e);
         if (this.env.ir && !irNode && !syntheticUuidExpressions.has(e)) irMisses++;
         if (this.env.ir && (e.k === 'name' || e.k === 'member') && !irNode?.symbol && !syntheticUuidExpressions.has(e)) irSymbolMisses++;
-        const bool = (js: string): Binding => ({ js, ty: { k: 'prim', name: 'Bool' } });
+        const bool = (js: string): Binding => ({ js });
         /** `(js)`; `loose` when `js` is a `||` at the top. */
         const wrapped = (js: string, loose = false): Binding => ({ ...bool(`(${js})`), wrapped: true, inner: js, tight: !loose });
         /** The body of an arrow function, which needs no parentheses. */
@@ -391,11 +392,11 @@ export class ExprCompiler {
             case 'bool':
                 return bool(String(e.value));
             case 'int':
-                return { js: e.value < 0 ? `(${e.value})` : String(e.value), ty: { k: 'prim', name: 'Int', literal: true } };
+                return { js: e.value < 0 ? `(${e.value})` : String(e.value) };
             case 'decimal':
-                return { js: quote(e.value), ty: { k: 'prim', name: 'Decimal', literal: true } };
+                return { js: quote(e.value) };
             case 'string':
-                return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true }, literal: e.value };
+                return { js: quote(e.value), literal: e.value };
             case 'name':
                 return this.name(e, scope);
             case 'member':
@@ -407,7 +408,7 @@ export class ExprCompiler {
             case 'count':
             case 'length': {
                 const value = this.compile(e.k === 'count' ? e.collection : e.operand, scope);
-                return { js: e.k === 'length' ? `Array.from(${value.js}).length` : `${value.js}.length`, ty: { k: 'prim', name: 'Int' } };
+                return { js: e.k === 'length' ? `Array.from(${value.js}).length` : `${value.js}.length` };
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
@@ -419,9 +420,8 @@ export class ExprCompiler {
             }
             case 'quantifier': {
                 const c = this.compile(e.collection, scope);
-                const elem = c.ty.k === 'list' ? c.ty.elem : c.ty;
                 const p = this.lambdaName(e.param, scope);
-                const b = this.compile(e.body, new Map([...scope, [e.param, { js: p, ty: elem }]]));
+                const b = this.compile(e.body, new Map([...scope, [e.param, { js: p }]]));
                 return bool(`${c.js}.${e.quantifier === 'all' ? 'every' : 'some'}((${p}) => ${body(b)})`);
             }
             case 'contains': {
@@ -438,8 +438,8 @@ export class ExprCompiler {
                 // the keys of two elements: the parameter as `x` and as `x2`
                 const a = this.lambdaName(e.param, scope);
                 const b = this.lambdaName(e.param, scope, [a]);
-                const left = new Map([...scope, [e.param, { js: a, ty: elem }]]);
-                const right = new Map([...scope, [e.param, { js: b, ty: elem }]]);
+                const left = new Map([...scope, [e.param, { js: a }]]);
+                const right = new Map([...scope, [e.param, { js: b }]]);
                 const same = e.keys.map((k) => {
                     const l = this.compile(k, left);
                     return this.equal(l.ty, l.js, this.compile(k, right).js);
@@ -498,10 +498,9 @@ export class ExprCompiler {
         const symbol = this.irNode(e)?.symbol;
         if (symbol?.kind === 'type') {
             const declared = elementOf(model, symbol.id);
-            if (declared?.kind === 'enum') return { js: '', ty: { k: 'enumType', el: declared } };
-            if (declared?.kind === 'union') return { js: '', ty: { k: 'unionType', el: declared } };
+            if (declared?.kind === 'enum' || declared?.kind === 'union') return { js: '' };
         }
-        if (symbol?.kind === 'context') return { js: '', ty: { k: 'ctx', name: symbol.id } };
+        if (symbol?.kind === 'context') return { js: '' };
         throw new Error(`cannot resolve '${name}'`);
     }
 
@@ -514,18 +513,17 @@ export class ExprCompiler {
         switch (t.k) {
             case 'ctx': {
                 const el = symbol?.kind === 'type' ? elementOf(this.env.model, symbol.id) : undefined;
-                if (el?.kind === 'enum') return { js: '', ty: { k: 'enumType', el } };
-                if (el?.kind === 'union') return { js: '', ty: { k: 'unionType', el } };
+                if (el?.kind === 'enum' || el?.kind === 'union') return { js: '' };
                 throw new Error(`no enum or union '${t.name}.${m}'`);
             }
             case 'enumType':
             case 'unionType':
                 // The IR records which enum value or union tag was resolved at this source location.
-                if (symbol?.kind === 'enumValue' || symbol?.kind === 'unionTag') return { js: quote(m), ty: { k: 'enum' } };
+                if (symbol?.kind === 'enumValue' || symbol?.kind === 'unionTag') return { js: quote(m) };
                 throw new Error(`no enum value or union tag '${m}'`);
             case 'union':
                 if (symbol?.kind !== 'discriminator') throw new Error(`union member '${m}' has no discriminator symbol`);
-                return { js: `${r.js}.${m}`, ty: { k: 'enum' } }; // only the discriminator is accessible (M009)
+                return { js: `${r.js}.${m}` }; // only the discriminator is accessible (M009)
             case 'struct': {
                 const separator = symbol?.kind === 'field' ? symbol.id.lastIndexOf('.') : -1;
                 const ownerId = separator >= 0 ? symbol!.id.slice(0, separator) : undefined;
@@ -533,7 +531,7 @@ export class ExprCompiler {
                 const fieldName = separator >= 0 ? symbol!.id.slice(separator + 1) : undefined;
                 const f = fieldName ? t.el.fields.find((x) => x.name === fieldName) : undefined;
                 if (!f) throw new Error(`'${t.el.name}' has no field '${m}'`);
-                return { js: `${r.js}.${m}`, ty: fieldTy(this.env.model, f) };
+                return { js: `${r.js}.${m}` };
             }
             default:
                 throw new Error(`no field '${m}'`);
@@ -585,7 +583,7 @@ function regex(pattern: string): string {
 
 /** A scope with the fields of an element, read from `subject`. */
 export function fieldScope(model: DomainModel, subject: string, fields: readonly FieldModel[]): Scope {
-    return new Map(fields.map((f) => [f.name, { js: `${subject}.${f.name}`, ty: fieldTy(model, f) }]));
+    return new Map(fields.map((f) => [f.name, { js: `${subject}.${f.name}` }]));
 }
 
 /** The name of the variable holding the value an element's checks look at. */
@@ -633,7 +631,7 @@ export function requirementScope(model: DomainModel, agg: AggregateModel, c: Com
     const first = states.find((s) => s.name === sources[0]);
     const fields = c.factory ? [] : [...agg.fields, ...(first?.fields ?? [])];
     const scope = fieldScope(model, subject, fields);
-    for (const p of c.params) scope.set(p.name, { js: `${params}.${p.name}`, ty: fieldTy(model, p) });
+    for (const p of c.params) scope.set(p.name, { js: `${params}.${p.name}` });
     return scope;
 }
 
@@ -704,7 +702,7 @@ export class CheckWriter {
         const choices = outcomes.map(({ o, kind }) => {
             const choice = o.select;
             const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, decisionFields(agg, kind ?? '*', o.from[0]));
-            for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
+            for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}` });
             const code =
                 choice?.kind === 'expression'
                     ? this.compiler.compile(choice.expr, scope).js
@@ -773,7 +771,7 @@ export class CheckWriter {
         }
         const body = entries.map(({ requirement, key, kind, inCase, sources }) => {
             const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, decisionFields(agg, kind ?? '*', sources[0]));
-            for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}`, ty: fieldTy(this.env.model, p) });
+            for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}` });
             const holds = requirement.expr ? this.compiler.compile(requirement.expr, scope).js : `checks.${key}(${names})`;
             const check = `if (!(${holds})) return '${key}';`;
             if (!inCase || c.factory) return check;
@@ -865,7 +863,7 @@ export class CheckWriter {
                 `export const ${makeName(p)}: ${makeTypeName(p)} = (value) => value as ${type};`,
             ];
         }
-        const scope: Scope = new Map([['value', { js: 'value', ty: { k: 'prim', name: p.base } }]]);
+        const scope: Scope = new Map([['value', { js: 'value' }]]);
         const declared = hasDeclared(invariants);
         const result = `${invalidTypeName(p)}['invariant']`;
         const out: string[] = [];
