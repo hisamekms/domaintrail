@@ -168,14 +168,21 @@ export const applicableRequirements = (agg: AggregateModel, command: M.CommandMo
     ...(kindCase(agg, kind, command.name)?.requires ?? []),
 ];
 
+/** Whether an outcome selects an externally supplied choice, or an invariant needs an external check. */
+export const hasExternalCheck = (item: M.OutcomeModel | M.InvariantModel | M.RequirementModel): boolean =>
+    isOutcome(item) ? item.select?.kind === 'external' : !item.expr && !!item.externalReason;
+
+/** An outcome, told from an invariant or a requirement by its target state (both of those have an expression slot). */
+const isOutcome = (item: M.OutcomeModel | M.InvariantModel | M.RequirementModel): item is M.OutcomeModel => 'to' in item;
+
 /** Initial and reached states for a kind; empty when the aggregate has no kinds. */
 export const validStatesFor = (agg: AggregateModel, kind: string): readonly string[] => agg.validStates.find((v) => v.kind === kind)?.states ?? [];
 
 /** Whether generation needs a user-supplied check and mandatory contract tests. */
 export function hasExternalObligations(model: M.DomainModel): boolean {
-    const invariant = (items: readonly M.InvariantModel[]): boolean => items.some((i) => !i.expr && !!i.externalReason);
-    const requirement = (items: readonly M.RequirementModel[]): boolean => items.some((r) => !r.expr && !!r.externalReason);
-    const outcome = (items: readonly M.OutcomeModel[]): boolean => items.some((o) => o.select?.kind === 'external');
+    const invariant = (items: readonly M.InvariantModel[]): boolean => items.some(hasExternalCheck);
+    const requirement = (items: readonly M.RequirementModel[]): boolean => items.some(hasExternalCheck);
+    const outcome = (items: readonly M.OutcomeModel[]): boolean => items.some(hasExternalCheck);
     return model.elements.some((el) => {
         if ('invariants' in el && invariant(el.invariants)) return true;
         if (el.kind === 'union' && el.variants.some((v) => invariant(v.invariants))) return true;

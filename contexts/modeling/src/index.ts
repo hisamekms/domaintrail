@@ -28,6 +28,7 @@ export {
     fieldsOf,
     hasElement,
     hasExternalObligations,
+    hasExternalCheck,
     invariantsOf,
     KIND_TAG,
     kindCase,

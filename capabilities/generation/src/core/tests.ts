@@ -20,7 +20,9 @@ import {
     elementOf,
     elementsIn,
     invariantsOf,
+    hasExternalCheck,
     kindCase,
+    outcomesOfCommand,
     validStatesFor,
 } from '@domaintrail/modeling';
 import type { DomainPrimitive } from './checks.js';
@@ -612,7 +614,7 @@ class TestsEmitter {
     private commandCase(agg: AggregateModel, c: CommandModel): string {
         if (!c.legacy) return this.namedCommandCase(agg, c);
         const states = agg.states;
-        const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
+        const sources = [...new Set(outcomesOfCommand(c, true).flatMap((o) => o.from))];
         const subject = c.factory
             ? []
             : [
@@ -725,7 +727,7 @@ class TestsEmitter {
             `    counted: [${counts.join(', ')}],`,
             `    outcomes: [${outcomes.join(', ')}],`,
             ...(hasKinds ? [`    kindField: '${KIND_TAG}',`, `    validStates: ${JSON.stringify(agg.validStates)},`] : []),
-            `    choices: ${this.ctx}.${choiceCheckName(agg, c)}(${all.some((o) => o.select?.kind === 'external') ? `options.external.${agg.name}.${c.name}` : '{}'}),`,
+            `    choices: ${this.ctx}.${choiceCheckName(agg, c)}(${all.some(hasExternalCheck) ? `options.external.${agg.name}.${c.name}` : '{}'}),`,
             `}, options),`,
         ].join('\n');
     }
@@ -848,22 +850,20 @@ class TestsEmitter {
                         !c.legacy &&
                         commandKinds(agg, c)
                             .flatMap((k) => applicableOutcomes(agg, c, k))
-                            .some((o) => o.select?.kind === 'external'),
+                            .some(hasExternalCheck),
                 )
                 .map((c) => ({ agg, c })),
         );
         const externalDeclared = this.els.flatMap((el) => {
             const invs =
                 el.kind === 'aggregate' ? aggregateInvariants(el) : el.kind === 'union' ? unionInvariants(el) : 'invariants' in el ? el.invariants : [];
-            const names = invs.filter((i) => !i.expr && i.externalReason).map((i) => i.name);
+            const names = invs.filter(hasExternalCheck).map((i) => i.name);
             const entries = names.length ? [{ key: el.name, type: `${ctx}.${declaredChecksName(el.name)}`, names }] : [];
             if (el.kind === 'aggregate')
                 for (const c of el.commands) {
                     const required = [
-                        ...c.requires.filter((r) => !r.expr && r.externalReason).map((r) => r.name),
-                        ...el.kinds.flatMap((k) =>
-                            (kindCase(el, k.name, c.name)?.requires ?? []).filter((r) => !r.expr && r.externalReason).map((r) => `${k.name}_${r.name}`),
-                        ),
+                        ...c.requires.filter(hasExternalCheck).map((r) => r.name),
+                        ...el.kinds.flatMap((k) => (kindCase(el, k.name, c.name)?.requires ?? []).filter(hasExternalCheck).map((r) => `${k.name}_${r.name}`)),
                     ];
                     if (required.length)
                         entries.push({ key: commandTypeName(el, c), type: `${ctx}.${declaredRequiresName(commandTypeName(el, c))}`, names: required });
