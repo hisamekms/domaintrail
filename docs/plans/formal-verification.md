@@ -342,9 +342,9 @@ granularity needed.
 
 ## Decisions for the maintainer
 
-Recommendations are Phase 0 judgments; the final column records maintainer decisions made on 2026-11-27.
+Recommendations are Phase 0 judgments; the final column records decisions, with dates stated in each decision where relevant.
 
-| Decision | Recommendation | Confidence | Decided (2026-11-27) |
+| Decision | Recommendation | Confidence | Decision |
 |---|---|---|---|
 | Formal backend/tools | TLA+, default TLC, optional Apalache, Java optional. | high | Adopted as recommended. |
 | Published IR compatibility | Set compatibility policy before external use; publish through Modeling `.dt`. | medium | Internal during the beta, no compatibility promise; the IR carries a version number; semver policy decided at 1.0. |
@@ -354,6 +354,9 @@ Recommendations are Phase 0 judgments; the final column records maintainer decis
 | Profile shape and type encodings | Decide Timestamp unit/range, date/time encoding, Decimal scale, string domains, `matches` on unbounded domains, verified-type slot semantics, and event treatment under ADR 0018 ([mapping](formal-verification/mapping.md#L65), [unbounded `matches`](formal-verification/mapping.md#L48), [verified types](formal-verification/mapping.md#L104), [events](formal-verification/mapping.md#L99)). | no recommendation yet; low | A separate verification file in DSL syntax (e.g. `sales/order.verify.dt`) with named scopes (`dt verify --scope`), resolved by `dt check` and renamed with the model; without it, defaults derived from the model; the scope used is printed with every result; encodings as in Phase 4. |
 | Checker distribution/licensing | Decide distribution and license policy; Phase 0 did not record checker licenses. | no recommendation yet; low | Explicit `dt tools install` / `dt tools status` with pinned versions and sha256; no npm postinstall and no implicit fetch in `dt verify` (missing tools: `skipped` with the next command); `DT_FV_*` overrides; licenses confirmed and recorded in Phase 4. |
 | AI trial size | At least 12 attempts per arm across two pinned model families; confirm model versions and feasibility. | medium | At least 12 attempts per arm; Claude and Codex families pinned to the latest versions at the trial start and recorded; a 3-attempt pilot per arm first. |
+| Trial arms and run count (supervisor decision, 2026-11-28) | Compare match forms and quantifier names against the adopted defaults. | medium | Four arms per task packet: A0 adopted match with `every`/`some`; M2 TC39 match with `every`/`some`; M3 ts-pattern-like match with `every`/`some`; Q2 `forall`/`exists` with A0 match. M2/M3/Q2 each compare pairwise with A0 and share A0 attempts; 12 attempts per arm per packet, six Claude and six Codex; main run 4 × 12 × packets (192 for four packets). |
+| Trial decision rule (supervisor decision, 2026-11-28) | Compare success rates, repair tokens and semantic correctness. | medium | Improvement: +10 points on first syntax/type-check success or −15% repair tokens; regression: −10 points on either rate or +15% repair tokens. Beat A0 only with an improvement, no regression, at least two packets, and no reversal in either model family; semantic pass rate ≥10 points below A0 vetoes; no winner keeps A0. |
+| Mixed Int/Decimal arithmetic (supervisor decision, 2026-11-28) | Define mixed numeric operations before freeze. | medium | Promote Int to Decimal; result is Decimal. |
 | F-code assignment | Assign F001–F008 in the schema rule-code row. | high | Adopted as recommended. |
 | Integration | `feat/formal-verification`, each phase merged by PR, then one merge to `main`. | high | Adopted as recommended. |
 | Language surface forms | Adopt JS-oriented forms after the paired trial; selected forms are `every`/`some`, `includes`, `.length`, `.matches()`. | medium | TS-like syntax with TS strict null safety (`T?`, `?.`, `??`, narrowing by `!= null`) and an exhaustive `match`; `==` by declared type, `===` and mutating methods rejected; the trial compares only the `match` form, quantifier names and lambda. |

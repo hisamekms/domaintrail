@@ -29,8 +29,12 @@ Rewrite entity `==`, `unique`, and `contains` to `.id` forms. Values are immutab
 `push`.
 
 Int supports only `+`, `-`, `*`; there is no Int `/`. Decimal supports `+`, `-`, `*`, `/` with declared scale
-and half-even rounding. Diagnose division by zero unless the divisor is shown non-zero. Domain primitive
-arithmetic yields its base type; its constraint is checked again on assignment.
+and half-even rounding. Mixed Int/Decimal arithmetic promotes the Int operand to Decimal and returns Decimal.
+Diagnose division by zero unless the divisor is shown non-zero. Domain primitive arithmetic yields its base type; its
+constraint is checked again on assignment.
+
+Supervisor decision (2026-11-28): mixed Int/Decimal arithmetic promotes the Int operand to Decimal and returns
+Decimal.
 
 Use the decided changes/postcondition model: `changes x` permits an unspecified value; `changes x = expr` determines
 the value using the `ensures` scope (parameters bare, fields `before.x`, no `after`). Omitted fields are unchanged.
