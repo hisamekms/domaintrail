@@ -2,6 +2,7 @@
 
 - Status: accepted
 - Date: 2026-10-23
+- Amended by: [ADR 0042](0042-language-revision-and-ensures.md) (proposed; declared-type equality)
 
 ## Context
 

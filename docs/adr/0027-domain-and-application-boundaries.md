@@ -15,6 +15,9 @@
 - Amended by: [ADR 0028](0028-generated-typescript-changes.md) (generated code may import a context imported from another
   package; values of recursive types in the contract tests and the kernel's `Location` imported, both left for later
   here)
+- Amended by: [ADR 0039](0039-tla-backend-and-tools.md) (proposed; formal backend boundary),
+  [ADR 0040](0040-semantic-ir-and-stable-identities.md) (proposed; Modeling IR), and
+  [ADR 0045](0045-tla-generator-and-tool-execution.md) (proposed; formal-verification capability and adapters)
 
 ## Context
 

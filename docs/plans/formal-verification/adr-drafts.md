@@ -1,10 +1,9 @@
 # Formal verification ADR drafts
 
-Write these in order of dependency. Use the next free ADR number when each draft is accepted; numbers are intentionally
-not reserved here. Follow the repository form: title, status/date, amends, context, decision, alternatives,
-consequences.
+The first seven drafts have been written as proposed ADRs. The final "Later phases" section remains a draft. Follow the
+repository form: title, status/date, amends, context, decision, alternatives, consequences.
 
-## TLA+ backend, checker roles, and optional Java
+## TLA+ backend, checker roles, and optional Java — now [ADR 0039](../../adr/0039-tla-backend-and-tools.md)
 
 **Phase:** Phase 4 foundation; decision should precede implementation.
 
@@ -20,20 +19,21 @@ static workflows.
 **Decision:** Use TLA+ as the formal backend and TLC as the default exhaustive finite-state checker. Offer Apalache as
 an optional backend for bounded exploration and inductive invariant checks, with bounded passes labeled accordingly.
 Java is optional; absent Java yields an explicit skipped result and static checks still run. Pin tool artifacts and
-checksums, and allow documented `DT_FV_*` overrides.
+checksums, and allow documented `DT_FV_*` overrides. Distribution is decided in ADR 0045: explicit `dt tools install` /
+`dt tools status`, pinned versions with sha256, no npm postinstall, and no implicit fetch; licenses are confirmed and recorded
+in Phase 4.
 
 **Alternatives considered:** Quint; Apalache as the sole/default checker; requiring Java; accepting user-edited
 generated specifications.
 
 **Consequences**
 
-Java-dependent formal checks can be skipped explicitly while static checks remain available; tool
-distribution and licensing still need a decision.
+Java-dependent formal checks can be skipped explicitly while static checks remain available; tool distribution is decided in ADR 0045; checker licenses are confirmed and recorded in Phase 4.
 
 **Evidence:** [Spike backend and run recommendation](spike/results.md#L131), [tool checksums and Java
 evidence](spike/results.md#L9), [Phase 0 mapping and recommendation](mapping.md#L152).
 
-## Semantic IR and stable declaration identities
+## Semantic IR and stable declaration identities — now [ADR 0040](../../adr/0040-semantic-ir-and-stable-identities.md)
 
 **Phase:** Phase 1, before migrating generators.
 
@@ -65,7 +65,7 @@ Existing semantics and snapshot outputs must remain stable through the Phase 1 m
 steps](semantic-ir.md#L15), [IR shape and stable IDs](semantic-ir.md#L89), [migration steps](semantic-ir.md#L128),
 [Phase 1 boundary](semantic-ir.md#L146).
 
-## Language revision and `ensures`
+## Language revision and `ensures` — now [ADR 0042](../../adr/0042-language-revision-and-ensures.md)
 
 **Phase:** Phase 2; freeze after prototype trial and before Phase 3 runtime work.
 
@@ -88,9 +88,9 @@ ID, unions by tag and fields, and lists element by element in order. Reject `===
 `==`.
 Rewrite entity `==`, `unique`, and `contains` to `.id` forms. Values are immutable; reject mutating methods such
 as `push`.
-Int supports `+`, `-`, `*` only; Decimal supports `+`, `-`, `*`, `/` with declared scale and half-even rounding.
+Int supports only `+`, `-`, `*`; there is no Int `/`. Decimal supports `+`, `-`, `*`, `/` with declared scale and half-even rounding.
 Diagnose division by zero unless the divisor is shown non-zero. Domain primitive arithmetic yields its base type, whose
-constraint is checked again on assignment. Adopt design D: per-field `changes x` means permitted but unspecified;
+constraint is checked again on assignment. Use the decided changes/postcondition model: per-field `changes x` means permitted but unspecified;
 `changes x = expr` determines the value using the `ensures` scope (parameters bare, fields `before.x`, no `after`);
 omitted fields are unchanged; `ensures { … }` is for relations. Diagnose a lone equality in `ensures` and move it to
 value-determining `changes`. Keep `before.x`/`after.x` qualification, parameters unqualified and forbidden from being
@@ -122,7 +122,7 @@ The migration must preserve comments, layout, and meaning, report manual work, a
 placement and scoping](language-revision.md#L158), [decision status](language-revision.md#L330), [AddItem
 Level 2 limitation](language-revision.md#L345).
 
-## TypeScript `ensures` runtime and contract checks
+## TypeScript `ensures` runtime and contract checks — now [ADR 0043](../../adr/0043-typescript-ensures-runtime.md)
 
 **Phase:** Phase 3; complete before Phase 4 lowering is accepted.
 
@@ -152,7 +152,7 @@ decision](../../adr/0019-command-changes-and-decisions.md#L41), [ADR 0020 genera
 checks](../../adr/0020-generated-checks-and-contract-tests.md#L26), [AddItem contract
 example](language-revision.md#L182).
 
-## `check`/`verify` boundary, result schema, and exit codes
+## `check`/`verify` boundary, result schema, and exit codes — now [ADR 0041](../../adr/0041-check-verify-boundary-and-results.md)
 
 **Phase:** Phase 4 CLI and result implementation.
 
@@ -181,7 +181,7 @@ SYNTAX changes from exit 1 to 3; J001/K001 remain 1, and `noCounterexample` exit
 **Evidence:** [Schema and envelope](results-schema.md#L1), [shared exit-code proposal](results-schema.md#L293), [checker
 boundary](../formal-verification.md#L105), [TLC transport-code interpretation](spike/results.md#L112).
 
-## Formal classification and positive claims
+## Formal classification and positive claims — now [ADR 0044](../../adr/0044-formal-classification-and-claims.md)
 
 **Phase:** Phase 4 classification, attribution, and result reporting.
 
@@ -213,7 +213,7 @@ Attribution requires fixed-input probes and per-action isolation when needed.
 cases](spike/results.md#L61), [unresolved joint attribution and `-continue`](spike/results.md#L100), [mapping soundness
 and existential direction](mapping.md#L8), [IR provenance requirements](semantic-ir.md#L115).
 
-## TLA+ generator shape and tool execution
+## TLA+ generator shape and tool execution — now [ADR 0045](../../adr/0045-tla-generator-and-tool-execution.md)
 
 **Phase:** Phase 4 generator and adapters, after the backend and IR decisions.
 
@@ -235,7 +235,7 @@ digits; strings from model literals plus fresh values; `matches` over unbounded 
 are opaque values satisfying their constraint; events are trace labels, not state. Always print the selected scope with
 results. Install pinned versions with sha256 via `dt tools install`, expose `dt tools status`, retain `DT_FV_*`
 overrides,
-confirm and record licenses. Use recursion depth 2 by default. `dt verify` never fetches tools implicitly; if missing,
+confirm and record licenses. Recursion depth 2 is a profile default. `dt verify` never fetches tools implicitly; if missing,
 report `skipped` with a
 reason and next command.
 Generate one parameterized module per aggregate and mechanically produce constrained actions `A_C(p) ==

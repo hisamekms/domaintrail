@@ -7,6 +7,8 @@
   contract of [ADR 0014](0014-command-transitions.md) and [ADR 0018](0018-command-events-contract.md) for commands
   whose output depends on the input
 - Amended by: [ADR 0036](0036-commands-in-any-state.md) (a state that is not a source state throws a contract violation)
+- Amended by: [ADR 0042](0042-language-revision-and-ensures.md) (proposed; `changes` value assignments and
+  `ensures`), [ADR 0043](0043-typescript-ensures-runtime.md) (proposed; successful decision postconditions)
 
 ## Context
 

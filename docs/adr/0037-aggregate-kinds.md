@@ -5,6 +5,7 @@
 - Supersedes: [ADR 0035](0035-kind-specific-lifecycles.md) (its lifecycle selector: `readonly` enum field and
   `transitions for`; its named outcomes, choice rules, `initial`, `@externalCheck` and restore boundary stay)
 - Amends: [ADR 0036](0036-commands-in-any-state.md) (a command not for the aggregate's kind)
+- Amended by: [ADR 0042](0042-language-revision-and-ensures.md) (proposed; outcome syntax and postconditions)
 
 ## Context
 
