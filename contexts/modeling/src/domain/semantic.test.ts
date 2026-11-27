@@ -43,6 +43,46 @@ describe('Semantic IR', () => {
             expect(withSink.items).toEqual(withoutSink.items);
         }
     });
+    test('records comparison kinds for value comparisons and collection membership', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture {
+                  id PersonId: UUID
+                  entity Person { id: PersonId }
+                  value Address { city: String }
+                  union Choice { Text { value: String } Count { value: Int } }
+                  id HolderId: UUID
+                  aggregate Holder {
+                    id: HolderId
+                    owns first: Person
+                    owns second: Person
+                    home: Address
+                    office: Address
+                    choice: Choice
+                    otherChoice: Choice
+                    owns people: Person[0..*]
+                    invariant comparisons {
+                      first == second and home == office and choice == otherChoice and
+                      home.city < office.city and contains(people, first)
+                    }
+                  }
+                }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        expect(nodes.filter((node) => node.comparison).map((node) => node.comparison)).toEqual([
+            'entityId',
+            'valueObjectStructural',
+            'unionStructural',
+            'ordered',
+            'entityId',
+        ]);
+    });
     test('projects the shop lifecycle facts as state IDs', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);

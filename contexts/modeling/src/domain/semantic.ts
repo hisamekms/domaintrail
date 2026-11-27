@@ -126,6 +126,7 @@ function expression(
         source: expr.text,
         ...(symbol ? { symbol } : {}),
         ...(type ? { type } : {}),
+        ...(fact?.comparison ? { comparison: fact.comparison } : {}),
         children: children.map((child, index) => expression(child, `${path}.${index}`, facts, declarationIds, expressionIds)),
     };
 }

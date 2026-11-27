@@ -35,6 +35,7 @@ import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, is
 export interface ExpressionFact {
     expression: Expr;
     type: Ty;
+    comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
 }
 export type ExpressionFactsSink = (fact: ExpressionFact) => void;
@@ -343,6 +344,7 @@ type ExprOf<K extends Expr['k']> = Extract<Expr, { k: K }>;
 
 class ExprChecker {
     private readonly symbols = new WeakMap<Expr, NonNullable<ExpressionFact['symbol']>>();
+    private readonly comparisons = new WeakMap<Expr, NonNullable<ExpressionFact['comparison']>>();
     constructor(
         private readonly model: SourceModel,
         private readonly rules: RuleSink,
@@ -351,7 +353,13 @@ class ExprChecker {
 
     check(e: Expr, scope: Scope): Ty {
         const t = this.infer(e, scope);
-        if (t.k !== 'error') this.sink?.({ expression: e, type: t, ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}) });
+        if (t.k !== 'error')
+            this.sink?.({
+                expression: e,
+                type: t,
+                ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}),
+                ...(this.comparisons.has(e) ? { comparison: this.comparisons.get(e) } : {}),
+            });
         if (t.k === 'enumType' || t.k === 'unionType' || t.k === 'ctx') {
             this.rules.error('M009', `'${showType(t)}' is not a value.`, e.at);
             return ERROR;
@@ -361,7 +369,13 @@ class ExprChecker {
 
     private infer(e: Expr, scope: Scope): Ty {
         const type = this.inferNode(e, scope);
-        if (type.k !== 'error') this.sink?.({ expression: e, type, ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}) });
+        if (type.k !== 'error')
+            this.sink?.({
+                expression: e,
+                type,
+                ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}),
+                ...(this.comparisons.has(e) ? { comparison: this.comparisons.get(e) } : {}),
+            });
         return type;
     }
 
@@ -455,7 +469,9 @@ class ExprChecker {
                     this.rules.error('M009', `unique() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 }
                 if (e.param === undefined) {
-                    if (elem.k !== 'error' && !equatable(elem, elem)) {
+                    const ok = elem.k !== 'error' && equatable(elem, elem);
+                    if (elem.k !== 'error') this.comparisons.set(e, ok ? comparisonKind(elem, elem, false) : 'notComparable');
+                    if (elem.k !== 'error' && !ok) {
                         this.rules.error(
                             'M009',
                             `unique() requires elements that can be compared with '==', but they have type '${showType(elem)}'.`,
@@ -467,6 +483,7 @@ class ExprChecker {
                 const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 e.keys.forEach((key, i) => {
                     const t = this.check(key, inner);
+                    if (t.k !== 'error') this.comparisons.set(key, equatable(t, t) ? comparisonKind(t, t, false) : 'notComparable');
                     if (t.k === 'error' || equatable(t, t)) return;
                     const what = `Key '${key.text}' of unique()`;
                     if (t.k === 'opt') {
@@ -490,6 +507,8 @@ class ExprChecker {
                     const hint = x.k === 'opt' ? ' Optional values must be guarded with exists(...) first.' : '';
                     this.rules.error('M009', `contains() cannot compare elements of type '${showType(coll.elem)}' with '${showType(x)}'.${hint}`, e.elementAt);
                 }
+                if (coll.k === 'list' && coll.elem.k !== 'error' && x.k !== 'error')
+                    this.comparisons.set(e, equatable(coll.elem, x) ? comparisonKind(coll.elem, x, false) : 'notComparable');
                 return BOOL;
             }
             case 'binary':
@@ -521,6 +540,7 @@ class ExprChecker {
         const ordering = op !== '==' && op !== '!=';
         if (this.temporalLiteral(l, e.right, ordering) || this.temporalLiteral(r, e.left, ordering)) return BOOL;
         const ok = op === '==' || op === '!=' ? equatable(l, r) : ordered(l, r);
+        this.comparisons.set(e, ok ? comparisonKind(l, r, ordering) : 'notComparable');
         if (!ok) {
             const [lb, rb] = [basePrimitive(l), basePrimitive(r)];
             if (l.k !== 'opt' && r.k !== 'opt' && (isTemporal(lb) || isTemporal(rb)) && lb !== rb) {
@@ -691,6 +711,15 @@ class ExprChecker {
                 return ERROR;
         }
     }
+}
+
+function comparisonKind(l: Ty, r: Ty, ordering: boolean): NonNullable<ExpressionFact['comparison']> {
+    if (ordering) return 'ordered';
+    if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityId' : 'valueObjectStructural';
+    if (l.k === 'union' && r.k === 'union' && l.decl === r.decl) return 'unionStructural';
+    if (l.k === 'enum' && r.k === 'enum') return 'enumValue';
+    if (isDomainPrimitive(l) || isDomainPrimitive(r)) return 'domainPrimitive';
+    return 'primitive';
 }
 
 function narrow(t: Ty, path: string, scope: Scope): Ty {

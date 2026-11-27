@@ -33,6 +33,7 @@ context Modeling {
     entityId
     valueObjectStructural
     unionStructural
+    ordered
     enumValue
     notComparable
   }
