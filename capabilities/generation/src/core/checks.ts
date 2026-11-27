@@ -145,13 +145,9 @@ export const declaredRequiresName = (commandType: string): string => `${commandT
 /** Test-only count of expression nodes compiled without a corresponding Semantic IR expression. */
 export let irMisses = 0;
 export let irSymbolMisses = 0;
-export let irTypeMismatches = 0;
-export const irTypeMismatchDetails: string[] = [];
 export const resetIrMisses = (): void => {
     irMisses = 0;
     irSymbolMisses = 0;
-    irTypeMismatches = 0;
-    irTypeMismatchDetails.length = 0;
 };
 
 /** Whether an element's or state's invariants include one without an expression (a slot). */
@@ -267,50 +263,6 @@ export function tyFromIr(env: CheckEnv, type: { name: string; cardinality: strin
     return base;
 }
 
-function sameTy(a: Ty, b: Ty): boolean {
-    if (a.k !== b.k) return false;
-    if (a.k === 'prim' && b.k === 'prim') return a.name === b.name;
-    if (
-        (a.k === 'dp' || a.k === 'struct' || a.k === 'union' || a.k === 'enumType' || a.k === 'unionType') &&
-        (b.k === 'dp' || b.k === 'struct' || b.k === 'union' || b.k === 'enumType' || b.k === 'unionType')
-    )
-        return a.el.id === b.el.id;
-    if (a.k === 'opt' && b.k === 'opt') return sameTy(a.inner, b.inner);
-    if (a.k === 'list' && b.k === 'list') return sameTy(a.elem, b.elem);
-    if (a.k === 'ctx' && b.k === 'ctx') return a.name === b.name;
-    return true;
-}
-
-/** Type implied by a semantic IR expression, including type and context symbols. */
-export function irTy(env: CheckEnv, e: ExprModel): Ty | undefined {
-    const node = exprModelIndex(env.ir, env.model).get(e);
-    if (node?.type) {
-        if (node.type.tag === true) return { k: 'enum' };
-        return tyFromIr(env, node.type);
-    }
-    const symbol = node?.symbol;
-    if (symbol?.kind === 'type') {
-        const el = elementOf(env.model, symbol.id);
-        if (el?.kind === 'enum') return { k: 'enumType', el };
-        if (el?.kind === 'union') return { k: 'unionType', el };
-    }
-    if (symbol?.kind === 'context') return { k: 'ctx', name: symbol.id };
-    return undefined;
-}
-
-const describeTy = (t: Ty): string =>
-    t.k === 'list'
-        ? `list<${describeTy(t.elem)}>`
-        : t.k === 'opt'
-          ? `opt<${describeTy(t.inner)}>`
-          : 'el' in t
-            ? `${t.k}<${t.el.id}>`
-            : t.k === 'prim'
-              ? `${t.k}<${t.name}>`
-              : t.k === 'ctx'
-                ? `ctx<${t.name}>`
-                : t.k;
-
 /** The base primitive of a scalar type, if it is one. */
 function primOf(t: Ty): PrimitiveName | undefined {
     if (t.k === 'prim') return t.name;
@@ -420,15 +372,10 @@ export class ExprCompiler {
 
     compile(e: ExprModel, scope: Scope): Binding {
         const result = this.compileNode(e, scope);
-        const node = this.irNode(e);
-        const expected = this.env.ir && !syntheticUuidExpressions.has(e) ? irTy(this.env, e) : undefined;
-        if (expected) {
-            if (!sameTy(result.ty, expected)) {
-                irTypeMismatches++;
-                irTypeMismatchDetails.push(`${node?.source ?? e.k} | ${describeTy(result.ty)} | ${describeTy(expected)}`);
-            }
-        }
-        return result;
+        if (!this.env.ir || syntheticUuidExpressions.has(e)) return result;
+        const type = this.irTy(e);
+        if (!type) throw new Error(`expression '${this.irNode(e)?.source ?? e.k}' has no IR type`);
+        return { ...result, ty: type };
     }
 
     private compileNode(e: ExprModel, scope: Scope): Binding {
@@ -525,6 +472,22 @@ export class ExprCompiler {
 
     private irNode(e: ExprModel): ReturnType<typeof exprModelIndex> extends Map<ExprModel, infer T> ? T | undefined : never {
         return this.irIndex.get(e);
+    }
+
+    private irTy(e: ExprModel): Ty | undefined {
+        const node = this.irNode(e);
+        if (node?.type) {
+            if (node.type.tag === true) return { k: 'enum' };
+            return tyFromIr(this.env, node.type);
+        }
+        const symbol = node?.symbol;
+        if (symbol?.kind === 'type') {
+            const el = elementOf(this.env.model, symbol.id);
+            if (el?.kind === 'enum') return { k: 'enumType', el };
+            if (el?.kind === 'union') return { k: 'unionType', el };
+        }
+        if (symbol?.kind === 'context') return { k: 'ctx', name: symbol.id };
+        return undefined;
     }
 
     private name(e: Extract<ExprModel, { k: 'name' }>, scope: Scope): Binding {
