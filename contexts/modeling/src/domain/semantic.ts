@@ -13,6 +13,7 @@ import type {
     SemanticScopeFact,
     SemanticUnspecified,
 } from '../generated/Modeling.js';
+import { valueCycles } from './cycles.js';
 import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel, ExprModel } from './model.js';
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
 import { lifecyclesOf } from './lifecycle.js';
@@ -747,6 +748,10 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
         obligations: obligations(model),
         unspecified,
         provenance,
+        cycles: valueCycles(model).map((cycle) => ({
+            members: [cycle.members[0]!, ...cycle.members.slice(1)],
+            ending: [...cycle.ending].map(([union, variant]) => ({ union, variant })),
+        })),
     };
 }
 

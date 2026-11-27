@@ -103,6 +103,16 @@ context Modeling {
     site: SemanticSpan
   }
 
+  value SemanticValueCycleEnding {
+    union: String
+    variant: String
+  }
+
+  value SemanticValueCycle {
+    members: String[1..*]
+    ending: SemanticValueCycleEnding[0..*]
+  }
+
   value SemanticObligation {
     kind: SemanticObligationKind
     declaration: String
@@ -187,5 +197,6 @@ context Modeling {
     obligations: SemanticObligation[0..*]
     unspecified: SemanticUnspecified[0..*]
     provenance: SemanticProvenance[0..*]
+    cycles: SemanticValueCycle[0..*]
   }
 }
