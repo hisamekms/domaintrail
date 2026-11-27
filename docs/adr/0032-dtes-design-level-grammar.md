@@ -6,6 +6,7 @@
 - Amends: [ADR 0024](0024-event-storming-dsl.md) (its relations, rules and Design Level drawing, and its "the formatter
   never reorders clauses") and the spec [docs/dtes-v0.1.md](../dtes-v0.1.md) (§3.2, §3.3, §3.6 on `dt fmt`, §3.8, §4,
   §5.2 on a command without `emits`, §9.1, §9.4, §11).
+- Amended by: [ADR 0041](0041-check-verify-boundary-and-results.md) (proposed; shared result schema and exit codes)
 - Code: `contexts/storming` (grammar, IR, validator, formatter, `migrateStorming`), `capabilities/visualization`
   (`core/storming/chains.ts`, `filter.ts`, `stage-view.ts`), `apps/dt` (`dt migrate dtes`), the guide (`dt guide
   dtes-quick`, `storming-rules`) and the agent's prompts.

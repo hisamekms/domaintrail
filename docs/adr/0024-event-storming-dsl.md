@@ -8,6 +8,7 @@
   the relations themselves are the grammar (`by`, `reads`, `handledBy`, `emits`, `on`, `issues`, `from`), `actor` and
   `target` are errors (S023), incomplete designs are errors unless an open hotspot asks about them (S024–S028).
 - Date: 2026-10-31
+- Amended by: [ADR 0041](0041-check-verify-boundary-and-results.md) (proposed; shared CLI result and exit-code contract)
 - Spec: [docs/dtes-v0.1.md](../dtes-v0.1.md). Its semantics, the sections marked 確定 in particular, are the reference.
   This ADR fixes only how they are implemented, plus the details the spec leaves to "実装調査" (§13, §14).
 
