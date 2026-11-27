@@ -330,9 +330,9 @@ export class ExprCompiler {
             case 'string':
                 return { js: quote(e.value), ty: { k: 'prim', name: 'String', literal: true }, literal: e.value };
             case 'name':
-                return this.name(e.name, scope);
+                return this.name(e, scope);
             case 'member':
-                return this.member(e.receiver, e.member, scope);
+                return this.member(e, scope);
             case 'not':
                 return bool(negate(this.compile(e.operand, scope)));
             case 'exists':
@@ -407,10 +407,17 @@ export class ExprCompiler {
         return this.irIndex.get(e);
     }
 
-    private name(name: string, scope: Scope): Binding {
+    private name(e: Extract<ExprModel, { k: 'name' }>, scope: Scope): Binding {
+        const name = e.name;
         const bound = scope.get(name);
         if (bound) return bound;
         const { model, ctx } = this.env;
+        const symbol = this.env.ir ? this.irNode(e)?.symbol : undefined;
+        if (symbol?.kind === 'type') {
+            const declared = elementOf(model, symbol.id);
+            if (declared?.kind === 'enum') return { js: '', ty: { k: 'enumType', el: declared } };
+            if (declared?.kind === 'union') return { js: '', ty: { k: 'unionType', el: declared } };
+        }
         const visible = [ctx, ...sharedContexts(model)].map((c) => elementOf(model, `${c}.${name}`)).find((el) => el?.kind === 'enum' || el?.kind === 'union');
         if (visible?.kind === 'enum') return { js: '', ty: { k: 'enumType', el: visible } };
         if (visible?.kind === 'union') return { js: '', ty: { k: 'unionType', el: visible } };
@@ -418,7 +425,10 @@ export class ExprCompiler {
         throw new Error(`cannot resolve '${name}'`);
     }
 
-    private member(receiver: ExprModel, m: string, scope: Scope): Binding {
+    private member(e: Extract<ExprModel, { k: 'member' }>, scope: Scope): Binding {
+        const receiver = e.receiver;
+        const m = e.member;
+        const symbol = this.env.ir ? this.irNode(e)?.symbol : undefined;
         const r = this.compile(receiver, scope);
         const t = strip(r.ty); // an optional receiver is guarded by exists(...) (M009)
         switch (t.k) {
@@ -430,11 +440,13 @@ export class ExprCompiler {
             }
             case 'enumType':
             case 'unionType':
+                // The IR records which enum value or union tag was resolved at this source location.
+                if (symbol?.kind === 'enumValue' || symbol?.kind === 'type') return { js: quote(m), ty: { k: 'enum' } };
                 return { js: quote(m), ty: { k: 'enum' } };
             case 'union':
                 return { js: `${r.js}.${m}`, ty: { k: 'enum' } }; // only the discriminator is accessible (M009)
             case 'struct': {
-                const f = t.el.fields.find((x) => x.name === m);
+                const f = t.el.fields.find((x) => x.name === m && (!symbol || symbol.kind !== 'field' || symbol.id === `${t.el.id}.${x.name}`));
                 if (!f) throw new Error(`'${t.el.name}' has no field '${m}'`);
                 return { js: `${r.js}.${m}`, ty: fieldTy(this.env.model, f) };
             }
