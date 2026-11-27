@@ -27,42 +27,21 @@
       "minLength": 1
     },
     "phase": {
-      "enum": [
-        "pilot",
-        "main"
-      ]
+      "enum": ["pilot", "main"]
     },
     "arm": {
-      "enum": [
-        "A0",
-        "M2",
-        "M3",
-        "Q2"
-      ]
+      "enum": ["A0", "M2", "M3", "Q2"]
     },
     "comparison_id": {
-      "enum": [
-        "A0_shared",
-        "M2_vs_A0",
-        "M3_vs_A0",
-        "Q2_vs_A0"
-      ]
+      "enum": ["A0_shared", "M2_vs_A0", "M3_vs_A0", "Q2_vs_A0"]
     },
     "model": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "family",
-        "id",
-        "version",
-        "pinned_at"
-      ],
+      "required": ["family", "id", "version", "pinned_at"],
       "properties": {
         "family": {
-          "enum": [
-            "Claude",
-            "Codex"
-          ]
+          "enum": ["Claude", "Codex"]
         },
         "id": {
           "type": "string"
@@ -82,12 +61,7 @@
     "guide": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "version",
-        "sha256",
-        "template_version",
-        "allowed_diff"
-      ],
+      "required": ["version", "sha256", "template_version", "allowed_diff"],
       "properties": {
         "version": {
           "type": "string"
@@ -140,24 +114,14 @@
       "properties": {
         "first_syntax_check_success": {
           "type": "integer",
-          "enum": [
-            0,
-            1
-          ]
+          "enum": [0, 1]
         },
         "first_type_check_success": {
           "type": "integer",
-          "enum": [
-            0,
-            1
-          ]
+          "enum": [0, 1]
         },
         "semantic_correctness": {
-          "enum": [
-            "pass",
-            "fail",
-            "uncertain"
-          ]
+          "enum": ["pass", "fail", "uncertain"]
         },
         "repair_count": {
           "type": "integer",
@@ -166,12 +130,7 @@
         "token_use": {
           "type": "object",
           "additionalProperties": false,
-          "required": [
-            "first_input",
-            "first_output",
-            "repair_input",
-            "repair_output"
-          ],
+          "required": ["first_input", "first_output", "repair_input", "repair_output"],
           "properties": {
             "first_input": {
               "type": "integer",
@@ -192,15 +151,8 @@
           }
         },
         "repair_success_from_diagnostics": {
-          "type": [
-            "integer",
-            "null"
-          ],
-          "enum": [
-            0,
-            1,
-            null
-          ]
+          "type": ["integer", "null"],
+          "enum": [0, 1, null]
         }
       }
     },
@@ -211,40 +163,24 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "reviewer_id",
-          "verdict",
-          "checklist_results"
-        ],
+        "required": ["reviewer_id", "verdict", "checklist_results"],
         "properties": {
           "reviewer_id": {
             "type": "string"
           },
           "verdict": {
-            "enum": [
-              "pass",
-              "fail",
-              "uncertain"
-            ]
+            "enum": ["pass", "fail", "uncertain"]
           },
           "checklist_results": {
             "type": "object",
             "additionalProperties": {
-              "enum": [
-                "pass",
-                "fail",
-                "uncertain"
-              ]
+              "enum": ["pass", "fail", "uncertain"]
             }
           },
           "scenario_results": {
             "type": "object",
             "additionalProperties": {
-              "enum": [
-                "pass",
-                "fail",
-                "not_run"
-              ]
+              "enum": ["pass", "fail", "not_run"]
             }
           },
           "rationale": {
@@ -256,29 +192,16 @@
     "adjudication": {
       "type": "object",
       "additionalProperties": false,
-      "required": [
-        "required",
-        "third_reviewer_id",
-        "verdict",
-        "reason"
-      ],
+      "required": ["required", "third_reviewer_id", "verdict", "reason"],
       "properties": {
         "required": {
           "type": "boolean"
         },
         "third_reviewer_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": ["string", "null"]
         },
         "verdict": {
-          "enum": [
-            "pass",
-            "fail",
-            "uncertain",
-            "not_needed"
-          ]
+          "enum": ["pass", "fail", "uncertain", "not_needed"]
         },
         "reason": {
           "type": "string"
@@ -336,9 +259,7 @@
             "maxContains": 1
           }
         },
-        "required": [
-          "reviewers"
-        ]
+        "required": ["reviewers"]
       },
       "then": {
         "properties": {
@@ -372,9 +293,7 @@
             "maxContains": 1
           }
         },
-        "required": [
-          "reviewers"
-        ]
+        "required": ["reviewers"]
       },
       "then": {
         "properties": {
@@ -408,9 +327,7 @@
             "maxContains": 1
           }
         },
-        "required": [
-          "reviewers"
-        ]
+        "required": ["reviewers"]
       },
       "then": {
         "properties": {
@@ -436,9 +353,7 @@
             "const": "A0"
           }
         },
-        "required": [
-          "arm"
-        ]
+        "required": ["arm"]
       },
       "then": {
         "properties": {
@@ -455,9 +370,7 @@
             "const": "M2"
           }
         },
-        "required": [
-          "arm"
-        ]
+        "required": ["arm"]
       },
       "then": {
         "properties": {
@@ -474,9 +387,7 @@
             "const": "M3"
           }
         },
-        "required": [
-          "arm"
-        ]
+        "required": ["arm"]
       },
       "then": {
         "properties": {
@@ -493,9 +404,7 @@
             "const": "Q2"
           }
         },
-        "required": [
-          "arm"
-        ]
+        "required": ["arm"]
       },
       "then": {
         "properties": {
@@ -519,9 +428,7 @@
             "minContains": 2
           }
         },
-        "required": [
-          "reviewers"
-        ]
+        "required": ["reviewers"]
       },
       "then": {
         "properties": {
@@ -555,9 +462,7 @@
             "minContains": 2
           }
         },
-        "required": [
-          "reviewers"
-        ]
+        "required": ["reviewers"]
       },
       "then": {
         "properties": {
@@ -591,9 +496,7 @@
             "minContains": 2
           }
         },
-        "required": [
-          "reviewers"
-        ]
+        "required": ["reviewers"]
       },
       "then": {
         "properties": {
