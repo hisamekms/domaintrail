@@ -81,6 +81,7 @@ context Modeling {
   }
 
   value SemanticScopeFact {
+    // Fields and parameters are every name visible in the root's scope.
     site: SemanticSpan
     owner: String
     command: String?

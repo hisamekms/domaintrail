@@ -699,12 +699,12 @@ describe('Semantic IR', () => {
         ]);
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
-        const scope = ir.scopes.find((fact) => fact.targetOutcome === 'Sales.Order:ship()->shipped')!;
+        const scope = ir.scopes.find((fact) => fact.targetOutcome === 'Sales.Order:ship->shipped')!;
         expect(scope).toEqual({
             site: scope.site,
             owner: 'Sales.Order',
             command: 'Sales.Order:ship',
-            targetOutcome: 'Sales.Order:ship()->shipped',
+            targetOutcome: 'Sales.Order:ship->shipped',
             fields: [{ id: 'Sales.Order.id', kind: 'field', name: 'id' }],
             parameters: [],
             lambdas: [],
