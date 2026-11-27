@@ -398,6 +398,10 @@ const expressionRoots = (model: SourceModel): Expr[] => {
         for (const item of items) if (item.kind === 'invariant' && item.expr) roots.push(item.expr);
     };
     for (const el of model.elements) {
+        if (el.kind === 'id' || el.kind === 'primitive') {
+            for (const inv of el.invariants) if (inv.expr) roots.push(inv.expr);
+            if (el.constraint) roots.push(el.constraint);
+        }
         if ('members' in el) addInvs(el.members);
         if (el.kind === 'aggregate') {
             for (const state of statesOf(el)) addInvs(state.members);

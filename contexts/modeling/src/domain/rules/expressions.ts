@@ -117,8 +117,8 @@ function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel,
     for (const inv of primitiveInvariants(p)) {
         if ('kind' in inv.decl) checkDeclared(inv.decl, rules);
         if (!inv.expr) continue;
-        const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
-        sink?.({ expression: inv.expr, type: ERROR, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value' }] } });
+        const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }, inv.expr]], present: new Set() };
+        sink?.({ expression: inv.expr, type: ERROR, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value', binding: inv.expr }] } });
         const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
         if (t.k !== 'error' && !isBool(t)) {
             const what = inv.decl === inv.expr ? `The constraint of '${p.name}'` : `Invariant '${inv.name}'`;

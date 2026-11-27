@@ -205,7 +205,7 @@ describe('Semantic IR', () => {
         expect(source('item.quantity')?.symbol).toEqual({ id: 'Sales.OrderItem.quantity', kind: 'field', name: 'quantity' });
         expect(source('item.unitPrice.currency')?.symbol).toEqual({ id: 'Common.Money.currency', kind: 'field', name: 'currency' });
         expect(source('note')?.type).toEqual({ name: 'String', cardinality: 'optional' });
-        const lambda = nodes.find((node) => node.symbol?.kind === 'lambda');
+        const lambda = nodes.find((node) => node.symbol?.kind === 'lambda' && node.symbol.name === 'item');
         expect(lambda?.symbol).toEqual({ id: expect.stringContaining(':expression:'), kind: 'lambda', name: 'item' });
         expect(lambda?.type).toEqual({ name: 'OrderItem', cardinality: 'one' });
     });
@@ -649,6 +649,39 @@ describe('Semantic IR', () => {
         expect(ids).toContain('Sales.Order/Retail:on:finish');
         expect(ids).toContain('Sales.Order/Retail:on:finish->completed');
         expect(ir.aggregates[0]?.requirements[0]?.error).toBe('Sales.EmptyOrder');
+    });
+
+    test('projects primitive invariant roots and their implicit value binding', async () => {
+        const analysis = await analyzeDomain([{ path: 'sales.dt', text: `context Sales { primitive Quantity: Int { value > 0 } }` }]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const root = ir.expressions.find((expression) => expression.source === 'value > 0')!;
+        const value = root.children[0]!;
+        expect(value.symbol).toEqual({ id: root.id, kind: 'lambda', name: 'value' });
+        expect(ir.scopes).toContainEqual(
+            expect.objectContaining({
+                expression: root.id,
+                lambdas: [{ id: root.id, kind: 'lambda', name: 'value' }],
+            }),
+        );
+    });
+
+    test('records a quantified optional object path on an implication right operand', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'sales.dt',
+                text: `context Sales {
+                  id ItemId: UUID
+                  value Details { note: String? }
+                  aggregate Item {
+                    id: ItemId
+                    owns items: Details[0..*]
+                    invariant notesPresent { all(items, x => exists(x.note) implies length(x.note) > 0) }
+                  }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        expect(ir.presence).toContainEqual(expect.objectContaining({ path: 'x.note' }));
     });
 
     test('projects every visible name in a state invariant scope', async () => {
