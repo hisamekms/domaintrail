@@ -5,8 +5,9 @@ This page is about working on DomainTrail itself. To use it, start with the [REA
 
 ## Setup
 
-Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.13 or later. `bun run dt` runs the
-CLI from source.
+Requires [Bun](https://bun.sh) (the version is pinned in `mise.toml`) and Node.js 22.13 or later. A JDK is also pinned
+in `mise.toml`; it is needed only for formal verification with TLC or Apalache. Everything else runs without Java.
+`bun run dt` runs the CLI from source.
 
 The repository is a Bun workspace: the root package (the published CLI and `domaintrail/testing`, `test/`) and the private packages under
 `contexts/`, `capabilities/`, `platform/`, `shared/` and `apps/` (see [Repository layout](#repository-layout)). `bun install` at the root installs all of them
