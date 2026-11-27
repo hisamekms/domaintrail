@@ -167,7 +167,7 @@ export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<G
         SemanticProvenanceKind: () => given.SemanticProvenanceKind ?? fc.constantFrom<Modeling.SemanticProvenanceKind>('parameter', 'explicitAssignment', 'carried', 'unspecified', 'selectedChoice'),
         SemanticSelectKind: () => given.SemanticSelectKind ?? fc.constantFrom<Modeling.SemanticSelectKind>('executable', 'naturalLanguage', 'externalCheck', 'absent'),
         SemanticSpan: () => given.SemanticSpan ?? testing.cast<Modeling.SemanticSpan>(fc.record({ file: testing.cast<string>(scalar.String), startLine: testing.cast<number>(scalar.Int), startColumn: testing.cast<number>(scalar.Int), endLine: testing.cast<number>(scalar.Int), endColumn: testing.cast<number>(scalar.Int) })),
-        SemanticType: () => given.SemanticType ?? testing.cast<Modeling.SemanticType>(fc.record({ name: testing.cast<string>(scalar.String), cardinality: a.SemanticCardinality })),
+        SemanticType: () => given.SemanticType ?? testing.cast<Modeling.SemanticType>(fc.record({ name: testing.cast<string>(scalar.String), cardinality: a.SemanticCardinality, tag: testing.cast<boolean>(scalar.Bool) })),
         SemanticSymbol: () => given.SemanticSymbol ?? testing.cast<Modeling.SemanticSymbol>(fc.record({ id: testing.cast<string>(scalar.String), kind: a.SemanticSymbolKind, name: testing.cast<string>(scalar.String) })),
         SemanticExpression: () => cycleSemanticExpression().SemanticExpression,
         SemanticPresenceFact: () => given.SemanticPresenceFact ?? testing.cast<Modeling.SemanticPresenceFact>(fc.record({ expression: testing.cast<string>(scalar.String), path: testing.cast<string>(scalar.String) })),
