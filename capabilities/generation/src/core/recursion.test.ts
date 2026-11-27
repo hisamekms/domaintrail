@@ -7,7 +7,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as fc from 'fast-check';
-import { buildSemanticIR } from '@domaintrail/modeling';
+import { semanticIROf } from '@domaintrail/modeling';
 import { generateTypeScript } from './typescript.js';
 import { recursiveCycles, testsWarnings } from './tests.js';
 import { generateFromAnalysis, check, linkNodeModules } from '../test-helpers.js';
@@ -71,7 +71,7 @@ async function project(
     tests: Omit<Parameters<typeof generateTypeScript>[2] & object, 'dir'>,
     policies: Parameters<typeof generateTypeScript>[3] = {},
     dirs: string[],
-): Promise<{ dir: string; diagnostics: unknown[]; model: NonNullable<Awaited<ReturnType<typeof check>>['model']>; ir: ReturnType<typeof buildSemanticIR> }> {
+): Promise<{ dir: string; diagnostics: unknown[]; model: NonNullable<Awaited<ReturnType<typeof check>>['model']>; ir: ReturnType<typeof semanticIROf> }> {
     const a = await check(files);
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-recursion-'));
     dirs.push(dir);
@@ -82,7 +82,7 @@ async function project(
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }
-    return { dir, diagnostics: a.diagnostics, model: a.model!, ir: buildSemanticIR(a.sourceModel!, a.model!) };
+    return { dir, diagnostics: a.diagnostics, model: a.model!, ir: semanticIROf(a) };
 }
 
 describe('recursive value types', async () => {

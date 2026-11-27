@@ -2,7 +2,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { buildSemanticIR, contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations } from '@domaintrail/modeling';
+import { semanticIROf, contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
@@ -441,7 +441,7 @@ Examples:
                   }
                 : undefined;
             const policies = policyModes(cfg, contextNames(a.model));
-            const ir = buildSemanticIR(a.sourceModel!, a.model);
+            const ir = semanticIROf(a);
             if (tests) for (const w of testsWarnings(a.model, ir, tests.types)) io.err(`Warning: ${w}`);
             const files = generateTypeScript(a.model, dirs, tests, policies, cfg.tsModules, { ir }).map((f) => ({
                 ...f,

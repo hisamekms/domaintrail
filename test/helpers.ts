@@ -2,7 +2,7 @@ import { cp, mkdir, mkdtemp, readdir, symlink, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { type Analysis, analyze } from '@domaintrail/analysis';
-import { buildSemanticIR } from '@domaintrail/modeling';
+import { semanticIROf } from '@domaintrail/modeling';
 import { generateTypeScript } from '@domaintrail/generation';
 import { type Diagnostic, type SourceFile } from '@domaintrail/kernel';
 import { createViewService, ElkLayoutEngine } from '@domaintrail/visualization';
@@ -18,7 +18,7 @@ export function generateFromAnalysis(
     modules?: Parameters<typeof generateTypeScript>[4],
     options: Parameters<typeof generateTypeScript>[5] = {},
 ): ReturnType<typeof generateTypeScript> {
-    return generateTypeScript(result.model!, dirs, tests, policies, modules, { ...options, ir: buildSemanticIR(result.sourceModel!, result.model!) });
+    return generateTypeScript(result.model!, dirs, tests, policies, modules, { ...options, ir: semanticIROf(result) });
 }
 export const EXAMPLES = path.join(ROOT, 'examples', 'shop');
 

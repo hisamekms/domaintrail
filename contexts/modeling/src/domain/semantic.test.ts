@@ -5,7 +5,7 @@ import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
 import { invariantId, kindId, onCaseId, outcomeId, requirementId, stateId, variantId } from './ids.js';
-import { buildSemanticIR, exprModelIndex, SEMANTIC_IR_VERSION } from './semantic.js';
+import { semanticIROf, exprModelIndex, SEMANTIC_IR_VERSION } from './semantic.js';
 import type { ExprModel } from './model.js';
 import { checkInvariants } from './rules/expressions.js';
 import { RuleSink } from './diagnostics.js';
@@ -24,7 +24,7 @@ const allExamples = async () => {
     return Promise.all(files.sort().map(async (file) => ({ path: file, text: await readFile(path.join(root, file), 'utf8') })));
 };
 
-function assertExpressionParity(typed: import('./model.js').DomainModel, ir: ReturnType<typeof buildSemanticIR>): void {
+function assertExpressionParity(typed: import('./model.js').DomainModel, ir: ReturnType<typeof semanticIROf>): void {
     const index = exprModelIndex(ir, typed);
     const roots: { id: string; expr: ExprModel }[] = [];
     const invariants = (owner: string, items: readonly import('./model.js').InvariantModel[]) =>
@@ -91,6 +91,14 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
 }
 
 describe('Semantic IR', () => {
+    test('projects facts collected by analysis without changing diagnostics', async () => {
+        const analysis = await analyzeDomain([{ path: 'facts.dt', text: 'context Facts { primitive Count: Int { value > 0 } }' }]);
+        const diagnostics = structuredClone(analysis.diagnostics);
+        expect(analysis.expressionFacts.size).toBeGreaterThan(0);
+        semanticIROf(analysis);
+        expect(analysis.diagnostics).toEqual(diagnostics);
+    });
+
     test('field set symbols use the element that owns each access', async () => {
         const analysis = await analyzeDomain([
             {
@@ -108,7 +116,7 @@ describe('Semantic IR', () => {
         }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const symbols = (root: string, source: string) => {
             const walk = (node: (typeof ir.expressions)[number]): string | undefined => {
                 if (node.source === source) return node.symbol?.id;
@@ -175,7 +183,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         const analyses = await Promise.all(fixtures.map((text, index) => analyzeDomain([{ path: `probe-${index}.dt`, text }])));
         analyses.push(await analyzeDomain(await exampleSources()));
         for (const [index, analysis] of analyses.entries()) {
-            const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+            const ir = semanticIROf(analysis);
             const missing = ir.expressions.flatMap((root) => {
                 const nodes: import('../generated/Modeling.js').SemanticExpression[] = [];
                 const visit = (node: import('../generated/Modeling.js').SemanticExpression) => {
@@ -223,7 +231,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             const analysis = await analyzeDomain(sources);
             expect(analysis.model).toBeDefined();
             expect(analysis.sourceModel).toBeDefined();
-            assertExpressionParity(analysis.model!, buildSemanticIR(analysis.sourceModel!, analysis.model!));
+            assertExpressionParity(analysis.model!, semanticIROf(analysis));
         }
     });
     test('keeps Bool types on invariant, requirement and select roots', async () => {
@@ -248,7 +256,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             },
         ]);
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const boolRoots = flatten(ir.expressions).filter((node) => node.source === 'true');
@@ -261,7 +269,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
     });
     test('projects per-source field and choice provenance', async () => {
         const analysis = await analyzeDomain(await exampleSources());
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const provenance = ir.provenance;
         const confirmedCancel = provenance.filter((fact) => fact.declaration === 'Sales.Order:cancel->Cancelled' && fact.source === 'Sales.Order#Confirmed');
         expect(confirmedCancel.filter((fact) => fact.field).map(({ kind, field }) => [kind, field])).toEqual([
@@ -284,7 +292,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 text: `context ChoiceTest { id ItemId: UUID aggregate Item { id: ItemId state Start state A state B initial Start command choose() { outcome first: Start -> A outcome second: Start -> B } } }`,
             },
         ]);
-        expect(buildSemanticIR(choiceAnalysis.sourceModel!, choiceAnalysis.model!).provenance.some((fact) => fact.kind === 'selectedChoice')).toBe(true);
+        expect(semanticIROf(choiceAnalysis).provenance.some((fact) => fact.kind === 'selectedChoice')).toBe(true);
     });
     test('expression facts sink preserves checker diagnostics on all examples and a representative fixture', async () => {
         const analyses = [
@@ -340,7 +348,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             },
         ]);
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
@@ -366,7 +374,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const facts = ir.presence;
         expect(facts.filter((fact) => fact.path === 'note')).toHaveLength(2);
         expect(facts.every((fact) => fact.path === 'note')).toBe(true);
@@ -380,7 +388,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
     });
     test('projects the shop lifecycle facts as state IDs', async () => {
         const analysis = await analyzeDomain(await exampleSources());
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const lifecycle = (id: string) => ir.aggregates.find((aggregate) => aggregate.id === id)!.kinds;
         expect(lifecycle('Sales.Order')).toEqual([
             {
@@ -398,7 +406,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
 
     test('projects exact resolved symbols and static types for shop expressions', async () => {
         const analysis = await analyzeDomain(await exampleSources());
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flat = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flat(node.children)]);
         const nodes = flat(ir.expressions);
@@ -440,7 +448,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
@@ -474,7 +482,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
@@ -502,7 +510,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
@@ -527,7 +535,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.aggregates[0]?.kinds.map(({ kind, initialStates, validStates }) => ({ kind, initialStates, validStates }))).toEqual([
             { kind: 'Retail', initialStates: ['Sales.Item#Draft'], validStates: ['Sales.Item#Draft'] },
             { kind: 'Wholesale', initialStates: ['Sales.Item#Ready'], validStates: ['Sales.Item#Ready'] },
@@ -544,7 +552,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         const shop = await analyzeDomain(await exampleSources());
         for (const analysis of [fixture, shop]) {
             expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-            const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+            const ir = semanticIROf(analysis);
             for (const model of analysis.model!.elements.filter((element): element is import('./model.js').AggregateModel => element.kind === 'aggregate')) {
                 const projected = ir.aggregates.find((aggregate) => aggregate.id === model.id)!;
                 for (const kind of model.kinds.map((item) => item.name))
@@ -558,7 +566,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
     test('projects examples/shop declarations and keeps 1-based source columns', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         expect(analysis.sourceModel).toBeDefined();
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.version).toBe(SEMANTIC_IR_VERSION);
         expect(ir.declarations.some((decl) => decl.id === 'Sales.Order')).toBe(true);
         expect(ir.aggregates.some((agg) => agg.id === 'Sales.Order')).toBe(true);
@@ -651,7 +659,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.aggregates[0]?.kinds[0]?.onCases.map(({ id, command, from, to, changes }) => ({ id, command, from, to, changes }))).toEqual([
             {
                 id: 'Sales.Order/Retail:on:finish->completed',
@@ -687,7 +695,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             },
         ]);
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const aggregate = ir.aggregates[0]!;
         expect(aggregate.outcomes.map(({ id }) => id)).toEqual(['Sales.Order/Retail:on:finish->completed']);
         expect(aggregate.requirements.map(({ id }) => id)).toEqual(['Sales.Order/Retail:on:finish.requires.ready']);
@@ -723,7 +731,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.unspecified.some((fact) => fact.kind === 'expressionFreeRequirement')).toBe(true);
         expect(ir.unspecified.some((fact) => fact.kind === 'changesWithoutExpression' && fact.field === 'amount')).toBe(true);
         expect(ir.aggregates[0]?.outcomes[0]).toMatchObject({ set: ['amount'], carried: ['id'], dropped: [] });
@@ -752,7 +760,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const outcome = ir.aggregates[0]?.outcomes.find((item) => item.from[0] === 'Sales.Item#B');
         expect(outcome).toMatchObject({ set: ['value', 'added'], carried: ['id'], dropped: ['value'] });
         const sameId = ir.aggregates[0]?.outcomes.filter((item) => item.id === 'Sales.Item:finish->Done');
@@ -772,7 +780,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 } }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.unspecified.some((fact) => fact.kind === 'targetOnlyField' && fact.field === 'total')).toBe(false);
         expect(ir.unspecified.some((fact) => fact.kind === 'changesWithoutExpression' && fact.field === 'total')).toBe(true);
     });
@@ -790,7 +798,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             } }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const aggregate = ir.aggregates[0]!;
         expect(ir.unspecified.some((fact) => 'nondeterministicChoice' in fact)).toBe(false);
         expect(aggregate.choices).toEqual([
@@ -821,7 +829,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 } }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.aggregates[0]!.choices).toEqual([
             { kind: 'Retail', source: 'Sales.Item#Start', outcomes: ['Sales.Item/Retail:on:choose->yes', 'Sales.Item/Retail:on:choose->no'] },
             { kind: 'Wholesale', source: 'Sales.Item#Start', outcomes: ['Sales.Item/Wholesale:on:choose->accept', 'Sales.Item/Wholesale:on:choose->reject'] },
@@ -832,7 +840,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 text: `context Legacy { id ItemId: UUID aggregate Item { id: ItemId state A state B state C command change() A -> B | C } }`,
             },
         ]);
-        expect(buildSemanticIR(legacy.sourceModel!, legacy.model!).aggregates[0]!.choices).toEqual([
+        expect(semanticIROf(legacy).aggregates[0]!.choices).toEqual([
             { kind: '*', source: 'Legacy.Item#A', outcomes: ['Legacy.Item:change->B', 'Legacy.Item:change->C'] },
         ]);
     });
@@ -844,7 +852,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 text: `context Sales { id ItemId: UUID aggregate Item { id: ItemId state Start state A state B kind Retail { initial Start } kind Wholesale { initial Start } command choose() { outcome first: Start -> A outcome second: Start -> B } } }`,
             },
         ]);
-        const choices = buildSemanticIR(analysis.sourceModel!, analysis.model!).aggregates[0]!.choices;
+        const choices = semanticIROf(analysis).aggregates[0]!.choices;
         expect(choices.map((choice) => choice.kind)).toEqual(['Retail', 'Wholesale']);
     });
 
@@ -855,7 +863,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 text: `context Sales { id ItemId: UUID aggregate Item { id: ItemId command review() { requires approved @externalCheck("approval is external") else Error } } error Error }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.aggregates[0]!.requirements[0]).toMatchObject({ externalReason: 'approval is external' });
         expect(ir.obligations).toContainEqual(expect.objectContaining({ kind: 'externalCheck', reason: 'approval is external' }));
     });
@@ -876,7 +884,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const obligations = ir.obligations;
         expect(obligations.map(({ declaration, reason }) => ({ declaration, reason }))).toEqual([
             { declaration: 'Sales.Code.invariant.valid', reason: 'check code' },
@@ -898,7 +906,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.unspecified.filter((fact) => fact.kind === 'createField').map((fact) => fact.field)).toContain('createdAt');
     });
 
@@ -920,7 +928,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const ids = ir.declarations.map((declaration) => declaration.id);
         expect(ids).toContain('Sales.Quantity.invariant.valid');
         expect(ids).toContain('Sales.Status=Open');
@@ -932,7 +940,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
 
     test('projects primitive invariant roots and their implicit value binding', async () => {
         const analysis = await analyzeDomain([{ path: 'sales.dt', text: `context Sales { primitive Quantity: Int { value > 0 } }` }]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const root = ir.expressions.find((expression) => expression.source === 'value > 0')!;
         const value = root.children[0]!;
         expect(value.symbol).toEqual({ id: 'Sales.Quantity', kind: 'value', name: 'value' });
@@ -959,14 +967,14 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }`,
             },
         ]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         expect(ir.presence).toContainEqual(expect.objectContaining({ path: 'x.note' }));
     });
 
     test('projects every visible name in a state invariant scope', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const scope = ir.scopes.find((fact) => fact.owner === 'Sales.Order#Confirmed' && fact.fields.some((field) => field.name === 'items'))!;
         expect(scope).toEqual({
             expression: scope.expression,
@@ -988,7 +996,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
     test('projects every visible name and lambda binding of a command requirement', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
@@ -1021,7 +1029,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             },
         ]);
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const scope = ir.scopes.find((fact) => fact.onCase === 'Sales.Order/Retail:on:ship')!;
         expect(scope).toEqual({
             expression: scope.expression,
@@ -1048,7 +1056,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             },
         ]);
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const ir = semanticIROf(analysis);
         const scope = ir.scopes.find((fact) => fact.targetOutcome === 'Sales.Order:ship->shipped')!;
         expect(scope).toEqual({
             expression: scope.expression,

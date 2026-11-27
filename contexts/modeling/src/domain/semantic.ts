@@ -17,8 +17,7 @@ import { valueCycles } from './cycles.js';
 import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel, ExprModel } from './model.js';
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
 import { lifecyclesOf } from './lifecycle.js';
-import { checkInvariants, type ExpressionFact } from './rules/expressions.js';
-import { RuleSink } from './diagnostics.js';
+import type { ExpressionFact } from './rules/expressions.js';
 import { enumValueId, fieldId, invariantId, kindId, onCaseId, outcomeId, shorthandOutcomeId, parameterId, requirementId, stateId, variantId } from './ids.js';
 import {
     commandsOf,
@@ -119,7 +118,7 @@ const semanticTypeName = (ty: NonNullable<ExpressionFact['type']>, declarationId
 function expression(
     expr: Expr,
     path = 'root',
-    facts?: Map<Expr, ExpressionFact>,
+    facts?: ReadonlyMap<Expr, ExpressionFact>,
     declarationIds?: Map<object, string>,
     expressionIds?: Map<Expr, string>,
     rootId: string = expr.at.elementId ?? '',
@@ -623,21 +622,8 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
     return result;
 }
 
-/** Merges two facts about one expression; a field left undefined in the later fact keeps the earlier value. */
-const mergeFacts = (earlier: ExpressionFact | undefined, later: ExpressionFact): ExpressionFact =>
-    earlier
-        ? {
-              expression: later.expression,
-              type: later.type ?? earlier.type,
-              comparison: later.comparison ?? earlier.comparison,
-              symbol: later.symbol ?? earlier.symbol,
-              paths: later.paths ?? earlier.paths,
-              scope: later.scope ?? earlier.scope,
-          }
-        : later;
-
 /** Build the versioned beta semantic projection from the source model, retaining exact syntax spans. */
-export function buildSemanticIR(model: SourceModel, typed: DomainModel): SemanticIR {
+export function buildSemanticIR(model: SourceModel, typed: DomainModel, facts: ReadonlyMap<Expr, ExpressionFact>): SemanticIR {
     const declarationIds = new Map<object, string>();
     const expressionIds = new Map<Expr, string>();
     const roots = expressionRoots(model);
@@ -678,10 +664,6 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
             }
         }
     }
-    const facts = new Map<Expr, ExpressionFact>();
-    // The checker may report several facts for one expression (its type, then its scope as a root): merge them, so a
-    // later fact never drops what an earlier one recorded.
-    checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, mergeFacts(facts.get(fact.expression), fact)));
     const scopes: SemanticScopeFact[] = [...facts.values()]
         .filter((fact) => fact.scope)
         .map((fact) => ({
@@ -839,4 +821,17 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
     };
     roots.forEach(({ id, expr }) => walk(id, expr));
     return result;
+}
+
+/** Build the beta semantic projection from a completed analysis; this export is internal/beta. */
+/** What the IR is built from: an analysis's source model, Typed Model, and the facts its checker run recorded. */
+export interface SemanticIRInput {
+    readonly sourceModel?: SourceModel;
+    readonly model?: DomainModel;
+    readonly expressionFacts: ReadonlyMap<Expr, ExpressionFact>;
+}
+
+export function semanticIROf(analysis: SemanticIRInput): SemanticIR {
+    if (!analysis.sourceModel || !analysis.model) throw new Error('Semantic IR requires a parsed source model and Typed Model');
+    return buildSemanticIR(analysis.sourceModel, analysis.model, analysis.expressionFacts);
 }

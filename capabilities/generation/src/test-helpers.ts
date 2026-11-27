@@ -3,7 +3,7 @@
 import { mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyzeDomain, type DomainAnalysis } from '@domaintrail/modeling';
-import { buildSemanticIR } from '@domaintrail/modeling';
+import { semanticIROf } from '@domaintrail/modeling';
 import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
 import { checkGeneratedNames } from './core/tsnames.js';
@@ -19,7 +19,7 @@ export function generateFromAnalysis(
     modules?: Parameters<typeof generateTypeScript>[4],
     options: Parameters<typeof generateTypeScript>[5] = {},
 ): ReturnType<typeof generateTypeScript> {
-    return generateTypeScript(result.model!, dirs, tests, policies, modules, { ...options, ir: buildSemanticIR(result.sourceModel!, result.model!) });
+    return generateTypeScript(result.model!, dirs, tests, policies, modules, { ...options, ir: semanticIROf(result) });
 }
 
 const ROOT = path.join(import.meta.dir, '..', '..', '..');
