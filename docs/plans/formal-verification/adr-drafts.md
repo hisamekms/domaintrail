@@ -62,8 +62,8 @@ pass; leave each backend's independent name/type/equality resolution in place.
 Existing semantics and snapshot outputs must remain stable through the Phase 1 migration.
 
 **Evidence:** [IR source and identity design](semantic-ir.md#L1), [duplicate work and migration
-steps](semantic-ir.md#L15), [IR shape and stable IDs](semantic-ir.md#L89), [migration steps](semantic-ir.md#L128),
-[Phase 1 boundary](semantic-ir.md#L146).
+steps](semantic-ir.md#L17), [IR shape and stable IDs](semantic-ir.md#L89), [migration steps](semantic-ir.md#L128),
+[Phase 1 boundary](semantic-ir.md#L160).
 
 ## Language revision and `ensures` — now [ADR 0042](../../adr/0042-language-revision-and-ensures.md)
 
@@ -211,7 +211,7 @@ Attribution requires fixed-input probes and per-action isolation when needed.
 
 **Evidence:** [Implemented fixed-input classification](spike/results.md#L31), [seeded AddItem and creation
 cases](spike/results.md#L61), [unresolved joint attribution and `-continue`](spike/results.md#L100), [mapping soundness
-and existential direction](mapping.md#L8), [IR provenance requirements](semantic-ir.md#L115).
+and existential direction](mapping.md#L8), [IR provenance requirements](semantic-ir.md#L124).
 
 ## TLA+ generator shape and tool execution — now [ADR 0045](../../adr/0045-tla-generator-and-tool-execution.md)
 

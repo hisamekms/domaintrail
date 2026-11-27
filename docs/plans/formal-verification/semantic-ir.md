@@ -1,6 +1,8 @@
 # Semantic IR: design
 
-Phase 1 adds a resolved semantic representation between model analysis and generation. The IR builder takes both the SourceModel and Typed Model. It takes semantic facts from Typed Model helpers and joins them to SourceModel spans by stable ID. That keeps precise source spans while semantic checking runs.
+Phase 1 adds a resolved semantic representation between model analysis and generation. The IR builder takes both the
+SourceModel and Typed Model. It takes semantic facts from Typed Model helpers and joins them to SourceModel spans by
+stable ID. That keeps precise source spans while semantic checking runs.
 The SourceModel is explicitly built from syntax and retains sites and duplicate declarations
 ([source-model.ts](../../../contexts/modeling/src/domain/source-model.ts#L1-L18)); each `Site` has a start and end
 position ([source-model.ts](../../../contexts/modeling/src/domain/source-model.ts#L19-L24)). The Typed Model is instead
@@ -106,7 +108,12 @@ the same name.
 
 Record comparison kind per expression occurrence: entity identity by ID, structural value-object equality, union tag and
 fields, or not comparable. Record optional presence facts at edges, with current true-edge behavior. A presence fact's
-`path` is the checker's guard path key used to narrow the expression at that edge. Provenance is keyed per (outcome,
+`path` is the checker's guard path key used to narrow the expression at that edge; it is resolved in the scope of that
+expression and holds for everything below it. It is ambiguous when a lambda inside the expression rebinds the path's
+first
+name — the checker narrows by the same text and has the same gap (an unguarded optional reached through the rebound
+name is accepted); fixing it changes what the checker accepts and is a separate checker task. Provenance is keyed per
+(outcome,
 source), so carried and unspecified facts retain the source state that produced each result. The IR also records
 initial and valid states per kind, plus `on` cases; named outcomes from one source remain nondeterministic choices
 unless an executable `select` expression constrains them (ADRs 0035/0037). Only natural-language `select` and
@@ -128,7 +135,8 @@ mapping in infrastructure, semantic interpretation in Modeling domain, and publi
 
 Migration steps and regressions:
 
-1. Step 1 declares IR types, stable IDs, and declaration-level facts. Capture current behavior with existing baselines: byte snapshots for every generated `dt generate ts` file for
+1. Step 1 declares IR types, stable IDs, and declaration-level facts. Capture current behavior with existing baselines:
+   byte snapshots for every generated `dt generate ts` file for
    `examples/shop` ([generate-contract.test.ts](../../../test/generate-contract.test.ts#L1-L7),
    [snapshot](../../../test/__snapshots__/generate-contract.test.ts.snap#L1-L5)), Live View contract hashes
    ([live-contract.test.ts](../../../test/live-contract.test.ts#L1-L12)), and checker text/JSON snapshots

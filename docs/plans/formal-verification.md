@@ -182,7 +182,7 @@ internal during beta, carries a version number, and has no compatibility promise
 becomes the IR builder, producing expression, lifecycle, and structure facts with diagnostics. Optional narrowing
 reproduces only the true-edge rule. Equality is selected by declared type: owned entity values and value objects
 structurally, references by ID, and unions by tag and fields. The visualization Graph IR remains on the Typed Model. See
-the [IR design](formal-verification/semantic-ir.md#L3) and [Phase 1 boundary](formal-verification/semantic-ir.md#L146).
+the [IR design](formal-verification/semantic-ir.md#L3) and [Phase 1 boundary](formal-verification/semantic-ir.md#L160).
 
 Migrate consumers in this order: (1) capture current generated TypeScript, Live View, and checker baselines; compare
 with existing snapshots and hashes after `withoutVersion` masking, including self-hosted generated output; (2) move
@@ -246,7 +246,7 @@ cross-backend examples must agree.
 
 Generate deterministic TLA+ and TLC configuration from Semantic IR, plus Apalache annotations. Put the code in a new
 formal-verification capability, Java/tool adapters under `adapters/`, and update `test/architecture/map.ts`
-([placement](formal-verification/semantic-ir.md#L123)). Profile input ranges, collection maximum, aggregate count,
+([placement](formal-verification/semantic-ir.md#L132)). Profile input ranges, collection maximum, aggregate count,
 time values, depth (recursive values default to 2),
 timeout, backend, abstractions, assumptions and properties. Supervisor decision (2026-11-28): recursive values use
 default depth 2. Bounds are verification scope, not business
@@ -342,7 +342,8 @@ granularity needed.
 
 ## Decisions for the maintainer
 
-Recommendations are Phase 0 judgments; the final column records decisions, with dates stated in each decision where relevant.
+Recommendations are Phase 0 judgments; the final column records decisions, with dates stated in each decision where
+relevant.
 
 | Decision | Recommendation | Confidence | Decision |
 |---|---|---|---|
@@ -380,3 +381,8 @@ Recommendations are Phase 0 judgments; the final column records decisions, with 
 defaults, scopes, tool installation, licenses, and no-Java evidence. Phase 2 trials match/quantifier spellings and
 confirms lambda syntax. Mapping edge cases, detailed level rules, and
 `ensures` over event payloads remain open. Later phases may be reordered based on evidence.
+
+Checker bug found in Phase 1 step 2 (separate task, outside Phase 1 because it changes what the checker accepts): a
+lambda that rebinds a name keeps the guarded paths that start with that name, so
+`all(vs, x => exists(x.o) implies all(vs, x => x.o > 0))` reports no M009 for the inner, unguarded `x.o`. The fix drops
+the guarded paths of a name when a lambda rebinds it.
