@@ -424,6 +424,7 @@ function checkInvariant(
     const rootFact = scopeInfo ? { ...scopeInfo, lambdas: [...scopeInfo.lambdas] } : undefined;
     if (rootFact) sink?.({ expression: inv.expr, type: ERROR, scope: rootFact });
     const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(inv.expr, scope);
+    if (rootFact) sink?.({ expression: inv.expr, type: ERROR, scope: rootFact });
     if (t.k !== 'error' && !isBool(t)) {
         rules.error('M008', `Invariant '${inv.name}' must be a Bool expression, but has type '${showType(t)}'.`, inv.exprAt);
     }
