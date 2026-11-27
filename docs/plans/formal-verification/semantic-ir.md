@@ -169,7 +169,9 @@ Migration steps and regressions:
    kinds call the element's equality function; the others compare scalars).
    Progress (step 3e, done): the checker runs once. `analyzeDomain` keeps the expression facts it recorded, and
    `semanticIROf(analysis)` builds the IR from them without checking again.
-   Remaining: applicability.
+   Applicability (step 3, closed): the generator keeps the shared Modeling helpers (`applicableOutcomes`,
+   `validStatesFor`, `kindCase`), which the IR builder also uses, so there is one computation; the TLA+ generator reads
+   the IR's `choices`. Step 3 is complete.
 4. Port contract-test generation to IR dependencies and recursion facts. Regression: all generated test files match the
    captured baseline and the checker contract remains unchanged.
 5. Add the TLA+ capability and adapters, trace metadata, and architecture-map entry (Phase 4; Phase 1 ends at step 4).

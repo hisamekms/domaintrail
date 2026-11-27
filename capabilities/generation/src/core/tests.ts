@@ -11,6 +11,7 @@ import type {
     SemanticIR,
 } from '@domaintrail/modeling';
 import {
+    exprModelIndex,
     applicableOutcomes,
     BINARY_OP_TEXT,
     commandKinds,
@@ -170,6 +171,7 @@ export function testsWarnings(model: DomainModel, ir: SemanticIR, types: TypeTes
  * `from`.
  */
 export function generateTests(model: DomainModel, ir: SemanticIR, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
+    const irIndex = exprModelIndex(ir, model);
     const cycles = recursiveCycles(model, ir, opts.maxRecursionDepth, opts.types);
     const dirOf = (ctx: string): string => posix.normalize(opts.dirs?.[ctx] ?? opts.dir);
     // the tests of another context: next to these, from its package (`<module>/tests`), or by relative path
@@ -187,6 +189,7 @@ export function generateTests(model: DomainModel, ir: SemanticIR, header: string
                 path: posix.join(dir, `${ctx}.ts`),
                 content: new TestsEmitter(
                     model,
+                    irIndex,
                     ctx,
                     header,
                     (c) => moduleOf(dir, c),
@@ -210,10 +213,10 @@ export function generateTests(model: DomainModel, ir: SemanticIR, header: string
 }
 
 /** Bounds read from the invariants of a domain primitive (`value in 1..999`, `length(value) <= 8`, `matches`). */
-export function hintsOf(invs: readonly InvariantModel[]): Record<string, number | string> {
+export function hintsOf(invs: readonly InvariantModel[], irIndex: ReturnType<typeof exprModelIndex>): Record<string, number | string> {
     const h: Record<string, number | string> = {};
     const num = (e: ExprModel): number | undefined => (e.k === 'int' ? e.value : e.k === 'decimal' ? Number(e.value) : undefined);
-    const isValue = (e: ExprModel): boolean => e.k === 'name' && e.name === 'value';
+    const isValue = (e: ExprModel): boolean => irIndex.get(e)?.symbol?.kind === 'value';
     const isLength = (e: ExprModel): boolean => e.k === 'length' && isValue(e.operand);
     const set = (key: string, v: number | undefined, keep: (a: number, b: number) => number): void => {
         if (v === undefined) return;
@@ -296,6 +299,7 @@ class TestsEmitter {
 
     constructor(
         private readonly model: DomainModel,
+        private readonly irIndex: ReturnType<typeof exprModelIndex>,
         private readonly ctx: string,
         private readonly header: string,
         private readonly moduleOf: (ctx: string) => string,
@@ -448,7 +452,7 @@ class TestsEmitter {
             switch (el.kind) {
                 case 'id':
                 case 'primitive': {
-                    const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base}', ${literal(hintsOf(el.invariants))})), seed)`;
+                    const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base}', ${literal(hintsOf(el.invariants, this.irIndex))})), seed)`;
                     const invs = primitiveInvariants(el);
                     add(el.name, valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined));
                     break;
@@ -600,7 +604,7 @@ class TestsEmitter {
             `...(impl.make.${p.name} ? testing.primitiveCases({`,
             `    type: '${this.ctx}.${p.name}',`,
             `    base: '${p.base}',`,
-            `    hints: ${literal(hintsOf(p.invariants))},`,
+            `    hints: ${literal(hintsOf(p.invariants, this.irIndex))},`,
             `    invariants: [${invs.map((i) => `'${i.name}'`).join(', ')}],`,
             `    declared: [${declared.join(', ')}],`,
             `    check: ${check},`,
