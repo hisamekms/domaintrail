@@ -636,24 +636,44 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
                 return id ? [{ expression: expressionIds.get(fact.expression) ?? '', edge: id, present: true }] : [];
             }),
         }));
+    const aggregates = model.elements
+        .filter((e): e is AggregateDecl => e.kind === 'aggregate')
+        .flatMap((agg) => {
+            const model = typed.elements.find((el): el is AggregateModel => el.kind === 'aggregate' && el.id === agg.id);
+            return model ? [aggregate(agg, model)] : [];
+        });
+    const unspecified = model.elements
+        .filter((e): e is AggregateDecl => e.kind === 'aggregate')
+        .flatMap((agg) => {
+            const typedAggregate = typed.elements.find((element): element is AggregateModel => element.kind === 'aggregate' && element.id === agg.id);
+            return typedAggregate ? unspecifiedFor(agg, typedAggregate) : [];
+        });
+    // `parameter` and `explicitAssignment` remain unused until Phase 2 adds `changes x = expr`.
+    const provenance: SemanticIR['provenance'][number][] = [];
+    for (const aggregate of aggregates) {
+        const choiceOutcomes = new Set(aggregate.choices.flatMap((choice) => choice.outcomes));
+        for (const item of aggregate.outcomes) {
+            const sources = item.from.length ? item.from : [undefined];
+            for (const source of sources) {
+                for (const field of item.carried)
+                    provenance.push({ kind: 'carried', declaration: item.id, field, ...(source ? { source } : {}), site: item.site });
+                for (const fact of unspecified) {
+                    if (fact.declaration !== item.id || fact.source !== source || !fact.field) continue;
+                    provenance.push({ kind: 'unspecified', declaration: item.id, field: fact.field, ...(source ? { source } : {}), site: fact.site });
+                }
+                if (choiceOutcomes.has(item.id))
+                    provenance.push({ kind: 'selectedChoice', declaration: item.id, ...(source ? { source } : {}), site: item.site });
+            }
+        }
+    }
     return {
         version: SEMANTIC_IR_VERSION,
         declarations: declarationsOf(model),
         expressions: roots.map((expr) => expression(expr, 'root', facts, declarationIds, expressionIds)),
         scopes,
-        aggregates: model.elements
-            .filter((e): e is AggregateDecl => e.kind === 'aggregate')
-            .flatMap((agg) => {
-                const model = typed.elements.find((el): el is AggregateModel => el.kind === 'aggregate' && el.id === agg.id);
-                return model ? [aggregate(agg, model)] : [];
-            }),
+        aggregates,
         obligations: obligations(model),
-        unspecified: model.elements
-            .filter((e): e is AggregateDecl => e.kind === 'aggregate')
-            .flatMap((agg) => {
-                const typedAggregate = typed.elements.find((element): element is AggregateModel => element.kind === 'aggregate' && element.id === agg.id);
-                return typedAggregate ? unspecifiedFor(agg, typedAggregate) : [];
-            }),
-        provenance: [],
+        unspecified,
+        provenance,
     };
 }

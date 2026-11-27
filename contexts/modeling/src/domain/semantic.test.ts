@@ -24,6 +24,33 @@ const allExamples = async () => {
 };
 
 describe('Semantic IR', () => {
+    test('projects per-source field and choice provenance', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const provenance = ir.provenance;
+        const confirmedCancel = provenance.filter((fact) => fact.declaration === 'Sales.Order:cancel->Cancelled' && fact.source === 'Sales.Order#Confirmed');
+        expect(confirmedCancel.filter((fact) => fact.field).map(({ kind, field }) => [kind, field])).toEqual([
+            ['carried', 'id'],
+            ['carried', 'items'],
+            ['carried', 'customer'],
+            ['carried', 'note'],
+            ['unspecified', 'reason'],
+        ]);
+        expect(confirmedCancel.some((fact) => fact.field === 'confirmedAt')).toBe(false);
+        expect(provenance.filter((fact) => fact.declaration === 'Sales.Order:place->Draft' && fact.kind === 'unspecified').map((fact) => fact.field)).toEqual([
+            'id',
+            'items',
+            'customer',
+            'note',
+        ]);
+        const choiceAnalysis = await analyzeDomain([
+            {
+                path: 'choice.dt',
+                text: `context ChoiceTest { id ItemId: UUID aggregate Item { id: ItemId state Start state A state B initial Start command choose() { outcome first: Start -> A outcome second: Start -> B } } }`,
+            },
+        ]);
+        expect(buildSemanticIR(choiceAnalysis.sourceModel!, choiceAnalysis.model!).provenance.some((fact) => fact.kind === 'selectedChoice')).toBe(true);
+    });
     test('expression facts sink preserves checker diagnostics on all examples and a representative fixture', async () => {
         const analyses = [
             await analyzeDomain(await allExamples()),
