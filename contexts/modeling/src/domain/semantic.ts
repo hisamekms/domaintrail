@@ -32,9 +32,8 @@ import {
     type Site,
 } from './source-model.js';
 
-export const SEMANTIC_IR_VERSION = 1;
-
 /** @internal Beta Semantic IR; its shape has no compatibility promise before 1.0. */
+export const SEMANTIC_IR_VERSION = 1;
 
 /** Convert a source-model site to the Semantic IR span shape. */
 const span = (site: Site): SemanticSpan => ({
@@ -156,6 +155,7 @@ const outcome = (
     o: OutcomeModel,
     source: OutcomeDecl | undefined,
     at: Site,
+    aggregateId: string,
     ownerId: string = command.id,
     kind?: string,
     frames: { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } = { set: [], carried: [], dropped: [] },
@@ -167,22 +167,23 @@ const outcome = (
     carried: frames.carried.map((field) => field.name),
     dropped: frames.dropped.map((field) => field.name),
     name: o.name,
-    from: o.from.map((s) => stateId(command.id.split(':')[0]!, s)),
-    to: o.to ? stateId(command.id.split(':')[0] ?? command.id, o.to) : '',
-    selectKind: source?.select?.expr
-        ? 'executable'
-        : source?.select?.externalReason
-          ? 'externalCheck'
-          : source?.select?.text
-            ? 'naturalLanguage'
-            : o.select?.kind === 'expression'
-              ? 'executable'
-              : o.select?.kind === 'external'
-                ? 'externalCheck'
-                : o.select?.kind === 'declared'
-                  ? 'naturalLanguage'
-                  : 'absent',
-    ...(source?.select?.expr ? { select: expression(source.select.expr) } : {}),
+    from: o.from.map((s) => stateId(aggregateId, s)),
+    to: o.to ? stateId(aggregateId, o.to) : '',
+    selectKind:
+        o.select?.kind === 'expression'
+            ? 'executable'
+            : o.select?.kind === 'external'
+              ? 'externalCheck'
+              : o.select?.kind === 'declared'
+                ? 'naturalLanguage'
+                : source?.select?.expr
+                  ? 'executable'
+                  : source?.select?.externalReason
+                    ? 'externalCheck'
+                    : source?.select?.text
+                      ? 'naturalLanguage'
+                      : 'absent',
+    ...(o.select?.kind === 'expression' && source?.select?.expr ? { select: expression(source.select.expr) } : {}),
     changes: o.changes,
     site: span(at),
 });
@@ -215,9 +216,10 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
                                     item,
                                     sourceOutcome,
                                     sourceOutcome.at,
+                                    agg.id,
                                     onCaseId(kindId(agg.id, lifecycle.kind), cmd.name),
                                     lifecycle.kind,
-                                    mergeFrames(typed, typedCommand, item, lifecycle.kind),
+                                    outcomeFields(typed, typedCommand, item.from[0], item.to, item, lifecycle.kind),
                                 )
                               : undefined;
                       })
@@ -252,7 +254,16 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
                         const at = source?.at ?? declaration?.transitionsAt[transitionIndex] ?? declaration?.at;
                         return at
                             ? {
-                                  ...outcome(cmd, o, source, at, cmd.id, cmd.kind ?? undefined, mergeFrames(typed, cmd, o, cmd.kind)),
+                                  ...outcome(
+                                      cmd,
+                                      o,
+                                      source,
+                                      at,
+                                      agg.id,
+                                      cmd.id,
+                                      cmd.kind ?? undefined,
+                                      outcomeFields(typed, cmd, o.from[0], o.to, o, cmd.kind),
+                                  ),
                                   id: source ? outcomeId(cmd.id, o.name) : shorthandOutcomeId(cmd.id, o.to || undefined),
                               }
                             : [];
@@ -276,9 +287,10 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
                                       item,
                                       source,
                                       source.at,
+                                      agg.id,
                                       onCaseId(kindId(agg.id, kind.name), cmd.name),
                                       kind.name,
-                                      mergeFrames(typed, typedCommand, item, kind.name),
+                                      outcomeFields(typed, typedCommand, item.from[0], item.to, item, kind.name),
                                   ),
                               ]
                             : [];
@@ -329,17 +341,6 @@ function choicesFor(agg: AggregateDecl, typed: AggregateModel): SemanticChoice[]
         }
     }
     return result;
-}
-
-/** Merge source-specific frames for a multi-source outcome while retaining each field name once. */
-function mergeFrames(agg: AggregateModel, command: CommandModel, outcomeModel: OutcomeModel, kind?: string) {
-    const frames = outcomeModel.from.length
-        ? outcomeModel.from.map((from) => outcomeFields(agg, command, from, outcomeModel.to, outcomeModel, kind))
-        : [outcomeFields(agg, command, undefined, outcomeModel.to, outcomeModel, kind)];
-    const unique = (key: 'set' | 'carried' | 'dropped'): FieldModel[] => [
-        ...new Map(frames.flatMap((frame) => frame[key]).map((field) => [field.name, field])).values(),
-    ];
-    return { set: unique('set'), carried: unique('carried'), dropped: unique('dropped') };
 }
 
 /** Find expression roots represented by the current step-one IR. */
@@ -489,6 +490,7 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
 }
 
 /** Build the versioned semantic projection from the source model, retaining the syntax's exact source spans. */
+/** @internal Beta Semantic IR; its shape has no compatibility promise before 1.0. */
 export function buildSemanticIR(model: SourceModel, typed: DomainModel): SemanticIR {
     return {
         version: SEMANTIC_IR_VERSION,

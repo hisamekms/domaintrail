@@ -168,6 +168,7 @@ context Modeling {
     requirements: SemanticRequirement[0..*]
   }
 
+  /// @internal Beta Semantic IR; its shape has no compatibility promise before 1.0.
   value SemanticIR {
     /// The beta Semantic IR. Versioned independently of the Typed Model; it retains source sites and resolved facts for
     /// formal verification and does not change the Live View payload.

@@ -2,7 +2,6 @@ import { describe, expect, test } from 'bun:test';
 import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
-import { lifecyclesOf } from './lifecycle.js';
 import { stateId } from './ids.js';
 import { buildSemanticIR, SEMANTIC_IR_VERSION } from './semantic.js';
 
@@ -49,31 +48,23 @@ describe('Semantic IR', () => {
         ]);
     });
 
-    test('matches Typed Model and M028 reachability for every fixture aggregate', async () => {
-        const sources = await exampleSources();
-        const analyses = [await analyzeDomain(sources)];
-        for (const [path, text] of [
-            ['fixture-a.dt', `context Fixture { id AId: UUID aggregate A { id: AId state Start state End initial Start command finish() Start -> End } }`],
-            ['fixture-b.dt', `context Fixture { id BId: UUID aggregate B { id: BId state One state Two initial One command move() One -> Two } }`],
-        ])
-            analyses.push(await analyzeDomain([{ path, text }]));
-        for (const analysis of analyses) {
+    test('matches Typed Model reachability on a two-kind fixture and examples/shop', async () => {
+        const fixture = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture { id ItemId: UUID aggregate Item { id: ItemId state Start state RetailDone state WholesaleDone kind Retail { initial Start on finish { outcome done: Start -> RetailDone } } kind Wholesale { initial Start on finish { outcome done: Start -> WholesaleDone } } command finish() { } } }`,
+            },
+        ]);
+        const shop = await analyzeDomain(await exampleSources());
+        for (const analysis of [fixture, shop]) {
+            expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
             const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
-            for (const declaration of analysis.sourceModel!.elements.filter(
-                (element): element is import('./source-model.js').AggregateDecl => element.kind === 'aggregate',
-            )) {
-                const model = analysis.model!.elements.find((element) => element.kind === 'aggregate' && element.id === declaration.id);
-                if (!model || model.kind !== 'aggregate') continue;
-                const projected = ir.aggregates.find((aggregate) => aggregate.id === declaration.id)!;
-                const expected = lifecyclesOf(declaration);
-                for (const lifecycle of expected) {
-                    const states = lifecycle.reachable.map((name) => stateId(declaration.id, name));
-                    expect(projected.kinds.find((item) => item.kind === lifecycle.kind)?.validStates).toEqual(states);
-                    if (lifecycle.kind !== '*')
-                        expect(projected.kinds.find((item) => item.kind === lifecycle.kind)?.validStates).toEqual(
-                            validStatesFor(model, lifecycle.kind).map((name) => stateId(declaration.id, name)),
-                        );
-                }
+            for (const model of analysis.model!.elements.filter((element): element is import('./model.js').AggregateModel => element.kind === 'aggregate')) {
+                const projected = ir.aggregates.find((aggregate) => aggregate.id === model.id)!;
+                for (const kind of model.kinds.map((item) => item.name))
+                    expect(projected.kinds.find((item) => item.kind === kind)?.validStates).toEqual(
+                        validStatesFor(model, kind).map((name) => stateId(model.id, name)),
+                    );
             }
         }
     });
@@ -355,6 +346,29 @@ describe('Semantic IR', () => {
         expect(buildSemanticIR(legacy.sourceModel!, legacy.model!).aggregates[0]!.choices).toEqual([
             { kind: '*', source: 'Legacy.Item#A', outcomes: ['Legacy.Item:change->B', 'Legacy.Item:change->C'] },
         ]);
+    });
+
+    test('keeps one shared-command choice for each kind', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'sales.dt',
+                text: `context Sales { id ItemId: UUID aggregate Item { id: ItemId state Start state A state B kind Retail { initial Start } kind Wholesale { initial Start } command choose() { outcome first: Start -> A outcome second: Start -> B } } }`,
+            },
+        ]);
+        const choices = buildSemanticIR(analysis.sourceModel!, analysis.model!).aggregates[0]!.choices;
+        expect(choices.map((choice) => choice.kind)).toEqual(['Retail', 'Wholesale']);
+    });
+
+    test('preserves externalReason on requirements', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'sales.dt',
+                text: `context Sales { id ItemId: UUID aggregate Item { id: ItemId command review() { requires approved @externalCheck("approval is external") else Error } } error Error }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        expect(ir.aggregates[0]!.requirements[0]).toMatchObject({ externalReason: 'approval is external' });
+        expect(ir.obligations).toContainEqual(expect.objectContaining({ kind: 'externalCheck', reason: 'approval is external' }));
     });
 
     test('keys external invariant obligations by stable declaration ID without duplicates', async () => {

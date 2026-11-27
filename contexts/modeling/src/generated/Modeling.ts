@@ -1388,7 +1388,10 @@ export function equalSemanticAggregate(a: SemanticAggregate, b: SemanticAggregat
     return a.id === b.id && sameList(a.initialStates, b.initialStates, ($184: string, $185: string) => $184 === $185) && sameList(a.validStates, b.validStates, ($186: string, $187: string) => $186 === $187) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
 }
 
-/** @see contexts/modeling/model/semantic.dt:171 */
+/**
+ * @internal Beta Semantic IR; its shape has no compatibility promise before 1.0.
+ * @see contexts/modeling/model/semantic.dt:172
+ */
 export interface SemanticIR {
     /** The beta Semantic IR. Versioned independently of the Typed Model; it retains source sites and resolved facts for formal verification and does not change the Live View payload. */
     readonly version: number;
@@ -1403,7 +1406,7 @@ export interface SemanticIR {
 
 /**
  * Whether two SemanticIR values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:171
+ * @see contexts/modeling/model/semantic.dt:172
  */
 export function equalSemanticIR(a: SemanticIR, b: SemanticIR): boolean {
     return a.version === b.version && sameList(a.declarations, b.declarations, equalSemanticDeclaration) && sameList(a.expressions, b.expressions, equalSemanticExpression) && sameList(a.scopes, b.scopes, equalSemanticScopeFact) && sameList(a.aggregates, b.aggregates, equalSemanticAggregate) && sameList(a.obligations, b.obligations, equalSemanticObligation) && sameList(a.unspecified, b.unspecified, equalSemanticUnspecified) && sameList(a.provenance, b.provenance, equalSemanticProvenance);
