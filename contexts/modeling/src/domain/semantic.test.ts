@@ -325,7 +325,7 @@ describe('Semantic IR', () => {
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
-        expect(nodes.find((node) => node.source.includes('INTERNAL_USER'))?.symbol).toEqual({
+        expect(nodes.find((node) => node.source === 'Actor.INTERNAL_USER')?.symbol).toEqual({
             id: 'Shop.Actor|INTERNAL_USER',
             kind: 'unionTag',
             name: 'INTERNAL_USER',

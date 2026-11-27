@@ -450,7 +450,7 @@ export class ExprCompiler {
             case 'unionType':
                 // The IR records which enum value or union tag was resolved at this source location.
                 if (this.env.ir && symbol) {
-                    if (symbol.kind === 'enumValue') return { js: quote(m), ty: { k: 'enum' } };
+                    if (symbol.kind === 'enumValue' || symbol.kind === 'unionTag') return { js: quote(m), ty: { k: 'enum' } };
                     throw new Error(`no enum value or union tag '${m}'`);
                 }
                 return { js: quote(m), ty: { k: 'enum' } };
