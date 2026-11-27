@@ -11,7 +11,8 @@ import { checkDescriptions } from '../domain/rules/descriptions.js';
 import { checkEventIds } from '../domain/rules/events.js';
 import { checkFieldSets } from '../domain/rules/field-sets.js';
 import { checkIdioms } from '../domain/rules/idioms.js';
-import { checkInvariants } from '../domain/rules/expressions.js';
+import { checkInvariants, type ExpressionFact } from '../domain/rules/expressions.js';
+import type { Expr } from '../domain/source-model.js';
 import { checkKinds } from '../domain/rules/kinds.js';
 import { checkLifecycles } from '../domain/rules/lifecycles.js';
 import { checkLabels } from '../domain/rules/labels.js';
@@ -43,6 +44,8 @@ export interface DomainAnalysis {
      * rules and the generator's name check read. Present whenever the `.dt` sources parse.
      */
     sourceModel?: SourceModel;
+    /** @internal Facts collected by Modeling’s invariant checker for beta semantic IR construction. */
+    expressionFacts: Map<Expr, ExpressionFact>;
     /** The path handed in for a document's URI, for the checks that report on the documents afterwards. */
     resolveFile: FileResolver;
 }
@@ -57,6 +60,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
     // Modeling's rules read the model as written and report after the syntax and the links, in this order (the
     // diagnostics keep it where `compareDiagnostics` sees no difference)
     const sourceModel = syntaxOk ? buildSourceModel(index, resolveFile) : undefined;
+    const expressionFacts = new Map<Expr, ExpressionFact>();
     if (sourceModel) {
         const rules = new RuleSink(diagnostics);
         checkNames(sourceModel, rules);
@@ -75,7 +79,22 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkPayloadNames(sourceModel, rules);
         checkPolicies(sourceModel, rules);
         checkIdioms(sourceModel, rules);
-        checkInvariants(sourceModel, rules);
+        checkInvariants(sourceModel, rules, (fact) => {
+            const earlier = expressionFacts.get(fact.expression);
+            expressionFacts.set(
+                fact.expression,
+                earlier
+                    ? {
+                          expression: fact.expression,
+                          type: fact.type ?? earlier.type,
+                          comparison: fact.comparison ?? earlier.comparison,
+                          symbol: fact.symbol ?? earlier.symbol,
+                          paths: fact.paths ?? earlier.paths,
+                          scope: fact.scope ?? earlier.scope,
+                      }
+                    : fact,
+            );
+        });
         checkLabels(sourceModel, rules);
     }
 
@@ -89,6 +108,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         syntaxOk,
         model,
         sourceModel,
+        expressionFacts,
         resolveFile,
     };
 }

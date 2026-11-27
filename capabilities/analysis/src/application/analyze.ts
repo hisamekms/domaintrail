@@ -30,6 +30,8 @@ export interface Analysis {
     sourceModel?: DomainAnalysis['sourceModel'];
     /** The `.dtes` sources (ADR 0024), checked against `model`. */
     stormings: StormingAnalysis;
+    /** @internal Facts collected by Modeling for beta semantic IR construction. */
+    expressionFacts: DomainAnalysis['expressionFacts'];
 }
 
 /**
@@ -52,6 +54,7 @@ export async function analyze(allSources: readonly SourceFile[]): Promise<Analys
         ok: domain.syntaxOk && !hasErrors(diagnostics),
         model: domain.model,
         sourceModel: domain.sourceModel,
+        expressionFacts: domain.expressionFacts,
         stormings,
     };
 }
