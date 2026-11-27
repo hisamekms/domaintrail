@@ -41,6 +41,29 @@ const BASE = `
 `;
 
 describe('kind-specific lifecycle', () => {
+    test('keeps M028 create reachability unchanged when there are no declared initials', async () => {
+        const a = await checkSales(`id ItemId: UUID aggregate Item {
+          id: ItemId state Draft state Done
+          create command open(id: ItemId) { outcome made: -> Draft }
+          command finish() { outcome finished: Draft -> Done }
+        }`);
+        expect(a.diagnostics.filter((d) => d.code === 'M028').map((d) => d.message)).toEqual([
+            "Lifecycle kind '*' of 'Item' has no initial state.",
+            "Create outcome 'made' must end at an initial state for kind '*'.",
+            "Source state 'Draft' of outcome 'finished' is unreachable for kind '*'.",
+        ]);
+    });
+
+    test('a factory target does not replace a declared initial for M028', async () => {
+        const a = await checkSales(`id ItemId: UUID aggregate Item {
+          id: ItemId state Draft state Done initial Draft
+          create command open(id: ItemId) { outcome made: -> Done }
+        }`);
+        expect(a.diagnostics.filter((d) => d.code === 'M028').map((d) => d.message)).toEqual([
+            "Create outcome 'made' must end at an initial state for kind '*'.",
+        ]);
+    });
+
     test('keeps a stateless create command in the legacy command model', async () => {
         const a = await checkSales('id TokenId: UUID aggregate Token { id: TokenId create command make(id: TokenId) }');
         expect(codes(a)).toEqual([]);

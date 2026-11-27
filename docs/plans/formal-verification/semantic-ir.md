@@ -1,7 +1,6 @@
 # Semantic IR: design
 
-Phase 1 adds a resolved semantic representation between model analysis and generation. The IR is built in Modeling's
-`domain` from the SourceModel, not from the Typed Model. That keeps precise source spans while semantic checking runs.
+Phase 1 adds a resolved semantic representation between model analysis and generation. The IR builder takes both the SourceModel and Typed Model. It takes semantic facts from Typed Model helpers and joins them to SourceModel spans by stable ID. That keeps precise source spans while semantic checking runs.
 The SourceModel is explicitly built from syntax and retains sites and duplicate declarations
 ([source-model.ts](../../../contexts/modeling/src/domain/source-model.ts#L1-L18)); each `Site` has a start and end
 position ([source-model.ts](../../../contexts/modeling/src/domain/source-model.ts#L19-L24)). The Typed Model is instead
@@ -127,7 +126,7 @@ mapping in infrastructure, semantic interpretation in Modeling domain, and publi
 
 Migration steps and regressions:
 
-1. Capture current behavior with existing baselines: byte snapshots for every generated `dt generate ts` file for
+1. Step 1 declares IR types, stable IDs, and declaration-level facts. Expression-level facts (resolved symbols and static types, comparison kinds, presence and scope facts, and provenance) remain empty until step 2. Capture current behavior with existing baselines: byte snapshots for every generated `dt generate ts` file for
    `examples/shop` ([generate-contract.test.ts](../../../test/generate-contract.test.ts#L1-L7),
    [snapshot](../../../test/__snapshots__/generate-contract.test.ts.snap#L1-L5)), Live View contract hashes
    ([live-contract.test.ts](../../../test/live-contract.test.ts#L1-L12)), and checker text/JSON snapshots
@@ -141,6 +140,8 @@ Migration steps and regressions:
 3. Port TypeScript generation to consume IR references, types, equality, narrowing, applicability, and finite-cycle
    facts; then delete duplicate generator logic listed above. Regression: generated file set and contents match the
    version-masked baseline, and the self-hosted generated output has no diff.
+   Known duplicate: `lifecyclesOf` differs from Typed Model `validStatesFor` for multi-target transitions and kinds
+   without creation (both models carry M028/M030 errors); unify this when the generator moves to the IR.
 4. Port contract-test generation to IR dependencies and recursion facts. Regression: all generated test files match the
    captured baseline and the checker contract remains unchanged.
 5. Add the TLA+ capability and adapters, trace metadata, and architecture-map entry (Phase 4; Phase 1 ends at step 4).

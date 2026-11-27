@@ -1,5 +1,6 @@
 import type { RuleSink } from '../diagnostics.js';
 import { checkChangedPath } from './commands.js';
+import { lifecyclesOf } from '../lifecycle.js';
 import {
     commandsOf,
     commonFields,
@@ -8,7 +9,6 @@ import {
     statesOf,
     type CommandCaseDecl,
     type CommandDecl,
-    type InitialMemberDecl,
     type KindDecl,
     type OutcomeDecl,
     type SourceModel,
@@ -147,39 +147,14 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
             for (const { o, kind } of all) checkOutcome(cmd, o, kind);
         }
 
-        const commonInitials = agg.members.filter((m): m is InitialMemberDecl => m.kind === 'initial').map((m) => m.state.text);
-        const kindInitials = (k: KindDecl): string[] => k.members.filter((m): m is InitialMemberDecl => m.kind === 'initial').map((m) => m.state.text);
         const applicable = (cmd: CommandDecl, kind: KindDecl | undefined): OutcomeDecl[] =>
             cmd.ofKind && cmd.ofKind !== kind?.name ? [] : [...cmd.outcomes, ...casesOf(kind, cmd).flatMap((c) => c.outcomes)];
-        const legacyTargets = (cmd: CommandDecl, kind: KindDecl | undefined): string[] =>
-            cmd.ofKind && cmd.ofKind !== kind?.name ? [] : cmd.transitions.flatMap((t) => t.to.map((r) => r.text));
-        if (!stateNames.size && kinds.length) continue; // kinds without a lifecycle: nothing to reach
-
-        for (const kind of kinds.length ? kinds : [undefined]) {
-            const label = kind?.name ?? '*';
-            // with kinds, a kind starts where its create commands end (ADR 0037); without, where `initial` says
-            const created = kind
-                ? commands.filter((c) => c.factory).flatMap((c) => [...applicable(c, kind).map((o) => o.to.text), ...legacyTargets(c, kind)])
-                : [];
-            const initial = new Set([...commonInitials, ...(kind ? kindInitials(kind) : []), ...created]);
+        for (const lifecycle of lifecyclesOf(agg)) {
+            const { kind: label } = lifecycle;
+            const kind = kinds.find((k) => k.name === lifecycle.kind);
+            const initial = new Set(lifecycle.initial);
+            const reachable = new Set(lifecycle.reachableFromInitial);
             if (!initial.size && !kind) rules.error('M028', `Lifecycle kind '${label}' of '${agg.name}' has no initial state.`, agg.nameAt);
-            const reachable = new Set(initial);
-            let changed = true;
-            while (changed) {
-                changed = false;
-                for (const cmd of commands.filter((c) => !c.factory && (!c.ofKind || c.ofKind === kind?.name))) {
-                    for (const t of cmd.transitions.filter((t) => t.to.length === 1))
-                        if (t.from.some((f) => reachable.has(f.text)) && !reachable.has(t.to[0]!.text)) {
-                            reachable.add(t.to[0]!.text);
-                            changed = true;
-                        }
-                    for (const o of applicable(cmd, kind))
-                        if (o.from.some((f) => reachable.has(f.text)) && !reachable.has(o.to.text)) {
-                            reachable.add(o.to.text);
-                            changed = true;
-                        }
-                }
-            }
             for (const cmd of commands.filter((c) => !mixed.has(c))) {
                 const outcomes = applicable(cmd, kind);
                 for (const o of outcomes) {
