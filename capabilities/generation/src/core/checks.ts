@@ -143,6 +143,12 @@ export const requiresName = (commandType: string): string => `check${commandType
 export const requiresWithName = (commandType: string): string => `check${commandType}RequiresWith`;
 export const declaredRequiresName = (commandType: string): string => `${commandType}DeclaredRequires`;
 
+/** Test-only count of expression nodes compiled without a corresponding Semantic IR expression. */
+export let irMisses = 0;
+export const resetIrMisses = (): void => {
+    irMisses = 0;
+};
+
 /** Whether an element's or state's invariants include one without an expression (a slot). */
 export const hasDeclared = (invs: readonly { readonly expr?: ExprModel }[]): boolean => invs.some((i) => !i.expr);
 
@@ -155,6 +161,8 @@ const UUID_INVARIANT: InvariantModel = {
     source: 'the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version',
     expr: { k: 'matches', operand: { k: 'name', name: 'value' }, pattern: UUID_PATTERN },
 };
+
+const syntheticUuidExpressions = new Set<ExprModel>([UUID_INVARIANT.expr!, ...(UUID_INVARIANT.expr!.k === 'matches' ? [UUID_INVARIANT.expr!.operand] : [])]);
 
 /**
  * The invariants that the constructor of an ID or domain primitive checks: on a `UUID` base, the generated `'uuid'`
@@ -314,7 +322,7 @@ export class ExprCompiler {
     }
 
     compile(e: ExprModel, scope: Scope): Binding {
-        this.irNode(e);
+        if (this.env.ir && !this.irNode(e) && !syntheticUuidExpressions.has(e)) irMisses++;
         const bool = (js: string): Binding => ({ js, ty: { k: 'prim', name: 'Bool' } });
         /** `(js)`; `loose` when `js` is a `||` at the top. */
         const wrapped = (js: string, loose = false): Binding => ({ ...bool(`(${js})`), wrapped: true, inner: js, tight: !loose });
@@ -441,12 +449,16 @@ export class ExprCompiler {
             case 'enumType':
             case 'unionType':
                 // The IR records which enum value or union tag was resolved at this source location.
-                if (symbol?.kind === 'enumValue' || symbol?.kind === 'type') return { js: quote(m), ty: { k: 'enum' } };
+                if (this.env.ir && symbol) {
+                    if (symbol.kind === 'enumValue') return { js: quote(m), ty: { k: 'enum' } };
+                    throw new Error(`no enum value or union tag '${m}'`);
+                }
                 return { js: quote(m), ty: { k: 'enum' } };
             case 'union':
                 return { js: `${r.js}.${m}`, ty: { k: 'enum' } }; // only the discriminator is accessible (M009)
             case 'struct': {
-                const f = t.el.fields.find((x) => x.name === m && (!symbol || symbol.kind !== 'field' || symbol.id === `${t.el.id}.${x.name}`));
+                const fieldId = symbol?.kind === 'field' ? symbol.id.split('.').at(-1) : undefined;
+                const f = t.el.fields.find((x) => x.name === (fieldId ?? m));
                 if (!f) throw new Error(`'${t.el.name}' has no field '${m}'`);
                 return { js: `${r.js}.${m}`, ty: fieldTy(this.env.model, f) };
             }
