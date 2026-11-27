@@ -126,7 +126,7 @@ mapping in infrastructure, semantic interpretation in Modeling domain, and publi
 
 Migration steps and regressions:
 
-1. Step 1 declares IR types, stable IDs, and declaration-level facts. Expression-level facts (resolved symbols and static types, comparison kinds, presence and scope facts, and provenance) remain empty until step 2. Capture current behavior with existing baselines: byte snapshots for every generated `dt generate ts` file for
+1. Step 1 declares IR types, stable IDs, and declaration-level facts. Capture current behavior with existing baselines: byte snapshots for every generated `dt generate ts` file for
    `examples/shop` ([generate-contract.test.ts](../../../test/generate-contract.test.ts#L1-L7),
    [snapshot](../../../test/__snapshots__/generate-contract.test.ts.snap#L1-L5)), Live View contract hashes
    ([live-contract.test.ts](../../../test/live-contract.test.ts#L1-L12)), and checker text/JSON snapshots
@@ -135,9 +135,11 @@ Migration steps and regressions:
    regenerate
    and diff
    committed self-hosted `src/generated` models. Add fixtures only where existing coverage has a gap.
-2. Move checker logic into the IR builder. Regression: checker text and JSON snapshots stay stable, including source
-   ranges; existing generated snapshots and hashes still match.
+2. Move checker logic into the IR builder. This step delivers resolved symbols and static types, comparison kinds,
+   presence and scope facts, and outcome-field provenance from typed frames. Regression: checker text and JSON snapshots
+   stay stable, including source ranges; existing generated snapshots and hashes still match.
 3. Port TypeScript generation to consume IR references, types, equality, narrowing, applicability, and finite-cycle
+   facts; delete the generator's duplicate logic listed above.
    facts; then delete duplicate generator logic listed above. Regression: generated file set and contents match the
    version-masked baseline, and the self-hosted generated output has no diff.
    Known duplicate: `lifecyclesOf` differs from Typed Model `validStatesFor` for multi-target transitions and kinds
