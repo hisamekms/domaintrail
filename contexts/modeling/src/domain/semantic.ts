@@ -564,6 +564,19 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
     return result;
 }
 
+/** Merges two facts about one expression; a field left undefined in the later fact keeps the earlier value. */
+const mergeFacts = (earlier: ExpressionFact | undefined, later: ExpressionFact): ExpressionFact =>
+    earlier
+        ? {
+              expression: later.expression,
+              type: later.type,
+              comparison: later.comparison ?? earlier.comparison,
+              symbol: later.symbol ?? earlier.symbol,
+              presence: later.presence ?? earlier.presence,
+              scope: later.scope ?? earlier.scope,
+          }
+        : later;
+
 /** Build the versioned beta semantic projection from the source model, retaining exact syntax spans. */
 export function buildSemanticIR(model: SourceModel, typed: DomainModel): SemanticIR {
     const declarationIds = new Map<object, string>();
@@ -634,7 +647,9 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
         }
     }
     const facts = new Map<Expr, ExpressionFact>();
-    checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, fact));
+    // The checker may report several facts for one expression (its type, then its scope as a root): merge them, so a
+    // later fact never drops what an earlier one recorded.
+    checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, mergeFacts(facts.get(fact.expression), fact)));
     const scopes: SemanticScopeFact[] = [...facts.values()]
         .filter((fact) => fact.scope || fact.presence?.length)
         .map((fact) => ({

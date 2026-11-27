@@ -612,4 +612,88 @@ describe('Semantic IR', () => {
         expect(ids).toContain('Sales.Order/Retail:on:finish->completed');
         expect(ir.aggregates[0]?.requirements[0]?.error).toBe('Sales.EmptyOrder');
     });
+
+    test('projects the exact scope of a state invariant', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const scope = ir.scopes.find((fact) => fact.owner === 'Sales.Order#Confirmed' && fact.fields.some((field) => field.name === 'items'))!;
+        expect(scope).toEqual({
+            site: scope.site,
+            owner: 'Sales.Order#Confirmed',
+            fields: [{ id: 'Sales.Order.items', kind: 'field', name: 'items' }],
+            parameters: [],
+            lambdas: [],
+            sourceStates: ['Sales.Order#Confirmed'],
+            presence: [],
+        });
+    });
+
+    test('projects the exact scope and lambda binding of a command requirement', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        const lambda = nodes.find((expression) => expression.symbol?.kind === 'lambda' && expression.symbol.name === 'i')!;
+        const scope = ir.scopes.find((fact) => fact.command === 'Sales.Order:addItem(item)')!;
+        expect(scope).toEqual({
+            site: scope.site,
+            owner: 'Sales.Order',
+            command: 'Sales.Order:addItem(item)',
+            fields: [{ id: 'Sales.Order.items', kind: 'field', name: 'items' }],
+            parameters: [{ id: 'Sales.Order:addItem(item).item', kind: 'parameter', name: 'item' }],
+            lambdas: [{ id: lambda.id, kind: 'lambda', name: 'i' }],
+            sourceStates: [],
+            presence: [],
+        });
+    });
+
+    test('projects the exact scope of an on-case requirement', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'scope.dt',
+                text: `context Sales { id OrderId: UUID error Unavailable aggregate Order { id: OrderId state Ready state Done kind Retail { initial Ready dockCount: Int on ship { requires available { dockCount > 0 } else Unavailable outcome shipped: Ready -> Done } } command ship() } }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const scope = ir.scopes.find((fact) => fact.onCase === 'Sales.Order/Retail:on:ship')!;
+        expect(scope).toEqual({
+            site: scope.site,
+            owner: 'Sales.Order/Retail',
+            command: 'Sales.Order:ship()',
+            onCase: 'Sales.Order/Retail:on:ship',
+            kind: 'Sales.Order/Retail',
+            fields: [{ id: 'Sales.Order/Retail.dockCount', kind: 'field', name: 'dockCount' }],
+            parameters: [],
+            lambdas: [],
+            sourceStates: [],
+            presence: [],
+        });
+    });
+
+    test('projects the exact scope of an outcome select', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'scope.dt',
+                text: `context Sales { id OrderId: UUID aggregate Order { id: OrderId state Ready state Done initial Ready command ship() { outcome shipped: Ready -> Done select { true } } } }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const scope = ir.scopes.find((fact) => fact.targetOutcome === 'Sales.Order:ship()->shipped')!;
+        expect(scope).toEqual({
+            site: scope.site,
+            owner: 'Sales.Order',
+            command: 'Sales.Order:ship()',
+            targetOutcome: 'Sales.Order:ship()->shipped',
+            fields: [],
+            parameters: [],
+            lambdas: [],
+            sourceStates: ['Sales.Order#Ready'],
+            presence: [],
+        });
+    });
 });
