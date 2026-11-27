@@ -33,6 +33,7 @@ export {
     kindOf,
     kindsOf,
     outcomeFields,
+    outcomesOfCommand,
     outcomePatternText,
     ownFields,
     policiesReactingTo,

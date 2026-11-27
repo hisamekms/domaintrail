@@ -29,6 +29,7 @@ import {
     emittedEventsInAggregate,
     kindCase,
     outcomeFields,
+    outcomesOfCommand,
     ownFields,
     validStatesFor,
 } from '@domaintrail/modeling';
@@ -1543,7 +1544,6 @@ class ContextEmitter {
                       .join(' | ')
                 : whole;
         const transitions = stateful ? c.transitions : [];
-        // TODO(step 3): use outcomesOfCommand from contexts/modeling/src/domain/model.ts.
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
         // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
         // its state, looked up in an object keyed by the source states.
@@ -1555,8 +1555,15 @@ class ContextEmitter {
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
         // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name; the
         // contract holds the aggregate, the decision what to `set`
+        const expandedOutcomes = outcomesOfCommand(c, stateful || agg.kinds.length > 0);
         const outcomes = (from: string | undefined, targets: readonly string[], decision: boolean): Outcome[] =>
-            (stateful ? unique(targets) : [undefined]).map((to) => ({
+            (stateful
+                ? expandedOutcomes
+                      .filter((o) => (o.from[0] || undefined) === from && targets.includes(o.to))
+                      .map((o) => o.to)
+                      .filter((to, i, all) => all.indexOf(to) === i)
+                : [undefined]
+            ).map((to) => ({
                 key: to ?? agg.name,
                 first: decision
                     ? `set: ${c.factory && c.kind ? `{ readonly ${KIND_TAG}: '${c.kind}' } & ` : ''}${this.setType(outcomeFields(agg, c, from, to).set)}`
