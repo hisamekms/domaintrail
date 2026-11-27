@@ -33,6 +33,7 @@ context Modeling {
     entityId
     valueObjectStructural
     unionStructural
+    ordered
     enumValue
     notComparable
   }
@@ -75,20 +76,22 @@ context Modeling {
 
   value SemanticPresenceFact {
     expression: String
-    edge: String
-    present: Bool
+    path: String
   }
 
   value SemanticScopeFact {
+    // Fields and parameters are every name visible in the root's scope.
+    expression: String
     site: SemanticSpan
     owner: String
+    command: String?
+    onCase: String?
     fields: SemanticSymbol[0..*]
     parameters: SemanticSymbol[0..*]
     lambdas: SemanticSymbol[0..*]
     sourceStates: String[0..*]
     targetOutcome: String?
     kind: String?
-    presence: SemanticPresenceFact[0..*]
   }
 
   value SemanticDeclaration {
@@ -177,6 +180,7 @@ context Modeling {
     declarations: SemanticDeclaration[0..*]
     expressions: SemanticExpression[0..*]
     scopes: SemanticScopeFact[0..*]
+    presence: SemanticPresenceFact[0..*]
     aggregates: SemanticAggregate[0..*]
     obligations: SemanticObligation[0..*]
     unspecified: SemanticUnspecified[0..*]

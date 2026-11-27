@@ -1110,21 +1110,21 @@ export type SemanticSymbolKind = 'field' | 'parameter' | 'lambda' | 'state' | 'k
 export type SemanticCardinality = 'one' | 'optional' | 'many' | 'nonEmpty';
 
 /** @see contexts/modeling/model/semantic.dt:30 */
-export type SemanticComparisonKind = 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'enumValue' | 'notComparable';
-
-/** @see contexts/modeling/model/semantic.dt:39 */
-export type SemanticObligationKind = 'externalCheck' | 'naturalLanguage';
+export type SemanticComparisonKind = 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
 
 /** @see contexts/modeling/model/semantic.dt:40 */
-export type SemanticUnspecifiedKind = 'createField' | 'targetOnlyField' | 'changesWithoutExpression' | 'expressionFreeRequirement';
+export type SemanticObligationKind = 'externalCheck' | 'naturalLanguage';
 
 /** @see contexts/modeling/model/semantic.dt:41 */
-export type SemanticProvenanceKind = 'parameter' | 'explicitAssignment' | 'carried' | 'unspecified' | 'selectedChoice';
+export type SemanticUnspecifiedKind = 'createField' | 'targetOnlyField' | 'changesWithoutExpression' | 'expressionFreeRequirement';
 
 /** @see contexts/modeling/model/semantic.dt:42 */
+export type SemanticProvenanceKind = 'parameter' | 'explicitAssignment' | 'carried' | 'unspecified' | 'selectedChoice';
+
+/** @see contexts/modeling/model/semantic.dt:43 */
 export type SemanticSelectKind = 'executable' | 'naturalLanguage' | 'externalCheck' | 'absent';
 
-/** @see contexts/modeling/model/semantic.dt:44 */
+/** @see contexts/modeling/model/semantic.dt:45 */
 export interface SemanticSpan {
     readonly file: string;
     readonly startLine: number;
@@ -1135,13 +1135,13 @@ export interface SemanticSpan {
 
 /**
  * Whether two SemanticSpan values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:44
+ * @see contexts/modeling/model/semantic.dt:45
  */
 export function equalSemanticSpan(a: SemanticSpan, b: SemanticSpan): boolean {
     return a.file === b.file && a.startLine === b.startLine && a.startColumn === b.startColumn && a.endLine === b.endLine && a.endColumn === b.endColumn;
 }
 
-/** @see contexts/modeling/model/semantic.dt:52 */
+/** @see contexts/modeling/model/semantic.dt:53 */
 export interface SemanticType {
     readonly name: string;
     readonly cardinality: SemanticCardinality;
@@ -1149,13 +1149,13 @@ export interface SemanticType {
 
 /**
  * Whether two SemanticType values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:52
+ * @see contexts/modeling/model/semantic.dt:53
  */
 export function equalSemanticType(a: SemanticType, b: SemanticType): boolean {
     return a.name === b.name && a.cardinality === b.cardinality;
 }
 
-/** @see contexts/modeling/model/semantic.dt:57 */
+/** @see contexts/modeling/model/semantic.dt:58 */
 export interface SemanticSymbol {
     readonly id: string;
     readonly kind: SemanticSymbolKind;
@@ -1164,7 +1164,7 @@ export interface SemanticSymbol {
 
 /**
  * Whether two SemanticSymbol values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:57
+ * @see contexts/modeling/model/semantic.dt:58
  */
 export function equalSemanticSymbol(a: SemanticSymbol, b: SemanticSymbol): boolean {
     return a.id === b.id && a.kind === b.kind && a.name === b.name;
@@ -1172,7 +1172,7 @@ export function equalSemanticSymbol(a: SemanticSymbol, b: SemanticSymbol): boole
 
 /**
  * A syntax expression node augmented with source identity, resolved symbol and checked static type when available.
- * @see contexts/modeling/model/semantic.dt:64
+ * @see contexts/modeling/model/semantic.dt:65
  */
 export interface SemanticExpression {
     readonly id: string;
@@ -1188,38 +1188,39 @@ export interface SemanticExpression {
 
 /**
  * Whether two SemanticExpression values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:64
+ * @see contexts/modeling/model/semantic.dt:65
  */
 export function equalSemanticExpression(a: SemanticExpression, b: SemanticExpression): boolean {
     return a.id === b.id && a.owner === b.owner && equalSemanticSpan(a.site, b.site) && a.syntaxKind === b.syntaxKind && a.source === b.source && sameOptional(a.symbol, b.symbol, equalSemanticSymbol) && sameOptional(a.type, b.type, equalSemanticType) && sameList(a.children, b.children, equalSemanticExpression) && sameOptional(a.comparison, b.comparison, ($150: string, $151: string) => $150 === $151);
 }
 
-/** @see contexts/modeling/model/semantic.dt:76 */
+/** @see contexts/modeling/model/semantic.dt:77 */
 export interface SemanticPresenceFact {
     readonly expression: string;
-    readonly edge: string;
-    readonly present: boolean;
+    readonly path: string;
 }
 
 /**
  * Whether two SemanticPresenceFact values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:76
+ * @see contexts/modeling/model/semantic.dt:77
  */
 export function equalSemanticPresenceFact(a: SemanticPresenceFact, b: SemanticPresenceFact): boolean {
-    return a.expression === b.expression && a.edge === b.edge && a.present === b.present;
+    return a.expression === b.expression && a.path === b.path;
 }
 
 /** @see contexts/modeling/model/semantic.dt:82 */
 export interface SemanticScopeFact {
+    readonly expression: string;
     readonly site: SemanticSpan;
     readonly owner: string;
+    readonly command?: string;
+    readonly onCase?: string;
     readonly fields: readonly SemanticSymbol[];
     readonly parameters: readonly SemanticSymbol[];
     readonly lambdas: readonly SemanticSymbol[];
     readonly sourceStates: readonly string[];
     readonly targetOutcome?: string;
     readonly kind?: string;
-    readonly presence: readonly SemanticPresenceFact[];
 }
 
 /**
@@ -1227,10 +1228,10 @@ export interface SemanticScopeFact {
  * @see contexts/modeling/model/semantic.dt:82
  */
 export function equalSemanticScopeFact(a: SemanticScopeFact, b: SemanticScopeFact): boolean {
-    return equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($152: string, $153: string) => $152 === $153) && sameOptional(a.targetOutcome, b.targetOutcome, ($154: string, $155: string) => $154 === $155) && sameOptional(a.kind, b.kind, ($156: string, $157: string) => $156 === $157) && sameList(a.presence, b.presence, equalSemanticPresenceFact);
+    return a.expression === b.expression && equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($152: string, $153: string) => $152 === $153) && sameOptional(a.onCase, b.onCase, ($154: string, $155: string) => $154 === $155) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($156: string, $157: string) => $156 === $157) && sameOptional(a.targetOutcome, b.targetOutcome, ($158: string, $159: string) => $158 === $159) && sameOptional(a.kind, b.kind, ($160: string, $161: string) => $160 === $161);
 }
 
-/** @see contexts/modeling/model/semantic.dt:94 */
+/** @see contexts/modeling/model/semantic.dt:97 */
 export interface SemanticDeclaration {
     readonly id: string;
     readonly kind: SemanticDeclarationKind;
@@ -1240,13 +1241,13 @@ export interface SemanticDeclaration {
 
 /**
  * Whether two SemanticDeclaration values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:94
+ * @see contexts/modeling/model/semantic.dt:97
  */
 export function equalSemanticDeclaration(a: SemanticDeclaration, b: SemanticDeclaration): boolean {
     return a.id === b.id && a.kind === b.kind && a.name === b.name && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:101 */
+/** @see contexts/modeling/model/semantic.dt:104 */
 export interface SemanticObligation {
     readonly kind: SemanticObligationKind;
     readonly declaration: string;
@@ -1256,13 +1257,13 @@ export interface SemanticObligation {
 
 /**
  * Whether two SemanticObligation values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:101
+ * @see contexts/modeling/model/semantic.dt:104
  */
 export function equalSemanticObligation(a: SemanticObligation, b: SemanticObligation): boolean {
     return a.kind === b.kind && a.declaration === b.declaration && a.reason === b.reason && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:108 */
+/** @see contexts/modeling/model/semantic.dt:111 */
 export interface SemanticUnspecified {
     readonly kind: SemanticUnspecifiedKind;
     readonly declaration: string;
@@ -1273,13 +1274,13 @@ export interface SemanticUnspecified {
 
 /**
  * Whether two SemanticUnspecified values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:108
+ * @see contexts/modeling/model/semantic.dt:111
  */
 export function equalSemanticUnspecified(a: SemanticUnspecified, b: SemanticUnspecified): boolean {
-    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($158: string, $159: string) => $158 === $159) && sameOptional(a.source, b.source, ($160: string, $161: string) => $160 === $161) && equalSemanticSpan(a.site, b.site);
+    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($162: string, $163: string) => $162 === $163) && sameOptional(a.source, b.source, ($164: string, $165: string) => $164 === $165) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:116 */
+/** @see contexts/modeling/model/semantic.dt:119 */
 export interface SemanticProvenance {
     readonly kind: SemanticProvenanceKind;
     readonly declaration: string;
@@ -1290,13 +1291,13 @@ export interface SemanticProvenance {
 
 /**
  * Whether two SemanticProvenance values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:116
+ * @see contexts/modeling/model/semantic.dt:119
  */
 export function equalSemanticProvenance(a: SemanticProvenance, b: SemanticProvenance): boolean {
-    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($162: string, $163: string) => $162 === $163) && sameOptional(a.source, b.source, ($164: string, $165: string) => $164 === $165) && equalSemanticSpan(a.site, b.site);
+    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($166: string, $167: string) => $166 === $167) && sameOptional(a.source, b.source, ($168: string, $169: string) => $168 === $169) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:124 */
+/** @see contexts/modeling/model/semantic.dt:127 */
 export interface SemanticOutcome {
     readonly id: string;
     readonly command: string;
@@ -1315,13 +1316,13 @@ export interface SemanticOutcome {
 
 /**
  * Whether two SemanticOutcome values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:124
+ * @see contexts/modeling/model/semantic.dt:127
  */
 export function equalSemanticOutcome(a: SemanticOutcome, b: SemanticOutcome): boolean {
-    return a.id === b.id && a.command === b.command && sameOptional(a.kind, b.kind, ($166: string, $167: string) => $166 === $167) && a.name === b.name && sameList(a.from, b.from, ($168: string, $169: string) => $168 === $169) && sameOptional(a.to, b.to, ($170: string, $171: string) => $170 === $171) && a.selectKind === b.selectKind && sameOptional(a.select, b.select, equalSemanticExpression) && sameList(a.changes, b.changes, ($172: string, $173: string) => $172 === $173) && sameList(a.set, b.set, ($174: string, $175: string) => $174 === $175) && sameList(a.carried, b.carried, ($176: string, $177: string) => $176 === $177) && sameList(a.dropped, b.dropped, ($178: string, $179: string) => $178 === $179) && equalSemanticSpan(a.site, b.site);
+    return a.id === b.id && a.command === b.command && sameOptional(a.kind, b.kind, ($170: string, $171: string) => $170 === $171) && a.name === b.name && sameList(a.from, b.from, ($172: string, $173: string) => $172 === $173) && sameOptional(a.to, b.to, ($174: string, $175: string) => $174 === $175) && a.selectKind === b.selectKind && sameOptional(a.select, b.select, equalSemanticExpression) && sameList(a.changes, b.changes, ($176: string, $177: string) => $176 === $177) && sameList(a.set, b.set, ($178: string, $179: string) => $178 === $179) && sameList(a.carried, b.carried, ($180: string, $181: string) => $180 === $181) && sameList(a.dropped, b.dropped, ($182: string, $183: string) => $182 === $183) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:140 */
+/** @see contexts/modeling/model/semantic.dt:143 */
 export interface SemanticChoice {
     readonly kind: string;
     readonly source?: string;
@@ -1330,13 +1331,13 @@ export interface SemanticChoice {
 
 /**
  * Whether two SemanticChoice values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:140
+ * @see contexts/modeling/model/semantic.dt:143
  */
 export function equalSemanticChoice(a: SemanticChoice, b: SemanticChoice): boolean {
-    return a.kind === b.kind && sameOptional(a.source, b.source, ($180: string, $181: string) => $180 === $181) && sameList(a.outcomes, b.outcomes, ($182: string, $183: string) => $182 === $183);
+    return a.kind === b.kind && sameOptional(a.source, b.source, ($184: string, $185: string) => $184 === $185) && sameList(a.outcomes, b.outcomes, ($186: string, $187: string) => $186 === $187);
 }
 
-/** @see contexts/modeling/model/semantic.dt:146 */
+/** @see contexts/modeling/model/semantic.dt:149 */
 export interface SemanticKindLifecycle {
     readonly kind: string;
     readonly initialStates: readonly string[];
@@ -1346,13 +1347,13 @@ export interface SemanticKindLifecycle {
 
 /**
  * Whether two SemanticKindLifecycle values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:146
+ * @see contexts/modeling/model/semantic.dt:149
  */
 export function equalSemanticKindLifecycle(a: SemanticKindLifecycle, b: SemanticKindLifecycle): boolean {
-    return a.kind === b.kind && sameList(a.initialStates, b.initialStates, ($184: string, $185: string) => $184 === $185) && sameList(a.validStates, b.validStates, ($186: string, $187: string) => $186 === $187) && sameList(a.onCases, b.onCases, equalSemanticOutcome);
+    return a.kind === b.kind && sameList(a.initialStates, b.initialStates, ($188: string, $189: string) => $188 === $189) && sameList(a.validStates, b.validStates, ($190: string, $191: string) => $190 === $191) && sameList(a.onCases, b.onCases, equalSemanticOutcome);
 }
 
-/** @see contexts/modeling/model/semantic.dt:153 */
+/** @see contexts/modeling/model/semantic.dt:156 */
 export interface SemanticRequirement {
     readonly id: string;
     readonly name: string;
@@ -1364,13 +1365,13 @@ export interface SemanticRequirement {
 
 /**
  * Whether two SemanticRequirement values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:153
+ * @see contexts/modeling/model/semantic.dt:156
  */
 export function equalSemanticRequirement(a: SemanticRequirement, b: SemanticRequirement): boolean {
-    return a.id === b.id && a.name === b.name && sameOptional(a.expression, b.expression, equalSemanticExpression) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($188: string, $189: string) => $188 === $189) && equalSemanticSpan(a.site, b.site);
+    return a.id === b.id && a.name === b.name && sameOptional(a.expression, b.expression, equalSemanticExpression) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($192: string, $193: string) => $192 === $193) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:162 */
+/** @see contexts/modeling/model/semantic.dt:165 */
 export interface SemanticAggregate {
     readonly id: string;
     readonly initialStates: readonly string[];
@@ -1383,15 +1384,15 @@ export interface SemanticAggregate {
 
 /**
  * Whether two SemanticAggregate values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:162
+ * @see contexts/modeling/model/semantic.dt:165
  */
 export function equalSemanticAggregate(a: SemanticAggregate, b: SemanticAggregate): boolean {
-    return a.id === b.id && sameList(a.initialStates, b.initialStates, ($190: string, $191: string) => $190 === $191) && sameList(a.validStates, b.validStates, ($192: string, $193: string) => $192 === $193) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
+    return a.id === b.id && sameList(a.initialStates, b.initialStates, ($194: string, $195: string) => $194 === $195) && sameList(a.validStates, b.validStates, ($196: string, $197: string) => $196 === $197) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
 }
 
 /**
  * @internal Beta Semantic IR; its shape has no compatibility promise before 1.0.
- * @see contexts/modeling/model/semantic.dt:173
+ * @see contexts/modeling/model/semantic.dt:176
  */
 export interface SemanticIR {
     /** The beta Semantic IR. Versioned independently of the Typed Model; it retains source sites and resolved facts for formal verification and does not change the Live View payload. */
@@ -1399,6 +1400,7 @@ export interface SemanticIR {
     readonly declarations: readonly SemanticDeclaration[];
     readonly expressions: readonly SemanticExpression[];
     readonly scopes: readonly SemanticScopeFact[];
+    readonly presence: readonly SemanticPresenceFact[];
     readonly aggregates: readonly SemanticAggregate[];
     readonly obligations: readonly SemanticObligation[];
     readonly unspecified: readonly SemanticUnspecified[];
@@ -1407,8 +1409,8 @@ export interface SemanticIR {
 
 /**
  * Whether two SemanticIR values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:173
+ * @see contexts/modeling/model/semantic.dt:176
  */
 export function equalSemanticIR(a: SemanticIR, b: SemanticIR): boolean {
-    return a.version === b.version && sameList(a.declarations, b.declarations, equalSemanticDeclaration) && sameList(a.expressions, b.expressions, equalSemanticExpression) && sameList(a.scopes, b.scopes, equalSemanticScopeFact) && sameList(a.aggregates, b.aggregates, equalSemanticAggregate) && sameList(a.obligations, b.obligations, equalSemanticObligation) && sameList(a.unspecified, b.unspecified, equalSemanticUnspecified) && sameList(a.provenance, b.provenance, equalSemanticProvenance);
+    return a.version === b.version && sameList(a.declarations, b.declarations, equalSemanticDeclaration) && sameList(a.expressions, b.expressions, equalSemanticExpression) && sameList(a.scopes, b.scopes, equalSemanticScopeFact) && sameList(a.presence, b.presence, equalSemanticPresenceFact) && sameList(a.aggregates, b.aggregates, equalSemanticAggregate) && sameList(a.obligations, b.obligations, equalSemanticObligation) && sameList(a.unspecified, b.unspecified, equalSemanticUnspecified) && sameList(a.provenance, b.provenance, equalSemanticProvenance);
 }

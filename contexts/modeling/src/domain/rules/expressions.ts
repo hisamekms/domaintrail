@@ -32,6 +32,26 @@ import {
 import { canonicalTemporal, isOrderedTemporal, isTemporal, TEMPORAL_EXAMPLE, TEMPORAL_FORM } from '../temporal.js';
 import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, showType, type Ty } from '../types.js';
 
+export interface ExpressionFact {
+    expression: Expr;
+    type?: Ty;
+    comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
+    symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
+    paths?: string[];
+    scope?: {
+        owner: object;
+        fields: object[];
+        parameters: object[];
+        lambdas: Array<{ name: string; binding?: Expr }>;
+        sourceStates?: object[];
+        targetOutcome?: object;
+        kind?: object;
+        command?: object;
+        onCase?: object;
+    };
+}
+export type ExpressionFactsSink = (fact: ExpressionFact) => void;
+
 interface Scope {
     ctx: string;
     /** Fields (and the parameters of a command) visible in this invariant or requirement. */
@@ -39,7 +59,7 @@ interface Scope {
     /** M010 diagnostics for fields of the aggregate that exist but are not in scope here, by name. */
     hidden: Map<string, Hidden>;
     /** Lambda parameters, innermost last. */
-    lambdas: Array<[string, Ty]>;
+    lambdas: Array<[string, Ty, Expr?]>;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
 }
@@ -50,26 +70,36 @@ interface Hidden {
 }
 
 /** Type-checks every invariant and command requirement in the workspace (M001 for names, M008, M009, M010, M018, M019). */
-export function checkInvariants(model: SourceModel, rules: RuleSink): void {
+export function checkInvariants(model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
     for (const el of model.elements) {
         const ctx = el.context;
         if (el.kind === 'aggregate') {
-            checkAggregate(el, ctx, model, rules);
+            checkAggregate(el, ctx, model, rules, sink);
         } else if (el.kind === 'entity' || el.kind === 'valueObject') {
             const fields = new Map<string, FieldDecl | ParamDecl>([...includedFields(el).map((x) => x.field), ...fieldsOf(el.members)].map((f) => [f.name, f]));
             for (const inv of invariantsOf(el.members)) {
-                checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules);
+                checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules, sink, {
+                    owner: el,
+                    fields: [...fields.values()],
+                    parameters: [],
+                    lambdas: [],
+                });
             }
         } else if (el.kind === 'union') {
             // Variant invariants see the fields of their own variant.
             for (const v of el.variants) {
                 const fields = new Map<string, FieldDecl | ParamDecl>(fieldsOf(v.members).map((f) => [f.name, f]));
                 for (const inv of invariantsOf(v.members)) {
-                    checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules);
+                    checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules, sink, {
+                        owner: v,
+                        fields: [...fields.values()],
+                        parameters: [],
+                        lambdas: [],
+                    });
                 }
             }
         } else if (el.kind === 'id' || el.kind === 'primitive') {
-            checkPrimitive(el, ctx, model, rules);
+            checkPrimitive(el, ctx, model, rules, sink);
         }
     }
 }
@@ -82,13 +112,14 @@ function tagOf(u: UnionDecl): Ty {
 }
 
 /** Domain primitive invariants see a single name, `value`, of the base primitive type. */
-function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel, rules: RuleSink): void {
+function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
     if (!p.base) return;
     for (const inv of primitiveInvariants(p)) {
         if ('kind' in inv.decl) checkDeclared(inv.decl, rules);
         if (!inv.expr) continue;
-        const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
-        const t = new ExprChecker(model, rules).check(inv.expr, scope);
+        const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }, inv.expr]], present: new Set() };
+        sink?.({ expression: inv.expr, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value', binding: inv.expr }] } });
+        const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
         if (t.k !== 'error' && !isBool(t)) {
             const what = inv.decl === inv.expr ? `The constraint of '${p.name}'` : `Invariant '${inv.name}'`;
             rules.error('M008', `${what} must be a Bool expression, but has type '${showType(t)}'.`, inv.expr.at);
@@ -96,7 +127,7 @@ function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel,
     }
 }
 
-function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rules: RuleSink): void {
+function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
     // fields taken from field sets are common fields too
     const common = new Map<string, FieldDecl | ParamDecl>([...includedFields(agg).map((x) => x.field), ...commonFields(agg)].map((f) => [f.name, f]));
     const states = statesOf(agg);
@@ -132,7 +163,12 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
 
     // Aggregate-level invariants: common fields only, applied to every state.
     for (const inv of invariantsOf(agg.members)) {
-        checkInvariant(inv, { ctx, fields: common, hidden: new Map([...stateOnly(), ...kindOnly()]), lambdas: [], present: new Set() }, model, rules);
+        checkInvariant(inv, { ctx, fields: common, hidden: new Map([...stateOnly(), ...kindOnly()]), lambdas: [], present: new Set() }, model, rules, sink, {
+            owner: agg,
+            fields: [...common.values()],
+            parameters: [],
+            lambdas: [],
+        });
     }
     // Kind-level invariants: common + that kind's own fields, applied to every state of the kind.
     for (const k of kinds)
@@ -142,6 +178,8 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
                 { ctx, fields: withKind(k), hidden: new Map([...stateOnly(), ...kindOnly(k.name)]), lambdas: [], present: new Set() },
                 model,
                 rules,
+                sink,
+                { owner: k, fields: [...withKind(k).values()], parameters: [], lambdas: [], kind: k },
             );
     // State-level invariants: common + that state's own fields.
     for (const s of states) {
@@ -150,22 +188,36 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         const hidden = new Map([...stateOnly(s.name), ...kindOnly()]);
         for (const name of fields.keys()) hidden.delete(name);
         for (const inv of invariantsOf(s.members)) {
-            checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, model, rules);
+            checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, model, rules, sink, {
+                owner: s,
+                fields: [...fields.values()],
+                parameters: [],
+                lambdas: [],
+                sourceStates: [s],
+            });
         }
     }
     for (const cmd of commandsOf(agg)) {
         // a kind's command sees its kind's fields; a common command the common ones
         const own = kindNamed(cmd.ofKind);
-        if (cmd.requirements.length) checkRequirements(agg, cmd, withKind(own), kindOnly(own?.name), ctx, model, rules);
-        for (const outcome of cmd.outcomes) checkChoice(outcome, cmd, withKind(own), ctx, model, rules);
+        if (cmd.requirements.length) checkRequirements(agg, cmd, withKind(own), kindOnly(own?.name), ctx, model, rules, sink);
+        for (const outcome of cmd.outcomes)
+            checkChoice(outcome, cmd, withKind(own), ctx, model, rules, sink, { owner: agg, command: cmd, targetOutcome: outcome, kind: own });
         for (const k of kinds) {
             for (const c of k.cases.filter((c) => c.command.text === cmd.name)) {
                 const sources = c.outcomes.flatMap((o) => o.from.map((r) => r.target)).filter((s): s is StateDecl => !!s);
                 for (const r of c.requirements) {
                     checkDeclared(r, rules);
-                    checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, withKind(k), ctx, model, rules, sources, kindOnly(k.name));
+                    checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, withKind(k), ctx, model, rules, sources, kindOnly(k.name), sink, {
+                        owner: k,
+                        command: cmd,
+                        onCase: c,
+                        sourceStates: sources,
+                        kind: k,
+                    });
                 }
-                for (const outcome of c.outcomes) checkChoice(outcome, cmd, withKind(k), ctx, model, rules);
+                for (const outcome of c.outcomes)
+                    checkChoice(outcome, cmd, withKind(k), ctx, model, rules, sink, { owner: k, command: cmd, onCase: c, targetOutcome: outcome, kind: k });
             }
         }
     }
@@ -178,6 +230,8 @@ function checkChoice(
     ctx: string,
     model: SourceModel,
     rules: RuleSink,
+    sink: ExpressionFactsSink | undefined,
+    scopeInfo: Pick<NonNullable<ExpressionFact['scope']>, 'owner' | 'command' | 'onCase' | 'targetOutcome' | 'kind' | 'sourceStates'>,
 ): void {
     checkDecisionExpr(
         outcome.select?.expr,
@@ -189,6 +243,9 @@ function checkChoice(
         model,
         rules,
         outcome.from.map((r) => r.target).filter((s): s is StateDecl => !!s),
+        new Map(),
+        sink,
+        { ...scopeInfo, sourceStates: outcome.from.map((r) => r.target).filter((s): s is StateDecl => !!s) },
     );
 }
 
@@ -203,6 +260,8 @@ function checkDecisionExpr(
     rules: RuleSink,
     sources: StateDecl[] = [],
     hidden: Map<string, Hidden> = new Map(),
+    sink?: ExpressionFactsSink,
+    scopeInfo?: Pick<NonNullable<ExpressionFact['scope']>, 'owner' | 'command' | 'onCase' | 'targetOutcome' | 'kind' | 'sourceStates'>,
 ): void {
     if (!expr) return;
     const fields = new Map(cmd.factory ? [] : common);
@@ -213,7 +272,22 @@ function checkDecisionExpr(
             if (rest.every((s) => fieldsOf(s.members).some((g) => g.name === f.name && sameType(memberType(g), ty)))) fields.set(f.name, f);
         }
     for (const p of cmd.params) fields.set(p.name, p);
-    const t = new ExprChecker(model, rules).check(expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
+    const rootFact = scopeInfo
+        ? {
+              ...scopeInfo,
+              fields: [...fields.values()].filter((x) => !cmd.params.some((parameter) => parameter === x)),
+              parameters: cmd.params,
+              lambdas: [] as Array<{ name: string; binding?: Expr }>,
+          }
+        : undefined;
+    if (rootFact) sink?.({ expression: expr, scope: rootFact });
+    const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(expr, {
+        ctx,
+        fields,
+        hidden,
+        lambdas: [],
+        present: new Set(),
+    });
     if (t.k !== 'error' && !isBool(t)) rules.error('M008', `${label} must be a Bool expression, but has type '${showType(t)}'.`, at);
 }
 
@@ -245,8 +319,16 @@ function checkRequirements(
     ctx: string,
     model: SourceModel,
     rules: RuleSink,
+    sink?: ExpressionFactsSink,
 ): void {
     const states = statesOf(agg);
+    const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
+    const sourceStates = [
+        ...new Set([
+            ...cmd.transitions.flatMap((t) => t.from.map((r) => r.target)),
+            ...[...cmd.outcomes, ...grouped].flatMap((o) => o.from.map((r) => r.target)),
+        ]),
+    ].filter((s): s is StateDecl => !!s);
     const fields = new Map<string, FieldDecl | ParamDecl>();
     const hidden = new Map<string, Hidden>(cmd.factory ? [] : kindHidden);
     if (cmd.factory) {
@@ -259,13 +341,7 @@ function checkRequirements(
         }
     } else {
         for (const [name, f] of common) fields.set(name, f);
-        const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
-        const sources = [
-            ...new Set([
-                ...cmd.transitions.flatMap((t) => t.from.map((r) => r.target)),
-                ...[...cmd.outcomes, ...grouped].flatMap((o) => o.from.map((r) => r.target)),
-            ]),
-        ].filter((s): s is StateDecl => !!s);
+        const sources = sourceStates;
         const [first, ...rest] = sources;
         for (const f of first ? fieldsOf(first.members) : []) {
             if (common.has(f.name)) continue;
@@ -296,7 +372,22 @@ function checkRequirements(
     for (const req of cmd.requirements) {
         checkDeclared(req, rules);
         if (!req.expr) continue;
-        const t = new ExprChecker(model, rules).check(req.expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
+        const rootFact = {
+            owner: agg,
+            command: cmd,
+            sourceStates,
+            fields: [...fields.values()].filter((x) => !cmd.params.some((p) => p === x)),
+            parameters: cmd.params,
+            lambdas: [] as Array<{ name: string; binding?: Expr }>,
+        };
+        sink?.({ expression: req.expr, scope: rootFact });
+        const t = new ExprChecker(model, rules, sink, (name, binding) => rootFact.lambdas.push({ name, binding })).check(req.expr, {
+            ctx,
+            fields,
+            hidden,
+            lambdas: [],
+            present: new Set(),
+        });
         if (t.k !== 'error' && !isBool(t)) {
             rules.error('M008', `Requirement '${req.name}' of command '${cmd.name}' must be a Bool expression, but has type '${showType(t)}'.`, req.exprAt);
         }
@@ -320,10 +411,19 @@ function checkDeclared(x: InvariantDecl | RequirementDecl, rules: RuleSink): voi
     );
 }
 
-function checkInvariant(inv: InvariantDecl, scope: Scope, model: SourceModel, rules: RuleSink): void {
+function checkInvariant(
+    inv: InvariantDecl,
+    scope: Scope,
+    model: SourceModel,
+    rules: RuleSink,
+    sink?: ExpressionFactsSink,
+    scopeInfo?: NonNullable<ExpressionFact['scope']>,
+): void {
     checkDeclared(inv, rules);
     if (!inv.expr) return;
-    const t = new ExprChecker(model, rules).check(inv.expr, scope);
+    const rootFact = scopeInfo ? { ...scopeInfo, lambdas: [...scopeInfo.lambdas] } : undefined;
+    if (rootFact) sink?.({ expression: inv.expr, scope: rootFact });
+    const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(inv.expr, scope);
     if (t.k !== 'error' && !isBool(t)) {
         rules.error('M008', `Invariant '${inv.name}' must be a Bool expression, but has type '${showType(t)}'.`, inv.exprAt);
     }
@@ -332,13 +432,24 @@ function checkInvariant(inv: InvariantDecl, scope: Scope, model: SourceModel, ru
 type ExprOf<K extends Expr['k']> = Extract<Expr, { k: K }>;
 
 class ExprChecker {
+    private readonly symbols = new WeakMap<Expr, NonNullable<ExpressionFact['symbol']>>();
+    private readonly comparisons = new WeakMap<Expr, NonNullable<ExpressionFact['comparison']>>();
     constructor(
         private readonly model: SourceModel,
         private readonly rules: RuleSink,
+        private readonly sink?: ExpressionFactsSink,
+        private readonly recordLambda?: (name: string, binding: Expr) => void,
     ) {}
 
     check(e: Expr, scope: Scope): Ty {
         const t = this.infer(e, scope);
+        if (t.k !== 'error')
+            this.sink?.({
+                expression: e,
+                type: t,
+                ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}),
+                ...(this.comparisons.has(e) ? { comparison: this.comparisons.get(e) } : {}),
+            });
         if (t.k === 'enumType' || t.k === 'unionType' || t.k === 'ctx') {
             this.rules.error('M009', `'${showType(t)}' is not a value.`, e.at);
             return ERROR;
@@ -347,6 +458,18 @@ class ExprChecker {
     }
 
     private infer(e: Expr, scope: Scope): Ty {
+        const type = this.inferNode(e, scope);
+        if (type.k !== 'error')
+            this.sink?.({
+                expression: e,
+                type,
+                ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}),
+                ...(this.comparisons.has(e) ? { comparison: this.comparisons.get(e) } : {}),
+            });
+        return type;
+    }
+
+    private inferNode(e: Expr, scope: Scope): Ty {
         switch (e.k) {
             case 'int':
                 return { k: 'prim', name: 'Int', literal: true };
@@ -415,13 +538,14 @@ class ExprChecker {
                 return BOOL;
             }
             case 'quantifier': {
+                this.recordLambda?.(e.param, e);
                 const coll = this.check(e.collection, scope);
                 let elem: Ty = ERROR;
                 if (coll.k === 'list') elem = coll.elem;
                 else if (coll.k !== 'error') {
                     this.rules.error('M009', `${e.quantifier}() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 }
-                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem]] };
+                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 const body = this.check(e.body, inner);
                 if (body.k !== 'error' && !isBool(body)) {
                     this.rules.error('M009', `The predicate of ${e.quantifier}() must be Bool, but has type '${showType(body)}'.`, e.bodyAt);
@@ -436,7 +560,9 @@ class ExprChecker {
                     this.rules.error('M009', `unique() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 }
                 if (e.param === undefined) {
-                    if (elem.k !== 'error' && !equatable(elem, elem)) {
+                    const ok = elem.k !== 'error' && equatable(elem, elem);
+                    if (elem.k !== 'error') this.comparisons.set(e, ok ? comparisonKind(elem, elem, false) : 'notComparable');
+                    if (elem.k !== 'error' && !ok) {
                         this.rules.error(
                             'M009',
                             `unique() requires elements that can be compared with '==', but they have type '${showType(elem)}'.`,
@@ -445,9 +571,11 @@ class ExprChecker {
                     }
                     return BOOL;
                 }
-                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem]] };
+                this.recordLambda?.(e.param, e);
+                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 e.keys.forEach((key, i) => {
                     const t = this.check(key, inner);
+                    if (t.k !== 'error') this.comparisons.set(key, equatable(t, t) ? comparisonKind(t, t, false) : 'notComparable');
                     if (t.k === 'error' || equatable(t, t)) return;
                     const what = `Key '${key.text}' of unique()`;
                     if (t.k === 'opt') {
@@ -471,6 +599,8 @@ class ExprChecker {
                     const hint = x.k === 'opt' ? ' Optional values must be guarded with exists(...) first.' : '';
                     this.rules.error('M009', `contains() cannot compare elements of type '${showType(coll.elem)}' with '${showType(x)}'.${hint}`, e.elementAt);
                 }
+                if (coll.k === 'list' && coll.elem.k !== 'error' && x.k !== 'error')
+                    this.comparisons.set(e, equatable(coll.elem, x) ? comparisonKind(coll.elem, x, false) : 'notComparable');
                 return BOOL;
             }
             case 'binary':
@@ -483,7 +613,9 @@ class ExprChecker {
         if (op === 'and' || op === 'or' || op === 'implies') {
             const l = this.check(e.left, scope);
             // `a and b` / `a implies b`: b is evaluated only when a holds, so a's exists() guards apply to b.
-            const rightScope = op === 'or' ? scope : { ...scope, present: new Set([...scope.present, ...guards(e.left)]) };
+            const guardedPaths = op === 'or' ? [] : guards(e.left);
+            const rightScope = op === 'or' ? scope : { ...scope, present: new Set([...scope.present, ...guardedPaths]) };
+            if (guardedPaths.length) this.sink?.({ expression: e.right, paths: guardedPaths });
             const r = this.check(e.right, rightScope);
             for (const [side, t, at] of [
                 ['left', l, e.leftAt],
@@ -500,8 +632,12 @@ class ExprChecker {
         if (l.k === 'error' || r.k === 'error') return BOOL;
         // a date or time compared with a string literal: the literal is a value of its type (ADR 0038)
         const ordering = op !== '==' && op !== '!=';
-        if (this.temporalLiteral(l, e.right, ordering) || this.temporalLiteral(r, e.left, ordering)) return BOOL;
+        if (this.temporalLiteral(l, e.right, ordering) || this.temporalLiteral(r, e.left, ordering)) {
+            this.comparisons.set(e, ordering ? 'ordered' : 'primitive');
+            return BOOL;
+        }
         const ok = op === '==' || op === '!=' ? equatable(l, r) : ordered(l, r);
+        this.comparisons.set(e, ok ? comparisonKind(l, r, ordering) : 'notComparable');
         if (!ok) {
             const [lb, rb] = [basePrimitive(l), basePrimitive(r)];
             if (l.k !== 'opt' && r.k !== 'opt' && (isTemporal(lb) || isTemporal(rb)) && lb !== rb) {
@@ -537,13 +673,25 @@ class ExprChecker {
 
     private name(name: string, node: Expr, scope: Scope): Ty {
         for (let i = scope.lambdas.length - 1; i >= 0; i--) {
-            if (scope.lambdas[i][0] === name) return narrow(scope.lambdas[i][1], name, scope);
+            if (scope.lambdas[i][0] === name) {
+                this.symbols.set(node, { kind: 'lambdaVariable', name, ...(scope.lambdas[i][2] ? { binding: scope.lambdas[i][2] } : {}) });
+                return narrow(scope.lambdas[i][1], name, scope);
+            }
         }
         const field = scope.fields.get(name);
-        if (field) return narrow(memberType(field), name, scope);
+        if (field) {
+            this.symbols.set(node, { kind: field.kind === 'param' ? 'parameter' : 'field', name, declaration: field });
+            return narrow(memberType(field), name, scope);
+        }
         const decl = lookupVisible(this.model, scope.ctx, name);
-        if (decl?.kind === 'enum') return { k: 'enumType', decl };
-        if (decl?.kind === 'union') return { k: 'unionType', decl };
+        if (decl?.kind === 'enum') {
+            this.symbols.set(node, { kind: 'type', name, declaration: decl });
+            return { k: 'enumType', decl };
+        }
+        if (decl?.kind === 'union') {
+            this.symbols.set(node, { kind: 'type', name, declaration: decl });
+            return { k: 'unionType', decl };
+        }
         if (this.model.contexts.includes(name)) return { k: 'ctx', name };
         const hidden = scope.hidden.get(name);
         if (hidden) {
@@ -585,8 +733,12 @@ class ExprChecker {
                 this.rules.error('M001', `Context '${recv.name}' has no enum or union named '${m}'.`, e.memberAt, didYouMean(m, names));
                 return ERROR;
             }
-            case 'enumType':
-                if (recv.decl.values.some((v) => v.name === m)) return { k: 'enum', decl: recv.decl as EnumDecl };
+            case 'enumType': {
+                const value = recv.decl.values.find((v) => v.name === m);
+                if (value) {
+                    this.symbols.set(e, { kind: 'enumValue', name: m, declaration: value });
+                    return { k: 'enum', decl: recv.decl as EnumDecl };
+                }
                 this.rules.error(
                     'M001',
                     `Enum '${recv.decl.name}' has no value '${m}'.`,
@@ -598,6 +750,7 @@ class ExprChecker {
                     ),
                 );
                 return ERROR;
+            }
             case 'unionType':
                 if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
                 this.rules.error(
@@ -629,7 +782,10 @@ class ExprChecker {
             case 'struct': {
                 const fields = [...includedFields(recv.decl).map((x) => x.field), ...fieldsOf(recv.decl.members)];
                 const f = fields.find((x) => x.name === m);
-                if (f) return narrow(memberType(f), pathOf(e) ?? '', scope);
+                if (f) {
+                    this.symbols.set(e, { kind: 'field', name: m, declaration: f });
+                    return narrow(memberType(f), pathOf(e) ?? '', scope);
+                }
                 const hint = suggestFrom(
                     m,
                     fields.map((x) => x.name),
@@ -653,6 +809,16 @@ class ExprChecker {
                 return ERROR;
         }
     }
+}
+
+function comparisonKind(l: Ty, r: Ty, ordering: boolean): NonNullable<ExpressionFact['comparison']> {
+    if (ordering) return 'ordered';
+    if (l.k === 'tag' && r.k === 'tag') return 'enumValue';
+    if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityId' : 'valueObjectStructural';
+    if (l.k === 'union' && r.k === 'union' && l.decl === r.decl) return 'unionStructural';
+    if (l.k === 'enum' && r.k === 'enum') return 'enumValue';
+    if (isDomainPrimitive(l) || isDomainPrimitive(r)) return 'domainPrimitive';
+    return 'primitive';
 }
 
 function narrow(t: Ty, path: string, scope: Scope): Ty {

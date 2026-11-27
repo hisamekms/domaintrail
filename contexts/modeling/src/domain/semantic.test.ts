@@ -1,11 +1,181 @@
 import { describe, expect, test } from 'bun:test';
+import { readdir, readFile } from 'node:fs/promises';
+import * as path from 'node:path';
 import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
 import { stateId } from './ids.js';
 import { buildSemanticIR, SEMANTIC_IR_VERSION } from './semantic.js';
+import { checkInvariants } from './rules/expressions.js';
+import { RuleSink } from './diagnostics.js';
+
+const allExamples = async () => {
+    const root = path.join(import.meta.dir, '..', '..', '..', '..', 'examples');
+    const files: string[] = [];
+    const walk = async (directory: string): Promise<void> => {
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+                if (!['node_modules', '.git', '.domaintrail', 'generated'].includes(entry.name)) await walk(path.join(directory, entry.name));
+            } else if (entry.name.endsWith('.dt')) files.push(path.relative(root, path.join(directory, entry.name)));
+        }
+    };
+    await walk(root);
+    return Promise.all(files.sort().map(async (file) => ({ path: file, text: await readFile(path.join(root, file), 'utf8') })));
+};
 
 describe('Semantic IR', () => {
+    test('keeps Bool types on invariant, requirement and select roots', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'root-types.dt',
+                text: `context Fixture {
+                  id ItemId: UUID
+                  aggregate Item {
+                    id: ItemId
+                    state Ready
+                    state Done
+                    initial Ready
+                    invariant valid { true }
+                    command finish() {
+                      requires ready { true } else Error
+                      outcome done: Ready -> Done select { true }
+                    }
+                  }
+                  error Error
+                }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const boolRoots = flatten(ir.expressions).filter((node) => node.source === 'true');
+        expect(boolRoots).toHaveLength(3);
+        expect(boolRoots.map(({ type }) => type)).toEqual([
+            { name: 'Bool', cardinality: 'one' },
+            { name: 'Bool', cardinality: 'one' },
+            { name: 'Bool', cardinality: 'one' },
+        ]);
+    });
+    test('projects per-source field and choice provenance', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const provenance = ir.provenance;
+        const confirmedCancel = provenance.filter((fact) => fact.declaration === 'Sales.Order:cancel->Cancelled' && fact.source === 'Sales.Order#Confirmed');
+        expect(confirmedCancel.filter((fact) => fact.field).map(({ kind, field }) => [kind, field])).toEqual([
+            ['carried', 'id'],
+            ['carried', 'items'],
+            ['carried', 'customer'],
+            ['carried', 'note'],
+            ['unspecified', 'reason'],
+        ]);
+        expect(confirmedCancel.some((fact) => fact.field === 'confirmedAt')).toBe(false);
+        expect(provenance.filter((fact) => fact.declaration === 'Sales.Order:place->Draft' && fact.kind === 'unspecified').map((fact) => fact.field)).toEqual([
+            'id',
+            'items',
+            'customer',
+            'note',
+        ]);
+        const choiceAnalysis = await analyzeDomain([
+            {
+                path: 'choice.dt',
+                text: `context ChoiceTest { id ItemId: UUID aggregate Item { id: ItemId state Start state A state B initial Start command choose() { outcome first: Start -> A outcome second: Start -> B } } }`,
+            },
+        ]);
+        expect(buildSemanticIR(choiceAnalysis.sourceModel!, choiceAnalysis.model!).provenance.some((fact) => fact.kind === 'selectedChoice')).toBe(true);
+    });
+    test('expression facts sink preserves checker diagnostics on all examples and a representative fixture', async () => {
+        const analyses = [
+            await analyzeDomain(await allExamples()),
+            await analyzeDomain([
+                {
+                    path: 'fixture.dt',
+                    text: `context Fixture { id ItemId: UUID aggregate Item { id: ItemId state Start state RetailDone kind Retail { initial Start on finish { outcome done: Start -> RetailDone } } command finish() { } } }`,
+                },
+            ]),
+            ...(await Promise.all(
+                [
+                    `context BadBool { aggregate Item { invariant invalid { 1 } } }`,
+                    `context BadOptional { aggregate Item { note: String? invariant invalid { note.length > 0 } } }`,
+                    `context BadScope { aggregate Item { state A { hidden: String } state B invariant invalid { hidden == "x" } } }`,
+                ].map((text, index) => analyzeDomain([{ path: `bad-${index}.dt`, text }])),
+            )),
+        ];
+        for (const analysis of analyses) {
+            const model = analysis.sourceModel!;
+            const withoutSink = new RuleSink();
+            const withSink = new RuleSink();
+            checkInvariants(model, withoutSink);
+            checkInvariants(model, withSink, () => {});
+            expect(withSink.items).toEqual(withoutSink.items);
+        }
+    });
+    test('records comparison kinds for value comparisons and collection membership', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture {
+                  id PersonId: UUID
+                  entity Person { id: PersonId }
+                  value Address { city: String }
+                  union Choice { Text { value: String } Count { value: Int } }
+                  id HolderId: UUID
+                  aggregate Holder {
+                    id: HolderId
+                    owns first: Person
+                    owns second: Person
+                    home: Address
+                    office: Address
+                    choice: Choice
+                    otherChoice: Choice
+                    owns people: Person[0..*]
+                    invariant comparisons {
+                      first == second and home == office and choice == otherChoice and
+                      home.city < office.city and contains(people, first)
+                    }
+                  }
+                }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        expect(nodes.filter((node) => node.comparison).map((node) => node.comparison)).toEqual([
+            'entityId',
+            'valueObjectStructural',
+            'unionStructural',
+            'ordered',
+            'entityId',
+        ]);
+    });
+    test('projects only true-edge optional presence facts and guarded right operands', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture {
+                  aggregate Item {
+                    note: String?
+                    invariant conjunction { exists(note) and note.length > 0 }
+                    invariant implication { exists(note) implies note.length > 0 }
+                    invariant disjunction { not exists(note) or note.length > 0 }
+                  }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const facts = ir.presence;
+        expect(facts.filter((fact) => fact.path === 'note')).toHaveLength(2);
+        expect(facts.every((fact) => fact.path === 'note')).toBe(true);
+        const disjunction = ir.expressions.filter((root) => root.site.startLine === 6);
+        expect(ir.presence.filter((fact) => disjunction.some((root) => root.id === fact.expression))).toEqual([]);
+        for (const scope of ir.scopes) {
+            const root = ir.expressions.find((expression) => expression.id === scope.expression);
+            expect(root?.site).toEqual(scope.site);
+        }
+        expect(ir.scopes.every((scope) => !('presence' in scope))).toBe(true);
+    });
     test('projects the shop lifecycle facts as state IDs', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
@@ -22,6 +192,83 @@ describe('Semantic IR', () => {
         expect(lifecycle('Billing.Invoice')).toEqual([
             { kind: '*', initialStates: ['Billing.Invoice#Open'], validStates: ['Billing.Invoice#Open', 'Billing.Invoice#Paid'], onCases: [] },
         ]);
+    });
+
+    test('projects exact resolved symbols and static types for shop expressions', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flat = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flat(node.children)]);
+        const nodes = flat(ir.expressions);
+        const source = (text: string) => nodes.find((node) => node.source === text);
+        expect(source('items')?.symbol).toEqual({ id: 'Sales.Order.items', kind: 'field', name: 'items' });
+        expect(source('items')?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'many' });
+        expect(nodes.find((node) => node.symbol?.id === 'Sales.Order:cancel(reason)')?.symbol).toEqual({
+            id: 'Sales.Order:cancel(reason)',
+            kind: 'parameter',
+            name: 'reason',
+        });
+        expect(source('CancelReason.Other')?.symbol).toEqual({ id: 'Sales.CancelReason=Other', kind: 'enumValue', name: 'Other' });
+        expect(source('item.quantity')?.symbol).toEqual({ id: 'Sales.OrderItem.quantity', kind: 'field', name: 'quantity' });
+        expect(source('item.unitPrice.currency')?.symbol).toEqual({ id: 'Common.Money.currency', kind: 'field', name: 'currency' });
+        expect(source('note')?.type).toEqual({ name: 'String', cardinality: 'optional' });
+        const lambda = nodes.find((node) => node.symbol?.kind === 'lambda' && node.symbol.name === 'item');
+        expect(lambda?.symbol).toEqual({ id: expect.stringContaining(':expression:'), kind: 'lambda', name: 'item' });
+        expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one' });
+    });
+
+    test('projects declared, primitive, enum, optional, list and non-empty types', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'types.dt',
+                text: `context Types {
+                  primitive Quantity: Int
+                  enum Status { Open Closed }
+                  entity Item { quantity: Quantity plain: Int invariant positive { quantity > 0 and plain > 0 } }
+                  aggregate Cart {
+                    item: Item?
+                    items: Item[0..*]
+                    requiredItems: Item[1..*]
+                    status: Status
+                    invariant values { exists(item) and items.length >= 0 and requiredItems.length >= 0 and status == Status.Open }
+                  }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        const source = (text: string) => nodes.find((node) => node.source === text);
+        expect(source('quantity')?.type).toEqual({ name: 'Types.Quantity', cardinality: 'one' });
+        expect(source('plain')?.type).toEqual({ name: 'Int', cardinality: 'one' });
+        expect(source('item')?.type).toEqual({ name: 'Types.Item', cardinality: 'optional' });
+        expect(source('items')?.type).toEqual({ name: 'Types.Item', cardinality: 'many' });
+        expect(source('requiredItems')?.type).toEqual({ name: 'Types.Item', cardinality: 'nonEmpty' });
+        expect(source('Status')?.type).toBeUndefined();
+        expect(source('Status.Open')?.symbol).toEqual({ id: 'Types.Status=Open', kind: 'enumValue', name: 'Open' });
+        expect(source('Status.Open')?.type).toEqual({ name: 'Types.Status', cardinality: 'one' });
+    });
+
+    test('projects a focused value object member and guarded optional field', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture {
+              value Address { city: String }
+              entity Customer {
+                address: Address?
+                invariant hasCity { exists(address) and address.city != "" }
+              }
+            }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        expect(nodes.find((node) => node.source === 'address')?.symbol).toEqual({ id: 'Fixture.Customer.address', kind: 'field', name: 'address' });
+        expect(nodes.find((node) => node.source === 'address.city')?.symbol).toEqual({ id: 'Fixture.Address.city', kind: 'field', name: 'city' });
     });
 
     test('keeps lifecycle initials separate for each kind', async () => {
@@ -442,5 +689,138 @@ describe('Semantic IR', () => {
         expect(ids).toContain('Sales.Order/Retail:on:finish');
         expect(ids).toContain('Sales.Order/Retail:on:finish->completed');
         expect(ir.aggregates[0]?.requirements[0]?.error).toBe('Sales.EmptyOrder');
+    });
+
+    test('projects primitive invariant roots and their implicit value binding', async () => {
+        const analysis = await analyzeDomain([{ path: 'sales.dt', text: `context Sales { primitive Quantity: Int { value > 0 } }` }]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const root = ir.expressions.find((expression) => expression.source === 'value > 0')!;
+        const value = root.children[0]!;
+        expect(value.symbol).toEqual({ id: root.id, kind: 'lambda', name: 'value' });
+        expect(ir.scopes).toContainEqual(
+            expect.objectContaining({
+                expression: root.id,
+                lambdas: [{ id: root.id, kind: 'lambda', name: 'value' }],
+            }),
+        );
+    });
+
+    test('records a quantified optional object path on an implication right operand', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'sales.dt',
+                text: `context Sales {
+                  id ItemId: UUID
+                  value Details { note: String? }
+                  aggregate Item {
+                    id: ItemId
+                    owns items: Details[0..*]
+                    invariant notesPresent { all(items, x => exists(x.note) implies length(x.note) > 0) }
+                  }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        expect(ir.presence).toContainEqual(expect.objectContaining({ path: 'x.note' }));
+    });
+
+    test('projects every visible name in a state invariant scope', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const scope = ir.scopes.find((fact) => fact.owner === 'Sales.Order#Confirmed' && fact.fields.some((field) => field.name === 'items'))!;
+        expect(scope).toEqual({
+            expression: scope.expression,
+            site: scope.site,
+            owner: 'Sales.Order#Confirmed',
+            fields: [
+                { id: 'Sales.Order.id', kind: 'field', name: 'id' },
+                { id: 'Sales.Order.items', kind: 'field', name: 'items' },
+                { id: 'Sales.Order.customer', kind: 'field', name: 'customer' },
+                { id: 'Sales.Order.note', kind: 'field', name: 'note' },
+                { id: 'Sales.Order#Confirmed.confirmedAt', kind: 'field', name: 'confirmedAt' },
+            ],
+            parameters: [],
+            lambdas: [],
+            sourceStates: ['Sales.Order#Confirmed'],
+        });
+    });
+
+    test('projects every visible name and lambda binding of a command requirement', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        const reference = nodes.find((expression) => expression.symbol?.kind === 'lambda' && expression.symbol.name === 'i')!;
+        // The binding is the quantifier expression that binds `i`: the root expression containing the reference.
+        const lambda = ir.expressions.find((root) => flatten([root]).includes(reference))!;
+        const scope = ir.scopes.find((fact) => fact.command === 'Sales.Order:addItem')!;
+        expect(scope).toEqual({
+            expression: scope.expression,
+            site: scope.site,
+            owner: 'Sales.Order',
+            command: 'Sales.Order:addItem',
+            fields: [
+                { id: 'Sales.Order.id', kind: 'field', name: 'id' },
+                { id: 'Sales.Order.items', kind: 'field', name: 'items' },
+                { id: 'Sales.Order.customer', kind: 'field', name: 'customer' },
+                { id: 'Sales.Order.note', kind: 'field', name: 'note' },
+            ],
+            parameters: [{ id: 'Sales.Order:addItem(item)', kind: 'parameter', name: 'item' }],
+            lambdas: [{ id: lambda.id, kind: 'lambda', name: 'i' }],
+            sourceStates: ['Sales.Order#Draft'],
+        });
+    });
+
+    test('projects every visible name in an on-case requirement scope', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'scope.dt',
+                text: `context Sales { id OrderId: UUID error Unavailable aggregate Order { id: OrderId state Ready state Done kind Retail { initial Ready dockCount: Int on ship { requires available { dockCount > 0 } else Unavailable outcome shipped: Ready -> Done } } command ship() } }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const scope = ir.scopes.find((fact) => fact.onCase === 'Sales.Order/Retail:on:ship')!;
+        expect(scope).toEqual({
+            expression: scope.expression,
+            site: scope.site,
+            owner: 'Sales.Order/Retail',
+            command: 'Sales.Order:ship',
+            onCase: 'Sales.Order/Retail:on:ship',
+            kind: 'Sales.Order/Retail',
+            fields: [
+                { id: 'Sales.Order.id', kind: 'field', name: 'id' },
+                { id: 'Sales.Order/Retail.dockCount', kind: 'field', name: 'dockCount' },
+            ],
+            parameters: [],
+            lambdas: [],
+            sourceStates: ['Sales.Order#Ready'],
+        });
+    });
+
+    test('projects the exact scope of an outcome select', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'scope.dt',
+                text: `context Sales { id OrderId: UUID aggregate Order { id: OrderId state Ready state Done initial Ready command ship() { outcome shipped: Ready -> Done select { true } } } }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const scope = ir.scopes.find((fact) => fact.targetOutcome === 'Sales.Order:ship->shipped')!;
+        expect(scope).toEqual({
+            expression: scope.expression,
+            site: scope.site,
+            owner: 'Sales.Order',
+            command: 'Sales.Order:ship',
+            targetOutcome: 'Sales.Order:ship->shipped',
+            fields: [{ id: 'Sales.Order.id', kind: 'field', name: 'id' }],
+            parameters: [],
+            lambdas: [],
+            sourceStates: ['Sales.Order#Ready'],
+        });
     });
 });

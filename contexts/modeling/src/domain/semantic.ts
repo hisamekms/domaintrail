@@ -7,13 +7,17 @@ import type {
     SemanticKindLifecycle,
     SemanticObligation,
     SemanticOutcome,
+    SemanticPresenceFact,
     SemanticRequirement,
     SemanticSpan,
+    SemanticScopeFact,
     SemanticUnspecified,
 } from '../generated/Modeling.js';
 import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel } from './model.js';
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
 import { lifecyclesOf } from './lifecycle.js';
+import { checkInvariants, type ExpressionFact } from './rules/expressions.js';
+import { RuleSink } from './diagnostics.js';
 import { enumValueId, fieldId, invariantId, kindId, onCaseId, outcomeId, shorthandOutcomeId, parameterId, requirementId, stateId, variantId } from './ids.js';
 import {
     commandsOf,
@@ -44,47 +48,119 @@ const span = (site: Site): SemanticSpan => ({
     endColumn: site.end.column,
 });
 
-/** Project an expression tree, assigning each node a source-location identity. */
-function expression(expr: Expr, path = 'root'): SemanticExpression {
-    const children: Expr[] = [];
+const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNullable<SemanticExpression['symbol']>['kind'] => {
+    switch (kind) {
+        case 'lambdaVariable':
+            return 'lambda';
+        case 'field':
+        case 'parameter':
+        case 'state':
+        case 'kind':
+        case 'enumValue':
+        case 'type':
+            return kind;
+    }
+};
+
+const expressionChildren = (expr: Expr): Expr[] => {
     switch (expr.k) {
         case 'member':
-            children.push(expr.receiver);
-            break;
+            return [expr.receiver];
         case 'not':
-            children.push(expr.operand);
-            break;
-        case 'binary':
-            children.push(expr.left, expr.right);
-            break;
-        case 'range':
-            children.push(expr.operand, expr.lower, expr.upper);
-            break;
-        case 'count':
         case 'exists':
         case 'length':
-            children.push(expr.k === 'count' ? expr.collection : expr.operand);
-            break;
         case 'matches':
-            children.push(expr.operand);
-            break;
+            return [expr.operand];
+        case 'count':
+            return [expr.collection];
+        case 'binary':
+            return [expr.left, expr.right];
+        case 'range':
+            return [expr.operand, expr.lower, expr.upper];
         case 'unique':
-            children.push(expr.collection, ...expr.keys);
-            break;
+            return [expr.collection, ...expr.keys];
         case 'contains':
-            children.push(expr.collection, expr.element);
-            break;
+            return [expr.collection, expr.element];
         case 'quantifier':
-            children.push(expr.collection, expr.body);
-            break;
+            return [expr.collection, expr.body];
+        default:
+            return [];
     }
+};
+
+const semanticTypeName = (ty: NonNullable<ExpressionFact['type']>, declarationIds?: Map<object, string>): string | undefined => {
+    while (ty.k === 'opt' || ty.k === 'list') ty = ty.k === 'opt' ? ty.inner : ty.elem;
+    switch (ty.k) {
+        case 'prim':
+            return ty.name;
+        case 'id':
+        case 'dp':
+        case 'enum':
+        case 'struct':
+        case 'union':
+        case 'tag':
+            return declarationIds?.get(ty.decl) ?? ty.decl.id;
+        case 'enumType':
+        case 'unionType':
+        case 'ctx':
+        case 'error':
+            return undefined;
+    }
+};
+
+/** Project an expression tree, assigning each node a source-location identity. */
+function expression(
+    expr: Expr,
+    path = 'root',
+    facts?: Map<Expr, ExpressionFact>,
+    declarationIds?: Map<object, string>,
+    expressionIds?: Map<Expr, string>,
+): SemanticExpression {
+    const children = expressionChildren(expr);
+    const fact = facts?.get(expr);
+    const found = fact?.symbol;
+    const id = found?.declaration ? declarationIds?.get(found.declaration) : undefined;
+    const symbol =
+        found?.kind === 'lambdaVariable'
+            ? { id: found.binding ? (expressionIds?.get(found.binding) ?? '') : '', kind: 'lambda' as const, name: found.name }
+            : id && found
+              ? { id, kind: symbolKind(found.kind), name: found.name }
+              : undefined;
+    const rawMultiplicity = found?.declaration && 'multiplicity' in found.declaration ? found.declaration.multiplicity : undefined;
+    const nonEmptyMultiplicity =
+        rawMultiplicity &&
+        typeof rawMultiplicity === 'object' &&
+        'lower' in rawMultiplicity &&
+        typeof rawMultiplicity.lower === 'number' &&
+        'optional' in rawMultiplicity &&
+        typeof rawMultiplicity.optional === 'boolean'
+            ? !rawMultiplicity.optional && rawMultiplicity.lower >= 1
+            : undefined;
+    const isNonEmpty = fact?.type?.k === 'list' && nonEmptyMultiplicity === true;
+    const typeName = fact?.type && semanticTypeName(fact.type, declarationIds);
+    const type =
+        fact?.type && typeName
+            ? {
+                  name: typeName,
+                  cardinality: isNonEmpty
+                      ? ('nonEmpty' as const)
+                      : fact.type.k === 'opt'
+                        ? ('optional' as const)
+                        : fact.type.k === 'list'
+                          ? ('many' as const)
+                          : ('one' as const),
+              }
+            : undefined;
     return {
         id: `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`,
         owner: expr.at.elementId ?? '',
         site: span(expr.at),
         syntaxKind: expr.k,
         source: expr.text,
-        children: children.map((child, index) => expression(child, `${path}.${index}`)),
+        ...(symbol ? { symbol } : {}),
+        ...(type ? { type } : {}),
+        ...(fact?.comparison ? { comparison: fact.comparison } : {}),
+        children: children.map((child, index) => expression(child, `${path}.${index}`, facts, declarationIds, expressionIds)),
     };
 }
 
@@ -353,6 +429,10 @@ const expressionRoots = (model: SourceModel): Expr[] => {
         for (const item of items) if (item.kind === 'invariant' && item.expr) roots.push(item.expr);
     };
     for (const el of model.elements) {
+        if (el.kind === 'id' || el.kind === 'primitive') {
+            for (const inv of el.invariants) if (inv.expr) roots.push(inv.expr);
+            if (el.constraint) roots.push(el.constraint);
+        }
         if ('members' in el) addInvs(el.members);
         if (el.kind === 'aggregate') {
             for (const state of statesOf(el)) addInvs(state.members);
@@ -520,26 +600,137 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
     return result;
 }
 
+/** Merges two facts about one expression; a field left undefined in the later fact keeps the earlier value. */
+const mergeFacts = (earlier: ExpressionFact | undefined, later: ExpressionFact): ExpressionFact =>
+    earlier
+        ? {
+              expression: later.expression,
+              type: later.type ?? earlier.type,
+              comparison: later.comparison ?? earlier.comparison,
+              symbol: later.symbol ?? earlier.symbol,
+              paths: later.paths ?? earlier.paths,
+              scope: later.scope ?? earlier.scope,
+          }
+        : later;
+
 /** Build the versioned beta semantic projection from the source model, retaining exact syntax spans. */
 export function buildSemanticIR(model: SourceModel, typed: DomainModel): SemanticIR {
+    const declarationIds = new Map<object, string>();
+    const expressionIds = new Map<Expr, string>();
+    const roots = expressionRoots(model);
+    const indexExpressions = (expr: Expr, path: string): void => {
+        expressionIds.set(expr, `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`);
+        const children = expressionChildren(expr);
+        children.forEach((child, i) => indexExpressions(child, `${path}.${i}`));
+    };
+    roots.forEach((root) => indexExpressions(root, 'root'));
+    for (const el of model.elements) {
+        declarationIds.set(el, el.id);
+        if ('members' in el) for (const field of fieldsOf(el.members)) declarationIds.set(field, fieldId(el.id, field.name));
+        if (el.kind === 'enum') for (const value of el.values) declarationIds.set(value, enumValueId(el.id, value.name));
+        if (el.kind === 'aggregate') for (const state of statesOf(el)) declarationIds.set(state, state.id);
+        if (el.kind === 'union')
+            for (const variant of el.variants)
+                for (const field of fieldsOf(variant.members)) declarationIds.set(field, fieldId(variantId(el.id, variant.name), field.name));
+        if (el.kind === 'aggregate') {
+            for (const state of statesOf(el)) for (const field of fieldsOf(state.members)) declarationIds.set(field, fieldId(state.id, field.name));
+            for (const command of commandsOf(el)) {
+                declarationIds.set(command, command.id);
+                for (const param of command.params) declarationIds.set(param, parameterId(command.id, param.name));
+                for (const item of command.outcomes) declarationIds.set(item, outcomeId(command.id, item.name));
+            }
+            for (const kind of kindsOf(el))
+                for (const field of fieldsOf(kind.members)) declarationIds.set(field, fieldId(kindId(el.id, kind.name), field.name));
+            for (const kind of kindsOf(el)) {
+                declarationIds.set(kind, kindId(el.id, kind.name));
+                for (const c of kind.cases) {
+                    const command = commandsOf(el).find((candidate) => candidate.name === c.command.text);
+                    if (!command) continue;
+                    const scopedCommandId = onCaseId(kindId(el.id, kind.name), command.name);
+                    declarationIds.set(c, scopedCommandId);
+                    for (const item of c.outcomes) declarationIds.set(item, outcomeId(scopedCommandId, item.name));
+                }
+            }
+        }
+    }
+    const facts = new Map<Expr, ExpressionFact>();
+    // The checker may report several facts for one expression (its type, then its scope as a root): merge them, so a
+    // later fact never drops what an earlier one recorded.
+    checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, mergeFacts(facts.get(fact.expression), fact)));
+    const scopes: SemanticScopeFact[] = [...facts.values()]
+        .filter((fact) => fact.scope)
+        .map((fact) => ({
+            expression: expressionIds.get(fact.expression) ?? '',
+            site: span(fact.expression.at),
+            owner: (fact.scope && declarationIds.get(fact.scope.owner)) ?? fact.expression.at.elementId ?? '',
+            fields: (fact.scope?.fields ?? []).flatMap((declaration) => {
+                const id = declarationIds.get(declaration);
+                return id ? [{ id, kind: 'field' as const, name: 'name' in declaration && typeof declaration.name === 'string' ? declaration.name : '' }] : [];
+            }),
+            parameters: (fact.scope?.parameters ?? []).flatMap((declaration) => {
+                const id = declarationIds.get(declaration);
+                return id
+                    ? [{ id, kind: 'parameter' as const, name: 'name' in declaration && typeof declaration.name === 'string' ? declaration.name : '' }]
+                    : [];
+            }),
+            lambdas: (fact.scope?.lambdas ?? []).map((lambda) => ({
+                id: lambda.binding ? (expressionIds.get(lambda.binding) ?? '') : (expressionIds.get(fact.expression) ?? ''),
+                kind: 'lambda' as const,
+                name: lambda.name,
+            })),
+            sourceStates: (fact.scope?.sourceStates ?? []).flatMap((declaration) => {
+                const id = declarationIds.get(declaration);
+                return id ? [id] : [];
+            }),
+            ...(fact.scope?.targetOutcome && declarationIds.get(fact.scope.targetOutcome)
+                ? { targetOutcome: declarationIds.get(fact.scope.targetOutcome)! }
+                : {}),
+            ...(fact.scope?.kind && declarationIds.get(fact.scope.kind) ? { kind: declarationIds.get(fact.scope.kind)! } : {}),
+            ...(fact.scope?.command && declarationIds.get(fact.scope.command) ? { command: declarationIds.get(fact.scope.command)! } : {}),
+            ...(fact.scope?.onCase && declarationIds.get(fact.scope.onCase) ? { onCase: declarationIds.get(fact.scope.onCase)! } : {}),
+        }));
+    const presence: SemanticPresenceFact[] = [...facts.values()].flatMap((fact) =>
+        (fact.paths ?? []).map((path) => ({ expression: expressionIds.get(fact.expression) ?? '', path })),
+    );
+    const aggregates = model.elements
+        .filter((e): e is AggregateDecl => e.kind === 'aggregate')
+        .flatMap((agg) => {
+            const model = typed.elements.find((el): el is AggregateModel => el.kind === 'aggregate' && el.id === agg.id);
+            return model ? [aggregate(agg, model)] : [];
+        });
+    const unspecified = model.elements
+        .filter((e): e is AggregateDecl => e.kind === 'aggregate')
+        .flatMap((agg) => {
+            const typedAggregate = typed.elements.find((element): element is AggregateModel => element.kind === 'aggregate' && element.id === agg.id);
+            return typedAggregate ? unspecifiedFor(agg, typedAggregate) : [];
+        });
+    // `parameter` and `explicitAssignment` remain unused until Phase 2 adds `changes x = expr`.
+    const provenance: SemanticIR['provenance'][number][] = [];
+    for (const aggregate of aggregates) {
+        const choiceOutcomes = new Set(aggregate.choices.flatMap((choice) => choice.outcomes));
+        for (const item of aggregate.outcomes) {
+            const sources = item.from.length ? item.from : [undefined];
+            for (const source of sources) {
+                for (const field of item.carried)
+                    provenance.push({ kind: 'carried', declaration: item.id, field, ...(source ? { source } : {}), site: item.site });
+                for (const fact of unspecified) {
+                    if (fact.declaration !== item.id || fact.source !== source || !fact.field) continue;
+                    provenance.push({ kind: 'unspecified', declaration: item.id, field: fact.field, ...(source ? { source } : {}), site: fact.site });
+                }
+                if (choiceOutcomes.has(item.id))
+                    provenance.push({ kind: 'selectedChoice', declaration: item.id, ...(source ? { source } : {}), site: item.site });
+            }
+        }
+    }
     return {
         version: SEMANTIC_IR_VERSION,
         declarations: declarationsOf(model),
-        expressions: expressionRoots(model).map((expr) => expression(expr)),
-        scopes: [],
-        aggregates: model.elements
-            .filter((e): e is AggregateDecl => e.kind === 'aggregate')
-            .flatMap((agg) => {
-                const model = typed.elements.find((el): el is AggregateModel => el.kind === 'aggregate' && el.id === agg.id);
-                return model ? [aggregate(agg, model)] : [];
-            }),
+        expressions: roots.map((expr) => expression(expr, 'root', facts, declarationIds, expressionIds)),
+        scopes,
+        presence,
+        aggregates,
         obligations: obligations(model),
-        unspecified: model.elements
-            .filter((e): e is AggregateDecl => e.kind === 'aggregate')
-            .flatMap((agg) => {
-                const typedAggregate = typed.elements.find((element): element is AggregateModel => element.kind === 'aggregate' && element.id === agg.id);
-                return typedAggregate ? unspecifiedFor(agg, typedAggregate) : [];
-            }),
-        provenance: [],
+        unspecified,
+        provenance,
     };
 }
