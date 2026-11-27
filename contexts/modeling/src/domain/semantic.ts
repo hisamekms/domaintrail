@@ -18,7 +18,6 @@ import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand 
 import { lifecyclesOf } from './lifecycle.js';
 import { checkInvariants, type ExpressionFact } from './rules/expressions.js';
 import { RuleSink } from './diagnostics.js';
-import { showType } from './types.js';
 import { enumValueId, fieldId, invariantId, kindId, onCaseId, outcomeId, shorthandOutcomeId, parameterId, requirementId, stateId, variantId } from './ids.js';
 import {
     commandsOf,
@@ -63,6 +62,52 @@ const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNul
     }
 };
 
+const expressionChildren = (expr: Expr): Expr[] => {
+    switch (expr.k) {
+        case 'member':
+            return [expr.receiver];
+        case 'not':
+        case 'exists':
+        case 'length':
+        case 'matches':
+            return [expr.operand];
+        case 'count':
+            return [expr.collection];
+        case 'binary':
+            return [expr.left, expr.right];
+        case 'range':
+            return [expr.operand, expr.lower, expr.upper];
+        case 'unique':
+            return [expr.collection, ...expr.keys];
+        case 'contains':
+            return [expr.collection, expr.element];
+        case 'quantifier':
+            return [expr.collection, expr.body];
+        default:
+            return [];
+    }
+};
+
+const semanticTypeName = (ty: NonNullable<ExpressionFact['type']>, declarationIds?: Map<object, string>): string | undefined => {
+    while (ty.k === 'opt' || ty.k === 'list') ty = ty.k === 'opt' ? ty.inner : ty.elem;
+    switch (ty.k) {
+        case 'prim':
+            return ty.name;
+        case 'id':
+        case 'dp':
+        case 'enum':
+        case 'struct':
+        case 'union':
+        case 'tag':
+            return declarationIds?.get(ty.decl) ?? ty.decl.id;
+        case 'enumType':
+        case 'unionType':
+        case 'ctx':
+        case 'error':
+            return undefined;
+    }
+};
+
 /** Project an expression tree, assigning each node a source-location identity. */
 function expression(
     expr: Expr,
@@ -71,38 +116,7 @@ function expression(
     declarationIds?: Map<object, string>,
     expressionIds?: Map<Expr, string>,
 ): SemanticExpression {
-    const children: Expr[] = [];
-    switch (expr.k) {
-        case 'member':
-            children.push(expr.receiver);
-            break;
-        case 'not':
-            children.push(expr.operand);
-            break;
-        case 'binary':
-            children.push(expr.left, expr.right);
-            break;
-        case 'range':
-            children.push(expr.operand, expr.lower, expr.upper);
-            break;
-        case 'count':
-        case 'exists':
-        case 'length':
-            children.push(expr.k === 'count' ? expr.collection : expr.operand);
-            break;
-        case 'matches':
-            children.push(expr.operand);
-            break;
-        case 'unique':
-            children.push(expr.collection, ...expr.keys);
-            break;
-        case 'contains':
-            children.push(expr.collection, expr.element);
-            break;
-        case 'quantifier':
-            children.push(expr.collection, expr.body);
-            break;
-    }
+    const children = expressionChildren(expr);
     const fact = facts?.get(expr);
     const found = fact?.symbol;
     const id = found?.declaration ? declarationIds?.get(found.declaration) : undefined;
@@ -112,14 +126,31 @@ function expression(
             : id && found
               ? { id, kind: symbolKind(found.kind), name: found.name }
               : undefined;
-    const type = fact?.type
-        ? {
-              name: showType(fact.type)
-                  .replace(/\?$/, '')
-                  .replace(/\[0\.\.\*\]$/, ''),
-              cardinality: fact.type.k === 'opt' ? ('optional' as const) : fact.type.k === 'list' ? ('many' as const) : ('one' as const),
-          }
-        : undefined;
+    const rawMultiplicity = found?.declaration && 'multiplicity' in found.declaration ? found.declaration.multiplicity : undefined;
+    const nonEmptyMultiplicity =
+        rawMultiplicity &&
+        typeof rawMultiplicity === 'object' &&
+        'lower' in rawMultiplicity &&
+        typeof rawMultiplicity.lower === 'number' &&
+        'optional' in rawMultiplicity &&
+        typeof rawMultiplicity.optional === 'boolean'
+            ? !rawMultiplicity.optional && rawMultiplicity.lower >= 1
+            : undefined;
+    const isNonEmpty = fact?.type?.k === 'list' && nonEmptyMultiplicity === true;
+    const typeName = fact?.type && semanticTypeName(fact.type, declarationIds);
+    const type =
+        fact?.type && typeName
+            ? {
+                  name: typeName,
+                  cardinality: isNonEmpty
+                      ? ('nonEmpty' as const)
+                      : fact.type.k === 'opt'
+                        ? ('optional' as const)
+                        : fact.type.k === 'list'
+                          ? ('many' as const)
+                          : ('one' as const),
+              }
+            : undefined;
     return {
         id: `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`,
         owner: expr.at.elementId ?? '',
@@ -589,36 +620,7 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     const roots = expressionRoots(model);
     const indexExpressions = (expr: Expr, path: string): void => {
         expressionIds.set(expr, `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`);
-        const children: Expr[] = [];
-        switch (expr.k) {
-            case 'member':
-                children.push(expr.receiver);
-                break;
-            case 'not':
-            case 'exists':
-            case 'length':
-            case 'matches':
-                children.push(expr.operand);
-                break;
-            case 'count':
-                children.push(expr.collection);
-                break;
-            case 'binary':
-                children.push(expr.left, expr.right);
-                break;
-            case 'range':
-                children.push(expr.operand, expr.lower, expr.upper);
-                break;
-            case 'unique':
-                children.push(expr.collection, ...expr.keys);
-                break;
-            case 'contains':
-                children.push(expr.collection, expr.element);
-                break;
-            case 'quantifier':
-                children.push(expr.collection, expr.body);
-                break;
-        }
+        const children = expressionChildren(expr);
         children.forEach((child, i) => indexExpressions(child, `${path}.${i}`));
     };
     roots.forEach((root) => indexExpressions(root, 'root'));

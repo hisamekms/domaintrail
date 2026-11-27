@@ -118,7 +118,7 @@ function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel,
         if ('kind' in inv.decl) checkDeclared(inv.decl, rules);
         if (!inv.expr) continue;
         const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }, inv.expr]], present: new Set() };
-        sink?.({ expression: inv.expr, type: ERROR, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value', binding: inv.expr }] } });
+        sink?.({ expression: inv.expr, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value', binding: inv.expr }] } });
         const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
         if (t.k !== 'error' && !isBool(t)) {
             const what = inv.decl === inv.expr ? `The constraint of '${p.name}'` : `Invariant '${inv.name}'`;
@@ -280,7 +280,7 @@ function checkDecisionExpr(
               lambdas: [] as Array<{ name: string; binding?: Expr }>,
           }
         : undefined;
-    if (rootFact) sink?.({ expression: expr, type: ERROR, scope: rootFact });
+    if (rootFact) sink?.({ expression: expr, scope: rootFact });
     const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(expr, {
         ctx,
         fields,
@@ -380,7 +380,7 @@ function checkRequirements(
             parameters: cmd.params,
             lambdas: [] as Array<{ name: string; binding?: Expr }>,
         };
-        sink?.({ expression: req.expr, type: ERROR, scope: rootFact });
+        sink?.({ expression: req.expr, scope: rootFact });
         const t = new ExprChecker(model, rules, sink, (name, binding) => rootFact.lambdas.push({ name, binding })).check(req.expr, {
             ctx,
             fields,
@@ -632,7 +632,10 @@ class ExprChecker {
         if (l.k === 'error' || r.k === 'error') return BOOL;
         // a date or time compared with a string literal: the literal is a value of its type (ADR 0038)
         const ordering = op !== '==' && op !== '!=';
-        if (this.temporalLiteral(l, e.right, ordering) || this.temporalLiteral(r, e.left, ordering)) return BOOL;
+        if (this.temporalLiteral(l, e.right, ordering) || this.temporalLiteral(r, e.left, ordering)) {
+            this.comparisons.set(e, ordering ? 'ordered' : 'primitive');
+            return BOOL;
+        }
         const ok = op === '==' || op === '!=' ? equatable(l, r) : ordered(l, r);
         this.comparisons.set(e, ok ? comparisonKind(l, r, ordering) : 'notComparable');
         if (!ok) {
@@ -730,7 +733,7 @@ class ExprChecker {
                 this.rules.error('M001', `Context '${recv.name}' has no enum or union named '${m}'.`, e.memberAt, didYouMean(m, names));
                 return ERROR;
             }
-            case 'enumType':
+            case 'enumType': {
                 const value = recv.decl.values.find((v) => v.name === m);
                 if (value) {
                     this.symbols.set(e, { kind: 'enumValue', name: m, declaration: value });
@@ -747,6 +750,7 @@ class ExprChecker {
                     ),
                 );
                 return ERROR;
+            }
             case 'unionType':
                 if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
                 this.rules.error(
@@ -809,6 +813,7 @@ class ExprChecker {
 
 function comparisonKind(l: Ty, r: Ty, ordering: boolean): NonNullable<ExpressionFact['comparison']> {
     if (ordering) return 'ordered';
+    if (l.k === 'tag' && r.k === 'tag') return 'enumValue';
     if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityId' : 'valueObjectStructural';
     if (l.k === 'union' && r.k === 'union' && l.decl === r.decl) return 'unionStructural';
     if (l.k === 'enum' && r.k === 'enum') return 'enumValue';

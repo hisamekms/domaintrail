@@ -93,6 +93,13 @@ describe('Semantic IR', () => {
                     text: `context Fixture { id ItemId: UUID aggregate Item { id: ItemId state Start state RetailDone kind Retail { initial Start on finish { outcome done: Start -> RetailDone } } command finish() { } } }`,
                 },
             ]),
+            ...(await Promise.all(
+                [
+                    `context BadBool { aggregate Item { invariant invalid { 1 } } }`,
+                    `context BadOptional { aggregate Item { note: String? invariant invalid { note.length > 0 } } }`,
+                    `context BadScope { aggregate Item { state A { hidden: String } state B invariant invalid { hidden == "x" } } }`,
+                ].map((text, index) => analyzeDomain([{ path: `bad-${index}.dt`, text }])),
+            )),
         ];
         for (const analysis of analyses) {
             const model = analysis.sourceModel!;
@@ -195,7 +202,7 @@ describe('Semantic IR', () => {
         const nodes = flat(ir.expressions);
         const source = (text: string) => nodes.find((node) => node.source === text);
         expect(source('items')?.symbol).toEqual({ id: 'Sales.Order.items', kind: 'field', name: 'items' });
-        expect(source('items')?.type).toEqual({ name: 'OrderItem', cardinality: 'many' });
+        expect(source('items')?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'many' });
         expect(nodes.find((node) => node.symbol?.id === 'Sales.Order:cancel(reason)')?.symbol).toEqual({
             id: 'Sales.Order:cancel(reason)',
             kind: 'parameter',
@@ -207,7 +214,40 @@ describe('Semantic IR', () => {
         expect(source('note')?.type).toEqual({ name: 'String', cardinality: 'optional' });
         const lambda = nodes.find((node) => node.symbol?.kind === 'lambda' && node.symbol.name === 'item');
         expect(lambda?.symbol).toEqual({ id: expect.stringContaining(':expression:'), kind: 'lambda', name: 'item' });
-        expect(lambda?.type).toEqual({ name: 'OrderItem', cardinality: 'one' });
+        expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one' });
+    });
+
+    test('projects declared, primitive, enum, optional, list and non-empty types', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'types.dt',
+                text: `context Types {
+                  primitive Quantity: Int
+                  enum Status { Open Closed }
+                  entity Item { quantity: Quantity plain: Int invariant positive { quantity > 0 and plain > 0 } }
+                  aggregate Cart {
+                    item: Item?
+                    items: Item[0..*]
+                    requiredItems: Item[1..*]
+                    status: Status
+                    invariant values { exists(item) and items.length >= 0 and requiredItems.length >= 0 and status == Status.Open }
+                  }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        const source = (text: string) => nodes.find((node) => node.source === text);
+        expect(source('quantity')?.type).toEqual({ name: 'Types.Quantity', cardinality: 'one' });
+        expect(source('plain')?.type).toEqual({ name: 'Int', cardinality: 'one' });
+        expect(source('item')?.type).toEqual({ name: 'Types.Item', cardinality: 'optional' });
+        expect(source('items')?.type).toEqual({ name: 'Types.Item', cardinality: 'many' });
+        expect(source('requiredItems')?.type).toEqual({ name: 'Types.Item', cardinality: 'nonEmpty' });
+        expect(source('Status')?.type).toBeUndefined();
+        expect(source('Status.Open')?.symbol).toEqual({ id: 'Types.Status=Open', kind: 'enumValue', name: 'Open' });
+        expect(source('Status.Open')?.type).toEqual({ name: 'Types.Status', cardinality: 'one' });
     });
 
     test('projects a focused value object member and guarded optional field', async () => {
