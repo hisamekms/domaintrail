@@ -791,7 +791,10 @@ class ExprChecker {
                 );
                 return ERROR;
             case 'union': {
-                if (m === discriminatorOf(recv.decl)) return tagOf(recv.decl);
+                if (m === discriminatorOf(recv.decl)) {
+                    this.symbols.set(e, { kind: 'unionTag', name: m, declaration: recv.decl });
+                    return tagOf(recv.decl);
+                }
                 const variants = recv.decl.variants.filter((v) => fieldsOf(v.members).some((f) => f.name === m)).map((v) => v.name);
                 if (variants.length) {
                     this.rules.error(

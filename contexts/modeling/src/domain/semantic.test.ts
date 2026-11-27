@@ -91,6 +91,51 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
 }
 
 describe('Semantic IR', () => {
+    test('records symbols on keyword and union member expressions', async () => {
+        const fixtures = [
+            `context Model {
+  enum BinaryOp { implies or and eq not in true false String state command }
+  union TypeExpr { primitive { name: String } ref { ref: String target: String? } }
+  value Use {
+    context: String event: String? errors: String[0..*] op: BinaryOp type: TypeExpr
+    invariant k { op != BinaryOp.and implies exists(event) }
+    invariant p { type.kind == TypeExpr.primitive or count(errors) > 0 }
+  }
+}`,
+            `context Sales {
+  id UserId: UUID
+  id PartnerId: UUID
+  enum Process { DELIVERY PRINTING }
+  union Actor { INTERNAL_USER { userId: UserId } EXTERNAL_PARTY { name: String partnerId: PartnerId? } }
+  value DeliverySpec { planned: Int? }
+  value PrintingSpec { copies: Int? }
+  union Details by type: Process { DELIVERY { details: DeliverySpec } PRINTING { details: PrintingSpec } }
+  union Coverage by form { DESCRIPTION { text: String invariant notBlank { length(text) > 0 } } }
+  id SpecId: UUID
+  aggregate Spec { id: SpecId process: Process owns details: Details actor: Actor coverage: Coverage?
+    invariant detailsMatchProcess { details.type == process }
+    invariant internalOnly { actor.kind == Actor.INTERNAL_USER }
+  }
+}`,
+            `shared context Common { enum Currency { JPY USD } value Money { amount: Decimal currency: Currency } }
+context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: Common.Money preferred: Common.Currency invariant yen { preferred == Common.Currency.USD } } }`,
+        ];
+        const analyses = await Promise.all(fixtures.map((text, index) => analyzeDomain([{ path: `probe-${index}.dt`, text }])));
+        analyses.push(await analyzeDomain(await exampleSources()));
+        for (const [index, analysis] of analyses.entries()) {
+            const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+            const missing = ir.expressions.flatMap((root) => {
+                const nodes: import('../generated/Modeling.js').SemanticExpression[] = [];
+                const visit = (node: import('../generated/Modeling.js').SemanticExpression) => {
+                    nodes.push(node);
+                    node.children.forEach(visit);
+                };
+                visit(root);
+                return nodes.filter((node) => (node.syntaxKind === 'member' || node.syntaxKind === 'name') && !node.symbol).map((node) => node.source);
+            });
+            expect(missing, `fixture ${index === fixtures.length ? 'examples/shop' : index}`).toEqual([]);
+        }
+    });
     test('keeps Typed Model invariant, requirement and select trees in parity with IR paths', async () => {
         const modelingRoot = path.join(import.meta.dir, '..', '..', 'model');
         const modelingFiles: string[] = [];
