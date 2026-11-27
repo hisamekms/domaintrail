@@ -165,7 +165,9 @@ Migration steps and regressions:
    context receivers take theirs from the symbol; a union's tag has an IR type `{ name: <union>, tag: true }`).
    Progress (step 3c, done): the compiler's cases produce JavaScript only; types come from the IR alone (`fieldTy`
    remains for the generated equality functions over declared fields).
-   Remaining: one checker pass; equality from comparison facts; applicability.
+   Progress (step 3d, done): `==`/`!=` choose the equality from the IR's comparison fact (structural and entity ID
+   kinds call the element's equality function; the others compare scalars).
+   Remaining: one checker pass; applicability.
 4. Port contract-test generation to IR dependencies and recursion facts. Regression: all generated test files match the
    captured baseline and the checker contract remains unchanged.
 5. Add the TLA+ capability and adapters, trace metadata, and architecture-map entry (Phase 4; Phase 1 ends at step 4).
