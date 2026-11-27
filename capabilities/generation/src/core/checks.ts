@@ -11,6 +11,7 @@ import type {
     SemanticIR,
     UnionModel,
 } from '@domaintrail/modeling';
+import { exprModelIndex } from '@domaintrail/modeling';
 import {
     BINARY_OP_TEXT,
     applicableOutcomes,
@@ -240,9 +241,11 @@ export class ExprCompiler {
     private params: readonly string[] = [];
     /** Names a lambda variable must not take in this module, other than those of the scope. */
     private readonly notLambda: ReadonlySet<string>;
+    private readonly irIndex: ReturnType<typeof exprModelIndex>;
 
     constructor(private readonly env: CheckEnv) {
         const { model, ctx } = env;
+        this.irIndex = env.ir ? exprModelIndex(env.ir, model) : new Map();
         // the other contexts are imported as namespaces, and the equality of this context's types is called by name
         const equalities = elementsIn(model, ctx)
             .filter((el) => el.kind === 'valueObject' || el.kind === 'entity' || el.kind === 'union')
@@ -311,6 +314,7 @@ export class ExprCompiler {
     }
 
     compile(e: ExprModel, scope: Scope): Binding {
+        this.irNode(e);
         const bool = (js: string): Binding => ({ js, ty: { k: 'prim', name: 'Bool' } });
         /** `(js)`; `loose` when `js` is a `||` at the top. */
         const wrapped = (js: string, loose = false): Binding => ({ ...bool(`(${js})`), wrapped: true, inner: js, tight: !loose });
@@ -397,6 +401,10 @@ export class ExprCompiler {
                 }
             }
         }
+    }
+
+    private irNode(e: ExprModel): ReturnType<typeof exprModelIndex> extends Map<ExprModel, infer T> ? T | undefined : never {
+        return this.irIndex.get(e);
     }
 
     private name(name: string, scope: Scope): Binding {

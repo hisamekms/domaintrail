@@ -5,7 +5,7 @@ import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
 import { invariantId, kindId, onCaseId, outcomeId, requirementId, stateId, variantId } from './ids.js';
-import { buildSemanticIR, irExpressionAt, SEMANTIC_IR_VERSION } from './semantic.js';
+import { buildSemanticIR, exprModelIndex, SEMANTIC_IR_VERSION } from './semantic.js';
 import type { ExprModel } from './model.js';
 import { checkInvariants } from './rules/expressions.js';
 import { RuleSink } from './diagnostics.js';
@@ -25,6 +25,7 @@ const allExamples = async () => {
 };
 
 function assertExpressionParity(typed: import('./model.js').DomainModel, ir: ReturnType<typeof buildSemanticIR>): void {
+    const index = exprModelIndex(ir, typed);
     const roots: { id: string; expr: ExprModel }[] = [];
     const invariants = (owner: string, items: readonly import('./model.js').InvariantModel[]) =>
         items.forEach((item) => item.expr && roots.push({ id: invariantId(owner, item.name), expr: item.expr }));
@@ -76,7 +77,7 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
         }
     };
     const walk = (root: string, expr: ExprModel, path = ''): void => {
-        const found = irExpressionAt(ir, root, path);
+        const found = index.get(expr);
         expect(found, `${root} at ${path || '<root>'}`).toBeDefined();
         expect(found!.syntaxKind).toBe(expr.k);
         if (expr.k === 'binary') {

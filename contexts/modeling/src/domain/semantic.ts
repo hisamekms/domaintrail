@@ -13,7 +13,7 @@ import type {
     SemanticScopeFact,
     SemanticUnspecified,
 } from '../generated/Modeling.js';
-import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel } from './model.js';
+import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel, ExprModel } from './model.js';
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
 import { lifecyclesOf } from './lifecycle.js';
 import { checkInvariants, type ExpressionFact } from './rules/expressions.js';
@@ -750,4 +750,66 @@ export function irExpressionAt(ir: SemanticIR, root: string, path: string): Sema
     let current = ir.expressions.find((item) => item.root === root);
     for (const index of parts) current = current?.children[index];
     return current;
+}
+
+/** Map every expression object in Typed Model declaration roots to its Semantic IR node. */
+export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprModel, SemanticExpression> {
+    const result = new Map<ExprModel, SemanticExpression>();
+    const roots: { id: string; expr: ExprModel }[] = [];
+    const invariants = (owner: string, items: readonly import('./model.js').InvariantModel[]) =>
+        items.forEach((item) => item.expr && roots.push({ id: invariantId(owner, item.name), expr: item.expr }));
+    const requirements = (owner: string, items: readonly import('./model.js').RequirementModel[]) =>
+        items.forEach((item) => item.expr && roots.push({ id: requirementId(owner, item.name), expr: item.expr }));
+    const outcomes = (owner: string, items: readonly OutcomeModel[]) =>
+        items.forEach((item) => item.select?.kind === 'expression' && roots.push({ id: outcomeId(owner, item.name), expr: item.select.expr }));
+    for (const element of model.elements) {
+        if ('invariants' in element) invariants(element.id, element.invariants);
+        if (element.kind === 'union') for (const variant of element.variants) invariants(variantId(element.id, variant.name), variant.invariants);
+        if (element.kind !== 'aggregate') continue;
+        for (const state of element.states) invariants(state.id, state.invariants);
+        for (const kind of element.kinds) {
+            invariants(kindId(element.id, kind.name), kind.invariants);
+            for (const c of kind.cases) {
+                const owner = onCaseId(kindId(element.id, kind.name), c.command);
+                requirements(owner, c.requires);
+                outcomes(owner, c.outcomes);
+            }
+        }
+        for (const command of element.commands) {
+            requirements(command.id, command.requires);
+            outcomes(command.id, command.outcomes);
+        }
+    }
+    const children = (expr: ExprModel): ExprModel[] => {
+        switch (expr.k) {
+            case 'member':
+                return [expr.receiver];
+            case 'not':
+            case 'exists':
+            case 'length':
+            case 'matches':
+                return [expr.operand];
+            case 'binary':
+                return [expr.left, expr.right];
+            case 'range':
+                return [expr.operand, expr.lower, expr.upper];
+            case 'count':
+                return [expr.collection];
+            case 'unique':
+                return [expr.collection, ...expr.keys];
+            case 'contains':
+                return [expr.collection, expr.element];
+            case 'quantifier':
+                return [expr.collection, expr.body];
+            default:
+                return [];
+        }
+    };
+    const walk = (root: string, expr: ExprModel, path = ''): void => {
+        const found = irExpressionAt(ir, root, path);
+        if (found) result.set(expr, found);
+        children(expr).forEach((child, i) => walk(root, child, path ? `${path}.${i}` : `${i}`));
+    };
+    roots.forEach(({ id, expr }) => walk(id, expr));
+    return result;
 }
