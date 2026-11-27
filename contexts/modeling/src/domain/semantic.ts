@@ -9,6 +9,7 @@ import type {
     SemanticOutcome,
     SemanticRequirement,
     SemanticSpan,
+    SemanticScopeFact,
     SemanticUnspecified,
 } from '../generated/Modeling.js';
 import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel } from './model.js';
@@ -621,11 +622,25 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     }
     const facts = new Map<Expr, ExpressionFact>();
     checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, fact));
+    const scopes: SemanticScopeFact[] = [...facts.values()]
+        .filter((fact) => fact.presence?.length)
+        .map((fact) => ({
+            site: span(fact.expression.at),
+            owner: fact.expression.at.elementId ?? '',
+            fields: [],
+            parameters: [],
+            lambdas: [],
+            sourceStates: [],
+            presence: (fact.presence ?? []).flatMap((declaration) => {
+                const id = declarationIds.get(declaration);
+                return id ? [{ expression: expressionIds.get(fact.expression) ?? '', edge: id, present: true }] : [];
+            }),
+        }));
     return {
         version: SEMANTIC_IR_VERSION,
         declarations: declarationsOf(model),
         expressions: roots.map((expr) => expression(expr, 'root', facts, declarationIds, expressionIds)),
-        scopes: [],
+        scopes,
         aggregates: model.elements
             .filter((e): e is AggregateDecl => e.kind === 'aggregate')
             .flatMap((agg) => {

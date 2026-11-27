@@ -83,6 +83,27 @@ describe('Semantic IR', () => {
             'entityId',
         ]);
     });
+    test('projects only true-edge optional presence facts and guarded right operands', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture {
+                  aggregate Item {
+                    note: String?
+                    invariant conjunction { exists(note) and note.length > 0 }
+                    invariant implication { exists(note) implies note.length > 0 }
+                    invariant disjunction { not exists(note) or note.length > 0 }
+                  }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const facts = ir.scopes.flatMap((scope) => scope.presence);
+        expect(facts).toContainEqual(expect.objectContaining({ edge: 'Fixture.Item.note', present: true }));
+        expect(facts.filter((fact) => fact.edge === 'Fixture.Item.note')).toHaveLength(4);
+        const disjunction = ir.scopes.filter((scope) => scope.site.startLine === 6);
+        expect(disjunction.flatMap((scope) => scope.presence)).toEqual([]);
+    });
     test('projects the shop lifecycle facts as state IDs', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
