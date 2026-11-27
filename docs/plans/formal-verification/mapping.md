@@ -13,6 +13,15 @@ contains only some concrete behaviors: existential witnesses are concrete, but a
 counterexample. These directions describe abstractions only; finitizing an input domain is a scope restriction, not a
 claim about behavior outside the selected scope.
 
+Every reported result must include the finite domains and collection bounds used. A violation of an invariant during
+creation can be a concrete checker trace yet still classify as `Underspecified` when the source leaves those create
+fields nondeterministic. For an existential question encoded by checking the negated invariant, invert the checker
+result: a counterexample to the negation is a positive witness; an exhaustive pass of the negation establishes
+non-reachability only within the stated profile. A deadlock report is a separate outcome, not an invariant result.
+For executability, disable deadlock checking for that run or check each command's `Enabled` predicate separately.
+The trace translator must use generated source/action metadata to map checker states, action arguments, outcomes,
+and changed fields back to `.dt`; a TLC source span alone does not provide that mapping.
+
 References point to the current source. The code has been inspected for the settled details below. ADRs supply semantic
 decisions. **Unconfirmed** marks a proposed encoding detail that the source and ADRs do not settle.
 
@@ -79,7 +88,7 @@ mentions a Set type that does not exist in this commit. This is a recorded corre
 | Feature | TLA+ candidate | Class and result impact | Source |
 |---|---|---|---|
 | Aggregate/entity state and fields | State variables and records | Lowering. Finite values and aggregate count restrict scope. | [`model.dt:100-129`](../../../contexts/modeling/model/model.dt#L100) |
-| Create commands | Initial-state/action relation | Abstracted: a create command sets every field, but its parameters do not determine every field. Unspecified values are nondeterministic within their type, an over-approximation. Universal invariant passes remain sound; existential claims may be spurious. This can cause `Underspecified`, for example `distinctSkus` failing on nondeterministic `items` at creation. For an aggregate with no create command, generate initial states directly from its applicable declared initial state(s), selecting field values from the profile domains; do not invent a create action. | [ADR 0019](../../adr/0019-command-changes-and-decisions.md#L50); [ADR 0035](../../adr/0035-kind-specific-lifecycles.md#L24); [shop Order](../../../examples/shop/sales/order.dt#L26) |
+| Create commands | Initial-state/action relation | Abstracted: a create command sets every field, but its parameters do not determine every field. Unspecified values are nondeterministic within their type, an over-approximation. Universal invariant passes remain sound; existential claims may be spurious. This can cause `Underspecified`, for example `distinctSkus` failing on nondeterministic `items` at creation. For an aggregate with no create command, generate initial states directly from its applicable declared initial state(s), selecting field values from the profile domains; do not invent a create action. Classification constrains only unspecified values for each fixed command parameter tuple. Create inputs such as `place(id, customer, items)` remain fixed; if no invariant-satisfying unspecified choices exist for an enabled input, classify that input as a forced `Counterexample found`. | [ADR 0019](../../adr/0019-command-changes-and-decisions.md#L50); [ADR 0035](../../adr/0035-kind-specific-lifecycles.md#L24); [shop Order](../../../examples/shop/sales/order.dt#L26) |
 | States, outcomes, kind-specific lifecycles | Action per outcome with kind/state validity predicate | Lowering; preserve initial states and selected kind guards. Profile bounds restrict scope. | [ADR 0035](../../adr/0035-kind-specific-lifecycles.md#L59); [ADR 0037](../../adr/0037-aggregate-kinds.md#L1); [`model.dt:122-129`](../../../contexts/modeling/model/model.dt#L122) |
 | Commands declared for any state | Same source-state guarded action | Lowering: generated wrapper supports the any-state call, but the command still checks declared source states. Calling it in another state is a `CommandUnavailable` rejection with no state change. | [ADR 0036](../../adr/0036-commands-in-any-state.md#L1) |
 | `requires` with expression | Action guard | Lowering with expression semantics above. | [ADR 0017](../../adr/0017-command-requirements.md#L33) |
@@ -97,6 +106,60 @@ mentions a Set type that does not exist in this commit. This is a recorded corre
 | Reachability / deadlock | TLC state graph and terminal-state predicate | Lowering, complete only within finite profile scope. Distinguish intended terminal states. | [ADR 0014](../../adr/0014-command-transitions.md#L25) |
 | Source locations / trace mapping | Symbol-to-source map and action metadata | Lowering candidate. Map commands, arguments, before/after states, and source `Location`. | [`model.dt:42`](../../../contexts/modeling/model/model.dt#L42); [`build.ts:95`](../../../contexts/modeling/src/infrastructure/syntax/build.ts#L95) |
 
+### Phase 0 spike clarification — capture B17b
+
+Finite bounds on item count and profile values are verification scope, not inferred business constraints. The
+single-module Order spike's constrained-action rule is mechanical: `A_C(p) == A(p) /\ Inv'`. Its no-successor probe is
+`\A p: ENABLED A(p) => ENABLED A_C(p)`. For each input tuple enabled by `A`, the same parameters are preserved;
+parameters are never constrained. Only unspecified outputs are restricted by `Inv'`. No constrained successor for an
+enabled input is a forced `Counterexample found`; a violation caused only by unspecified outputs is `Underspecified`.
+Attribute a transition finding with `NextOnly_A`, leaving only A unconstrained and constraining other declarations.
+
+Creation is represented by `Place` from `Absent`. The seed models creation as `place(id, customer, items)`; the real
+command is `place(id, customer)` (`order.dt:26`). The probe fixes each seed input tuple and checks whether any
+invariant-satisfying unspecified output exists. The `its` parameter exists only in the
+`creation_items_param` seed; in `none` it is quantified but unused. TLC can report the state violation but does not
+print the quantified input witness; a translator must recover it by matching the generated input domain and action
+relation against the trace. In the spike, binding create ID/customer parameters to fields is an explicit modeling
+assumption. Command arguments generally do not bind to fields: ChangeNote's argument is retained but `note'` is
+nondeterministic; Confirm's timestamp argument is retained but the selected timestamp is nondeterministic; Cancel's
+reason argument is retained but `reason'` is nondeterministic. Source-only fields are dropped.
+
+Capture B17b detects 5 of 5 seeded kinds: missing `hasItems` is detected via `Confirm` (`C_probes` fails while
+`none__C_probes` passes; `only_Confirm` fails while `none__only_Confirm` passes). At Level 2, missing `requires` is
+detectable when it protects fields a command does not change or specify, not when it protects only unspecified
+outputs. The missing AddItem requirement is not detected: the correct model also admits duplicate SKUs, and
+`none__only_AddItem` violates `DistinctSkus`. A postcondition such as `items' = Append(items, it)` is needed at Level 3.
+Full detection and stop criteria are in
+[`spike/results.md`](spike/results.md).
+
+TLC 1.8.0 JSON records state/action values, action name, TLA source location, context, and formal parameters. It does
+not identify DomainTrail declarations, field provenance, or a quantified input hidden by a state-only invariant
+failure. Generator metadata must map actions, arguments, fields, invariants, and source spans, and indicate whether
+each target field came from a parameter, explicit assignment, unchanged state, or an unspecified choice. For a forced
+creation violation, it must recover the fixed input tuple from the relation and state witness.
+
+Checker exit codes are transport signals, not result classes. A completed exhaustive pass is verified only within
+the finite profile. Interpret violations using the source classification above; interpret existential checks
+encoded as negated invariants against a correct-model witness. A counterexample to the negation is a positive
+witness; an exhaustive pass establishes absence only within scope. `none__deadlock_U` passed with Cancelled
+terminal-aware. In capture B19, the Apalache `none__C_all` run is a compatibility smoke test that shows only that `Inv`
+holds under `NextC` to length 4, and the `missing_requires_confirm__only_Confirm` run finds an `Inv` violation at state
+2; under `NextC`, `Inv` holds by construction, and Apalache cannot evaluate the `ENABLED` probes. The accepted
+annotation form is a keyword, a `\* @type:` line comment, then the name; sequence iteration uses `DOMAIN items`
+rather than `1..Len(items)`. Add both requirements to the generator; bounded passes are not exhaustive.
+
+Phase 4 generator requirements include treating SANY semantic diagnostics as errors even on exit 0; aligned
+bulleted lists; parenthesized quantifiers and `IF` expressions; dependency-ordered definitions; `Inv'` last in
+constrained actions; valid cfg keywords such as `CHECK_DEADLOCK`; and defining every operator referenced by every
+cfg. Prefer one seed-parameterized module over copied modules. Generate fixed-parameter constrained forms and probes
+mechanically, and validate config/operator closure. Java 27 works for TLC. TLC is the recommended exhaustive
+finite-state checker; Apalache's bounded runs (capture B19) are compatible with the spec and find the confirm seed, but
+are not exhaustive. Per aggregate, the basic matrix is unconstrained and
+constrained invariant runs plus a probe run, with one additional run per action for full attribution and one per
+existential witness. Capture B17b took 84.86 seconds across 45 timed invocations. See the
+[detection table and stop criteria](spike/results.md#stop-criteria).
+
 ## Phase 0 tool and runtime notes
 
 TLC 1.7.4 (latest stable): [tla2tools.jar](https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2tools.jar),
@@ -105,5 +168,18 @@ SHA-256 `936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88`. TLC 
 `67f9575c3b9ef7a0787b1bded34812862ffe79d711298e5a75b1a77720b19928`. Apalache 0.63.0:
 [apalache-0.63.0.tgz](https://github.com/apalache-mc/apalache/releases/download/v0.63.0/apalache-0.63.0.tgz),
 SHA-256 `a756e96af249bf33cd7629667a49472cb26ac8227c48583da139b414834d59df` (matches the release's
-`sha256sum.txt`). All three started for version/help only on Temurin 27.0.1.1+4; Java is provisionally pinned, subject
-to Phase 0 confirmation.
+`sha256sum.txt`). Capture B17b ran TLC and bounded Apalache on Temurin 27.0.1.1+4; Java 27 works for TLC in this
+toolchain.
+The measured single-module results and observed exit codes are recorded in [capture B17b results](spike/results.md).
+
+### Argument and violation attribution decisions (B17b)
+
+Command parameters are not bound to state fields: ADR 0019 obtains values from the decision's `set`. Changed and
+target-only fields are nondeterministic within type: `ChangeNote` chooses `note' \in Notes`, `Confirm` chooses
+`confirmedAt' \in Times`, and `Cancel` chooses `reason' \in Reasons` and sets `confirmedAt' = None`;
+source-only fields are dropped. Create ID/customer bindings are an explicit assumption. The `its` argument exists only
+for `creation_items_param`; in `none` it is quantified but unused. The `U_all` runs stop at their first violation, so
+joint attribution was not checked. Phase 4 should use `-continue` and explain every violation through some `only_A`.
+TLC 1.7.4 logs show states and action names, not arguments. Use parameters printed in TLC 1.8.0 JSON; mark other
+values as inferred from the state/action relation. The Place trace has two `(i1,s1,1,JPY)` items; `its` is unused
+and `items'` is unspecified.
