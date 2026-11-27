@@ -38,7 +38,8 @@ The right-hand side of `changes x = expr` uses the `ensures` scope: parameters a
 `after` is unavailable. Create commands list every non-optional target field through `changes`; an unlisted optional
 field is `null`. The same rule applies to fields new in a transition's target state, such as `confirmedAt` and
 `reason`. Grammar adds `ChangedField: FeatureName ('=' Expression)?` and optional `ensures` after `emits` in Outcome
-and shorthand Command. The default recursion depth for recursive values in the verification profile is 2.
+and shorthand Command. The default recursion depth for recursive values in the verification profile is 2. Mixed
+Int/Decimal arithmetic promotes the Int operand to Decimal and returns Decimal.
 
 ## 1. Current language and command contract
 
@@ -126,9 +127,9 @@ The maintainer decided the surface policy in “Maintainer decisions (2026-11-27
 | Implication | `!(p) || q` | Decided |
 | Optional presence | `x != null`; `?.`; `??` | Decided with strict null safety |
 | Conditional | `test ? a : b` | Decided TS-like form |
-| Arithmetic | Int `+ - *`; Decimal `+ - * /` | Decided; see maintainer decisions |
+| Arithmetic | Int `+ - *`; Decimal `+ - * /`; mixed Int/Decimal promotes Int to Decimal | Decided; see maintainer decisions |
 | Old/new state | `before.x`, `after.x` | Decided |
-| Match | `match (x) { variant { fields } => e, … }` | Trial: TC39 proposal form vs ts-pattern-like method form |
+| Match | `match (x) { variant { fields } => e, … }` | Adopted as A0; trial arms M2 TC39, M3 ts-pattern |
 | Lists | `[]`, `[a, b]`, `[...xs, x]`, `.map`, `.filter`, `.sum` | Decided |
 | User functions | Typed expression-bodied predicates/functions | Decided; no recursion/cycles |
 
@@ -297,35 +298,31 @@ Outcome and in the shorthand Command.
 
 Build the remaining `match` forms as a prototype branch or parser/checker variant flag. Use one guide template to keep
 non-syntax instructions identical. Compare only the listed `match` forms and quantifier names; confirm `x => …`. Run
-tasks
-in a domain other than shop so the existing example does not leak answers. The `match` trial has three forms, producing
-three pairwise comparisons per task packet. Task (b) is a task in the trial domain that needs `.sum`, for example a
-total over line items.
+tasks in a domain other than shop so the existing example does not leak answers. Four arms are used per task packet:
+A0 is `match (x) { Variant { fields } => e, … }` with `every`/`some`; M2 is the TC39 proposal form with
+`every`/`some`; M3 is a ts-pattern-like method form with `every`/`some`; Q2 is `forall`/`exists` with the A0 match
+form. M2, M3 and Q2 are each compared with A0; A0 attempts are shared.
 
-Teach agents only with `dt guide`, as in Phase 2 of the plan and ADR 0038. Each task packet is one attempt. Use at least
-12 independent attempts per arm, balanced across latest Claude and Codex versions pinned at trial start. Run a
-three-attempt pilot per arm first. Set improvement as
-at least +10 percentage points in first-pass parse or type-check rate, or at least 15% fewer repair tokens; set
-regression as at least -10 percentage points or at least 15% more repair tokens. Aggregate the pairwise comparisons
-as stated above and below, and
-report uncertainty; do not declare a winner from one task. Compare token counts only within one model and one
-requirement packet. Semantic correctness is a gate: reviewers blind to syntax variant judge normalized Typed Model
-or Semantic IR dumps against a hidden acceptance matrix, then check scenario outcomes. Do not judge correctness from
-source syntax or token count.
+Teach agents only with `dt guide`, as in Phase 2 of the plan and ADR 0038. Each task packet is one attempt. Run 12
+independent attempts per arm per task packet, six Claude and six Codex, with latest versions pinned at trial start. Run
+a three-attempt-per-arm pilot first. The four-arm main-run count is 4 arms × 12 attempts × task packets (192 for four
+packets); add 3 attempts × 4 arms × task packets for the pilot. Set improvement as at least +10 percentage points in
+first syntax-check or first type-check success, or at least 15% fewer repair tokens. Set regression as at least −10
+percentage points on either rate, or at least 15% more repair tokens. An arm beats A0 if it improves at least one metric
+with no regression on any, in at least two task packets, and the result does not reverse in either model family. An
+adjudicated semantic pass rate at least 10 percentage points below A0 vetoes the win; no winner keeps A0. Report
+uncertainty. Compare token counts only within one model and one requirement packet. Semantic correctness is a gate:
+reviewers blind to syntax variant judge normalized Typed Model or Semantic IR dumps against a hidden acceptance matrix,
+then check scenario outcomes. Do not judge correctness from source syntax or token count.
 
 Record all six plan metrics: first syntax-check success, first type-check success, semantic correctness, repair count,
 token use and repair success from diagnostics. Define repair count as diagnostic-driven edit cycles before passing or
 exhaustion; repair success is whether those diagnostics lead to a passing check without changing the requirements. Also
-record prompt, guide version, model/version, outputs, every diagnostic and repair, normalized model and scenario
-results.
-Report attempts per arm, paired comparisons, task packets, model families, and total runs as attempts per arm × 2 arms
-× comparisons × tasks. The main-run count is 12 attempts per arm × 2 arms × 4 comparisons (three pairwise `match`
-comparisons and quantifier names) × task packets. Report the task-packet count and add the three-attempt-per-arm pilot.
-Use at least two reviewers blind to variant; adjudicate any disagreement with a third reviewer and report agreement and
-adjudication.
-Keep task-packet and model budgets identical and randomize variant order. ADR 0038 reports six Sonnet agents taught
-from `dt guide` only
-([ADR 0038, six-agent trial](../../adr/0038-date-and-time.md#L11)).
+record prompt, guide/template version and allowed diff, model/version, outputs, every diagnostic and repair, normalized
+model and scenario results. Use at least two reviewers blind to variant; adjudicate disagreement with a third reviewer
+and report agreement and adjudication.
+Keep task-packet and model budgets identical and randomize variant order. ADR 0038 reports six Sonnet agents taught from
+`dt guide` only ([ADR 0038, six-agent trial](../../adr/0038-date-and-time.md#L11)).
 
 ## 6. Decision status
 
