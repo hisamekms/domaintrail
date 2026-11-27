@@ -21,6 +21,12 @@ describe('valueCycles', () => {
         ]);
     });
 
+    test('chooses the later union variant when the earlier variant recurses', async () => {
+        expect(await cycles(`context M { union U { a { c: C } b { x: Int } } value C { u: U  y: Int } }`)).toEqual([
+            { members: ['M.U', 'M.C'], ending: new Map([['M.U', 'b']]) },
+        ]);
+    });
+
     test('keeps declaration order across shared contexts', async () => {
         expect(await cycles('shared context A { value First { next: B.Second } } shared context B { value Second { previous: A.First } }')).toEqual([
             { members: ['A.First', 'B.Second'], ending: new Map() },

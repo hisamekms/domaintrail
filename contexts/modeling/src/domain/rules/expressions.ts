@@ -700,7 +700,9 @@ class ExprChecker {
         }
         const field = scope.fields.get(name);
         if (field) {
-            const owner = this.model.elements.find((element) => element.id === node.at.elementId);
+            // a state (`O#S`), kind (`O/K`) or command (`O:c`) site belongs to its element `O`
+            const ownerId = node.at.elementId?.replace(/[#/:].*$/, '');
+            const owner = this.model.elements.find((element) => element.id === ownerId);
             const inherited = owner && 'fieldSets' in owner && includedFields(owner).some((entry) => entry.field === field);
             this.symbols.set(node, {
                 kind: field.kind === 'param' ? 'parameter' : 'field',

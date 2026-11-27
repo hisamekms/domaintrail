@@ -131,8 +131,8 @@ function expression(
     const found = fact?.symbol;
     const id =
         found?.id ??
-        (found?.kind === 'field' && fieldOwner ? fieldId(fieldOwner, found.name) : undefined) ??
-        (found?.declaration ? declarationIds?.get(found.declaration) : undefined);
+        (found?.declaration ? declarationIds?.get(found.declaration) : undefined) ??
+        (found?.kind === 'field' && fieldOwner && found.declaration ? fieldId(fieldOwner, found.name) : undefined);
     const symbol =
         found?.kind === 'lambdaVariable'
             ? { id: found.binding ? (expressionIds?.get(found.binding) ?? '') : '', kind: 'lambda' as const, name: found.name }
@@ -193,6 +193,8 @@ const declarationsOf = (model: SourceModel): SemanticDeclaration[] => {
     for (const el of model.elements) {
         add(el.id, el.kind, el.name, el.at);
         const owner = el.id;
+        // fields from field sets are fields of each element that uses them (the field set's site)
+        if ('fieldSets' in el) for (const { field } of includedFields(el)) add(fieldId(owner, field.name), 'field', field.name, field.at);
         if ('members' in el) {
             for (const f of fieldsOf(el.members)) add(fieldId(owner, f.name), 'field', f.name, f.at);
             for (const inv of invariantsOf(el.members)) add(invariantId(owner, inv.name), 'invariant', inv.name, inv.at);
@@ -646,7 +648,6 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     roots.forEach(({ expr }) => indexExpressions(expr, 'root'));
     for (const el of model.elements) {
         declarationIds.set(el, el.id);
-        if ('fieldSets' in el) for (const { field } of includedFields(el)) declarationIds.set(field, fieldId(el.id, field.name));
         if ('members' in el) for (const field of fieldsOf(el.members)) declarationIds.set(field, fieldId(el.id, field.name));
         if (el.kind === 'enum') for (const value of el.values) declarationIds.set(value, enumValueId(el.id, value.name));
         if (el.kind === 'aggregate') for (const state of statesOf(el)) declarationIds.set(state, state.id);

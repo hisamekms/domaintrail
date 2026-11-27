@@ -11,11 +11,17 @@ export interface LifecycleReachability {
 
 /** Initial and reachable lifecycle states, independently for each aggregate kind. */
 export function lifecyclesOf(aggregate: AggregateDecl, includeValidStates = false): LifecycleReachability[] {
-    // Known duplicate: for invalid multi-target transitions and kinds without creation this differs from Typed Model
-    // validStatesFor; unify when the generator moves to the IR.
     const kinds = kindsOf(aggregate);
     const commands = commandsOf(aggregate);
-    if (!statesOf(aggregate).length && kinds.length) return [];
+    if (!statesOf(aggregate).length && kinds.length)
+        return kinds.map((kind) => ({
+            kind: kind.name,
+            initial: [],
+            creationTargets: [],
+            reachableFromInitial: [],
+            reachable: [],
+            ...(includeValidStates ? { validStates: [] } : {}),
+        }));
     const casesOf = (kind: KindDecl | undefined, cmd: CommandDecl) => kind?.cases.filter((c) => c.command.text === cmd.name) ?? [];
     const applicable = (cmd: CommandDecl, kind: KindDecl | undefined): OutcomeDecl[] =>
         cmd.ofKind && cmd.ofKind !== kind?.name ? [] : [...cmd.outcomes, ...casesOf(kind, cmd).flatMap((c) => c.outcomes)];

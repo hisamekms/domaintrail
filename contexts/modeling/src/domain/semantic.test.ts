@@ -152,6 +152,25 @@ describe('Semantic IR', () => {
 }`,
             `shared context Common { enum Currency { JPY USD } value Money { amount: Decimal currency: Currency } }
 context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: Common.Money preferred: Common.Currency invariant yen { preferred == Common.Currency.USD } } }`,
+            `context M {
+  fields Audit { level: Int }
+  value V with Audit { x: Int }
+  id AId: UUID
+  aggregate A with Audit {
+    id: AId
+    n: Int
+    state Open { o: V invariant oo { o.level > 0 and o.x > 0 and level > 0 } }
+    state Done
+    kind P {
+      w: V
+      invariant pw { w.level > n and w.x > 0 and level > 0 }
+      create command mkP(id: AId, n: Int, w: V, level: Int, o: V) { outcome made: -> Open }
+      command fin() { outcome f: Open -> Done requires q { w.level > 0 and o.level > 0 } else Bad }
+    }
+    kind Q { create command mkQ(id: AId, n: Int, level: Int, o: V) { outcome made: -> Open } }
+  }
+  error Bad
+}`,
         ];
         const analyses = await Promise.all(fixtures.map((text, index) => analyzeDomain([{ path: `probe-${index}.dt`, text }])));
         analyses.push(await analyzeDomain(await exampleSources()));
@@ -167,6 +186,24 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 return nodes.filter((node) => (node.syntaxKind === 'member' || node.syntaxKind === 'name') && !node.symbol).map((node) => node.source);
             });
             expect(missing, `fixture ${index === fixtures.length ? 'examples/shop' : index}`).toEqual([]);
+            const declaredFieldIds = new Set(
+                ir.declarations
+                    .filter((declaration) => declaration.kind === 'field' || declaration.kind === 'variantField')
+                    .map((declaration) => declaration.id),
+            );
+            const fieldSymbols = ir.expressions.flatMap((root) => {
+                const nodes: import('../generated/Modeling.js').SemanticExpression[] = [];
+                const visit = (node: import('../generated/Modeling.js').SemanticExpression) => {
+                    nodes.push(node);
+                    node.children.forEach(visit);
+                };
+                visit(root);
+                return nodes.filter((node) => node.symbol?.kind === 'field').map((node) => node.symbol!.id);
+            });
+            expect(
+                fieldSymbols.every((id) => declaredFieldIds.has(id)),
+                `field symbols in fixture ${index}`,
+            ).toBe(true);
         }
     });
     test('keeps Typed Model invariant, requirement and select trees in parity with IR paths', async () => {

@@ -135,6 +135,19 @@ describe('recursive value types', async () => {
         expect(fc.sample<Value>(m.Chain, { seed: 3, numRuns: 50 }).every((c) => !('next' in c) || c.next !== undefined)).toBe(true);
     });
 
+    test('generates finite samples when a union recurses through its first variant', async () => {
+        const fixture = await project(
+            { 'm4.dt': `context M { union U { a { c: C } b { x: Int } } value C { u: U  y: Int } }` },
+            { maxRecursionDepth: 4 },
+            {},
+            dirs,
+        );
+        const generated = await import(path.join(fixture.dir, 'tests', 'index.ts'));
+        const samples = fc.sample<Value>(generated.M.arbitraries().U, { seed: 4, numRuns: 50 });
+        expect(samples).toHaveLength(50);
+        expect(samples.every((sample) => sample.kind === 'b' || sample.kind === 'a')).toBe(true);
+    });
+
     test('an arbitrary passed in the options replaces the generated one, inside the cycle too', () => {
         const m = tests.M.arbitraries({ arbitraries: { M: { Expr: fc.constant({ kind: 'lit', value: 7 }) } } });
         expect(fc.sample(m.Expr, { seed: 1, numRuns: 5 })).toEqual(Array(5).fill({ kind: 'lit', value: 7 }));
