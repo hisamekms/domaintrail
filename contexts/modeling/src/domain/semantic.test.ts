@@ -613,7 +613,7 @@ describe('Semantic IR', () => {
         expect(ir.aggregates[0]?.requirements[0]?.error).toBe('Sales.EmptyOrder');
     });
 
-    test('projects the exact scope of a state invariant', async () => {
+    test('projects every visible name in a state invariant scope', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
@@ -621,7 +621,13 @@ describe('Semantic IR', () => {
         expect(scope).toEqual({
             site: scope.site,
             owner: 'Sales.Order#Confirmed',
-            fields: [{ id: 'Sales.Order.items', kind: 'field', name: 'items' }],
+            fields: [
+                { id: 'Sales.Order.id', kind: 'field', name: 'id' },
+                { id: 'Sales.Order.items', kind: 'field', name: 'items' },
+                { id: 'Sales.Order.customer', kind: 'field', name: 'customer' },
+                { id: 'Sales.Order.note', kind: 'field', name: 'note' },
+                { id: 'Sales.Order#Confirmed.confirmedAt', kind: 'field', name: 'confirmedAt' },
+            ],
             parameters: [],
             lambdas: [],
             sourceStates: ['Sales.Order#Confirmed'],
@@ -629,28 +635,35 @@ describe('Semantic IR', () => {
         });
     });
 
-    test('projects the exact scope and lambda binding of a command requirement', async () => {
+    test('projects every visible name and lambda binding of a command requirement', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
-        const lambda = nodes.find((expression) => expression.symbol?.kind === 'lambda' && expression.symbol.name === 'i')!;
-        const scope = ir.scopes.find((fact) => fact.command === 'Sales.Order:addItem(item)')!;
+        const reference = nodes.find((expression) => expression.symbol?.kind === 'lambda' && expression.symbol.name === 'i')!;
+        // The binding is the quantifier expression that binds `i`: the root expression containing the reference.
+        const lambda = ir.expressions.find((root) => flatten([root]).includes(reference))!;
+        const scope = ir.scopes.find((fact) => fact.command === 'Sales.Order:addItem')!;
         expect(scope).toEqual({
             site: scope.site,
             owner: 'Sales.Order',
-            command: 'Sales.Order:addItem(item)',
-            fields: [{ id: 'Sales.Order.items', kind: 'field', name: 'items' }],
-            parameters: [{ id: 'Sales.Order:addItem(item).item', kind: 'parameter', name: 'item' }],
+            command: 'Sales.Order:addItem',
+            fields: [
+                { id: 'Sales.Order.id', kind: 'field', name: 'id' },
+                { id: 'Sales.Order.items', kind: 'field', name: 'items' },
+                { id: 'Sales.Order.customer', kind: 'field', name: 'customer' },
+                { id: 'Sales.Order.note', kind: 'field', name: 'note' },
+            ],
+            parameters: [{ id: 'Sales.Order:addItem(item)', kind: 'parameter', name: 'item' }],
             lambdas: [{ id: lambda.id, kind: 'lambda', name: 'i' }],
-            sourceStates: [],
+            sourceStates: ['Sales.Order#Draft'],
             presence: [],
         });
     });
 
-    test('projects the exact scope of an on-case requirement', async () => {
+    test('projects every visible name in an on-case requirement scope', async () => {
         const analysis = await analyzeDomain([
             {
                 path: 'scope.dt',
@@ -663,13 +676,16 @@ describe('Semantic IR', () => {
         expect(scope).toEqual({
             site: scope.site,
             owner: 'Sales.Order/Retail',
-            command: 'Sales.Order:ship()',
+            command: 'Sales.Order:ship',
             onCase: 'Sales.Order/Retail:on:ship',
             kind: 'Sales.Order/Retail',
-            fields: [{ id: 'Sales.Order/Retail.dockCount', kind: 'field', name: 'dockCount' }],
+            fields: [
+                { id: 'Sales.Order.id', kind: 'field', name: 'id' },
+                { id: 'Sales.Order/Retail.dockCount', kind: 'field', name: 'dockCount' },
+            ],
             parameters: [],
             lambdas: [],
-            sourceStates: [],
+            sourceStates: ['Sales.Order#Ready'],
             presence: [],
         });
     });
@@ -687,9 +703,9 @@ describe('Semantic IR', () => {
         expect(scope).toEqual({
             site: scope.site,
             owner: 'Sales.Order',
-            command: 'Sales.Order:ship()',
+            command: 'Sales.Order:ship',
             targetOutcome: 'Sales.Order:ship()->shipped',
-            fields: [],
+            fields: [{ id: 'Sales.Order.id', kind: 'field', name: 'id' }],
             parameters: [],
             lambdas: [],
             sourceStates: ['Sales.Order#Ready'],
