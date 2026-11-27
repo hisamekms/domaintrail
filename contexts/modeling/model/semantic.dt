@@ -76,8 +76,7 @@ context Modeling {
 
   value SemanticPresenceFact {
     expression: String
-    edge: String
-    present: Bool
+    path: String
   }
 
   value SemanticScopeFact {

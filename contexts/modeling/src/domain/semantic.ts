@@ -573,7 +573,7 @@ const mergeFacts = (earlier: ExpressionFact | undefined, later: ExpressionFact):
               type: later.type ?? earlier.type,
               comparison: later.comparison ?? earlier.comparison,
               symbol: later.symbol ?? earlier.symbol,
-              presence: later.presence ?? earlier.presence,
+              paths: later.paths ?? earlier.paths,
               scope: later.scope ?? earlier.scope,
           }
         : later;
@@ -684,10 +684,7 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
             ...(fact.scope?.onCase && declarationIds.get(fact.scope.onCase) ? { onCase: declarationIds.get(fact.scope.onCase)! } : {}),
         }));
     const presence: SemanticPresenceFact[] = [...facts.values()].flatMap((fact) =>
-        (fact.presence ?? []).flatMap((declaration) => {
-            const id = declarationIds.get(declaration);
-            return id ? [{ expression: expressionIds.get(fact.expression) ?? '', edge: id, present: true }] : [];
-        }),
+        (fact.paths ?? []).map((path) => ({ expression: expressionIds.get(fact.expression) ?? '', path })),
     );
     const aggregates = model.elements
         .filter((e): e is AggregateDecl => e.kind === 'aggregate')

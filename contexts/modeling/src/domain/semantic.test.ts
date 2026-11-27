@@ -159,8 +159,8 @@ describe('Semantic IR', () => {
         ]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const facts = ir.presence;
-        expect(facts).toContainEqual(expect.objectContaining({ edge: 'Fixture.Item.note', present: true }));
-        expect(facts.filter((fact) => fact.edge === 'Fixture.Item.note')).toHaveLength(4);
+        expect(facts.filter((fact) => fact.path === 'note')).toHaveLength(2);
+        expect(facts.every((fact) => fact.path === 'note')).toBe(true);
         const disjunction = ir.expressions.filter((root) => root.site.startLine === 6);
         expect(ir.presence.filter((fact) => disjunction.some((root) => root.id === fact.expression))).toEqual([]);
         for (const scope of ir.scopes) {

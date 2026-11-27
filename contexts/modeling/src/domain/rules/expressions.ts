@@ -37,7 +37,7 @@ export interface ExpressionFact {
     type?: Ty;
     comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
-    presence?: object[];
+    paths?: string[];
     scope?: {
         owner: object;
         fields: object[];
@@ -434,7 +434,6 @@ type ExprOf<K extends Expr['k']> = Extract<Expr, { k: K }>;
 class ExprChecker {
     private readonly symbols = new WeakMap<Expr, NonNullable<ExpressionFact['symbol']>>();
     private readonly comparisons = new WeakMap<Expr, NonNullable<ExpressionFact['comparison']>>();
-    private readonly presence = new WeakMap<Expr, object[]>();
     constructor(
         private readonly model: SourceModel,
         private readonly rules: RuleSink,
@@ -450,7 +449,6 @@ class ExprChecker {
                 type: t,
                 ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}),
                 ...(this.comparisons.has(e) ? { comparison: this.comparisons.get(e) } : {}),
-                ...(this.presence.has(e) ? { presence: this.presence.get(e) } : {}),
             });
         if (t.k === 'enumType' || t.k === 'unionType' || t.k === 'ctx') {
             this.rules.error('M009', `'${showType(t)}' is not a value.`, e.at);
@@ -467,7 +465,6 @@ class ExprChecker {
                 type,
                 ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}),
                 ...(this.comparisons.has(e) ? { comparison: this.comparisons.get(e) } : {}),
-                ...(this.presence.has(e) ? { presence: this.presence.get(e) } : {}),
             });
         return type;
     }
@@ -616,27 +613,9 @@ class ExprChecker {
         if (op === 'and' || op === 'or' || op === 'implies') {
             const l = this.check(e.left, scope);
             // `a and b` / `a implies b`: b is evaluated only when a holds, so a's exists() guards apply to b.
-            const rightScope = op === 'or' ? scope : { ...scope, present: new Set([...scope.present, ...guards(e.left)]) };
-            if (op !== 'or') {
-                const guarded = (x: Expr): Array<{ expression: Expr; declaration: object }> => {
-                    if (x.k === 'exists') {
-                        const declaration = this.symbols.get(x.operand)?.declaration;
-                        return declaration ? [{ expression: x, declaration }] : [];
-                    }
-                    return x.k === 'binary' && x.op === 'and' ? [...guarded(x.left), ...guarded(x.right)] : [];
-                };
-                const guards = guarded(e.left);
-                if (guards.length) {
-                    for (const guard of guards) {
-                        this.presence.set(guard.expression, [guard.declaration]);
-                        this.sink?.({ expression: guard.expression, type: BOOL, presence: [guard.declaration] });
-                    }
-                    this.presence.set(
-                        e.right,
-                        guards.map((guard) => guard.declaration),
-                    );
-                }
-            }
+            const guardedPaths = op === 'or' ? [] : guards(e.left);
+            const rightScope = op === 'or' ? scope : { ...scope, present: new Set([...scope.present, ...guardedPaths]) };
+            if (guardedPaths.length) this.sink?.({ expression: e.right, paths: guardedPaths });
             const r = this.check(e.right, rightScope);
             for (const [side, t, at] of [
                 ['left', l, e.leftAt],
