@@ -123,6 +123,35 @@ export const kindCase = (agg: AggregateModel, kind: string, command: string): M.
 export const applicableOutcomes = (agg: AggregateModel, command: M.CommandModel, kind: string): M.OutcomeModel[] =>
     command.kind && command.kind !== kind ? [] : [...command.outcomes, ...(kindCase(agg, kind, command.name)?.outcomes ?? [])];
 
+/** Group applicable outcomes by source state, using the create marker for factories. */
+export function outcomesBySource(outcomes: readonly M.OutcomeModel[], factory = false): Map<string, M.OutcomeModel[]> {
+    const groups = new Map<string, M.OutcomeModel[]>();
+    for (const outcome of outcomes)
+        for (const source of factory ? ['<create>'] : outcome.from.length ? outcome.from : ['']) groups.set(source, [...(groups.get(source) ?? []), outcome]);
+    return groups;
+}
+
+/** Named outcomes plus shorthand outcomes expanded once per target (or one stateless outcome). */
+export function outcomesOfCommand(command: M.CommandModel, hasStatesOrKindCases = false): M.OutcomeModel[] {
+    if (command.outcomes.length)
+        return command.outcomes.flatMap((outcome) => (outcome.from.length ? outcome.from : ['']).map((from) => ({ ...outcome, from: from ? [from] : [] })));
+    if (command.transitions.length) {
+        return command.transitions.flatMap((transition) =>
+            transition.to.flatMap((target) =>
+                (transition.from.length ? transition.from : ['']).map((from) => ({
+                    name: target,
+                    from: from ? [from] : [],
+                    to: target,
+                    changes: command.changes,
+                    emits: command.emits,
+                })),
+            ),
+        );
+    }
+    if (hasStatesOrKindCases) return [];
+    return [{ name: '*', from: [], to: '', changes: command.changes, emits: command.emits }];
+}
+
 /** The requirements of a command for a kind: the common ones first, then those of the kind's `on` case. */
 export const applicableRequirements = (agg: AggregateModel, command: M.CommandModel, kind: string): M.RequirementModel[] => [
     ...command.requires,

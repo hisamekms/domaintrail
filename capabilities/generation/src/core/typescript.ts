@@ -1543,6 +1543,7 @@ class ContextEmitter {
                       .join(' | ')
                 : whole;
         const transitions = stateful ? c.transitions : [];
+        // TODO(step 3): use outcomesOfCommand from contexts/modeling/src/domain/model.ts.
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
         // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
         // its state, looked up in an object keyed by the source states.

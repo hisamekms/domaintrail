@@ -176,9 +176,9 @@ The forced no-successor probe violates `hasItems`; it uses the F002 check-kind c
   "schemaVersion": 2,
   "diagnostics": [],
   "results": [
-    { "origin": "formal", "code": "F002", "class": { "id": "counterexampleFound", "display": "Counterexample found" }, "property": { "id": "Sales.Order#Confirmed.hasItems", "name": "hasItems" }, "method": "tlc-exhaustive", "scope": { "ids": 2, "maxItems": 2, "initialStates": ["creation"], "depth": "exhaustive" }, "assumptions": [], "attribution": { "command": "Sales.Order:confirm", "cause": "enabled input has no invariant-preserving successor" }, "trace": [{ "step": 1, "command": "Sales.Order:place", "arguments": { "id": "o1", "customer": "c1" }, "before": null, "after": { "state": "Draft", "items": [], "note": { "tag": "none" } }, "source": { "file": "order.dt", "line": 26 } }, { "step": 2, "command": "Sales.Order:confirm", "arguments": { "at": "t1" }, "before": { "state": "Draft", "items": [], "note": { "tag": "none" } }, "after": { "state": "Confirmed", "items": [], "note": { "tag": "none" }, "confirmedAt": "t1" }, "source": { "file": "order.dt", "line": 51 } }], "unformalizedParts": [] },
-    { "origin": "formal", "code": "F002", "class": { "id": "underspecified", "display": "Underspecified" }, "property": { "id": "Sales.Order#Cancelled.otherNeedsNote", "name": "otherNeedsNote" }, "method": "tlc-exhaustive", "scope": { "ids": 2, "maxItems": 2, "initialStates": ["creation"], "depth": "exhaustive" }, "assumptions": [], "attribution": { "command": "Sales.Order:cancel", "cause": "reason is an unspecified output; the model does not bind the parameter to the field" }, "trace": [{ "step": 1, "command": "Sales.Order:place", "arguments": { "id": "o1", "customer": "c1" }, "before": null, "after": { "state": "Draft", "note": { "tag": "none" } }, "source": { "file": "order.dt", "line": 26 } }, { "step": 2, "command": "Sales.Order:cancel", "arguments": { "reason": "Requested" }, "before": { "state": "Draft", "note": { "tag": "none" } }, "after": { "state": "Cancelled", "reason": "Other", "note": { "tag": "none" } }, "source": { "file": "order.dt", "line": 56, "endLine": 62 } }], "unformalizedParts": ["The reason output is unspecified because the command parameter is not bound to the field"] },
-    { "origin": "formal", "code": "F002", "class": { "id": "verified", "display": "Verified" }, "property": { "id": "Sales.Order#Confirmed.hasItems", "name": "hasItems" }, "method": "tlc-exhaustive", "scope": { "ids": 2, "maxItems": 2, "initialStates": ["creation"], "depth": "exhaustive" }, "assumptions": [], "attribution": { "command": "Sales.Order:changeNote" }, "unformalizedParts": [] }
+    { "origin": "formal", "code": "F002", "class": { "id": "counterexampleFound", "display": "Counterexample found" }, "property": { "id": "Sales.Order#Confirmed.invariant.hasItems", "name": "hasItems" }, "method": "tlc-exhaustive", "scope": { "ids": 2, "maxItems": 2, "initialStates": ["creation"], "depth": "exhaustive" }, "assumptions": [], "attribution": { "command": "Sales.Order:confirm", "cause": "enabled input has no invariant-preserving successor" }, "trace": [{ "step": 1, "command": "Sales.Order:place", "arguments": { "id": "o1", "customer": "c1" }, "before": null, "after": { "state": "Draft", "items": [], "note": { "tag": "none" } }, "source": { "file": "order.dt", "line": 26 } }, { "step": 2, "command": "Sales.Order:confirm", "arguments": { "at": "t1" }, "before": { "state": "Draft", "items": [], "note": { "tag": "none" } }, "after": { "state": "Confirmed", "items": [], "note": { "tag": "none" }, "confirmedAt": "t1" }, "source": { "file": "order.dt", "line": 51 } }], "unformalizedParts": [] },
+    { "origin": "formal", "code": "F002", "class": { "id": "underspecified", "display": "Underspecified" }, "property": { "id": "Sales.Order#Cancelled.invariant.otherNeedsNote", "name": "otherNeedsNote" }, "method": "tlc-exhaustive", "scope": { "ids": 2, "maxItems": 2, "initialStates": ["creation"], "depth": "exhaustive" }, "assumptions": [], "attribution": { "command": "Sales.Order:cancel", "cause": "reason is an unspecified output; the model does not bind the parameter to the field" }, "trace": [{ "step": 1, "command": "Sales.Order:place", "arguments": { "id": "o1", "customer": "c1" }, "before": null, "after": { "state": "Draft", "note": { "tag": "none" } }, "source": { "file": "order.dt", "line": 26 } }, { "step": 2, "command": "Sales.Order:cancel", "arguments": { "reason": "Requested" }, "before": { "state": "Draft", "note": { "tag": "none" } }, "after": { "state": "Cancelled", "reason": "Other", "note": { "tag": "none" } }, "source": { "file": "order.dt", "line": 56, "endLine": 62 } }], "unformalizedParts": ["The reason output is unspecified because the command parameter is not bound to the field"] },
+    { "origin": "formal", "code": "F002", "class": { "id": "verified", "display": "Verified" }, "property": { "id": "Sales.Order#Confirmed.invariant.hasItems", "name": "hasItems" }, "method": "tlc-exhaustive", "scope": { "ids": 2, "maxItems": 2, "initialStates": ["creation"], "depth": "exhaustive" }, "assumptions": [], "attribution": { "command": "Sales.Order:changeNote" }, "unformalizedParts": [] }
   ],
   "summary": { "files": 1, "errors": 0, "warnings": 0, "results": { "verified": 1, "counterexampleFound": 1, "underspecified": 1, "noCounterexample": 0, "inconclusive": 0, "unsupported": 0, "skipped": 0, "error": 0 } }
 }
@@ -219,7 +219,7 @@ A missing Java runtime skips formal execution:
   "origin": "formal",
   "code": "F002",
   "class": { "id": "skipped", "display": "Skipped" },
-  "property": { "id": "Sales.Order#Confirmed.hasItems", "name": "hasItems" },
+  "property": { "id": "Sales.Order#Confirmed.invariant.hasItems", "name": "hasItems" },
   "method": "tlc-exhaustive",
   "scope": { "initialStates": ["creation"] },
   "assumptions": [],
@@ -240,7 +240,7 @@ A failed check prevents formal exploration:
   "origin": "formal",
   "code": "F002",
   "class": { "id": "skipped", "display": "Skipped" },
-  "property": { "id": "Sales.Order#Confirmed.hasItems", "name": "hasItems" },
+  "property": { "id": "Sales.Order#Confirmed.invariant.hasItems", "name": "hasItems" },
   "method": "tlc-exhaustive",
   "scope": { "initialStates": ["creation"] },
   "assumptions": [],
@@ -261,7 +261,7 @@ A failed check prevents formal exploration:
   "origin": "formal",
   "code": "F002",
   "class": { "id": "error", "display": "Checker error" },
-  "property": { "id": "Sales.Order#Confirmed.hasItems", "name": "hasItems" },
+  "property": { "id": "Sales.Order#Confirmed.invariant.hasItems", "name": "hasItems" },
   "method": "tlc-exhaustive",
   "scope": { "initialStates": ["creation"] },
   "assumptions": [],

@@ -1,0 +1,185 @@
+context Modeling {
+  enum SemanticDeclarationKind {
+    id
+    primitive
+    verified
+    enum
+    valueObject
+    union
+    entity
+    aggregate
+    event
+    error
+    fieldSet
+    policy
+    field
+    invariant
+    state
+    command
+    parameter
+    requirement
+    outcome
+    kind
+    variant
+    variantField
+    enumValue
+    onCase
+  }
+  enum SemanticSymbolKind { field parameter lambda state kind enumValue type }
+  enum SemanticCardinality { one optional many nonEmpty }
+  enum SemanticComparisonKind {
+    primitive
+    domainPrimitive
+    entityId
+    valueObjectStructural
+    unionStructural
+    enumValue
+    notComparable
+  }
+  enum SemanticObligationKind { externalCheck naturalLanguage }
+  enum SemanticUnspecifiedKind { createField targetOnlyField changesWithoutExpression expressionFreeRequirement }
+  enum SemanticProvenanceKind { parameter explicitAssignment carried unspecified selectedChoice }
+  enum SemanticSelectKind { executable naturalLanguage externalCheck absent }
+
+  value SemanticSpan {
+    file: String
+    startLine: Int
+    startColumn: Int
+    endLine: Int
+    endColumn: Int
+  }
+
+  value SemanticType {
+    name: String
+    cardinality: SemanticCardinality
+  }
+
+  value SemanticSymbol {
+    id: String
+    kind: SemanticSymbolKind
+    name: String
+  }
+
+  /// A syntax expression node augmented with source identity, resolved symbol and checked static type when available.
+  value SemanticExpression {
+    id: String
+    owner: String
+    site: SemanticSpan
+    syntaxKind: String
+    source: String
+    symbol: SemanticSymbol?
+    type: SemanticType?
+    children: SemanticExpression[0..*]
+    comparison: SemanticComparisonKind?
+  }
+
+  value SemanticPresenceFact {
+    expression: String
+    edge: String
+    present: Bool
+  }
+
+  value SemanticScopeFact {
+    site: SemanticSpan
+    owner: String
+    fields: SemanticSymbol[0..*]
+    parameters: SemanticSymbol[0..*]
+    lambdas: SemanticSymbol[0..*]
+    sourceStates: String[0..*]
+    targetOutcome: String?
+    kind: String?
+    presence: SemanticPresenceFact[0..*]
+  }
+
+  value SemanticDeclaration {
+    id: String
+    kind: SemanticDeclarationKind
+    name: String
+    site: SemanticSpan
+  }
+
+  value SemanticObligation {
+    kind: SemanticObligationKind
+    declaration: String
+    reason: String
+    site: SemanticSpan
+  }
+
+  value SemanticUnspecified {
+    kind: SemanticUnspecifiedKind
+    declaration: String
+    field: String?
+    source: String?
+    site: SemanticSpan
+  }
+
+  value SemanticProvenance {
+    kind: SemanticProvenanceKind
+    declaration: String
+    field: String?
+    source: String?
+    site: SemanticSpan
+  }
+
+  value SemanticOutcome {
+    id: String
+    command: String
+    kind: String?
+    name: String
+    from: String[0..*]
+    to: String?
+    selectKind: SemanticSelectKind
+    select: SemanticExpression?
+    changes: String[0..*]
+    set: String[0..*]
+    carried: String[0..*]
+    dropped: String[0..*]
+    site: SemanticSpan
+  }
+
+  value SemanticChoice {
+    kind: String
+    source: String?
+    outcomes: String[1..*]
+  }
+
+  value SemanticKindLifecycle {
+    kind: String
+    initialStates: String[0..*]
+    validStates: String[0..*]
+    onCases: SemanticOutcome[0..*]
+  }
+
+  value SemanticRequirement {
+    id: String
+    name: String
+    expression: SemanticExpression?
+    error: String
+    externalReason: String?
+    site: SemanticSpan
+  }
+
+  value SemanticAggregate {
+    id: String
+    initialStates: String[0..*]
+    validStates: String[0..*]
+    kinds: SemanticKindLifecycle[0..*]
+    outcomes: SemanticOutcome[0..*]
+    choices: SemanticChoice[0..*]
+    requirements: SemanticRequirement[0..*]
+  }
+
+  /// @internal Beta Semantic IR; its shape has no compatibility promise before 1.0.
+  value SemanticIR {
+    /// The beta Semantic IR. Versioned independently of the Typed Model; it retains source sites and resolved facts for
+    /// formal verification and does not change the Live View payload.
+    version: Int
+    declarations: SemanticDeclaration[0..*]
+    expressions: SemanticExpression[0..*]
+    scopes: SemanticScopeFact[0..*]
+    aggregates: SemanticAggregate[0..*]
+    obligations: SemanticObligation[0..*]
+    unspecified: SemanticUnspecified[0..*]
+    provenance: SemanticProvenance[0..*]
+  }
+}

@@ -51,6 +51,30 @@ export interface Arbitraries {
     readonly PolicyModel: fc.Arbitrary<Modeling.PolicyModel>;
     readonly VerifiedModel: fc.Arbitrary<Modeling.VerifiedModel>;
     readonly VerifiedFor: fc.Arbitrary<Modeling.VerifiedFor>;
+    readonly SemanticDeclarationKind: fc.Arbitrary<Modeling.SemanticDeclarationKind>;
+    readonly SemanticSymbolKind: fc.Arbitrary<Modeling.SemanticSymbolKind>;
+    readonly SemanticCardinality: fc.Arbitrary<Modeling.SemanticCardinality>;
+    readonly SemanticComparisonKind: fc.Arbitrary<Modeling.SemanticComparisonKind>;
+    readonly SemanticObligationKind: fc.Arbitrary<Modeling.SemanticObligationKind>;
+    readonly SemanticUnspecifiedKind: fc.Arbitrary<Modeling.SemanticUnspecifiedKind>;
+    readonly SemanticProvenanceKind: fc.Arbitrary<Modeling.SemanticProvenanceKind>;
+    readonly SemanticSelectKind: fc.Arbitrary<Modeling.SemanticSelectKind>;
+    readonly SemanticSpan: fc.Arbitrary<Modeling.SemanticSpan>;
+    readonly SemanticType: fc.Arbitrary<Modeling.SemanticType>;
+    readonly SemanticSymbol: fc.Arbitrary<Modeling.SemanticSymbol>;
+    readonly SemanticExpression: fc.Arbitrary<Modeling.SemanticExpression>;
+    readonly SemanticPresenceFact: fc.Arbitrary<Modeling.SemanticPresenceFact>;
+    readonly SemanticScopeFact: fc.Arbitrary<Modeling.SemanticScopeFact>;
+    readonly SemanticDeclaration: fc.Arbitrary<Modeling.SemanticDeclaration>;
+    readonly SemanticObligation: fc.Arbitrary<Modeling.SemanticObligation>;
+    readonly SemanticUnspecified: fc.Arbitrary<Modeling.SemanticUnspecified>;
+    readonly SemanticProvenance: fc.Arbitrary<Modeling.SemanticProvenance>;
+    readonly SemanticOutcome: fc.Arbitrary<Modeling.SemanticOutcome>;
+    readonly SemanticChoice: fc.Arbitrary<Modeling.SemanticChoice>;
+    readonly SemanticKindLifecycle: fc.Arbitrary<Modeling.SemanticKindLifecycle>;
+    readonly SemanticRequirement: fc.Arbitrary<Modeling.SemanticRequirement>;
+    readonly SemanticAggregate: fc.Arbitrary<Modeling.SemanticAggregate>;
+    readonly SemanticIR: fc.Arbitrary<Modeling.SemanticIR>;
 }
 
 /** Checks of the invariants and requirements of Modeling that the DSL does not express, as your code implements them. */
@@ -86,6 +110,9 @@ export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<G
     const KernelArbs = (): KernelTests.Arbitraries => (KernelOf ??= KernelTests.arbitraries(generation));
     const cycleExprModel = testing.recursive<{ ExprModel: Modeling.ExprModel }>('Modeling.ExprModel', 4, (tie, depth) => ({
         ExprModel: given.ExprModel ?? testing.cast<Modeling.ExprModel>(testing.variants(depth, fc.record({ k: fc.constant('bool' as const), value: testing.cast<boolean>(scalar.Bool) }), fc.record({ k: fc.constant('int' as const), value: testing.cast<number>(scalar.Int) }), fc.record({ k: fc.constant('decimal' as const), value: testing.cast<string>(scalar.String) }), fc.record({ k: fc.constant('string' as const), value: testing.cast<string>(scalar.String) }), fc.record({ k: fc.constant('name' as const), name: testing.cast<string>(scalar.String) }), fc.record({ k: fc.constant('member' as const), receiver: tie('ExprModel'), member: testing.cast<string>(scalar.String) }), fc.record({ k: fc.constant('not' as const), operand: tie('ExprModel') }), fc.record({ k: fc.constant('binary' as const), op: a.BinaryOp, left: tie('ExprModel'), right: tie('ExprModel') }), fc.record({ k: fc.constant('range' as const), operand: tie('ExprModel'), lower: tie('ExprModel'), upper: tie('ExprModel') }), fc.record({ k: fc.constant('count' as const), collection: tie('ExprModel') }), fc.record({ k: fc.constant('exists' as const), operand: tie('ExprModel') }), fc.record({ k: fc.constant('length' as const), operand: tie('ExprModel') }), fc.record({ k: fc.constant('matches' as const), operand: tie('ExprModel'), pattern: testing.cast<string>(scalar.String) }), fc.record({ k: fc.constant('unique' as const), collection: tie('ExprModel'), param: testing.cast<string>(scalar.String), keys: testing.manyAt(depth, tie('ExprModel')) }, { requiredKeys: ['k', 'collection', 'keys'] }), fc.record({ k: fc.constant('contains' as const), collection: tie('ExprModel'), element: tie('ExprModel') }), fc.record({ k: fc.constant('quantifier' as const), quantifier: a.Quantifier, collection: tie('ExprModel'), param: testing.cast<string>(scalar.String), body: tie('ExprModel') }))),
+    }));
+    const cycleSemanticExpression = testing.recursive<{ SemanticExpression: Modeling.SemanticExpression }>('Modeling.SemanticExpression', 4, (tie, depth) => ({
+        SemanticExpression: given.SemanticExpression ?? testing.cast<Modeling.SemanticExpression>(fc.record({ id: testing.cast<string>(scalar.String), owner: testing.cast<string>(scalar.String), site: a.SemanticSpan, syntaxKind: testing.cast<string>(scalar.String), source: testing.cast<string>(scalar.String), symbol: a.SemanticSymbol, type: a.SemanticType, children: testing.manyAt(depth, tie('SemanticExpression')), comparison: a.SemanticComparisonKind }, { requiredKeys: ['id', 'owner', 'site', 'syntaxKind', 'source', 'children'] })),
     }));
     const a: Arbitraries = testing.lazy<Arbitraries>({
         ModelDiff: () => given.ModelDiff ?? testing.cast<Modeling.ModelDiff>(fc.record({ added: testing.many(a.ElementId, 0), changed: testing.many(a.ElementId, 0), removed: testing.many(a.ElementId, 0) })),
@@ -129,6 +156,30 @@ export function arbitraries(options: Omit<Partial<Options>, 'declared'> & Pick<G
         PolicyModel: () => given.PolicyModel ?? testing.cast<Modeling.PolicyModel>(fc.record({ event: a.QualifiedName, aggregate: a.QualifiedName, command: testing.cast<string>(scalar.String) })),
         VerifiedModel: () => given.VerifiedModel ?? testing.cast<Modeling.VerifiedModel>(fc.record({ of: a.TypeExpr, for: a.VerifiedFor, errors: testing.many(a.QualifiedName, 0) }, { requiredKeys: ['of', 'errors'] })),
         VerifiedFor: () => given.VerifiedFor ?? testing.cast<Modeling.VerifiedFor>(fc.record({ type: a.TypeExpr, optional: testing.cast<boolean>(scalar.Bool) })),
+        SemanticDeclarationKind: () => given.SemanticDeclarationKind ?? fc.constantFrom<Modeling.SemanticDeclarationKind>('id', 'primitive', 'verified', 'enum', 'valueObject', 'union', 'entity', 'aggregate', 'event', 'error', 'fieldSet', 'policy', 'field', 'invariant', 'state', 'command', 'parameter', 'requirement', 'outcome', 'kind', 'variant', 'variantField', 'enumValue', 'onCase'),
+        SemanticSymbolKind: () => given.SemanticSymbolKind ?? fc.constantFrom<Modeling.SemanticSymbolKind>('field', 'parameter', 'lambda', 'state', 'kind', 'enumValue', 'type'),
+        SemanticCardinality: () => given.SemanticCardinality ?? fc.constantFrom<Modeling.SemanticCardinality>('one', 'optional', 'many', 'nonEmpty'),
+        SemanticComparisonKind: () => given.SemanticComparisonKind ?? fc.constantFrom<Modeling.SemanticComparisonKind>('primitive', 'domainPrimitive', 'entityId', 'valueObjectStructural', 'unionStructural', 'enumValue', 'notComparable'),
+        SemanticObligationKind: () => given.SemanticObligationKind ?? fc.constantFrom<Modeling.SemanticObligationKind>('externalCheck', 'naturalLanguage'),
+        SemanticUnspecifiedKind: () => given.SemanticUnspecifiedKind ?? fc.constantFrom<Modeling.SemanticUnspecifiedKind>('createField', 'targetOnlyField', 'changesWithoutExpression', 'expressionFreeRequirement'),
+        SemanticProvenanceKind: () => given.SemanticProvenanceKind ?? fc.constantFrom<Modeling.SemanticProvenanceKind>('parameter', 'explicitAssignment', 'carried', 'unspecified', 'selectedChoice'),
+        SemanticSelectKind: () => given.SemanticSelectKind ?? fc.constantFrom<Modeling.SemanticSelectKind>('executable', 'naturalLanguage', 'externalCheck', 'absent'),
+        SemanticSpan: () => given.SemanticSpan ?? testing.cast<Modeling.SemanticSpan>(fc.record({ file: testing.cast<string>(scalar.String), startLine: testing.cast<number>(scalar.Int), startColumn: testing.cast<number>(scalar.Int), endLine: testing.cast<number>(scalar.Int), endColumn: testing.cast<number>(scalar.Int) })),
+        SemanticType: () => given.SemanticType ?? testing.cast<Modeling.SemanticType>(fc.record({ name: testing.cast<string>(scalar.String), cardinality: a.SemanticCardinality })),
+        SemanticSymbol: () => given.SemanticSymbol ?? testing.cast<Modeling.SemanticSymbol>(fc.record({ id: testing.cast<string>(scalar.String), kind: a.SemanticSymbolKind, name: testing.cast<string>(scalar.String) })),
+        SemanticExpression: () => cycleSemanticExpression().SemanticExpression,
+        SemanticPresenceFact: () => given.SemanticPresenceFact ?? testing.cast<Modeling.SemanticPresenceFact>(fc.record({ expression: testing.cast<string>(scalar.String), edge: testing.cast<string>(scalar.String), present: testing.cast<boolean>(scalar.Bool) })),
+        SemanticScopeFact: () => given.SemanticScopeFact ?? testing.cast<Modeling.SemanticScopeFact>(fc.record({ site: a.SemanticSpan, owner: testing.cast<string>(scalar.String), fields: testing.many(a.SemanticSymbol, 0), parameters: testing.many(a.SemanticSymbol, 0), lambdas: testing.many(a.SemanticSymbol, 0), sourceStates: testing.many(testing.cast<string>(scalar.String), 0), targetOutcome: testing.cast<string>(scalar.String), kind: testing.cast<string>(scalar.String), presence: testing.many(a.SemanticPresenceFact, 0) }, { requiredKeys: ['site', 'owner', 'fields', 'parameters', 'lambdas', 'sourceStates', 'presence'] })),
+        SemanticDeclaration: () => given.SemanticDeclaration ?? testing.cast<Modeling.SemanticDeclaration>(fc.record({ id: testing.cast<string>(scalar.String), kind: a.SemanticDeclarationKind, name: testing.cast<string>(scalar.String), site: a.SemanticSpan })),
+        SemanticObligation: () => given.SemanticObligation ?? testing.cast<Modeling.SemanticObligation>(fc.record({ kind: a.SemanticObligationKind, declaration: testing.cast<string>(scalar.String), reason: testing.cast<string>(scalar.String), site: a.SemanticSpan })),
+        SemanticUnspecified: () => given.SemanticUnspecified ?? testing.cast<Modeling.SemanticUnspecified>(fc.record({ kind: a.SemanticUnspecifiedKind, declaration: testing.cast<string>(scalar.String), field: testing.cast<string>(scalar.String), source: testing.cast<string>(scalar.String), site: a.SemanticSpan }, { requiredKeys: ['kind', 'declaration', 'site'] })),
+        SemanticProvenance: () => given.SemanticProvenance ?? testing.cast<Modeling.SemanticProvenance>(fc.record({ kind: a.SemanticProvenanceKind, declaration: testing.cast<string>(scalar.String), field: testing.cast<string>(scalar.String), source: testing.cast<string>(scalar.String), site: a.SemanticSpan }, { requiredKeys: ['kind', 'declaration', 'site'] })),
+        SemanticOutcome: () => given.SemanticOutcome ?? testing.cast<Modeling.SemanticOutcome>(fc.record({ id: testing.cast<string>(scalar.String), command: testing.cast<string>(scalar.String), kind: testing.cast<string>(scalar.String), name: testing.cast<string>(scalar.String), from: testing.many(testing.cast<string>(scalar.String), 0), to: testing.cast<string>(scalar.String), selectKind: a.SemanticSelectKind, select: a.SemanticExpression, changes: testing.many(testing.cast<string>(scalar.String), 0), set: testing.many(testing.cast<string>(scalar.String), 0), carried: testing.many(testing.cast<string>(scalar.String), 0), dropped: testing.many(testing.cast<string>(scalar.String), 0), site: a.SemanticSpan }, { requiredKeys: ['id', 'command', 'name', 'from', 'selectKind', 'changes', 'set', 'carried', 'dropped', 'site'] })),
+        SemanticChoice: () => given.SemanticChoice ?? testing.cast<Modeling.SemanticChoice>(fc.record({ kind: testing.cast<string>(scalar.String), source: testing.cast<string>(scalar.String), outcomes: testing.many(testing.cast<string>(scalar.String), 1) }, { requiredKeys: ['kind', 'outcomes'] })),
+        SemanticKindLifecycle: () => given.SemanticKindLifecycle ?? testing.cast<Modeling.SemanticKindLifecycle>(fc.record({ kind: testing.cast<string>(scalar.String), initialStates: testing.many(testing.cast<string>(scalar.String), 0), validStates: testing.many(testing.cast<string>(scalar.String), 0), onCases: testing.many(a.SemanticOutcome, 0) })),
+        SemanticRequirement: () => given.SemanticRequirement ?? testing.cast<Modeling.SemanticRequirement>(fc.record({ id: testing.cast<string>(scalar.String), name: testing.cast<string>(scalar.String), expression: a.SemanticExpression, error: testing.cast<string>(scalar.String), externalReason: testing.cast<string>(scalar.String), site: a.SemanticSpan }, { requiredKeys: ['id', 'name', 'error', 'site'] })),
+        SemanticAggregate: () => given.SemanticAggregate ?? testing.cast<Modeling.SemanticAggregate>(fc.record({ id: testing.cast<string>(scalar.String), initialStates: testing.many(testing.cast<string>(scalar.String), 0), validStates: testing.many(testing.cast<string>(scalar.String), 0), kinds: testing.many(a.SemanticKindLifecycle, 0), outcomes: testing.many(a.SemanticOutcome, 0), choices: testing.many(a.SemanticChoice, 0), requirements: testing.many(a.SemanticRequirement, 0) })),
+        SemanticIR: () => given.SemanticIR ?? testing.cast<Modeling.SemanticIR>(fc.record({ version: testing.cast<number>(scalar.Int), declarations: testing.many(a.SemanticDeclaration, 0), expressions: testing.many(a.SemanticExpression, 0), scopes: testing.many(a.SemanticScopeFact, 0), aggregates: testing.many(a.SemanticAggregate, 0), obligations: testing.many(a.SemanticObligation, 0), unspecified: testing.many(a.SemanticUnspecified, 0), provenance: testing.many(a.SemanticProvenance, 0) })),
     });
     return a;
 }
