@@ -34,7 +34,7 @@ import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, is
 
 export interface ExpressionFact {
     expression: Expr;
-    type: Ty;
+    type?: Ty;
     comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
     presence?: object[];
@@ -422,9 +422,8 @@ function checkInvariant(
     checkDeclared(inv, rules);
     if (!inv.expr) return;
     const rootFact = scopeInfo ? { ...scopeInfo, lambdas: [...scopeInfo.lambdas] } : undefined;
-    if (rootFact) sink?.({ expression: inv.expr, type: ERROR, scope: rootFact });
+    if (rootFact) sink?.({ expression: inv.expr, scope: rootFact });
     const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(inv.expr, scope);
-    if (rootFact) sink?.({ expression: inv.expr, type: ERROR, scope: rootFact });
     if (t.k !== 'error' && !isBool(t)) {
         rules.error('M008', `Invariant '${inv.name}' must be a Bool expression, but has type '${showType(t)}'.`, inv.exprAt);
     }

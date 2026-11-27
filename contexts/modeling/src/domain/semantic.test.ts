@@ -24,6 +24,39 @@ const allExamples = async () => {
 };
 
 describe('Semantic IR', () => {
+    test('keeps Bool types on invariant, requirement and select roots', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'root-types.dt',
+                text: `context Fixture {
+                  id ItemId: UUID
+                  aggregate Item {
+                    id: ItemId
+                    state Ready
+                    state Done
+                    initial Ready
+                    invariant valid { true }
+                    command finish() {
+                      requires ready { true } else Error
+                      outcome done: Ready -> Done select { true }
+                    }
+                  }
+                  error Error
+                }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const boolRoots = flatten(ir.expressions).filter((node) => node.source === 'true');
+        expect(boolRoots).toHaveLength(3);
+        expect(boolRoots.map(({ type }) => type)).toEqual([
+            { name: 'Bool', cardinality: 'one' },
+            { name: 'Bool', cardinality: 'one' },
+            { name: 'Bool', cardinality: 'one' },
+        ]);
+    });
     test('projects per-source field and choice provenance', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);

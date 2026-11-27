@@ -111,7 +111,7 @@ function expression(
             : id && found
               ? { id, kind: symbolKind(found.kind), name: found.name }
               : undefined;
-    const type = fact
+    const type = fact?.type
         ? {
               name: showType(fact.type)
                   .replace(/\?$/, '')
@@ -569,7 +569,7 @@ const mergeFacts = (earlier: ExpressionFact | undefined, later: ExpressionFact):
     earlier
         ? {
               expression: later.expression,
-              type: later.type,
+              type: later.type ?? earlier.type,
               comparison: later.comparison ?? earlier.comparison,
               symbol: later.symbol ?? earlier.symbol,
               presence: later.presence ?? earlier.presence,
