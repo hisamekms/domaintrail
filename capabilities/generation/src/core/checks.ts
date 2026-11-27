@@ -23,7 +23,6 @@ import {
     isTemporal,
     kindCase,
     kindOf,
-    sharedContexts,
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
@@ -71,8 +70,8 @@ export type Ty =
 export interface CheckEnv {
     model: DomainModel;
     ctx: string;
-    /** The Semantic IR of the model (internal, beta), when the caller built one; step 3 moves name resolution onto it. */
-    ir?: SemanticIR;
+    /** The Semantic IR of the model. */
+    ir: SemanticIR;
     /** TypeScript type of an element by qualified name, importing its context as a type. */
     typeRef(qname: string): string;
     /** A generated function of an element's context (`equalMoney` of `Common.Money`), importing the context as a value. */
@@ -253,7 +252,7 @@ export class ExprCompiler {
 
     constructor(private readonly env: CheckEnv) {
         const { model, ctx } = env;
-        this.irIndex = env.ir ? exprModelIndex(env.ir, model) : new Map();
+        this.irIndex = exprModelIndex(env.ir, model);
         // the other contexts are imported as namespaces, and the equality of this context's types is called by name
         const equalities = elementsIn(model, ctx)
             .filter((el) => el.kind === 'valueObject' || el.kind === 'entity' || el.kind === 'union')
@@ -419,29 +418,26 @@ export class ExprCompiler {
         const name = e.name;
         const bound = scope.get(name);
         if (bound) return bound;
-        const { model, ctx } = this.env;
-        const symbol = this.env.ir ? this.irNode(e)?.symbol : undefined;
+        const { model } = this.env;
+        const symbol = this.irNode(e)?.symbol;
         if (symbol?.kind === 'type') {
             const declared = elementOf(model, symbol.id);
             if (declared?.kind === 'enum') return { js: '', ty: { k: 'enumType', el: declared } };
             if (declared?.kind === 'union') return { js: '', ty: { k: 'unionType', el: declared } };
         }
-        const visible = [ctx, ...sharedContexts(model)].map((c) => elementOf(model, `${c}.${name}`)).find((el) => el?.kind === 'enum' || el?.kind === 'union');
-        if (visible?.kind === 'enum') return { js: '', ty: { k: 'enumType', el: visible } };
-        if (visible?.kind === 'union') return { js: '', ty: { k: 'unionType', el: visible } };
-        if (contextNames(model).some((c) => c === name)) return { js: '', ty: { k: 'ctx', name } };
+        if (symbol?.kind === 'context') return { js: '', ty: { k: 'ctx', name: symbol.id } };
         throw new Error(`cannot resolve '${name}'`);
     }
 
     private member(e: Extract<ExprModel, { k: 'member' }>, scope: Scope): Binding {
         const receiver = e.receiver;
         const m = e.member;
-        const symbol = this.env.ir ? this.irNode(e)?.symbol : undefined;
+        const symbol = this.irNode(e)?.symbol;
         const r = this.compile(receiver, scope);
         const t = strip(r.ty); // an optional receiver is guarded by exists(...) (M009)
         switch (t.k) {
             case 'ctx': {
-                const el = elementOf(this.env.model, `${t.name}.${m}`);
+                const el = symbol?.kind === 'type' ? elementOf(this.env.model, symbol.id) : undefined;
                 if (el?.kind === 'enum') return { js: '', ty: { k: 'enumType', el } };
                 if (el?.kind === 'union') return { js: '', ty: { k: 'unionType', el } };
                 throw new Error(`no enum or union '${t.name}.${m}'`);
@@ -449,16 +445,13 @@ export class ExprCompiler {
             case 'enumType':
             case 'unionType':
                 // The IR records which enum value or union tag was resolved at this source location.
-                if (this.env.ir && symbol) {
-                    if (symbol.kind === 'enumValue' || symbol.kind === 'unionTag') return { js: quote(m), ty: { k: 'enum' } };
-                    throw new Error(`no enum value or union tag '${m}'`);
-                }
-                return { js: quote(m), ty: { k: 'enum' } };
+                if (symbol?.kind === 'enumValue' || symbol?.kind === 'unionTag') return { js: quote(m), ty: { k: 'enum' } };
+                throw new Error(`no enum value or union tag '${m}'`);
             case 'union':
                 return { js: `${r.js}.${m}`, ty: { k: 'enum' } }; // only the discriminator is accessible (M009)
             case 'struct': {
                 const fieldId = symbol?.kind === 'field' ? symbol.id.split('.').at(-1) : undefined;
-                const f = t.el.fields.find((x) => x.name === (fieldId ?? m));
+                const f = fieldId ? t.el.fields.find((x) => x.name === fieldId) : undefined;
                 if (!f) throw new Error(`'${t.el.name}' has no field '${m}'`);
                 return { js: `${r.js}.${m}`, ty: fieldTy(this.env.model, f) };
             }
