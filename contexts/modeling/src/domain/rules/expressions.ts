@@ -686,7 +686,14 @@ class ExprChecker {
         }
         const field = scope.fields.get(name);
         if (field) {
-            this.symbols.set(node, { kind: field.kind === 'param' ? 'parameter' : 'field', name, declaration: field });
+            const owner = this.model.elements.find((element) => element.id === node.at.elementId);
+            const inherited = owner && 'fieldSets' in owner && includedFields(owner).some((entry) => entry.field === field);
+            this.symbols.set(node, {
+                kind: field.kind === 'param' ? 'parameter' : 'field',
+                name,
+                declaration: field,
+                ...(inherited ? { id: `${owner.id}.${name}` } : {}),
+            });
             return narrow(memberType(field), name, scope);
         }
         const decl = lookupVisible(this.model, scope.ctx, name);
@@ -734,8 +741,14 @@ class ExprChecker {
                 return ERROR;
             case 'ctx': {
                 const el = lookup(this.model, `${recv.name}.${m}`);
-                if (el?.kind === 'enum') return { k: 'enumType', decl: el };
-                if (el?.kind === 'union') return { k: 'unionType', decl: el };
+                if (el?.kind === 'enum') {
+                    this.symbols.set(e, { kind: 'type', name: m, declaration: el });
+                    return { k: 'enumType', decl: el };
+                }
+                if (el?.kind === 'union') {
+                    this.symbols.set(e, { kind: 'type', name: m, declaration: el });
+                    return { k: 'unionType', decl: el };
+                }
                 const names = elementsOf(this.model, recv.name)
                     .filter((x) => x.kind === 'enum' || x.kind === 'union')
                     .map((x) => x.name);
