@@ -3,9 +3,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
 
-import { analyzeForGeneration, EXAMPLES, exampleSources } from '../test-helpers.js';
+import { generateFromAnalysis, analyzeForGeneration, EXAMPLES, exampleSources } from '../test-helpers.js';
 
 describe('generated TypeScript for domain primitives', () => {
     let dir: string;
@@ -37,7 +36,7 @@ describe('generated TypeScript for domain primitives', () => {
         const a = await analyzeForGeneration(await exampleSources());
         expect(a.diagnostics).toEqual([]);
         await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
         await mkdir(path.join(dir, 'src'));
     });
     afterAll(async () => {

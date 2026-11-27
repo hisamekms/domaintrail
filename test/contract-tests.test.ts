@@ -4,8 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps, runCli } from '@domaintrail/dt';
 import { workspaceDirs } from '@domaintrail/workspace';
-import { generateTypeScript } from '@domaintrail/generation';
-import { check, linkNodeModules, tempCopyOfExamples } from './helpers.js';
+import { check, generateFromAnalysis, linkNodeModules, tempCopyOfExamples } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const dirs: string[] = [];
@@ -116,7 +115,7 @@ const dir = await tempDir();
 {
     const a = await check(MODEL);
     expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    for (const f of generateTypeScript(a.model!, {}, { dir: 'tests', runner: 'bun' })) {
+    for (const f of generateFromAnalysis(a, {}, { dir: 'tests', runner: 'bun' })) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }

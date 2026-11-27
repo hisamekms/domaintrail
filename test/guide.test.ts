@@ -5,11 +5,10 @@ import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
 import { formatDomain } from '@domaintrail/modeling';
 import { formatStorming } from '@domaintrail/storming';
-import { generateTypeScript } from '@domaintrail/generation';
 import { analyze, sourceSelection } from '@domaintrail/analysis';
 import { resolveConfig } from '@domaintrail/dt';
 import { loadWorkspace } from '@domaintrail/workspace';
-import { EXAMPLES, check } from './helpers.js';
+import { EXAMPLES, check, generateFromAnalysis } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const guide = await readFile(path.join(ROOT, 'docs', 'guide.md'), 'utf8');
@@ -126,7 +125,7 @@ describe('dt guide', () => {
         try {
             const a = await analyze(await loadWorkspace(EXAMPLES, sourceSelection()));
             await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
-            for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
+            for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
             await mkdir(path.join(dir, 'src'));
             for (const [name, text] of files) await writeFile(path.join(dir, name), text);
             const tsc = path.join(ROOT, 'node_modules', '.bin', 'tsc');

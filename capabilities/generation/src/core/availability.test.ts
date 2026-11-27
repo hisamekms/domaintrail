@@ -4,8 +4,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { check, only } from '../test-helpers.js';
-import { generateTypeScript } from './typescript.js';
+import { generateFromAnalysis, check, only } from '../test-helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
 
@@ -15,7 +14,7 @@ async function inGenerated(source: string, typecheck: string, body: (dir: string
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-availability-'));
     try {
-        for (const file of generateTypeScript(result.model!)) await writeFile(path.join(dir, file.path), file.content);
+        for (const file of generateFromAnalysis(result)) await writeFile(path.join(dir, file.path), file.content);
         await writeFile(path.join(dir, 'typecheck.ts'), typecheck);
         const tsc = Bun.spawnSync(
             [
@@ -76,7 +75,7 @@ const PLAIN = `context Delivery {
 
 test('an aggregate with states gets its availability, guards and any-state commands', async () => {
     const result = await check({ 'delivery.dt': PLAIN });
-    const delivery = generateTypeScript(result.model!).find((f) => f.path === 'Delivery.ts')!.content;
+    const delivery = generateFromAnalysis(result).find((f) => f.path === 'Delivery.ts')!.content;
     expect(delivery).toContain(
         "    commands: {\n        assign: { '*': ['Unassigned'] },\n        cancel: { '*': ['Unassigned', 'Assigned'] },\n        ship: { '*': ['Assigned'] },\n        deliver: { '*': ['OutForDelivery'] },\n        touch: { '*': ['Unassigned', 'Assigned', 'OutForDelivery', 'Delivered', 'Cancelled'] },\n    },",
     );
@@ -175,7 +174,7 @@ const KINDS = `context Delivery {
 test('availability follows the kind: sources and errors per kind, and a command of another kind is CommandNotForKind', async () => {
     const result = await check({ 'delivery.dt': KINDS });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const delivery = generateTypeScript(result.model!).find((f) => f.path === 'Delivery.ts')!.content;
+    const delivery = generateFromAnalysis(result).find((f) => f.path === 'Delivery.ts')!.content;
     expect(delivery).toContain("    kindField: 'kind',");
     expect(delivery).toContain("        complete: { 'COLLECT': ['Assigned'], 'DROP_OFF': ['Assigned', 'Holding'] },");
     expect(delivery).toContain("        release: { 'DROP_OFF': ['Holding'] },");
@@ -250,7 +249,7 @@ test('decide throws a contract violation for a state that is not a source state'
     const result = await check({ 'delivery.dt': PLAIN });
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-availability-decide-'));
     try {
-        for (const file of generateTypeScript(result.model!)) await writeFile(path.join(dir, file.path), file.content);
+        for (const file of generateFromAnalysis(result)) await writeFile(path.join(dir, file.path), file.content);
         const runtime = await import(path.join(dir, '_runtime.ts'));
         const cancel = runtime.decide({ fields: ['id'], states: { Unassigned: [], Cancelled: [] } }, { Unassigned: () => ({ ok: true, value: {} }) });
         expect(() => cancel({ id: 'r', state: 'Delivered' })).toThrow(
@@ -312,7 +311,7 @@ export const open: Delivery.OpenDeliveryRequest = decideNamed<Delivery.OpenDeliv
     const kinds = await check({ 'delivery.dt': KINDS });
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-availability-named-'));
     try {
-        for (const file of generateTypeScript(kinds.model!)) await writeFile(path.join(dir, file.path), file.content);
+        for (const file of generateFromAnalysis(kinds)) await writeFile(path.join(dir, file.path), file.content);
         const runtime = await import(path.join(dir, '_runtime.ts'));
         const generated = await import(path.join(dir, 'Delivery.ts'));
         const complete = runtime.decideNamed()(generated.RequestShape, {}, () => ({ ok: true, value: {} }), {
@@ -352,12 +351,12 @@ const LEGACY = `context Tasks {
 
 test('commands with transitions per source state: availability and the result of the any-state entry', async () => {
     const result = await check({ 'delivery.dt': LEGACY });
-    const tasks = generateTypeScript(result.model!).find((f) => f.path === 'Tasks.ts')!.content;
+    const tasks = generateFromAnalysis(result).find((f) => f.path === 'Tasks.ts')!.content;
     expect(tasks).toContain("        touch: { '*': ['Draft', 'Review'] },");
     expect(tasks).toContain("export type TouchWorkUnavailable = CommandUnavailable<'Tasks.Work', 'touch', 'Done', 'Draft' | 'Review'>;");
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-availability-legacy-'));
     try {
-        for (const file of generateTypeScript(result.model!)) await writeFile(path.join(dir, file.path), file.content);
+        for (const file of generateFromAnalysis(result)) await writeFile(path.join(dir, file.path), file.content);
         await writeFile(
             path.join(dir, 'typecheck.ts'),
             `import type * as Tasks from './Tasks.js';
@@ -443,6 +442,6 @@ test('a name in a doc comment is not a use: no import of what the module does no
 }`,
     });
     expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const slots = generateTypeScript(a.model!).find((f) => f.path === 'Slots.ts')!.content;
+    const slots = generateFromAnalysis(a).find((f) => f.path === 'Slots.ts')!.content;
     expect(slots).toContain("import type { Result, Shape } from './_runtime.js';");
 });

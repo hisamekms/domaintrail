@@ -4,8 +4,7 @@ import { afterAll, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { check } from '../test-helpers.js';
-import { generateTypeScript } from './typescript.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -33,7 +32,7 @@ async function generated(): Promise<{ dir: string; code: string }> {
     expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-temporal-'));
     dirs.push(dir);
-    const files = generateTypeScript(a.model!);
+    const files = generateFromAnalysis(a);
     for (const f of files) await writeFile(path.join(dir, f.path), f.content);
     return { dir, code: files.find((f) => f.path === 'Booking.ts')!.content };
 }
@@ -120,7 +119,7 @@ test('stage 2: a ZonedDateTime is checked against its zone, and ordered by insta
     expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-zoned-'));
     dirs.push(dir);
-    const files = generateTypeScript(a.model!);
+    const files = generateFromAnalysis(a);
     for (const f of files) await writeFile(path.join(dir, f.path), f.content);
     const code = files.find((f) => f.path === 'Meeting.ts')!.content;
     expect(code).toContain('zonedCompare(meeting.startsAt, meeting.endsAt) < 0');

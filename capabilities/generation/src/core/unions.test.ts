@@ -1,7 +1,6 @@
 // What unions make of the generated TypeScript (the DSL and its checks: contexts/modeling/src/domain/rules/unions.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   id UserId: UUID
@@ -42,7 +41,7 @@ const SALES = `context Sales "販売" {
 describe('unions: generated TypeScript', () => {
     test('generates a tagged union per union', async () => {
         const a = await check({ 'sales.dt': SALES });
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
+        const code = generateFromAnalysis(a).find((f) => f.path === 'Sales.ts')!.content;
         expect(code).toContain(`/**
  * 行為者
  * 実際の行為者。

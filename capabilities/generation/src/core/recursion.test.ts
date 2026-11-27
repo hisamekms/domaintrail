@@ -9,7 +9,7 @@ import * as path from 'node:path';
 import * as fc from 'fast-check';
 import { generateTypeScript } from './typescript.js';
 import { recursiveCycles, testsWarnings } from './tests.js';
-import { check, linkNodeModules } from '../test-helpers.js';
+import { generateFromAnalysis, check, linkNodeModules } from '../test-helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
 
@@ -77,7 +77,7 @@ async function project(
     await linkNodeModules(dir);
     // an ES module project, like domaintrail/testing (under nodenext, CommonJS would see fast-check's other types)
     await writeFile(path.join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-    for (const f of generateTypeScript(a.model!, {}, { dir: 'tests', ...tests }, policies)) {
+    for (const f of generateFromAnalysis(a, {}, { dir: 'tests', ...tests }, policies)) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }

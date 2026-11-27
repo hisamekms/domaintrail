@@ -1,7 +1,7 @@
 // What persistent events make of the generated TypeScript, and the generator's check of `PersistentEvent` (M011) (the
 // DSL: contexts/modeling/src/domain/rules/persistence.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
+import { generateFromAnalysis } from '../test-helpers.js';
 import { checkSales, only } from '../test-helpers.js';
 
 const SALES = `
@@ -13,11 +13,11 @@ const SALES = `
   value Flags { persistent: Bool }
 `;
 
-const salesTs = (model: Parameters<typeof generateTypeScript>[0]): string => generateTypeScript(model).find((f) => f.path === 'Sales.ts')!.content;
+const salesTs = (analysis: Awaited<ReturnType<typeof checkSales>>): string => generateFromAnalysis(analysis).find((f) => f.path === 'Sales.ts')!.content;
 
 describe('persistent events: generated', () => {
     test('generated: a JSDoc tag on each persistent event and the PersistentEvent union', async () => {
-        const ts = salesTs((await checkSales(SALES)).model!);
+        const ts = salesTs(await checkSales(SALES));
         expect(ts).toContain(
             '/**\n * 注文受付\n * 注文を受け付けた事実。\n * @persistent Persisted: storing this event is part of its contract.\n * @see sales.dt:5\n */\nexport interface OrderPlaced {',
         );
@@ -26,7 +26,7 @@ describe('persistent events: generated', () => {
     });
 
     test('generated: no PersistentEvent without persistent events', async () => {
-        const ts = salesTs((await checkSales(SALES.replaceAll('persistent event', 'event'))).model!);
+        const ts = salesTs(await checkSales(SALES.replaceAll('persistent event', 'event')));
         expect(ts).not.toContain('PersistentEvent');
         expect(ts).not.toContain('@persistent');
     });

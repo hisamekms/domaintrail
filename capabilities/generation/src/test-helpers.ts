@@ -3,10 +3,24 @@
 import { mkdir, readdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { analyzeDomain, type DomainAnalysis } from '@domaintrail/modeling';
+import { buildSemanticIR } from '@domaintrail/modeling';
 import { compareDiagnostics, dedupeDiagnostics, hasErrors, type Diagnostic } from '@domaintrail/kernel';
 import type { SourceFile } from '@domaintrail/kernel';
 import { checkGeneratedNames } from './core/tsnames.js';
 import type { DomainModel, ElementModel } from '@domaintrail/modeling';
+import { generateTypeScript } from './core/typescript.js';
+
+/** Generates from an analysis, always supplying its semantic IR. */
+export function generateFromAnalysis(
+    result: DomainAnalysis,
+    dirs?: Parameters<typeof generateTypeScript>[1],
+    tests?: Parameters<typeof generateTypeScript>[2],
+    policies?: Parameters<typeof generateTypeScript>[3],
+    modules?: Parameters<typeof generateTypeScript>[4],
+    options: Parameters<typeof generateTypeScript>[5] = {},
+): ReturnType<typeof generateTypeScript> {
+    return generateTypeScript(result.model!, dirs, tests, policies, modules, { ...options, ir: buildSemanticIR(result.sourceModel!, result.model!) });
+}
 
 const ROOT = path.join(import.meta.dir, '..', '..', '..');
 export const EXAMPLES = path.join(ROOT, 'examples', 'shop');

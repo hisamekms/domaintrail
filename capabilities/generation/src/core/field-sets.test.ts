@@ -1,8 +1,7 @@
 // What field sets make of the generated TypeScript, and the generator's check of their names (M011) (the DSL and its
 // checks: contexts/modeling/src/domain/rules/field-sets.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
-import { check, checkSales, only } from '../test-helpers.js';
+import { generateFromAnalysis, check, checkSales, only } from '../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {
@@ -46,7 +45,7 @@ const FILES = {
 }`,
 };
 
-const ts = (files: Awaited<ReturnType<typeof check>>, ctx: string): string => generateTypeScript(files.model!).find((f) => f.path === `${ctx}.ts`)!.content;
+const ts = (files: Awaited<ReturnType<typeof check>>, ctx: string): string => generateFromAnalysis(files).find((f) => f.path === `${ctx}.ts`)!.content;
 
 describe('field sets: the name check of the generator (M011)', () => {
     test('M011: an event field named type from a field set; the new unions collide like other names', async () => {

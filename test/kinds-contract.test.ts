@@ -5,8 +5,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from '@domaintrail/generation';
-import { check, linkNodeModules } from './helpers.js';
+import { check, generateFromAnalysis, linkNodeModules } from './helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..');
 const dirs: string[] = [];
@@ -121,7 +120,7 @@ await linkNodeModules(dir);
 {
     const a = await check(MODEL);
     expect(a.diagnostics.filter((d) => d.severity !== 'info')).toEqual([]);
-    for (const f of generateTypeScript(a.model!, {}, { dir: 'tests', runner: 'bun' })) {
+    for (const f of generateFromAnalysis(a, {}, { dir: 'tests', runner: 'bun' })) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }

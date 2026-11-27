@@ -2,8 +2,7 @@ import { expect, test } from 'bun:test';
 import { mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { check } from '../test-helpers.js';
-import { generateTypeScript } from './typescript.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const SOURCE = `context Sales {
   id RequestId: UUID
@@ -46,7 +45,7 @@ const SOURCE = `context Sales {
 test('named outcomes generate kind-restricted aggregate and command types', async () => {
     const result = await check({ 'sales.dt': SOURCE });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const sales = generateTypeScript(result.model!).find((f) => f.path === 'Sales.ts')!.content;
+    const sales = generateFromAnalysis(result).find((f) => f.path === 'Sales.ts')!.content;
     expect(sales).toContain("readonly kind: 'COLLECT';");
     expect(sales).toContain("readonly kind: 'DROP_OFF';");
     expect(sales).toContain('readonly collected: {');
@@ -60,7 +59,7 @@ test('named outcomes generate kind-restricted aggregate and command types', asyn
     expect(sales).toContain('export function checkCompleteRequestRequires');
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-lifecycle-ts-'));
     try {
-        for (const file of generateTypeScript(result.model!)) await writeFile(path.join(dir, file.path), file.content);
+        for (const file of generateFromAnalysis(result)) await writeFile(path.join(dir, file.path), file.content);
         await writeFile(
             path.join(dir, 'typecheck.ts'),
             `import type * as Sales from './Sales.js';
@@ -128,7 +127,7 @@ test('external choice obligations require a typed check and mandatory contract o
     const source = SOURCE.replace('select { passed }', 'select "approved by reviewer" @externalCheck("requires a reviewer")');
     const result = await check({ 'sales.dt': source });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const files = generateTypeScript(result.model!, {}, { dir: 'tests' });
+    const files = generateFromAnalysis(result, {}, { dir: 'tests' });
     const sales = files.find((f) => f.path === 'Sales.ts')!.content;
     const tests = files.find((f) => f.path === 'tests/Sales.ts')!.content;
     expect(sales).toContain('readonly accepted: (request: COLLECTAssignedRequest | DROP_OFFAssignedRequest, params: InspectRequestParams) => boolean');
@@ -188,7 +187,7 @@ test('a factory of a kind fixes the produced kind, named in its set', async () =
     }`,
     });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const code = generateTypeScript(result.model!).find((f) => f.path === 'X.ts')!.content;
+    const code = generateFromAnalysis(result).find((f) => f.path === 'X.ts')!.content;
     expect(code).toContain('readonly openedA: {');
     expect(code).toContain('aggregate: AStartTask');
     expect(code).toContain('aggregate: BStartTask');
@@ -204,7 +203,7 @@ test('an annotated invariant makes its external check mandatory in contract opti
     }`,
     });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const files = generateTypeScript(result.model!, {}, { dir: 'tests' });
+    const files = generateFromAnalysis(result, {}, { dir: 'tests' });
     const tests = files.find((f) => f.path === 'tests/X.ts')!.content;
     expect(tests).toContain("readonly declared: { readonly X: { readonly Code: Pick<X.CodeDeclaredChecks, 'registered'> } };");
     expect(tests).toContain('export function contract(impl: Implementation, options: Options): testing.Suite');
@@ -266,7 +265,7 @@ test('named requirement and choice expressions resolve fields of their source st
     }`,
     });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const files = generateTypeScript(result.model!);
+    const files = generateFromAnalysis(result);
     const code = files.find((f) => f.path === 'X.ts')!.content;
     expect(code).toContain('checkFinishRunRequires(run: RunningRun, params: FinishRunParams)');
     expect(code).toContain('checkFinishRunChoice(checks: FinishRunChoiceChecks): (run: RunningRun, params: FinishRunParams)');
@@ -317,7 +316,7 @@ test('choice guards preserve grouping when an outcome has several source states'
     const source = SOURCE.replace('outcome collected: Assigned -> CollectDone', 'outcome collected: Unassigned | Assigned -> CollectDone');
     const result = await check({ 'sales.dt': source });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-    const files = generateTypeScript(result.model!);
+    const files = generateFromAnalysis(result);
     const code = files.find((f) => f.path === 'Sales.ts')!.content;
     expect(code).toContain("((request.state === 'Unassigned' || request.state === 'Assigned') && (request.kind === 'COLLECT'))");
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-choice-guard-'));

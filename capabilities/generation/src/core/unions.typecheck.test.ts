@@ -3,8 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const SALES = `context Sales "販売" {
   id UserId: UUID
@@ -48,7 +47,7 @@ describe('unions', () => {
         try {
             const a = await check({ 'sales.dt': SALES });
             await mkdir(path.join(dir, 'gen'));
-            for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'gen', f.path), f.content);
+            for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'gen', f.path), f.content);
             await writeFile(
                 path.join(dir, 'use.ts'),
                 `import type { Sales } from './gen/index.js';

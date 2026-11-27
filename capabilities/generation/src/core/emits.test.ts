@@ -4,8 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
-import { check, only } from '../test-helpers.js';
+import { generateFromAnalysis, check, only } from '../test-helpers.js';
 
 const WORK = `context Tasks {
   id WorkId: UUID
@@ -81,7 +80,7 @@ describe('emits: the name check of the generator (M011)', () => {
             }`,
         });
         expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-        const modules = generateTypeScript(a.model!);
+        const modules = generateFromAnalysis(a);
         const sales = modules.find((f) => f.path === 'Sales.ts')!.content;
         const billing = modules.find((f) => f.path === 'Billing.ts')!.content;
         expect(sales).toContain("readonly type: 'Sales.Done';");
@@ -114,7 +113,7 @@ describe('emits in the generated TypeScript', () => {
         const a = await check({ 'tasks.dt': WORK });
         expect(a.diagnostics).toEqual([]);
         await mkdir(path.join(dir, 'generated'));
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', f.path), f.content);
         code = await readFile(path.join(dir, 'generated', 'Tasks.ts'), 'utf8');
         await mkdir(path.join(dir, 'src'));
     });

@@ -1,8 +1,7 @@
 // What verified types make of the generated TypeScript and its contract tests, and the generator's check of their
 // factories' names (M011) (the DSL and its checks: contexts/modeling/src/domain/rules/verified.test.ts).
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
-import { check, only } from '../test-helpers.js';
+import { check, generateFromAnalysis, only } from '../test-helpers.js';
 
 /** A Sales context with verified types; `extra` goes into the context, `members` into the aggregate. */
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {
@@ -59,7 +58,7 @@ describe('verified types: generated TypeScript', () => {
     let ts: string;
 
     beforeAll(async () => {
-        ts = generateTypeScript((await run()).model!).find((f) => f.path === 'Sales.ts')!.content;
+        ts = generateFromAnalysis(await run()).find((f) => f.path === 'Sales.ts')!.content;
     });
 
     test('the base with a property per verification, and the factory contract with its context and errors', () => {
@@ -103,7 +102,7 @@ export type MakeAvailableEmail =`);
 
     test('the contract tests take values of the base as verified, and the arbitraries can be overridden', async () => {
         // (examples/shop runs such tests: Customer.register and changeEmail take an AvailableEmail)
-        const tests = generateTypeScript((await run()).model!, {}, { dir: 'tests' }).find((f) => f.path === 'tests/Sales.ts')!.content;
+        const tests = generateFromAnalysis(await run(), {}, { dir: 'tests' }).find((f) => f.path === 'tests/Sales.ts')!.content;
         expect(tests).toContain('readonly AvailableEmail: fc.Arbitrary<Sales.AvailableEmail>;');
         expect(tests).toContain('AvailableEmail: () => given.AvailableEmail ?? testing.cast<Sales.AvailableEmail>(a.EmailAddress),');
         expect(tests).toContain('Reachable: () => given.Reachable ?? testing.cast<Sales.Reachable>(a.AvailableEmail),');
