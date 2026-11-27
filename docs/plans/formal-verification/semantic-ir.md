@@ -161,9 +161,10 @@ Migration steps and regressions:
    computed once (`valueCycles`, in the IR as `cycles`) for M012 and contract-test arbitraries. Two accepted behaviour
    changes: a union on a cycle ends with a variant that really ends it (the old rule could pick a recursing variant and
    overflow), and M012 reports a non-finite type once, on its own cycle, not on each cycle that reaches it.
-   Remaining (step 3b): one checker pass; generator types from the IR (`Ty` inference, `fieldTy`/`baseTy`), with the
-   IR's narrowing (type-name and context receivers carry a symbol, not a type); equality from comparison facts;
-   applicability.
+   Progress (step 3b, part 1, done): every compiled node's type is the IR's, including its narrowing (type-name and
+   context receivers take theirs from the symbol; a union's tag has an IR type `{ name: <union>, tag: true }`).
+   Remaining: one checker pass; delete the compiler's own per-case type computation that the IR type now overrides;
+   equality from comparison facts; applicability.
 4. Port contract-test generation to IR dependencies and recursion facts. Regression: all generated test files match the
    captured baseline and the checker contract remains unchanged.
 5. Add the TLA+ capability and adapters, trace metadata, and architecture-map entry (Phase 4; Phase 1 ends at step 4).
