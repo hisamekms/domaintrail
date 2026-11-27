@@ -20,6 +20,7 @@ import {
     type ValueObjectDecl,
 } from '../source-model.js';
 import { cardinality, multiplicityText } from '../types.js';
+import { valueCycles } from '../cycles.js';
 
 type Owner = AggregateDecl | EntityDecl | ValueObjectDecl | UnionDecl;
 
@@ -77,7 +78,7 @@ export function checkStructure(model: SourceModel, rules: RuleSink): void {
     checkPayloads(model, aggregates, rules);
     checkIdentity(model, aggregates, entities, rules);
     checkOwningAggregates(aggregates, entities, rules);
-    checkCycles(owners, rules);
+    checkCycles(owners, rules, model);
 }
 
 function checkFieldKind(owner: Owner | FieldSetDecl, f: FieldDecl, rules: RuleSink): void {
@@ -239,8 +240,8 @@ function checkOwningAggregates(aggregates: readonly AggregateDecl[], entities: r
  * objects and unions alone is a recursive value type: allowed when each of them has a finite value (the cycle passes
  * through `?`, a list that may be empty, or a union with a variant out of it).
  */
-function checkCycles(owners: Owner[], rules: RuleSink): void {
-    const finite = finiteValues(owners);
+function checkCycles(owners: Owner[], rules: RuleSink, model: SourceModel): void {
+    const finite = finiteValues(model);
     const state = new Map<Owner, 'visiting' | 'done'>();
     const reported = new Set<FieldDecl>();
     const visit = (el: Owner, path: Owner[]): void => {
@@ -276,23 +277,31 @@ function checkCycles(owners: Owner[], rules: RuleSink): void {
  * The value objects and unions that have a finite value: a value object whose required fields (one, or a list of at
  * least one) all have one, a union with a variant whose required fields all have one. Fields of other types have one.
  */
-function finiteValues(owners: readonly Owner[]): Set<Owner> {
+function finiteValues(model: SourceModel): Set<Owner> {
     const finite = new Set<Owner>();
-    const has = (f: FieldDecl): boolean => {
-        const decl = f.type?.decl?.target;
-        if (f.kind === 'references' || !isValueType(decl)) return true;
-        const c = cardinality(f.multiplicity);
-        return c === 'optional' || c === 'many' || finite.has(decl);
-    };
-    const values = owners.filter(isValueType);
-    for (let grew = true; grew;) {
-        grew = false;
-        for (const v of values) {
-            if (finite.has(v)) continue;
-            const ok = v.kind === 'union' ? v.variants.some((x) => fieldsOf(x.members).every(has)) : heldFields(v).every(has);
-            if (ok) {
-                finite.add(v);
-                grew = true;
+    for (const cycle of valueCycles(model)) {
+        const members = cycle.members
+            .map((id) => model.elements.find((e): e is ValueObjectDecl | UnionDecl => e.id === id && isValueType(e)))
+            .filter((e): e is ValueObjectDecl | UnionDecl => !!e);
+        const ids = new Set(cycle.members);
+        const ended = new Set<string>();
+        const has = (f: FieldDecl): boolean => {
+            if (f.kind === 'references') return true;
+            const decl = f.type?.decl?.target;
+            if (!isValueType(decl)) return true;
+            const c = cardinality(f.multiplicity);
+            return !ids.has(decl.id) || c === 'optional' || c === 'many' || ended.has(decl.id);
+        };
+        for (let grew = true; grew;) {
+            grew = false;
+            for (const value of members) {
+                if (ended.has(value.id)) continue;
+                const ok = value.kind === 'union' ? value.variants.some((variant) => fieldsOf(variant.members).every(has)) : heldFields(value).every(has);
+                if (ok) {
+                    ended.add(value.id);
+                    finite.add(value);
+                    grew = true;
+                }
             }
         }
     }

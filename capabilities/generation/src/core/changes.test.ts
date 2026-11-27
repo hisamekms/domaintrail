@@ -4,8 +4,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 /**
  * Work moves Draft -> Review -> Done -> Archived. `draftNo` is in Draft and Review (carried over between them),
@@ -65,7 +64,7 @@ describe('changes in the generated TypeScript', () => {
         const a = await work(COMMANDS);
         expect(a.diagnostics).toEqual([]);
         await mkdir(path.join(dir, 'generated'));
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', f.path), f.content);
         code = await readFile(path.join(dir, 'generated', 'Tasks.ts'), 'utf8');
         await mkdir(path.join(dir, 'src'));
     });

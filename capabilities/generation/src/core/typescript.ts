@@ -14,6 +14,7 @@ import type {
     PolicyElement,
     PrimitiveName,
     RequirementModel,
+    SemanticIR,
     TypeExpr,
     UnionModel,
 } from '@domaintrail/modeling';
@@ -29,6 +30,7 @@ import {
     emittedEventsInAggregate,
     kindCase,
     outcomeFields,
+    outcomesOfCommand,
     ownFields,
     validStatesFor,
 } from '@domaintrail/modeling';
@@ -592,7 +594,10 @@ export function generateTypeScript(
     tests?: TestsOptions,
     policies: Readonly<Record<string, PolicyMode>> = {},
     modules: Readonly<Record<string, string>> = {},
+    options: { ir?: SemanticIR } = {},
 ): GeneratedFile[] {
+    if (!options.ir) throw new Error('generateTypeScript needs the Semantic IR (options.ir)');
+    const ir = options.ir;
     const dirOf = (ctx: string): string => posix.normalize(dirs[ctx] || '.');
     // a context of another package by its module, one of the same directory by relative path
     const moduleOf = (from: string, ctx: string): string => (modules[ctx] && dirOf(ctx) !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx));
@@ -604,7 +609,7 @@ export function generateTypeScript(
         for (const ctx of contexts) {
             files.push({
                 path: posix.join(dir, `${ctx}.ts`),
-                content: new ContextEmitter(model, ctx, (other) => moduleOf(dir, other), policies[ctx] ?? 'optional').emit(),
+                content: new ContextEmitter(model, ctx, (other) => moduleOf(dir, other), policies[ctx] ?? 'optional', ir).emit(),
             });
         }
         const index = [HEADER, `export * from './_runtime.js';`, ...contexts.map((c) => `export * as ${c} from './${c}.js';`), ''].join('\n');
@@ -612,7 +617,7 @@ export function generateTypeScript(
     }
     if (tests)
         files.push(
-            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies, dirs: testsDirs, modules }, (from, ctx) =>
+            ...generateTests(model, ir, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies, dirs: testsDirs, modules }, (from, ctx) =>
                 // the tests in a context's own package import it by relative path
                 modules[ctx] && testsDirs[ctx] !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx),
             ),
@@ -706,10 +711,12 @@ class ContextEmitter {
         /** Import specifier of another context's module. */
         private readonly moduleOf: (ctx: string) => string,
         private readonly policies: PolicyMode,
+        private readonly ir: SemanticIR,
     ) {
         this.checks = new CheckWriter({
             model,
             ctx,
+            ir: this.ir,
             typeRef: (qname) => this.ref(qname),
             valueRef: (qname, name) => {
                 const ctx = qname.slice(0, qname.indexOf('.'));
@@ -1543,7 +1550,6 @@ class ContextEmitter {
                       .join(' | ')
                 : whole;
         const transitions = stateful ? c.transitions : [];
-        // TODO(step 3): use outcomesOfCommand from contexts/modeling/src/domain/model.ts.
         // One output for every input (as `A | B -> C`): a plain function. Outputs that depend on the input
         // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
         // its state, looked up in an object keyed by the source states.
@@ -1555,8 +1561,15 @@ class ContextEmitter {
         const errors = c.errors.length === 0 ? 'never' : c.errors.map((e) => this.ref(e)).join(' | ');
         // the outcomes of an input state (`undefined`: a factory, or no states): one per target, keyed by its name; the
         // contract holds the aggregate, the decision what to `set`
+        const expandedOutcomes = outcomesOfCommand(c, stateful || agg.kinds.length > 0);
         const outcomes = (from: string | undefined, targets: readonly string[], decision: boolean): Outcome[] =>
-            (stateful ? unique(targets) : [undefined]).map((to) => ({
+            (stateful
+                ? expandedOutcomes
+                      .filter((o) => (o.from[0] || undefined) === from && targets.includes(o.to))
+                      .map((o) => o.to)
+                      .filter((to, i, all) => all.indexOf(to) === i)
+                : [undefined]
+            ).map((to) => ({
                 key: to ?? agg.name,
                 first: decision
                     ? `set: ${c.factory && c.kind ? `{ readonly ${KIND_TAG}: '${c.kind}' } & ` : ''}${this.setType(outcomeFields(agg, c, from, to).set)}`

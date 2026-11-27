@@ -6,8 +6,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as fc from 'fast-check';
-import { generateTypeScript } from './typescript.js';
-import { check, linkNodeModules } from '../test-helpers.js';
+import { generateFromAnalysis, check, linkNodeModules } from '../test-helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
 
@@ -56,7 +55,7 @@ describe('a context written into another package', () => {
     test('is imported by its module from other directories', async () => {
         const a = await check({ 'kernel.dt': KERNEL, 'sales.dt': SALES });
         expect(a.diagnostics).toEqual([]);
-        const files = generateTypeScript(a.model!, DIRS, undefined, {}, MODULES);
+        const files = generateFromAnalysis(a, DIRS, undefined, {}, MODULES);
         expect(files.map((f) => f.path).sort()).toEqual([
             'Sales.ts',
             '_runtime.ts',
@@ -74,13 +73,13 @@ describe('a context written into another package', () => {
 
     test('a context of the same directory keeps its relative path', async () => {
         const a = await check({ 'kernel.dt': KERNEL, 'sales.dt': SALES });
-        const files = generateTypeScript(a.model!, { Kernel: 'gen', Sales: 'gen' }, undefined, {}, { Kernel: '@acme/kernel', Sales: '@acme/kernel' });
+        const files = generateFromAnalysis(a, { Kernel: 'gen', Sales: 'gen' }, undefined, {}, { Kernel: '@acme/kernel', Sales: '@acme/kernel' });
         expect(contentOf(files, 'gen/Sales.ts')).toContain("import * as Kernel from './Kernel.js';");
     });
 
     test('its contract tests are written into its package, and other tests reach them through it', async () => {
         const a = await check({ 'kernel.dt': KERNEL, 'sales.dt': SALES });
-        const files = generateTypeScript(a.model!, DIRS, { dir: 'tests', runner: 'bun' }, {}, MODULES);
+        const files = generateFromAnalysis(a, DIRS, { dir: 'tests', runner: 'bun' }, {}, MODULES);
         const paths = files.map((f) => f.path);
         expect(paths.filter((p) => p.startsWith('tests/')).sort()).toEqual(['tests/Sales.ts', 'tests/_register.ts', 'tests/index.ts']);
         expect(paths.filter((p) => p.startsWith(`${KERNEL_OUT}/tests/`)).sort()).toEqual(
@@ -105,7 +104,7 @@ describe('a context written into another package', () => {
         };
         const a = await check({ 'kernel.dt': KERNEL_EXTERNAL, 'sales.dt': SALES });
         expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
-        for (const f of generateTypeScript(a.model!, DIRS, { dir: 'tests' }, {}, MODULES)) await write(f.path, f.content);
+        for (const f of generateFromAnalysis(a, DIRS, { dir: 'tests' }, {}, MODULES)) await write(f.path, f.content);
         // the kernel's package exports its context and its tests
         await write(
             'packages/kernel/package.json',

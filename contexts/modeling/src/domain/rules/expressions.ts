@@ -30,13 +30,20 @@ import {
     type UnionDecl,
 } from '../source-model.js';
 import { canonicalTemporal, isOrderedTemporal, isTemporal, TEMPORAL_EXAMPLE, TEMPORAL_FORM } from '../temporal.js';
+import { fieldId } from '../ids.js';
 import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, showType, type Ty } from '../types.js';
 
 export interface ExpressionFact {
     expression: Expr;
     type?: Ty;
     comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
-    symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
+    symbol?: {
+        kind: 'field' | 'parameter' | 'lambdaVariable' | 'value' | 'state' | 'kind' | 'enumValue' | 'type' | 'unionTag' | 'discriminator' | 'context';
+        name: string;
+        declaration?: object;
+        id?: string;
+        binding?: Expr;
+    };
     paths?: string[];
     scope?: {
         owner: object;
@@ -60,6 +67,7 @@ interface Scope {
     hidden: Map<string, Hidden>;
     /** Lambda parameters, innermost last. */
     lambdas: Array<[string, Ty, Expr?]>;
+    implicitValueId?: string;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
 }
@@ -117,7 +125,14 @@ function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel,
     for (const inv of primitiveInvariants(p)) {
         if ('kind' in inv.decl) checkDeclared(inv.decl, rules);
         if (!inv.expr) continue;
-        const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }, inv.expr]], present: new Set() };
+        const scope: Scope = {
+            ctx,
+            fields: new Map(),
+            hidden: new Map(),
+            lambdas: [['value', { k: 'prim', name: p.base }, inv.expr]],
+            implicitValueId: p.id,
+            present: new Set(),
+        };
         sink?.({ expression: inv.expr, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value', binding: inv.expr }] } });
         const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
         if (t.k !== 'error' && !isBool(t)) {
@@ -674,13 +689,27 @@ class ExprChecker {
     private name(name: string, node: Expr, scope: Scope): Ty {
         for (let i = scope.lambdas.length - 1; i >= 0; i--) {
             if (scope.lambdas[i][0] === name) {
-                this.symbols.set(node, { kind: 'lambdaVariable', name, ...(scope.lambdas[i][2] ? { binding: scope.lambdas[i][2] } : {}) });
+                this.symbols.set(node, {
+                    kind: scope.implicitValueId && name === 'value' ? 'value' : 'lambdaVariable',
+                    name,
+                    ...(scope.implicitValueId && name === 'value' ? { id: scope.implicitValueId } : {}),
+                    ...(scope.lambdas[i][2] ? { binding: scope.lambdas[i][2] } : {}),
+                });
                 return narrow(scope.lambdas[i][1], name, scope);
             }
         }
         const field = scope.fields.get(name);
         if (field) {
-            this.symbols.set(node, { kind: field.kind === 'param' ? 'parameter' : 'field', name, declaration: field });
+            // a state (`O#S`), kind (`O/K`) or command (`O:c`) site belongs to its element `O`
+            const ownerId = node.at.elementId?.replace(/[#/:].*$/, '');
+            const owner = this.model.elements.find((element) => element.id === ownerId);
+            const inherited = owner && 'fieldSets' in owner && includedFields(owner).some((entry) => entry.field === field);
+            this.symbols.set(node, {
+                kind: field.kind === 'param' ? 'parameter' : 'field',
+                name,
+                declaration: field,
+                ...(inherited ? { id: `${owner.id}.${name}` } : {}),
+            });
             return narrow(memberType(field), name, scope);
         }
         const decl = lookupVisible(this.model, scope.ctx, name);
@@ -692,7 +721,10 @@ class ExprChecker {
             this.symbols.set(node, { kind: 'type', name, declaration: decl });
             return { k: 'unionType', decl };
         }
-        if (this.model.contexts.includes(name)) return { k: 'ctx', name };
+        if (this.model.contexts.includes(name)) {
+            this.symbols.set(node, { kind: 'context', name, id: name });
+            return { k: 'ctx', name };
+        }
         const hidden = scope.hidden.get(name);
         if (hidden) {
             this.rules.error('M010', hidden.message, node.at, hidden.hint);
@@ -725,8 +757,14 @@ class ExprChecker {
                 return ERROR;
             case 'ctx': {
                 const el = lookup(this.model, `${recv.name}.${m}`);
-                if (el?.kind === 'enum') return { k: 'enumType', decl: el };
-                if (el?.kind === 'union') return { k: 'unionType', decl: el };
+                if (el?.kind === 'enum') {
+                    this.symbols.set(e, { kind: 'type', name: m, declaration: el });
+                    return { k: 'enumType', decl: el };
+                }
+                if (el?.kind === 'union') {
+                    this.symbols.set(e, { kind: 'type', name: m, declaration: el });
+                    return { k: 'unionType', decl: el };
+                }
                 const names = elementsOf(this.model, recv.name)
                     .filter((x) => x.kind === 'enum' || x.kind === 'union')
                     .map((x) => x.name);
@@ -752,7 +790,11 @@ class ExprChecker {
                 return ERROR;
             }
             case 'unionType':
-                if (recv.decl.variants.some((v) => v.name === m)) return tagOf(recv.decl);
+                const variant = recv.decl.variants.find((v) => v.name === m);
+                if (variant) {
+                    this.symbols.set(e, { kind: 'unionTag', name: m, declaration: variant });
+                    return tagOf(recv.decl);
+                }
                 this.rules.error(
                     'M001',
                     `Union '${recv.decl.name}' has no variant '${m}'.`,
@@ -765,7 +807,10 @@ class ExprChecker {
                 );
                 return ERROR;
             case 'union': {
-                if (m === discriminatorOf(recv.decl)) return tagOf(recv.decl);
+                if (m === discriminatorOf(recv.decl)) {
+                    this.symbols.set(e, { kind: 'discriminator', name: m, id: recv.decl.id });
+                    return tagOf(recv.decl);
+                }
                 const variants = recv.decl.variants.filter((v) => fieldsOf(v.members).some((f) => f.name === m)).map((v) => v.name);
                 if (variants.length) {
                     this.rules.error(
@@ -783,7 +828,7 @@ class ExprChecker {
                 const fields = [...includedFields(recv.decl).map((x) => x.field), ...fieldsOf(recv.decl.members)];
                 const f = fields.find((x) => x.name === m);
                 if (f) {
-                    this.symbols.set(e, { kind: 'field', name: m, declaration: f });
+                    this.symbols.set(e, { kind: 'field', name: m, declaration: f, id: fieldId(recv.decl.id, m) });
                     return narrow(memberType(f), pathOf(e) ?? '', scope);
                 }
                 const hint = suggestFrom(

@@ -4,8 +4,8 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript, type PolicyMode } from './typescript.js';
-import { check, linkNodeModules } from '../test-helpers.js';
+import type { PolicyMode } from './typescript.js';
+import { check, generateFromAnalysis, linkNodeModules } from '../test-helpers.js';
 
 const SALES = `context Sales {
   id OrderId: UUID
@@ -65,7 +65,7 @@ describe('policies: the name check of the generator (M011)', () => {
 
 describe('generated policies', () => {
     const generate = async (mode: PolicyMode) => {
-        const files = generateTypeScript((await model()).model!, {}, { dir: 'tests', runner: 'bun' }, { Billing: mode });
+        const files = generateFromAnalysis(await model(), {}, { dir: 'tests', runner: 'bun' }, { Billing: mode });
         return (p: string) => files.find((f) => f.path === p)!.content;
     };
 
@@ -114,7 +114,7 @@ describe('generated policy cases', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-policies-'));
     dirs.push(dir);
     await linkNodeModules(dir);
-    for (const f of generateTypeScript((await model()).model!, {}, { dir: 'tests' }, { Billing: 'required' })) {
+    for (const f of generateFromAnalysis(await model(), {}, { dir: 'tests' }, { Billing: 'required' })) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }

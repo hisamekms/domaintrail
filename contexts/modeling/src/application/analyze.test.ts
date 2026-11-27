@@ -185,6 +185,11 @@ describe('ownership (M003, M004, M012)', () => {
         expect(only(a, 'M012').map((d) => d.message)).toEqual(['Ownership cycle: E -> V -> E.']);
     });
 
+    test('M012 reports only the self cycle in the supplied value graph', async () => {
+        const a = await checkSales(`${ORDER} value C { next: C?  d: D } value D { d: D }`);
+        expect(only(a, 'M012').map((diagnostic) => diagnostic.message)).toEqual(['Recursive value without a finite value: D -> D.']);
+    });
+
     test('M012 a recursive value type is allowed when each value on the cycle has a finite value', async () => {
         const through = async (body: string): Promise<string[]> => only(await checkSales(`${ORDER} ${body}`), 'M012').map((d) => d.message);
         expect(await through('value A { owns b: B } value B { c: C } value C { owns a: A? }')).toEqual([]);

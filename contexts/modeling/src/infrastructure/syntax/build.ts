@@ -52,6 +52,8 @@ import { expressionText } from './format.js';
 import { cardinality, multiplicityText } from '../../domain/types.js';
 import type { FileResolver } from './site.js';
 import { regexSource } from './regex-source.js';
+import { buildSourceModel } from './build-source.js';
+import { lifecyclesOf } from '../../domain/lifecycle.js';
 import {
     commandsOf,
     commonFields,
@@ -89,6 +91,7 @@ import type {
 
 /** Builds the Typed Model. Tolerates unresolved references so that the view can render models with semantic errors. */
 export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel {
+    const source = buildSourceModel(index, fileOf);
     const elements = new Map<string, ElementModel>();
     const labels = new LabelResolver(index);
     const field = (f: FieldLike | Parameter): FieldModel => fieldModel(f, labels);
@@ -167,7 +170,12 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                         ...kindsOf(el).flatMap((k) => k.members.filter(isInitial).map((i) => ({ state: i.state.$refText, kinds: [k.name] }))),
                     ],
                     kinds: kindsOf(el).map((k) => kind(id, k, loc, field)),
-                    validStates: validStatesOf(el),
+                    validStates: validStatesOf(
+                        source.elements.find(
+                            (x): x is import('../../domain/source-model.js').AggregateDecl =>
+                                x.kind === 'aggregate' && x.context === el.$container.name && x.name === el.name,
+                        ),
+                    ),
                 };
             }
             if (isPolicy(el)) {
@@ -403,38 +411,9 @@ function kind(aggId: ElementId, k: Kind, loc: (n: AstNode) => Location, field: (
  * The states each kind of an aggregate can be in (ADR 0037): from its initial states — those declared for every kind
  * and for it, and the targets of its create commands — through the outcomes and transitions of the commands it has.
  */
-function validStatesOf(agg: import('./generated/ast.js').Aggregate): import('../../domain/model.js').ValidKindStatesModel[] {
-    const kinds = kindsOf(agg);
-    if (!kinds.length) return [];
-    const common = agg.members.filter(isInitial).map((i) => i.state.$refText);
-    const commands = commandsOf(agg);
-    return kinds.map((k) => {
-        const mine = commands.filter((c) => !isKind(c.$container) || c.$container === k);
-        const cases = k.members.filter(isCommandCase);
-        const outcomes = (c: Command): Outcome[] => [...c.outcomes, ...cases.filter((x) => x.command.$refText === c.name).flatMap((x) => x.outcomes)];
-        const created = mine
-            .filter((c) => c.factory)
-            .flatMap((c) => [...c.transitions.flatMap((t) => t.to.map((r) => r.$refText)), ...outcomes(c).map((o) => o.to.$refText)]);
-        const seen = new Set([...common, ...k.members.filter(isInitial).map((i) => i.state.$refText), ...created]);
-        let changed = true;
-        while (changed) {
-            changed = false;
-            for (const c of mine.filter((x) => !x.factory)) {
-                const reached = [
-                    ...c.transitions.filter((t) => t.from.some((f) => seen.has(f.$refText))).flatMap((t) => t.to.map((r) => r.$refText)),
-                    ...outcomes(c)
-                        .filter((o) => o.from.some((f) => seen.has(f.$refText)))
-                        .map((o) => o.to.$refText),
-                ];
-                for (const target of reached)
-                    if (!seen.has(target)) {
-                        seen.add(target);
-                        changed = true;
-                    }
-            }
-        }
-        // a kind made elsewhere (no create command, no initial state) may be in any state
-        const declared = statesOf(agg).map((s) => s.name);
-        return { kind: k.name, states: seen.size ? declared.filter((s) => seen.has(s)) : declared };
-    });
+function validStatesOf(agg: import('../../domain/source-model.js').AggregateDecl | undefined): import('../../domain/model.js').ValidKindStatesModel[] {
+    if (!agg) return [];
+    return lifecyclesOf(agg, true)
+        .filter((lifecycle) => lifecycle.kind !== '*')
+        .map((lifecycle) => ({ kind: lifecycle.kind, states: lifecycle.validStates ?? [] }));
 }

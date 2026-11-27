@@ -3,8 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const MODEL = `context Model {
   enum BinaryOp { implies or and eq not in true false String state command }
@@ -41,7 +40,7 @@ describe('keywords as names', () => {
             const a = await check({ 'model.dt': MODEL });
             expect(a.diagnostics).toEqual([]);
             await mkdir(path.join(dir, 'gen'));
-            for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'gen', f.path), f.content);
+            for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'gen', f.path), f.content);
             await writeFile(
                 path.join(dir, 'use.ts'),
                 `import { Model } from './gen/index.js';

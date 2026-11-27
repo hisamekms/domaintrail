@@ -3,8 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const FILES = {
     'common.dt': `shared context Common {
@@ -55,7 +54,7 @@ describe('field sets: generated TypeScript', () => {
         a = await check(FILES);
         dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-fieldsets-'));
         await mkdir(path.join(dir, 'generated'), { recursive: true });
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', f.path), f.content);
     });
     afterAll(() => rm(dir, { recursive: true, force: true }));
 

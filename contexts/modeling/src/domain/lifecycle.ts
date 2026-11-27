@@ -6,15 +6,22 @@ export interface LifecycleReachability {
     creationTargets: string[];
     reachableFromInitial: string[];
     reachable: string[];
+    validStates?: string[];
 }
 
 /** Initial and reachable lifecycle states, independently for each aggregate kind. */
-export function lifecyclesOf(aggregate: AggregateDecl): LifecycleReachability[] {
-    // Known duplicate: for invalid multi-target transitions and kinds without creation this differs from Typed Model
-    // validStatesFor; unify when the generator moves to the IR.
+export function lifecyclesOf(aggregate: AggregateDecl, includeValidStates = false): LifecycleReachability[] {
     const kinds = kindsOf(aggregate);
     const commands = commandsOf(aggregate);
-    if (!statesOf(aggregate).length && kinds.length) return [];
+    if (!statesOf(aggregate).length && kinds.length)
+        return kinds.map((kind) => ({
+            kind: kind.name,
+            initial: [],
+            creationTargets: [],
+            reachableFromInitial: [],
+            reachable: [],
+            ...(includeValidStates ? { validStates: [] } : {}),
+        }));
     const casesOf = (kind: KindDecl | undefined, cmd: CommandDecl) => kind?.cases.filter((c) => c.command.text === cmd.name) ?? [];
     const applicable = (cmd: CommandDecl, kind: KindDecl | undefined): OutcomeDecl[] =>
         cmd.ofKind && cmd.ofKind !== kind?.name ? [] : [...cmd.outcomes, ...casesOf(kind, cmd).flatMap((c) => c.outcomes)];
@@ -28,6 +35,7 @@ export function lifecyclesOf(aggregate: AggregateDecl): LifecycleReachability[] 
         const initial = new Set([...commonInitials, ...(kind ? kindInitials(kind) : []), ...(kind ? creationTargets : [])]);
         const reachableFromInitial = new Set(initial);
         const reachable = new Set([...initial, ...creationTargets]);
+        const valid = new Set(initial);
         let changed = true;
         while (changed) {
             changed = false;
@@ -42,6 +50,26 @@ export function lifecyclesOf(aggregate: AggregateDecl): LifecycleReachability[] 
                         reachable.add(outcome.to.text);
                         changed = true;
                     }
+            }
+        }
+        if (includeValidStates) {
+            let validChanged = true;
+            while (validChanged) {
+                validChanged = false;
+                for (const cmd of commands.filter((c) => !c.factory && (!c.ofKind || c.ofKind === kind?.name))) {
+                    for (const transition of cmd.transitions)
+                        if (transition.from.some((f) => valid.has(f.text)))
+                            for (const target of transition.to)
+                                if (!valid.has(target.text)) {
+                                    valid.add(target.text);
+                                    validChanged = true;
+                                }
+                    for (const outcome of applicable(cmd, kind))
+                        if (outcome.from.some((f) => valid.has(f.text)) && !valid.has(outcome.to.text)) {
+                            valid.add(outcome.to.text);
+                            validChanged = true;
+                        }
+                }
             }
         }
         // M028 reachability is based only on declared initials; factory targets remain separate for the IR.
@@ -61,6 +89,16 @@ export function lifecyclesOf(aggregate: AggregateDecl): LifecycleReachability[] 
                     }
             }
         }
-        return { kind: kind?.name ?? '*', initial: [...initial], creationTargets, reachableFromInitial: [...reachableFromInitial], reachable: [...reachable] };
+        const validStates = statesOf(aggregate)
+            .map((s) => s.name)
+            .filter((state) => valid.has(state));
+        return {
+            kind: kind?.name ?? '*',
+            initial: [...initial],
+            creationTargets,
+            reachableFromInitial: [...reachableFromInitial],
+            reachable: [...reachable],
+            ...(includeValidStates && { validStates: validStates.length ? validStates : statesOf(aggregate).map((s) => s.name) }),
+        };
     });
 }

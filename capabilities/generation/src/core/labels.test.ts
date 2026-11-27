@@ -1,13 +1,12 @@
 // Labels and descriptions in the generated TypeScript (the DSL's labels and their checks: contexts/modeling/src/infrastructure/syntax/labels.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
-import { analyzeForGeneration, exampleSources } from '../test-helpers.js';
+import { generateFromAnalysis, analyzeForGeneration, exampleSources } from '../test-helpers.js';
 
 describe('labels in generated code', () => {
     test('generated TypeScript carries labels and descriptions as JSDoc', async () => {
         const a = await analyzeForGeneration(await exampleSources());
         expect(a.diagnostics).toEqual([]);
-        const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
+        const sales = generateFromAnalysis(a).find((f) => f.path === 'Sales.ts')!.content;
         expect(sales).toContain('/**\n * 注文\n * 顧客からの購入依頼。確定後は明細を変更できない。\n * @see sales/order.dt:13\n */\nexport type Order =');
         expect(sales).toContain('    /** 確定日時 — 顧客が注文を確定した日時。キャンセル可否の判定に使う。 */\n    readonly confirmedAt: Timestamp;');
         expect(sales).toContain("    | 'Requested' // 顧客都合");

@@ -17,6 +17,16 @@ describe('lifecyclesOf', () => {
         ]);
     });
 
+    test('keeps an empty valid state list for every kind when the aggregate has no states', async () => {
+        const analysis = await checkSales(`aggregate A { id: String kind P {} kind Q {} }`);
+        const aggregate = analysis.sourceModel?.elements.find((element): element is AggregateDecl => element.kind === 'aggregate');
+        expect(aggregate).toBeDefined();
+        expect(lifecyclesOf(aggregate!, true).map(({ kind, validStates }) => ({ kind, states: validStates }))).toEqual([
+            { kind: 'P', states: [] },
+            { kind: 'Q', states: [] },
+        ]);
+    });
+
     test('keeps create initial states and reachability separate by kind', async () => {
         expect(
             await lifecycle(`aggregate A {

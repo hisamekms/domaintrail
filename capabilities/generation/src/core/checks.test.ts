@@ -3,8 +3,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { quote } from './checks.js';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const dirs: string[] = [];
 afterAll(async () => {
@@ -17,7 +16,7 @@ async function generated(files: Record<string, string>): Promise<Record<string, 
     expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-checks-'));
     dirs.push(dir);
-    const out = generateTypeScript(a.model!);
+    const out = generateFromAnalysis(a);
     for (const f of out) await writeFile(path.join(dir, f.path), f.content);
     return import(path.join(dir, 'index.ts'));
 }
@@ -310,7 +309,7 @@ context Names {
 
 describe('readable expressions (ADR 0028)', async () => {
     const names = await check(NAMES);
-    const source = generateTypeScript(names.model!).find((f) => f.path === 'Names.ts')!.content;
+    const source = generateFromAnalysis(names).find((f) => f.path === 'Names.ts')!.content;
     const { Names } = await generated(NAMES);
     const has = (line: string): void => expect(source).toContain(line);
     const item = (name: string, count = 1) => ({ name, count });

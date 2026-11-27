@@ -1,7 +1,6 @@
 // What shared contexts make of the generated TypeScript (the DSL and its checks: contexts/modeling/src/domain/rules/shared.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const COMMON = `shared context Common "共通" {
   terms { currency: "通貨" }
@@ -26,7 +25,7 @@ describe('shared contexts: generated TypeScript', () => {
 }`,
         });
         expect(a.diagnostics).toEqual([]);
-        const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
+        const sales = generateFromAnalysis(a).find((f) => f.path === 'Sales.ts')!.content;
         expect(sales).toContain("import type * as Common from './Common.js';");
         expect(sales).toContain('readonly email: Common.Email;');
     });

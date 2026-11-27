@@ -3,8 +3,7 @@ import { afterAll, describe, expect, test } from 'bun:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 const ROOT = path.join(import.meta.dir, '..', '..', '..', '..');
 const dirs: string[] = [];
@@ -125,7 +124,7 @@ describe('generated checks', () => {
         const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-checks-tsc-'));
         dirs.push(dir);
         const a = await check(MODEL);
-        const files = generateTypeScript(a.model!);
+        const files = generateFromAnalysis(a);
         for (const f of files) await writeFile(path.join(dir, f.path), f.content);
         expect(
             tsc(

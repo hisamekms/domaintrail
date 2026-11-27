@@ -3,8 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
-import { generateTypeScript } from './typescript.js';
-import { analyzeForGeneration, check, exampleSources } from '../test-helpers.js';
+import { generateFromAnalysis, analyzeForGeneration, check, exampleSources } from '../test-helpers.js';
 
 let dir: string;
 
@@ -13,7 +12,7 @@ beforeAll(async () => {
     const a = await analyzeForGeneration(await exampleSources());
     expect(a.ok).toBe(true);
     await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
-    for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
+    for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
     await mkdir(path.join(dir, 'src'));
 });
 
@@ -97,7 +96,7 @@ describe('commands with several transitions', () => {
         const a = await check({ 'tasks.dt': WORK });
         expect(a.diagnostics).toEqual([]);
         await mkdir(path.join(work, 'generated'));
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(work, 'generated', f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(work, 'generated', f.path), f.content);
         code = await readFile(path.join(work, 'generated', 'Tasks.ts'), 'utf8');
         await mkdir(path.join(work, 'src'));
     });
@@ -229,7 +228,7 @@ describe('contexts generated into different directories', () => {
         split = await mkdtemp(path.join(tmpdir(), 'domaintrail-split-'));
         const a = await analyzeForGeneration(await exampleSources());
         const dirs = { Common: SHARED, Sales: 'generated/domain', Billing: 'generated/domain' };
-        for (const f of generateTypeScript(a.model!, dirs)) {
+        for (const f of generateFromAnalysis(a, dirs)) {
             await mkdir(path.dirname(path.join(split, f.path)), { recursive: true });
             await writeFile(path.join(split, f.path), f.content);
         }
@@ -272,7 +271,7 @@ describe('invariants without an expression', () => {
     test('are documented as not expressed in the DSL, and join the invariants of the constructor error', async () => {
         const a = await check({ 'factory.dt': FACTORY });
         expect(a.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Factory.ts')!.content;
+        const code = generateFromAnalysis(a).find((f) => f.path === 'Factory.ts')!.content;
         expect(code).toContain(
             '/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {',
         );
@@ -287,7 +286,7 @@ describe('links to the DSL', () => {
         const a = await analyzeForGeneration(ws);
         const sources = new Map(ws.map((s) => [s.path.replace(/\\/g, '/'), s.text.split('\n')]));
         const unlinked: string[] = [];
-        for (const f of generateTypeScript(a.model!).filter((f) => !f.path.startsWith('_') && f.path !== 'index.ts')) {
+        for (const f of generateFromAnalysis(a).filter((f) => !f.path.startsWith('_') && f.path !== 'index.ts')) {
             const lines = f.content.split('\n');
             lines.forEach((l, i) => {
                 const name = /^export (?:type|interface|const) (\w+)/.exec(l)?.[1];
@@ -299,7 +298,7 @@ describe('links to the DSL', () => {
         }
         // the unions of a context come from no single declaration
         expect([...new Set(unlinked)].sort()).toEqual(['Aggregate', 'DomainEvent', 'PersistentEvent', 'commandErrors']);
-        const sales = generateTypeScript(a.model!).find((f) => f.path === 'Sales.ts')!.content;
+        const sales = generateFromAnalysis(a).find((f) => f.path === 'Sales.ts')!.content;
         const target = (name: string): string => {
             const [, file, line] = new RegExp(`@see (\\S+):(\\d+)\\n \\*/\\nexport type ${name} `).exec(sales)!;
             return sources.get(file)![Number(line) - 1].trim();
@@ -338,7 +337,7 @@ describe('the target of references', () => {
     test('is linked from the doc comment of the field, by the name the module uses for it', async () => {
         const a = await check(SOURCES);
         expect(a.diagnostics).toEqual([]);
-        const files = generateTypeScript(a.model!);
+        const files = generateFromAnalysis(a);
         const sales = files.find((f) => f.path === 'Sales.ts')!.content;
         expect(sales).toContain('    /**\n     * 顧客\n     * @see {@link Customer}\n     */\n    readonly customer: CustomerId;\n');
         expect(sales).toContain('    /** @see {@link Customer} */\n    readonly payer?: CustomerId;\n');
@@ -364,7 +363,7 @@ describe('generated output safety', () => {
 }`,
         });
         expect(a.ok).toBe(true);
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'S.ts')!.content;
+        const code = generateFromAnalysis(a).find((f) => f.path === 'S.ts')!.content;
         const lines = code.split(/\r\n|[\n\r\u2028\u2029]/);
         expect(lines.filter((l) => /^\s*export const injected/.test(l))).toEqual([]);
         expect(code).toContain("| 'A' // x export const injected = 1;");
@@ -387,7 +386,7 @@ describe('command parameters as one object (ADR 0028)', () => {
 }`,
         });
         expect(a.diagnostics).toEqual([]);
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'S.ts')!.content;
+        const code = generateFromAnalysis(a).find((f) => f.path === 'S.ts')!.content;
         expect(code).toContain('export interface MakeParamsParams {\n    readonly id: ParamsId;\n    readonly note?: string;\n}');
         expect(code).toContain('export type MakeParams = (\n    parameters: MakeParamsParams,\n)');
         // a command without parameters takes none

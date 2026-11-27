@@ -4,9 +4,8 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
-import { generateTypeScript } from './typescript.js';
 
-import { analyzeForGeneration, check, EXAMPLES, exampleSources } from '../test-helpers.js';
+import { generateFromAnalysis, analyzeForGeneration, check, EXAMPLES, exampleSources } from '../test-helpers.js';
 
 const TSC = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
 let dir: string;
@@ -43,7 +42,7 @@ beforeAll(async () => {
     const a = await analyzeForGeneration(await exampleSources());
     expect(a.ok).toBe(true);
     await mkdir(path.join(dir, 'generated', 'domain'), { recursive: true });
-    for (const f of generateTypeScript(a.model!)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
+    for (const f of generateFromAnalysis(a)) await writeFile(path.join(dir, 'generated', 'domain', f.path), f.content);
     await mkdir(path.join(dir, 'src'));
 });
 
@@ -57,7 +56,7 @@ describe('generated TypeScript', () => {
         const a = await check({ 'both.dt': 'context Sales { error Conflict } context Billing { error Conflict }' });
         expect(a.diagnostics).toEqual([]);
         await mkdir(collision);
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(collision, f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(collision, f.path), f.content);
         const sales = await readFile(path.join(collision, 'Sales.ts'), 'utf8');
         const billing = await readFile(path.join(collision, 'Billing.ts'), 'utf8');
         expect(sales).toContain("readonly type: 'Sales.Conflict';");
@@ -225,7 +224,7 @@ describe('commands with several transitions', () => {
         const a = await check({ 'tasks.dt': WORK });
         expect(a.diagnostics).toEqual([]);
         await mkdir(path.join(work, 'generated'));
-        for (const f of generateTypeScript(a.model!)) await writeFile(path.join(work, 'generated', f.path), f.content);
+        for (const f of generateFromAnalysis(a)) await writeFile(path.join(work, 'generated', f.path), f.content);
         await mkdir(path.join(work, 'src'));
     });
 
@@ -356,7 +355,7 @@ describe('contexts generated into different directories', () => {
         split = await mkdtemp(path.join(tmpdir(), 'domaintrail-split-'));
         const a = await analyzeForGeneration(await exampleSources());
         const dirs = { Common: SHARED, Sales: 'generated/domain', Billing: 'generated/domain' };
-        for (const f of generateTypeScript(a.model!, dirs)) {
+        for (const f of generateFromAnalysis(a, dirs)) {
             await mkdir(path.dirname(path.join(split, f.path)), { recursive: true });
             await writeFile(path.join(split, f.path), f.content);
         }
@@ -403,7 +402,7 @@ describe('a context imported only for a {@link}', () => {
         expect(a.diagnostics).toEqual([]);
         const work = await mkdtemp(path.join(tmpdir(), 'domaintrail-link-'));
         try {
-            const files = generateTypeScript(a.model!);
+            const files = generateFromAnalysis(a);
             // Sales is named only by the link of Invoice.account (its ID type is Common's)
             expect(files.find((f) => f.path === 'Billing.ts')!.content).toContain("import type * as Sales from './Sales.js';");
             for (const f of files) await writeFile(path.join(work, f.path), f.content);

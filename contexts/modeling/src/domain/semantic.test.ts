@@ -4,8 +4,9 @@ import * as path from 'node:path';
 import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
-import { stateId } from './ids.js';
-import { buildSemanticIR, SEMANTIC_IR_VERSION } from './semantic.js';
+import { invariantId, kindId, onCaseId, outcomeId, requirementId, stateId, variantId } from './ids.js';
+import { buildSemanticIR, exprModelIndex, SEMANTIC_IR_VERSION } from './semantic.js';
+import type { ExprModel } from './model.js';
 import { checkInvariants } from './rules/expressions.js';
 import { RuleSink } from './diagnostics.js';
 
@@ -23,7 +24,208 @@ const allExamples = async () => {
     return Promise.all(files.sort().map(async (file) => ({ path: file, text: await readFile(path.join(root, file), 'utf8') })));
 };
 
+function assertExpressionParity(typed: import('./model.js').DomainModel, ir: ReturnType<typeof buildSemanticIR>): void {
+    const index = exprModelIndex(ir, typed);
+    const roots: { id: string; expr: ExprModel }[] = [];
+    const invariants = (owner: string, items: readonly import('./model.js').InvariantModel[]) =>
+        items.forEach((item) => item.expr && roots.push({ id: invariantId(owner, item.name), expr: item.expr }));
+    const requirements = (owner: string, items: readonly import('./model.js').RequirementModel[]) =>
+        items.forEach((item) => item.expr && roots.push({ id: requirementId(owner, item.name), expr: item.expr }));
+    const outcomes = (owner: string, items: readonly import('./model.js').OutcomeModel[]) =>
+        items.forEach((item) => item.select?.kind === 'expression' && roots.push({ id: outcomeId(owner, item.name), expr: item.select.expr }));
+    for (const element of typed.elements) {
+        if ('invariants' in element) invariants(element.id, element.invariants);
+        if (element.kind === 'union') for (const variant of element.variants) invariants(variantId(element.id, variant.name), variant.invariants);
+        if (element.kind !== 'aggregate') continue;
+        for (const state of element.states) invariants(state.id, state.invariants);
+        for (const kind of element.kinds) {
+            invariants(kindId(element.id, kind.name), kind.invariants);
+            for (const c of kind.cases) {
+                const caseOwner = onCaseId(kindId(element.id, kind.name), c.command);
+                requirements(caseOwner, c.requires);
+                outcomes(caseOwner, c.outcomes);
+            }
+        }
+        for (const command of element.commands) {
+            requirements(command.id, command.requires);
+            outcomes(command.id, command.outcomes);
+        }
+    }
+    const children = (expr: ExprModel): ExprModel[] => {
+        switch (expr.k) {
+            case 'member':
+                return [expr.receiver];
+            case 'not':
+            case 'exists':
+            case 'length':
+            case 'matches':
+                return [expr.operand];
+            case 'binary':
+                return [expr.left, expr.right];
+            case 'range':
+                return [expr.operand, expr.lower, expr.upper];
+            case 'count':
+                return [expr.collection];
+            case 'unique':
+                return [expr.collection, ...expr.keys];
+            case 'contains':
+                return [expr.collection, expr.element];
+            case 'quantifier':
+                return [expr.collection, expr.body];
+            default:
+                return [];
+        }
+    };
+    const walk = (root: string, expr: ExprModel, path = ''): void => {
+        const found = index.get(expr);
+        expect(found, `${root} at ${path || '<root>'}`).toBeDefined();
+        expect(found!.syntaxKind).toBe(expr.k);
+        if (expr.k === 'binary') {
+            const operator = { eq: '==', ne: '!=', lt: '<', le: '<=', gt: '>', ge: '>=', implies: 'implies', and: 'and', or: 'or' }[expr.op];
+            expect(found!.source).toContain(operator);
+        }
+        if (expr.k === 'name') expect(found!.source).toBe(expr.name);
+        children(expr).forEach((child, index) => walk(root, child, path ? `${path}.${index}` : `${index}`));
+    };
+    for (const { id, expr } of roots) walk(id, expr);
+}
+
 describe('Semantic IR', () => {
+    test('field set symbols use the element that owns each access', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fields.dt',
+                text: `context Sales {
+          fields Audit { createdAt: Int }
+          id OId: UUID
+          aggregate O with Audit { id: OId
+            state S { x: Int invariant si { createdAt > x } }
+            command go(n: Int) S -> S requires r { createdAt > n } else Bad
+          }
+          error Bad
+          value V with Audit { n: Int }
+          value W { v: V invariant m { v.createdAt > 0 } }
+        }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const symbols = (root: string, source: string) => {
+            const walk = (node: (typeof ir.expressions)[number]): string | undefined => {
+                if (node.source === source) return node.symbol?.id;
+                for (const child of node.children) {
+                    const found = walk(child);
+                    if (found) return found;
+                }
+                return undefined;
+            };
+            return walk(ir.expressions.find((expression) => expression.root === root)!);
+        };
+        expect(symbols('Sales.O#S.invariant.si', 'createdAt')).toBe('Sales.O.createdAt');
+        expect(symbols('Sales.O:go.requires.r', 'createdAt')).toBe('Sales.O.createdAt');
+        expect(symbols('Sales.W.invariant.m', 'v.createdAt')).toBe('Sales.V.createdAt');
+    });
+    test('records symbols on keyword and union member expressions', async () => {
+        const fixtures = [
+            `context Model {
+  enum BinaryOp { implies or and eq not in true false String state command }
+  union TypeExpr { primitive { name: String } ref { ref: String target: String? } }
+  value Use {
+    context: String event: String? errors: String[0..*] op: BinaryOp type: TypeExpr
+    invariant k { op != BinaryOp.and implies exists(event) }
+    invariant p { type.kind == TypeExpr.primitive or count(errors) > 0 }
+  }
+}`,
+            `context Sales {
+  id UserId: UUID
+  id PartnerId: UUID
+  enum Process { DELIVERY PRINTING }
+  union Actor { INTERNAL_USER { userId: UserId } EXTERNAL_PARTY { name: String partnerId: PartnerId? } }
+  value DeliverySpec { planned: Int? }
+  value PrintingSpec { copies: Int? }
+  union Details by type: Process { DELIVERY { details: DeliverySpec } PRINTING { details: PrintingSpec } }
+  union Coverage by form { DESCRIPTION { text: String invariant notBlank { length(text) > 0 } } }
+  id SpecId: UUID
+  aggregate Spec { id: SpecId process: Process owns details: Details actor: Actor coverage: Coverage?
+    invariant detailsMatchProcess { details.type == process }
+    invariant internalOnly { actor.kind == Actor.INTERNAL_USER }
+  }
+}`,
+            `shared context Common { enum Currency { JPY USD } value Money { amount: Decimal currency: Currency } }
+context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: Common.Money preferred: Common.Currency invariant yen { preferred == Common.Currency.USD } } }`,
+            `context M {
+  fields Audit { level: Int }
+  value V with Audit { x: Int }
+  id AId: UUID
+  aggregate A with Audit {
+    id: AId
+    n: Int
+    state Open { o: V invariant oo { o.level > 0 and o.x > 0 and level > 0 } }
+    state Done
+    kind P {
+      w: V
+      invariant pw { w.level > n and w.x > 0 and level > 0 }
+      create command mkP(id: AId, n: Int, w: V, level: Int, o: V) { outcome made: -> Open }
+      command fin() { outcome f: Open -> Done requires q { w.level > 0 and o.level > 0 } else Bad }
+    }
+    kind Q { create command mkQ(id: AId, n: Int, level: Int, o: V) { outcome made: -> Open } }
+  }
+  error Bad
+}`,
+        ];
+        const analyses = await Promise.all(fixtures.map((text, index) => analyzeDomain([{ path: `probe-${index}.dt`, text }])));
+        analyses.push(await analyzeDomain(await exampleSources()));
+        for (const [index, analysis] of analyses.entries()) {
+            const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+            const missing = ir.expressions.flatMap((root) => {
+                const nodes: import('../generated/Modeling.js').SemanticExpression[] = [];
+                const visit = (node: import('../generated/Modeling.js').SemanticExpression) => {
+                    nodes.push(node);
+                    node.children.forEach(visit);
+                };
+                visit(root);
+                return nodes.filter((node) => (node.syntaxKind === 'member' || node.syntaxKind === 'name') && !node.symbol).map((node) => node.source);
+            });
+            expect(missing, `fixture ${index === fixtures.length ? 'examples/shop' : index}`).toEqual([]);
+            const declaredFieldIds = new Set(
+                ir.declarations
+                    .filter((declaration) => declaration.kind === 'field' || declaration.kind === 'variantField')
+                    .map((declaration) => declaration.id),
+            );
+            const fieldSymbols = ir.expressions.flatMap((root) => {
+                const nodes: import('../generated/Modeling.js').SemanticExpression[] = [];
+                const visit = (node: import('../generated/Modeling.js').SemanticExpression) => {
+                    nodes.push(node);
+                    node.children.forEach(visit);
+                };
+                visit(root);
+                return nodes.filter((node) => node.symbol?.kind === 'field').map((node) => node.symbol!.id);
+            });
+            expect(
+                fieldSymbols.every((id) => declaredFieldIds.has(id)),
+                `field symbols in fixture ${index}`,
+            ).toBe(true);
+        }
+    });
+    test('keeps Typed Model invariant, requirement and select trees in parity with IR paths', async () => {
+        const modelingRoot = path.join(import.meta.dir, '..', '..', 'model');
+        const modelingFiles: string[] = [];
+        const walk = async (directory: string): Promise<void> => {
+            for (const entry of await readdir(directory, { withFileTypes: true })) {
+                if (entry.isDirectory()) await walk(path.join(directory, entry.name));
+                else if (entry.name.endsWith('.dt')) modelingFiles.push(path.relative(modelingRoot, path.join(directory, entry.name)));
+            }
+        };
+        await walk(modelingRoot);
+        const modelingSources = await Promise.all(
+            modelingFiles.sort().map(async (file) => ({ path: file, text: await readFile(path.join(modelingRoot, file), 'utf8') })),
+        );
+        for (const sources of [await exampleSources(), modelingSources]) {
+            const analysis = await analyzeDomain(sources);
+            expect(analysis.model).toBeDefined();
+            expect(analysis.sourceModel).toBeDefined();
+            assertExpressionParity(analysis.model!, buildSemanticIR(analysis.sourceModel!, analysis.model!));
+        }
+    });
     test('keeps Bool types on invariant, requirement and select roots', async () => {
         const analysis = await analyzeDomain([
             {
@@ -215,6 +417,36 @@ describe('Semantic IR', () => {
         const lambda = nodes.find((node) => node.symbol?.kind === 'lambda' && node.symbol.name === 'item');
         expect(lambda?.symbol).toEqual({ id: expect.stringContaining(':expression:'), kind: 'lambda', name: 'item' });
         expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one' });
+    });
+
+    test('projects union tags, context qualifiers, and field set fields under the using element ID', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'symbols.dt',
+                text: `context Shared {
+                  enum Status { Open Closed }
+                }
+                context Shop {
+                  fields Tenanted { tenant: Int }
+                  value Order with Tenanted { status: Shared.Status invariant valid { status == Shared.Status.Open and tenant > 0 } }
+                  id UserId: UUID
+                  id AccessId: UUID
+                  union Actor { INTERNAL_USER { userId: UserId } EXTERNAL_PARTY { name: String } }
+                  aggregate Access { id: AccessId actor: Actor invariant internal { actor.kind == Actor.INTERNAL_USER } }
+                }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        expect(nodes.find((node) => node.source === 'Actor.INTERNAL_USER')?.symbol).toEqual({
+            id: 'Shop.Actor|INTERNAL_USER',
+            kind: 'unionTag',
+            name: 'INTERNAL_USER',
+        });
+        expect(nodes.find((node) => node.source === 'Shared')?.symbol).toEqual({ id: 'Shared', kind: 'context', name: 'Shared' });
+        expect(nodes.find((node) => node.source === 'tenant')?.symbol).toEqual({ id: 'Shop.Order.tenant', kind: 'field', name: 'tenant' });
     });
 
     test('projects declared, primitive, enum, optional, list and non-empty types', async () => {
@@ -696,7 +928,7 @@ describe('Semantic IR', () => {
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const root = ir.expressions.find((expression) => expression.source === 'value > 0')!;
         const value = root.children[0]!;
-        expect(value.symbol).toEqual({ id: root.id, kind: 'lambda', name: 'value' });
+        expect(value.symbol).toEqual({ id: 'Sales.Quantity', kind: 'value', name: 'value' });
         expect(ir.scopes).toContainEqual(
             expect.objectContaining({
                 expression: root.id,

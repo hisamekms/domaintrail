@@ -25,7 +25,7 @@ context Modeling {
     enumValue
     onCase
   }
-  enum SemanticSymbolKind { field parameter lambda state kind enumValue type }
+  enum SemanticSymbolKind { field parameter lambda value state kind enumValue type unionTag discriminator context }
   enum SemanticCardinality { one optional many nonEmpty }
   enum SemanticComparisonKind {
     primitive
@@ -65,6 +65,8 @@ context Modeling {
   value SemanticExpression {
     id: String
     owner: String
+    root: String
+    path: String
     site: SemanticSpan
     syntaxKind: String
     source: String
@@ -99,6 +101,16 @@ context Modeling {
     kind: SemanticDeclarationKind
     name: String
     site: SemanticSpan
+  }
+
+  value SemanticValueCycleEnding {
+    union: String
+    variant: String
+  }
+
+  value SemanticValueCycle {
+    members: String[1..*]
+    ending: SemanticValueCycleEnding[0..*]
   }
 
   value SemanticObligation {
@@ -185,5 +197,6 @@ context Modeling {
     obligations: SemanticObligation[0..*]
     unspecified: SemanticUnspecified[0..*]
     provenance: SemanticProvenance[0..*]
+    cycles: SemanticValueCycle[0..*]
   }
 }

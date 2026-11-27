@@ -1,7 +1,6 @@
 // What requirements make of the generated TypeScript (the DSL and its checks: contexts/modeling/src/domain/rules/requires.test.ts).
 import { describe, expect, test } from 'bun:test';
-import { generateTypeScript } from './typescript.js';
-import { check } from '../test-helpers.js';
+import { generateFromAnalysis, check } from '../test-helpers.js';
 
 /** A review aggregate with states that share some fields; `commands` go into the aggregate. */
 const review = (commands: string, extra = '') =>
@@ -37,7 +36,7 @@ describe('requires in the generated TypeScript', () => {
       requires noOpenBlocker "未解決の阻害がない" else Blocked
       errors Blocked, Conflict`);
         expect(a.diagnostics).toEqual([]);
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
+        const code = generateFromAnalysis(a).find((f) => f.path === 'Review.ts')!.content;
         const lines = [
             ' * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)',
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
@@ -56,7 +55,7 @@ describe('requires in the generated TypeScript', () => {
 
     test('a command without errors gets the errors of its requirements', async () => {
         const a = await review('command accept() Reviewing -> Accepted requires x { blockers == 0 } else Blocked');
-        const code = generateTypeScript(a.model!).find((f) => f.path === 'Review.ts')!.content;
+        const code = generateFromAnalysis(a).find((f) => f.path === 'Review.ts')!.content;
         expect(code).toContain(' * @requires x else Blocked: blockers == 0\n');
         expect(code).toContain('}, Blocked>;');
         expect(code).toContain("    'Review.accept': ['Review.Blocked'],");
