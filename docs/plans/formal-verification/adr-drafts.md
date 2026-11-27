@@ -48,8 +48,11 @@ in Modeling `domain`.
 **Decision:** Build a resolved Semantic IR in Modeling `domain` from `SourceModel`, preserving source sites, types,
 resolved references, scope, equality kind, optional narrowing, lifecycle facts, and value provenance. Make the checker
 the IR builder and migrate TypeScript and contract-test generators to consume it, deleting duplicate semantic
-computations. Add stable IDs for fields, parameters, invariants, requirements, and outcomes; settle variant identity
-before variants become external property keys. Phase 1 ends after the contract-test consumer migration.
+computations. Add stable IDs for fields, parameters, invariants, requirements, outcomes, variants and variant fields in
+Phase 1 using the same scheme, with separator chosen there. The IR remains internal during beta, carries a version
+number, and has no compatibility promise; decide public semver compatibility at 1.0. Phase 1 ends after the
+contract-test
+consumer migration.
 
 **Alternatives considered:** Build from Typed Model and lose source-site fidelity; add a separate downstream semantic
 pass; leave each backend's independent name/type/equality resolution in place.
@@ -67,7 +70,8 @@ steps](semantic-ir.md#L15), [IR shape and stable IDs](semantic-ir.md#L89), [migr
 **Phase:** Phase 2; freeze after prototype trial and before Phase 3 runtime work.
 
 **Amends or supersedes:** [ADR 0016](../../adr/0016-collection-constraints-and-declared-invariants.md#L24) equality
-semantics; [ADR 0019](../../adr/0019-command-changes-and-decisions.md#L41) command changes; [ADR
+semantics; [ADR 0019](../../adr/0019-command-changes-and-decisions.md#L41) command changes, including create commands
+with `changes`; [ADR
 0035](../../adr/0035-kind-specific-lifecycles.md#L35) and [ADR 0037](../../adr/0037-aggregate-kinds.md#L5) outcome
 syntax and selection.
 
@@ -75,27 +79,48 @@ syntax and selection.
 
 The Level 2 spike records an `addItem` limitation, and Phase 2 proposes a breaking syntax revision.
 
-**Decision:** Add arithmetic `+`, `-`, `*` and conditional `?:`; use `x != null`, `!(p) || q`, and `null`. Add `ensures`
-after `changes`/`emits`, with `before.x` and `after.x`; parameters stay unqualified and `before`/`after` are reserved.
-Equality follows declared type: owned entity values and value objects structurally, references by ID, unions by tag and
-fields, lists element-wise in order, and optionals by presence then value. Rewrite entity `==`, `unique`, and `contains`
-to `.id` forms. Align `ensures` with `changes` and carried/kept/new/dropped diagnostics. Exclude recursion, side
-effects, external APIs, and implicit clocks; time is explicit input. Do not support old/new syntax coexistence. `dt
-migrate domain` is idempotent, supports `--dry-run`, and exits 0/1/2. Use JS names and one canonical spelling per
-meaning, subject to a paired AI trial. The trial precedes syntax freeze; Level 2's `addItem` limitation motivates Level
-3 postconditions.
+**Decision:** Use TS-like surface syntax with strict null safety (`T?` means `T | null`, narrowing by `x != null`, `?.`,
+and `??`), `?:` conditional expressions, and `!(p) || q` in place of `implies`; use the `null` keyword and exhaustive
+`match` expressions over unions and states. Compare only match forms and quantifier names in the AI trial; confirm
+`x => …`. `==`/`!=` use declared-type equality: owned entity values and value objects are structural, references compare
+by
+ID, unions by tag and fields, and lists element by element in order. Reject `===` with a diagnostic suggesting
+`==`.
+Rewrite entity `==`, `unique`, and `contains` to `.id` forms. Values are immutable; reject mutating methods such
+as `push`.
+Int supports `+`, `-`, `*` only; Decimal supports `+`, `-`, `*`, `/` with declared scale and half-even rounding.
+Diagnose division by zero unless the divisor is shown non-zero. Domain primitive arithmetic yields its base type, whose
+constraint is checked again on assignment. Adopt design D: per-field `changes x` means permitted but unspecified;
+`changes x = expr` determines the value using the `ensures` scope (parameters bare, fields `before.x`, no `after`);
+omitted fields are unchanged; `ensures { … }` is for relations. Diagnose a lone equality in `ensures` and move it to
+value-determining `changes`. Keep `before.x`/`after.x` qualification, parameters unqualified and forbidden from being
+named `before` or
+`after`, and place optional `ensures` after `emits`. Create commands set fields through `changes`: list every
+non-optional field; an unlisted optional field is `null`; the same rule applies to fields new in a transition's target
+state. Fields carried over and kept stay unchanged unless listed, carried fields listed in `changes` follow that
+clause, new target fields follow the create rule, and dropped fields are not mentioned. Grammar adds `ChangedField:
+FeatureName ('=' Expression)?`
+and optional
+`ensures` after `emits` in Outcome and shorthand Command. Adopt list literals, spread, `.map`, `.filter`, `.sum`, and
+typed expression-bodied predicates/functions without recursion or call cycles. Equality is deep structural for recursive
+value objects; optionals compare absent with absent and present contents with present contents, one absent is unequal;
+optional-to-non-optional `==` is allowed. TLA+ bounds recursion through the profile. Exclude side effects, external APIs
+and implicit clocks; time is explicit input. Do not support old/new syntax coexistence. `dt migrate domain` is
+idempotent,
+supports `--dry-run`, exits 0/1/2, and preserves comments/layout while reporting manual work.
 
-**Alternatives considered:** `old(x)` plus unqualified post-state fields; multiple aliases for one operation; equality
-by raw record representation; freezing syntax before AI trial; retaining only Level 2 checks.
+**Alternatives considered:** Freeze the syntax before the AI trial (rejected because the trial still decides `match` and
+quantifier names); `old(x)` plus unqualified post-state fields; multiple aliases for one operation; equality by raw
+record representation; retaining only Level 2 checks.
 
 **Consequences**
 
-The migration must preserve comments, layout, and meaning, report manual work, and support the
-specified trial protocol. `ensures` over event payloads remains open.
+The migration must preserve comments, layout, and meaning, report manual work, and support the narrowed trial protocol.
+`ensures` over event payloads remains open.
 
-**Evidence:** [Recommended forms](language-revision.md#L73), [trial protocol](language-revision.md#L250), [`ensures`
-placement and scoping](language-revision.md#L119), [remaining language decisions](language-revision.md#L285), [AddItem
-Level 2 limitation](language-revision.md#L299).
+**Evidence:** [Recommended forms](language-revision.md#L113), [trial protocol](language-revision.md#L296), [`ensures`
+placement and scoping](language-revision.md#L158), [decision status](language-revision.md#L330), [AddItem
+Level 2 limitation](language-revision.md#L345).
 
 ## TypeScript `ensures` runtime and contract checks
 
@@ -122,10 +147,10 @@ checks; treat `ensures` as documentation or an outcome selector.
 
 Phase 4 lowering must agree with these TypeScript semantics.
 
-**Evidence:** [Phase 3 and `decide` requirements](../formal-verification.md#L220), [ADR 0019
+**Evidence:** [Phase 3 and `decide` requirements](../formal-verification.md#L239), [ADR 0019
 decision](../../adr/0019-command-changes-and-decisions.md#L41), [ADR 0020 generated expression
 checks](../../adr/0020-generated-checks-and-contract-tests.md#L26), [AddItem contract
-example](language-revision.md#L307).
+example](language-revision.md#L182).
 
 ## `check`/`verify` boundary, result schema, and exit codes
 
@@ -154,7 +179,7 @@ raw checker exit codes as result classes.
 SYNTAX changes from exit 1 to 3; J001/K001 remain 1, and `noCounterexample` exits 0.
 
 **Evidence:** [Schema and envelope](results-schema.md#L1), [shared exit-code proposal](results-schema.md#L293), [checker
-boundary](../formal-verification.md#L103), [TLC transport-code interpretation](spike/results.md#L112).
+boundary](../formal-verification.md#L105), [TLC transport-code interpretation](spike/results.md#L112).
 
 ## Formal classification and positive claims
 
@@ -200,20 +225,32 @@ a formal-verification capability and Phase 4 profile rules for bounds as scope a
 The spike identifies generator syntax constraints, sound classification probes, checker run requirements,
 and finite profile decisions.
 
-**Decision:** Generate one parameterized module per aggregate and mechanically produce constrained actions `A_C(p) ==
+**Decision:** Use a separate verification file in DSL syntax (for example `sales/order.verify.dt`) with named scopes
+such
+as `scope default { … }` and `scope deep { … }`, selected by `dt verify --scope`. Resolve it in `dt check` and rename it
+with the model in the LSP; do not put it in `domaintrail.jsonc`. Without a verification file, derive defaults from the
+model: two values per ID type (at least the maximum list length for IDs of entities in lists); lists up to length two;
+numeric ranges from declared bounds; Timestamp/date as small integers preserving only order; Decimal scaled by literal
+digits; strings from model literals plus fresh values; `matches` over unbounded strings is Unsupported; verified types
+are opaque values satisfying their constraint; events are trace labels, not state. Always print the selected scope with
+results. Install pinned versions with sha256 via `dt tools install`, expose `dt tools status`, retain `DT_FV_*`
+overrides,
+confirm and record licenses. Use recursion depth 2 by default. `dt verify` never fetches tools implicitly; if missing,
+report `skipped` with a
+reason and next command.
+Generate one parameterized module per aggregate and mechanically produce constrained actions `A_C(p) ==
 A(p) /\ Inv'` and fixed-input probes. Model creation from the absent state and retain parameter identity; never silently
 equate parameters with fields. Validate SANY diagnostics, cfg/operator closure, action syntax and Apalache annotation
 format; use `DOMAIN` for sequence iteration. Run the per-aggregate unconstrained, constrained, probe, requested
-isolation, and existential-witness matrix. Pin tool checksums, support `DT_FV_*` overrides, and skip Java-dependent
-checks explicitly when Java is absent.
+isolation, and existential-witness matrix. Install tools explicitly and skip Java-dependent checks when Java is absent.
 
 **Alternatives considered:** Copy modules per seed; hand-maintain constrained actions; bind same-named arguments to
 fields; classify by process exit code; require Java for all CLI use.
 
 **Consequences**
 
-Profiles must state bounds, assumptions, and encodings explicitly; values outside finite domains are
-outside the checked scope.
+Report defaults, bounds, assumptions and encodings with the selected scope; values outside finite domains are outside
+the checked scope.
 
 **Evidence:** [Generator requirements](spike/results.md#L119), [per-aggregate run matrix](spike/results.md#L131), [tool
 capture and checksums](spike/results.md#L3), [Semantic IR verification consumer](semantic-ir.md#L150), [profile
@@ -243,5 +280,5 @@ multi-aggregate verification before single-aggregate behavior stabilizes.
 
 Level 4 results must state delivery and failure assumptions explicitly.
 
-**Evidence:** [Phase 5–7 plan](../formal-verification.md#L261), [mapping result limits](mapping.md#L8), [Phase 7 scope
-and symmetry limitation](../formal-verification.md#L276).
+**Evidence:** [Phase 5–7 plan](../formal-verification.md#L291), [mapping result limits](mapping.md#L8), [Phase 7 scope
+and symmetry limitation](../formal-verification.md#L306).

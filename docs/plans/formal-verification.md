@@ -57,8 +57,10 @@ Boundary properties: `check` serves LSP, MCP and Live View; `verify` takes secon
 - Introduce a Semantic IR resolving types, names, equality, optional narrowing and scope. Both TypeScript and TLA+
   generators consume it. Keep backends replaceable behind the IR.
 - Generators must not infer or duplicate semantics. Handwritten TLA+ is only for comparison in the PoC.
-- Keep syntax familiar to TS/JS developers, with one canonical spelling per meaning. Syntax follows TS/JS conventions,
-  not the backend language. Evaluate correctness, clarity, repairability and token use with AI trials.
+- Syntax follows TS/JS conventions, not the backend language. Use TS-like syntax with null safety and one canonical
+  spelling per meaning.
+  No TS look may have a meaning that differs from DomainTrail's (`==` structural by declared type; `===` and mutating
+  methods rejected). Evaluate correctness, clarity, repairability and token use with AI trials.
 - Preserve “Structure and Contracts”; procedural business logic and a general-purpose programming language are out of
   scope. Formalization depth follows business understanding and risk.
 - `dt check`, generation and Live View work without Java. Without Java or a checker, `dt verify` reports skipped, never
@@ -95,7 +97,7 @@ exploration is not `Verified`.
 ```text
 DomainTrail -> parser/name resolution/type checker -> Semantic IR
   -> TypeScript generator and contract tests
-  -> TLA+ generator <- verification profile (domaintrail.jsonc)
+  -> TLA+ generator <- named scopes in .verify.dt or model-derived defaults
   -> backend runner (TLC / optional Apalache; unavailable Java => skipped)
   -> result translator and source map -> CLI / JSON / Live View / AI diagnostics
 ```
@@ -173,7 +175,10 @@ table](formal-verification/spike/results.md#L91).
 
 Build the IR in Modeling's `domain` from `SourceModel`, retaining syntax sites and resolved semantic facts. Publish the
 IR declarations through Modeling's `.dt` model and generated types. Add stable IDs for fields, parameters, invariants,
-requirements, and outcomes; decide variant identity before using variants as external property identities. The checker
+requirements, outcomes, union variants and variant fields, using the same scheme (separator decided in Phase 1). The IR
+is
+internal during beta, carries a version number, and has no compatibility promise; decide the public semver policy at
+1.0. The checker
 becomes the IR builder, producing expression, lifecycle, and structure facts with diagnostics. Optional narrowing
 reproduces only the true-edge rule. Equality is selected by declared type: owned entity values and value objects
 structurally, references by ID, and unions by tag and fields. The visualization Graph IR remains on the Typed Model. See
@@ -189,31 +194,45 @@ at step 4. Details are in the [IR migration steps](formal-verification/semantic-
 
 ### Phase 2 — one breaking language revision
 
-Adopt arithmetic `+`, `-`, `*` and conditional `?:`; use `x != null` for optional presence and `!(p) || q` instead of
-`implies`, and the `null` keyword. Adopt method-form collection calls and selected names `every`/`some`, `includes`,
-`.length`, and `.matches()` ([recommended surface forms](formal-verification/language-revision.md#L78-L90)). Put
-`ensures`
-after `changes`/`emits`, using `before.x` and `after.x`. Its scope includes parameters and `after` fields only for
-creation; define named outcomes, state- and kind-specific fields, optionals, and how create constructs
-values. Diagnose kept fields consistently. Detect contradictory postconditions. Pure user-defined predicates remain
-deferred if needed; see the corresponding decision row.
+Use TS-like syntax with strict null safety (`T?` means `T | null`, narrowed by `x != null`, `?.`, and `??`) and an
+exhaustive `match` expression over unions and states. Use `?:` for conditional expressions and `!(p) || q` in place of
+`implies`; use `null` as the null keyword. `==`/`!=` follow declared-type equality; reject `===` with a
+diagnostic suggesting `==`. Values are immutable; reject mutating methods such as `push`. The AI trial compares only
+match forms and quantifier names (`every`/`some` vs `forall`/`exists`), and confirms the `x => …` lambda form.
+
+Use Int `+`, `-`, `*` (no `/`); Decimal `+`, `-`, `*`, `/` with declared scale and half-even rounding. Diagnose
+division by zero unless the divisor is shown non-zero. Arithmetic on domain primitives yields the base type; check its
+constraint again on assignment. Adopt method-form collection calls `every`/`some`, `includes`, `.length`, `.matches()`,
+list literals, spread, `.map`, `.filter`, and `.sum`. Include typed, expression-bodied predicates and functions without
+recursion or call cycles.
+
+Supervisor decision (2026-11-28): recursive values use default verification recursion depth 2. Adopt design D:
+`changes x` permits a field change with unspecified value; `changes x = expr` determines its value
+using the `ensures` scope (bare parameters, `before.x` fields, no `after`); unlisted fields are unchanged. `ensures`
+follows `changes`/`emits`, uses `before.x` and `after.x`, and expresses relations only. Diagnose a lone equality in
+`ensures` and move it to `changes x = expr`. Create commands list every non-optional field through `changes`; an
+unlisted optional field is `null`; the same rule applies to fields new in a transition's target state. Define named
+outcomes, state- and kind-specific fields, optionals, and create
+construction. Diagnose kept fields consistently and detect contradictory postconditions. Grammar adds
+`ChangedField: FeatureName ('=' Expression)?` and an optional `ensures` block after `emits` in Outcome and shorthand
+Command. See [maintainer decisions](formal-verification/language-revision.md#L7).
 
 Equality follows declared type: owned entity values and value objects structurally, references by ID, and unions by tag
 and fields; list and optional equality compose their element/payload equality. Migrate entity `==`, `unique`, and
-`contains` to `.id` forms. Align `ensures` with `changes` using carried/kept/new/dropped diagnostics. Keep exclusions:
-no recursion, side effects, external APIs, or implicit clock; time is an explicit input. There is no compatibility
-period
-or old/new syntax coexistence. `dt migrate domain` must be idempotent, support `--dry-run`, preserve comments/layout,
-report manual work and use exit codes 0/1/2. Update grammar, type checker, self-hosted models, examples, `dt guide`, and
-ADRs together. The trial teaches agents only by `dt guide`, in ADR 0038 style, using a domain other than shop. Run at
-least 12 independent attempts per arm over two pinned model families, randomize syntax order, and use blind reviewers
-with a third-reviewer adjudication for disagreements. Improvement is at least +10 percentage points in first-pass parse
-or type-check rate, or at least 15% fewer repair tokens; regression is at least -10 points or 15% more tokens. Record
-first syntax-check success, first type-check success, semantic correctness, repair count, token use, and repair success
-from diagnostics. Parsing success alone is not correctness. See the [recommended
-revision](formal-verification/language-revision.md#L73),
-[trial protocol](formal-verification/language-revision.md#L250), and [Level 2
-finding](formal-verification/spike/results.md#L61).
+`contains` to `.id` forms. Keep exclusions: no recursion in predicates/functions, side effects, external APIs, or
+implicit clock; time is an explicit input. There is no compatibility period or old/new syntax coexistence. `dt migrate
+domain` must be idempotent, support `--dry-run`, preserve comments/layout, report manual work and use exit codes 0/1/2.
+Update grammar, type checker, self-hosted models, examples, `dt guide`, and ADRs together.
+
+The trial teaches agents only by `dt guide`, using a non-shop domain. First syntax/type-check success is a metric;
+parsing success alone is not correctness. Repair success means a diagnostic-led repair passes without changing
+requirements. Follow the protocol in ADR 0038 style. Run at least 12 independent attempts per arm over two pinned Claude
+and Codex families, pin latest versions at trial start and record them, with a three-attempt pilot per arm. Randomize
+syntax order and use blind reviewers with a third-reviewer adjudication for disagreements. Improvement is at least +10
+percentage points in first-pass parse or type-check rate, or at least 15% fewer repair tokens; regression is at least
+-10 points or 15% more tokens. Record syntax/type-check success, semantic correctness, repair count, token use and
+repair success. See the [trial protocol](formal-verification/language-revision.md#L296) and
+[Level 2 finding](formal-verification/spike/results.md#L61).
 Add in Phase 2 a static `dt check` rule for an error declared but no longer used by any `else`
 ([spike finding](formal-verification/spike/results.md#L66)).
 
@@ -228,8 +247,9 @@ cross-backend examples must agree.
 Generate deterministic TLA+ and TLC configuration from Semantic IR, plus Apalache annotations. Put the code in a new
 formal-verification capability, Java/tool adapters under `adapters/`, and update `test/architecture/map.ts`
 ([placement](formal-verification/semantic-ir.md#L123)). Profile input ranges, collection maximum, aggregate count,
-time values, depth, timeout, backend, abstractions, assumptions and properties. Bounds are verification scope, not
-business
+time values, depth (recursive values default to 2),
+timeout, backend, abstractions, assumptions and properties. Supervisor decision (2026-11-28): recursive values use
+default depth 2. Bounds are verification scope, not business
 constraints; record simulation seeds. Use one parameterized module per aggregate; generate `A_C(p) == A(p) /\ Inv'`
 and fixed-input probes. Order definitions by dependency, with `Inv'` last; close every cfg operator reference. Create is
 an action from absent state; never bind arguments to fields. Emit aligned bullets, parenthesized quantifiers and `IF`,
@@ -247,11 +267,21 @@ attribution; every
 carry,
 unspecified choice) and recover fixed input for forced failures.
 
-Acquire tools with pinned checksums, expose `DT_FV_*` overrides, and account for checker licenses and no-Java behavior.
+Use a separate DSL verification file (for example `sales/order.verify.dt`) with named scopes, selected by
+`dt verify --scope`, resolved by `dt check`, and renamed with its model by the LSP. Do not put it in
+`domaintrail.jsonc`.
+Without a file, defaults are two values per ID type (at least the maximum list length for IDs of entities in lists),
+lists up to length two, numeric ranges from declared bounds, Timestamp/date as small integers preserving order,
+Decimal scaled by literal digits, strings from literals plus fresh values, unbounded `matches` Unsupported,
+verified types as opaque constraint-satisfying values, and events as trace labels rather than state. Always print the
+selected scope with results. `dt verify` never fetches tools implicitly. Install pinned versions with sha256 via
+`dt tools install` and report status with `dt tools status`; absent tools produce `skipped` with the reason and next
+command. Retain `DT_FV_*` overrides; licenses are confirmed and recorded.
 Provide `dt verify`, `--aggregate`, `--format json`, `--backend tlc|apalache`, and `--allow-skip`. Check invariants,
 `requires` satisfiability, executability, state/outcome reachability, contradictory contracts, unintended deadlock with
 intended terminal states excluded, coverage, and vacuity (when `ensures` restricts transitions, a satisfying successor
-exists for allowed inputs). Without Java, mark every item skipped. Use the common versioned
+exists for allowed inputs). When Java is absent, skip Java-dependent checks explicitly. Mark every applicable item
+skipped. Use the common versioned
 output schema. Exit 0 includes `noCounterexample`; `--allow-skip` makes skips exit 0 only when no other failure exists.
 Exit 1 is static content errors or formal counterexample/underspecified/inconclusive/unsupported; 2 is verification
 skipped; 3 is SYNTAX, unreadable files, usage/configuration/I/O/translation/checker errors, or any result class `error`.
@@ -312,36 +342,38 @@ granularity needed.
 
 ## Decisions for the maintainer
 
-Recommendations are Phase 0 judgments, not accepted decisions.
+Recommendations are Phase 0 judgments; the final column records maintainer decisions made on 2026-11-27.
 
-| Decision | Recommendation | Confidence |
-|---|---|---|
-| Formal backend/tools | TLA+, default TLC, optional Apalache, Java optional. | high |
-| Published IR compatibility | Set compatibility policy before external use; publish through Modeling `.dt`. | medium |
-| Stable IDs for variants | Preserve source identity in IR; decide stable IDs before variants are external property identities. | medium |
-| External and natural-language obligations | Represent explicitly as non-executable obligations. | high |
-| Recursive values and tagged optionals equality | Structural equality by declared type; define recursive-value and tagged-optional details before implementation. | medium |
-| Profile shape and type encodings | Decide Timestamp unit/range, date/time encoding, Decimal scale, string domains, `matches` on unbounded domains, verified-type slot semantics, and event treatment under ADR 0018 ([mapping](formal-verification/mapping.md#L65), [unbounded `matches`](formal-verification/mapping.md#L48), [verified types](formal-verification/mapping.md#L104), [events](formal-verification/mapping.md#L99)). | no recommendation yet; low |
-| Checker distribution/licensing | Decide distribution and license policy; Phase 0 did not record checker licenses. | no recommendation yet; low |
-| AI trial size | At least 12 attempts per arm across two pinned model families; confirm model versions and feasibility. | medium |
-| F-code assignment | Assign F001–F008 in the schema rule-code row. | high |
-| Integration | `feat/formal-verification`, each phase merged by PR, then one merge to `main`. | high |
-| Language surface forms | Adopt JS-oriented forms after the paired trial; selected forms are `every`/`some`, `includes`, `.length`, `.matches()`. | medium |
-| Int/Decimal arithmetic and division | Start with Int `+`, `-`, `*`, no Int `/`; define `div` rounding, division by zero, Decimal scale/rounding, and domain-primitive result rules before freeze. | low |
-| `ensures` grammar, scope, diagnostics, creation | Put after `changes`/`emits`; scope creation to parameters and `after`; define kept-field diagnostics and create construction. | medium |
-| List literals, append, `sum`, trial task (b) | Trial list literals/append or concatenation and `sum`; remove task (b) if `sum` is not adopted. | low |
-| Pure predicates | Defer user-defined pure predicates unless trial evidence supports including them. | low |
-| `dt migrate domain` reporting | Preserve comments/layout, be idempotent, support `--dry-run`, report manual work, and use exit codes 0/1/2. | high |
-| Trial model versions | Use two pinned model families; exact versions and pilot size remain maintainer choices. | low |
-| Schema v2 acceptance | Adopt the shared v2 schema proposal. | high |
-| Breaking exit-code acceptance | Adopt shared codes, including breaking `dt check` changes. | high |
-| Verification classification and claims | Forced vs unconstrained-only underspecification; positive claims need a correct-model witness; negated passes hold only within scope. | high |
-| Tool paths and run budget | Pin checksums, support `DT_FV_*`, use per-aggregate matrix, keep Java optional; runtime scales by profile. | high |
+| Decision | Recommendation | Confidence | Decided (2026-11-27) |
+|---|---|---|---|
+| Formal backend/tools | TLA+, default TLC, optional Apalache, Java optional. | high | Adopted as recommended. |
+| Published IR compatibility | Set compatibility policy before external use; publish through Modeling `.dt`. | medium | Internal during the beta, no compatibility promise; the IR carries a version number; semver policy decided at 1.0. |
+| Stable IDs for variants | Preserve source identity in IR; decide stable IDs before variants are external property identities. | medium | Stable IDs for union variants and their fields in Phase 1, same scheme as the new IDs; separator decided in Phase 1. |
+| External and natural-language obligations | Represent explicitly as non-executable obligations. | high | Adopted as recommended. |
+| Recursive values and tagged optionals equality | Structural equality by declared type; define recursive-value and tagged-optional details before implementation. | medium | Deep structural equality for recursive value objects; optionals: both absent equal, both present compare contents, one absent unequal; optional vs non-optional `==` allowed; TLA+ depth bounded by the profile (default 2, supervisor decision). |
+| Profile shape and type encodings | Decide Timestamp unit/range, date/time encoding, Decimal scale, string domains, `matches` on unbounded domains, verified-type slot semantics, and event treatment under ADR 0018 ([mapping](formal-verification/mapping.md#L65), [unbounded `matches`](formal-verification/mapping.md#L48), [verified types](formal-verification/mapping.md#L104), [events](formal-verification/mapping.md#L99)). | no recommendation yet; low | A separate verification file in DSL syntax (e.g. `sales/order.verify.dt`) with named scopes (`dt verify --scope`), resolved by `dt check` and renamed with the model; without it, defaults derived from the model; the scope used is printed with every result; encodings as in Phase 4. |
+| Checker distribution/licensing | Decide distribution and license policy; Phase 0 did not record checker licenses. | no recommendation yet; low | Explicit `dt tools install` / `dt tools status` with pinned versions and sha256; no npm postinstall and no implicit fetch in `dt verify` (missing tools: `skipped` with the next command); `DT_FV_*` overrides; licenses confirmed and recorded in Phase 4. |
+| AI trial size | At least 12 attempts per arm across two pinned model families; confirm model versions and feasibility. | medium | At least 12 attempts per arm; Claude and Codex families pinned to the latest versions at the trial start and recorded; a 3-attempt pilot per arm first. |
+| F-code assignment | Assign F001–F008 in the schema rule-code row. | high | Adopted as recommended. |
+| Integration | `feat/formal-verification`, each phase merged by PR, then one merge to `main`. | high | Adopted as recommended. |
+| Language surface forms | Adopt JS-oriented forms after the paired trial; selected forms are `every`/`some`, `includes`, `.length`, `.matches()`. | medium | TS-like syntax with TS strict null safety (`T?`, `?.`, `??`, narrowing by `!= null`) and an exhaustive `match`; `==` by declared type, `===` and mutating methods rejected; the trial compares only the `match` form, quantifier names and lambda. |
+| Int/Decimal arithmetic and division | Start with Int `+`, `-`, `*`, no Int `/`; define `div` rounding, division by zero, Decimal scale/rounding, and domain-primitive result rules before freeze. | low | Int `+ - *` (no Int `/`); Decimal `+ - * /` with declared scale and half-even rounding; division-by-zero diagnostic; domain-primitive results re-validated where assigned. |
+| `ensures` grammar, scope, diagnostics, creation | Put after `changes`/`emits`; scope creation to parameters and `after`; define kept-field diagnostics and create construction. | medium | Design D: `changes x` (unspecified) or `changes x = expr` (determined; right-hand side in the `ensures` scope); unlisted fields unchanged; `ensures` only for relations, a lone equality diagnosed; create and new target fields set by `changes x = expr` (non-optional listed, unlisted optional `null`; amends ADR 0019). |
+| List literals, append, `sum`, trial task (b) | Trial list literals/append or concatenation and `sum`; remove task (b) if `sum` is not adopted. | low | Literals `[]` `[a, b]`, spread `[...xs, x]`, `.map`, `.filter`, `.sum`; task (b) kept as a `.sum` task in the trial domain. |
+| Pure predicates | Defer user-defined pure predicates unless trial evidence supports including them. | low | Adopted in this revision: typed, expression-bodied predicates and functions, no recursion or call cycles. |
+| `dt migrate domain` reporting | Preserve comments/layout, be idempotent, support `--dry-run`, report manual work, and use exit codes 0/1/2. | high | Adopted as recommended. |
+| Trial model versions | Use two pinned model families; exact versions and pilot size remain maintainer choices. | low | Claude and Codex, pinned to the latest at the trial start and recorded; 3-attempt pilot per arm. |
+| Schema v2 acceptance | Adopt the shared v2 schema proposal. | high | Adopted as recommended. |
+| Breaking exit-code acceptance | Adopt shared codes, including breaking `dt check` changes. | high | Adopted as recommended. |
+| Verification classification and claims | Forced vs unconstrained-only underspecification; positive claims need a correct-model witness; negated passes hold only within scope. | high | Adopted as recommended. |
+| Tool paths and run budget | Pin checksums, support `DT_FV_*`, use per-aggregate matrix, keep Java optional; runtime scales by profile. | high | Adopted as recommended. |
+| Null safety and `match` (new) | — | — | Adopted with the surface syntax (see Language surface forms). |
+| `===` and mutating methods (new) | — | — | Rejected with diagnostics; all values immutable. |
+| Verification file and named scopes (new) | — | — | See Profile shape and type encodings. |
 
 ## Open questions
 
-**Added beyond the Japanese plan:** the spike settled seeded detection and stop criteria. Phase 4 still needs checker
-licenses, no-Java behavior evidence, profile shape and type encodings, and checker distribution. Phase 2 selects
-canonical
-syntax by AI trials. Mapping edge cases and detailed level rules remain open because Phase 0 did not settle them.
-`ensures` over event payloads remains open. Later phases may be reordered based on evidence.
+**Added beyond the Japanese plan:** the spike settled seeded detection and stop criteria. Phase 4 implements profile
+defaults, scopes, tool installation, licenses, and no-Java evidence. Phase 2 trials match/quantifier spellings and
+confirms lambda syntax. Mapping edge cases, detailed level rules, and
+`ensures` over event payloads remain open. Later phases may be reordered based on evidence.

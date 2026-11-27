@@ -1,8 +1,44 @@
 # Phase 0 deliverable 7: one language revision
 
-Status: proposal for maintainer decision. The revision is intentionally breaking: DomainTrail is beta and the plan
-calls for one canonical syntax, with legacy syntax handled by migration. The current-language claims below link to the
+Status: decision recorded; implementation proposal. The revision is intentionally breaking: DomainTrail is beta and the
+plan calls for one canonical syntax, with legacy syntax handled by migration. Current-language claims link to the
 checked-in grammar, implementation, examples or ADRs. Proposed syntax is not current behavior.
+
+## Maintainer decisions (2026-11-27)
+
+The maintainer decided the following after considering changeability and how easily AI writes the language. Decision 1
+fixes arithmetic: Int supports `+`, `-`, `*` only; Decimal supports `+`, `-`, `*`, `/` with declared scale and
+half-even rounding; diagnose division by zero unless the divisor is shown non-zero. Domain primitive arithmetic returns
+the base type, whose constraint is checked again on assignment. This confirms the recommended operators and supersedes
+the unresolved arithmetic/rounding candidates below.
+
+Decision 2 adopts TS-like syntax with strict null safety (`T?` means `T | null`, narrowing by `x != null`, `?.`, and
+`??`) and exhaustive `match` over unions and states. Declared-type equality is structural for owned entities and value
+objects and by ID for references; `===` is rejected with a diagnostic suggesting `==`. Values are immutable and
+mutating methods are rejected. Only the `match` spelling alternatives and `every`/`some` versus `forall`/`exists` are
+compared in the AI trial; the lambda form `x => …` is confirmed, not compared. This supersedes the broader syntax
+trial proposed below.
+
+Decision 3 adopts design D for `changes`: each field may use `changes x` (permitted, unspecified value) or
+`changes x = expr` (value determined); omitted fields are unchanged. The right-hand side uses the `ensures` scope:
+parameters are bare, fields use `before.x`, and `after` is unavailable. `ensures { … }` expresses relations only. A
+lone equality such as `after.x == e` is diagnosed and moved to `changes x = e`. Keep parameter restrictions and
+placement after `emits`.
+
+Decision 4 adopts list literals `[]` and `[a, b]`, spread `[...xs, x]`, and `.map(f)`, `.filter(p)`, and `.sum(f)`;
+trial task (b) is a task in the trial domain (not shop) that needs `.sum`, such as a total over line items. Decision 5
+includes pure user-defined typed, expression-bodied predicates and functions, with no
+recursion or call cycles. These supersede the open list-operation and predicate recommendations below. Decision 11
+confirms deep structural equality for recursive value objects, optional equality by absent/present contents, permits
+optional-to-non-optional `==`, and bounds recursion depth in TLA+ through the profile.
+
+## Supervisor decisions (2026-11-28)
+
+The right-hand side of `changes x = expr` uses the `ensures` scope: parameters are bare, fields use `before.x`, and
+`after` is unavailable. Create commands list every non-optional target field through `changes`; an unlisted optional
+field is `null`. The same rule applies to fields new in a transition's target state, such as `confirmedAt` and
+`reason`. Grammar adds `ChangedField: FeatureName ('=' Expression)?` and optional `ensures` after `emits` in Outcome
+and shorthand Command. The default recursion depth for recursive values in the verification profile is 2.
 
 ## 1. Current language and command contract
 
@@ -38,8 +74,10 @@ named outcomes, choice rules and outcome-level changes; ADR 0037 retains those w
 `select { expr }` is an outcome choice rule, not a postcondition
 ([ADR 0035, choice rules](../../adr/0035-kind-specific-lifecycles.md#L38)).
 
-`changes` grants permission to set fields and determines framing; it does not supply output values. A field carried
-between source and target can be listed; create commands set every field and cannot declare `changes`
+`changes` grants permission to set fields and determines framing. A bare `changes x` leaves its value unspecified;
+`changes x = expr` determines its value using the `ensures` scope: parameters are bare, fields use `before.x`, and
+`after` is unavailable. Create commands set every non-optional field through `changes`; an unlisted optional field is
+`null`
 ([ADR 0019, changes and carry-over](../../adr/0019-command-changes-and-decisions.md#L41)). Target-only fields are
 new and set, source-only fields are dropped, and other common fields are kept
 ([ADR 0019, transition field rules](../../adr/0019-command-changes-and-decisions.md#L57)). With no postcondition,
@@ -52,8 +90,10 @@ The shop source uses `place(id, customer)`, `addItem(item)`, `changeNote(note)`,
 including `id`, `customer`, `note`, and `reason`
 ([shop fields](../../../examples/shop/sales/order.dt#L14),
 [customer and note](../../../examples/shop/sales/order.dt#L16)).
-In `ensures`, fields will therefore always be qualified `before.x` or `after.x`; parameters remain unqualified.
-`ensures`, `null`, `before` and `after` receive the same keyword and `FeatureName` treatment as `changes` (ADR 0019
+In `ensures`, fields are qualified `before.x` or `after.x`; parameters remain unqualified. The same scope applies to
+right-hand sides of `changes x = expr`: parameters are bare, fields use `before.x`, and `after` is not allowed.
+`ensures`, `null`, `before`, `after`, and `match` receive the same keyword and `FeatureName` treatment as
+`changes` (ADR 0019
 records that treatment at [ADR 0019, changes](../../adr/0019-command-changes-and-decisions.md#L72)): they are keywords
 in their grammatical positions and remain usable as field names. A parameter may not be named `before` or `after`
 (a new check): otherwise `before.x` would be ambiguous when the parameter is a value object with a field `x`.
@@ -70,29 +110,32 @@ idempotent, reports what it leaves, and documents exit codes 0/1/2
 new domain rewrite must carry the same contract: comments and layout preserved, idempotent output, `--dry-run` kept,
 exit codes 0/1/2, and a report of constructs left for manual work.
 
-## 2. Recommended surface syntax
+## 2. Decided surface syntax
 
-The plan's principle is syntax that follows TS/JS for authors. Use one spelling per meaning; keep formally useful
-constructs only where JS has no direct form.
+The maintainer decided the surface policy in “Maintainer decisions (2026-11-27)”. Adopted forms follow; only the
+`match` spelling and quantifier names remain trial comparisons, and the lambda form is confirmed.
 
-| Construct | Recommended form | Trial variants |
+| Construct | Adopted form | Decision / trial status |
 |---|---|---|
-| Quantifiers | `items.every(i => p)` / `items.some(i => p)` | `all`/`any`; `forall`/`exists` |
-| Membership | `items.includes(x)` | `items.contains(x)` |
-| Size | `items.length`, `text.length` | `items.length()`; retain `length(x)` |
-| Uniqueness | `items.unique()` / `items.unique(x => a, b)` | prefix `unique(items, ...)` |
-| Regex | `text.matches("pattern")` | prefix `matches(text, "pattern")` |
-| Logical operators | `&&`, `||`, `!` | `and`, `or`, `not` |
-| Implication | `!(p) || q` | keyword `implies` |
-| Optional presence | `x != null` | prefix `isPresent(x)` |
-| Conditional | `test ? a : b` | `if test then a else b`; `ifThenElse(...)` |
-| Arithmetic | `+`, `-`, `*` | function forms; none |
-| Old/new state | `before.x`, `after.x` | `old(x)` and unqualified target fields |
+| Quantifiers | `items.every(i => p)` / `items.some(i => p)` | Trial: `every`/`some` vs `forall`/`exists` |
+| Membership | `items.includes(x)` | Decided |
+| Size | `items.length`, `text.length` | Decided |
+| Uniqueness | `items.unique()` / `items.unique(x => a, b)` | Decided |
+| Regex | `text.matches("pattern")` | Decided |
+| Logical operators | `&&`, `||`, `!` | Decided |
+| Implication | `!(p) || q` | Decided |
+| Optional presence | `x != null`; `?.`; `??` | Decided with strict null safety |
+| Conditional | `test ? a : b` | Decided TS-like form |
+| Arithmetic | Int `+ - *`; Decimal `+ - * /` | Decided; see maintainer decisions |
+| Old/new state | `before.x`, `after.x` | Decided |
+| Match | `match (x) { variant { fields } => e, … }` | Trial: TC39 proposal form vs ts-pattern-like method form |
+| Lists | `[]`, `[a, b]`, `[...xs, x]`, `.map`, `.filter`, `.sum` | Decided |
+| User functions | Typed expression-bodied predicates/functions | Decided; no recursion/cycles |
 
 The JS logical operators replace `implies` with equivalent `!(p) || q`; this preserves short-circuit semantics and keeps
-one canonical implication spelling. If the trial retains `isPresent`, it remains a prefix call because invoking a
-method on a possibly absent receiver is misleading and unsafe; unlike collection and string methods, presence tests
-the optional wrapper itself. `matches` should be a method because it is a string operation. Current forms and their
+one canonical implication spelling. `matches` is a method because it is a string operation. These forms are decided;
+only
+the `match` spelling and quantifier names remain trial choices. Current forms and their
 current grammar are documented above
 ([grammar, primary forms](../../../contexts/modeling/src/infrastructure/syntax/domain.langium#L210)).
 
@@ -100,17 +143,15 @@ Use `.length` for both lists and strings, with one meaning per type; do not have
 checks element uniqueness, and `unique(x => a, b)` checks key tuples, matching current one- and multi-key forms
 ([grammar, unique](../../../contexts/modeling/src/infrastructure/syntax/domain.langium#L216),
 [ADR 0016, unique](../../adr/0016-collection-constraints-and-declared-invariants.md#L38)).
-List concatenation/append, list literals, and `sum` are additional trial candidates because postconditions and task (b)
-need them. Prefer `[...before.items, item]` and `items.sum(i => i.quantity * i.unitPrice.amount)`; test `append` or
-concatenation against the literal form rather than making all forms canonical. If no `sum` is adopted, remove task (b).
+List literals, spread and `.sum` are decided; see “Maintainer decisions (2026-11-27)”. Use
+`[...before.items, item]` and
+`items.sum(i => i.quantity * i.unitPrice.amount)`.
 
-For arithmetic, recommend Int `+`, `-`, `*` only initially and no `/` on Int: TS `/` produces floating-point values,
-while an Int expression must stay integral. If integer division is needed, propose a distinct `div` operator with
-specified rounding; decimal division also requires explicit scale/rounding for TS/TLA+ parity. Domain primitives such
-as `Quantity` inherit arithmetic only if their base is numeric and the result is range-checked as that primitive;
-IDs get no arithmetic. Conditional has lower precedence than implication/its replacement, and inside `x in a..b`
-the range bounds are conditional expressions only when parenthesized; alternatively keep conditional out of range
-bounds. Define these rules in grammar and type-checker tests before freezing syntax.
+Arithmetic is decided; see “Maintainer decisions (2026-11-27)”. Domain primitive constraints are checked when a
+result
+is assigned; IDs have no arithmetic. Conditional has lower precedence than implication/its replacement. Inside
+`x in a..b`, range bounds are conditional expressions only when parenthesized; alternatively keep conditional out of
+range bounds. Define these rules in grammar and type-checker tests before freezing syntax.
 
 ## 3. `ensures`: placement, equality and field lifecycle
 
@@ -134,8 +175,8 @@ Each block-form command lists its outcomes explicitly; outcome bodies are inside
 ```dt
 create command place(id: OrderId, customer: CustomerId) {
   outcome placed: -> Draft
+    changes id = id, customer = customer, items = []
     emits OrderPlaced
-    ensures { after.id == id && after.customer == customer && after.items.length == 0 }
 }
 
 command addItem(item: OrderItem) {
@@ -146,26 +187,23 @@ command addItem(item: OrderItem) {
     items.every(i => i.unitPrice.currency == item.unitPrice.currency)
   } else CurrencyMismatch
   outcome added: Draft -> Draft
-    changes items
-    ensures { after.items == [...before.items, item] }
+    changes items = [...before.items, item]
 }
 
 command changeNote(note: String?) {
   outcome changedDraft: Draft -> Draft
-    changes note
+    changes note = note
     emits NoteChanged?
-    ensures { after.note == note }
   outcome changedConfirmed: Confirmed -> Confirmed
-    changes note
+    changes note = note
     emits NoteChanged?
-    ensures { after.note == note }
 }
 
 command confirm(at: Timestamp) {
   requires hasItems "明細が1件以上" { items.length > 0 } else EmptyOrder
   outcome confirmed: Draft -> Confirmed
+    changes confirmedAt = at
     emits OrderConfirmed
-    ensures { after.confirmedAt == at && after.items == before.items }
 }
 
 command cancel(reason: CancelReason) {
@@ -173,24 +211,27 @@ command cancel(reason: CancelReason) {
     reason != CancelReason.Other || note != null
   } else NoteRequired
   outcome cancelledDraft: Draft -> Cancelled
+    changes reason = reason
     emits OrderCancelled
-    ensures { after.reason == reason && after.note == before.note }
   outcome cancelledConfirmed: Confirmed -> Cancelled
+    changes reason = reason
     emits OrderCancelled, RefundRequested
-    ensures {
-      after.reason == reason && after.note == before.note && after.items == before.items
-    }
 }
 ```
+
+`changeNote`'s `changes note = note` uses its bare parameter. The `confirm` and `cancel` outcomes need no equality
+clauses for unlisted fields: under design D, those fields are unchanged. `place` lists `id`, `customer`, and
+`items = []`; `note` is omitted and therefore defaults to `null`. All non-optional create fields must be listed.
+Relational postconditions remain in `ensures`; hypothetically, if Order had a `total` field, one could write
+`ensures { after.total >= before.total }`.
 
 The selector belongs before outcome `changes`/`emits` and therefore before `ensures`; it narrows the pre-state/parameter
 condition for that named outcome, while `ensures` describes its post-state. Command-level `requires` declarations appear
 once before the block outcomes; outcomes cannot contain requirements (the proposed grammar retains this scope).
 Requirement names remain command-unique under M002
-([ADR 0017, name scope](../../adr/0017-command-requirements.md#L37)). Create has no `before` aggregate fields: each
-target field must be set by the create decision (ADR 0019 says create sets every field
-([ADR 0019, create](../../adr/0019-command-changes-and-decisions.md#L50))). `place` therefore needs a list literal or
-some equivalent constructor to assert empty `items`; `.length == 0` is the candidate shown above.
+([ADR 0017, name scope](../../adr/0017-command-requirements.md#L37)). Create has no `before` aggregate fields. Every
+non-optional target field must be listed in `changes`; an unlisted optional field is `null`. `place` explicitly sets
+`id`, `customer`, and empty `items`, while `note` defaults to `null`.
 
 ### Equality choices
 
@@ -208,10 +249,11 @@ this. Semantic IR must also retain primitive/domain primitive and enum equality 
 follows, using ADR 0019's carried/kept/new/dropped rules
 ([ADR 0019, transition field rules](../../adr/0019-command-changes-and-decisions.md#L57)):
 
-- Carried field listed in effective `changes`: output may vary, then `ensures` constrains its value.
+- Carried field listed as `changes x`: its output is permitted to vary but unspecified; `ensures` may add relations.
+- Carried field listed as `changes x = e`: its output is determined by `e`; `ensures` may add relations.
 - Carried field not listed: it is framed to `before.x`; an `ensures` contradicting that fact is a diagnostic.
-- New target field: set by the decision; absent a constraining `ensures`, it is unspecified. For example,
-  `Cancelled.reason` is new and `ensures { after.reason == reason }` constrains it.
+- New target field: listed through `changes` and determined by an assignment; create commands list each non-optional
+  field, while an unlisted optional field is `null`.
 - Dropped source-only field: inaccessible through `after`; it is not carried into the target.
 
 A field not possible for the selected outcome is a type error. Constraining a kept field inconsistently is a diagnostic,
@@ -219,14 +261,15 @@ not a hidden `requires`. For multiple source states, `before.x` is available onl
 with the same name and type, matching the `requires` scope rule
 ([ADR 0017, source-state fields](../../adr/0017-command-requirements.md#L53)).
 Outcome-specific `select` chooses the applicable transition; its `ensures` is checked against that outcome's source and
-target fields. Create commands expose parameters and `after` fields only, and create decisions set every field
+target fields. Create commands expose parameters and target fields only. They list every non-optional field through
+`changes`; an unlisted optional field is `null`
 ([ADR 0019, create](../../adr/0019-command-changes-and-decisions.md#L50)).
 
 ## 4. Rewrite and coordinated files
 
 Add `dt migrate domain` alongside existing `.dtes` migration. Rewrite constructs with explicit meaning-preserving
 rules: `and`/`or`/`not` to `&&`/`||`/`!`; `p implies q` to `!(p) || q` (including required parentheses);
-`matches(t, "r")` to `t.matches("r")`; `exists(x)` to `x != null` (or `isPresent(x)` if that variant wins);
+`matches(t, "r")` to `t.matches("r")`; `exists(x)` to `x != null`;
 `count(xs)` to `xs.length`; and prefix collection calls to receiver calls. For entity values, `unique(items)` and
 `contains(items, x)` currently compare by ID (ADR 0016); rewrite these as `items.unique(x => x.id)` and
 `items.some(e => e.id == x.id)`, and include both rewrites in the migration report. For entity values, rewrite
@@ -244,26 +287,27 @@ Coordinated changes: `contexts/modeling/src/infrastructure/syntax/domain.langium
 checks and contract tests, [ADR 0020](../../adr/0020-generated-checks-and-contract-tests.md#L26)); Semantic IR and
 all consumers; `apps/dt/src/cli/guide.ts`, `docs/guide.md`, `docs/getting-started.md`,
 `docs/getting-started.ja.md`; `tree-sitter-domaintrail/test/corpus`; `CHANGELOG.md` and `CHANGELOG.ja.md`; and ADRs
-0016, 0020, 0037 plus the new revision decision. Drop “TLA+ consumers” from Phase 2 unless that implementation is
+0016, 0019, 0020, 0037 plus the new revision decision. Drop “TLA+ consumers” from Phase 2 unless that implementation is
 actually in scope.
+
+Grammar additions are `ChangedField: FeatureName ('=' Expression)?`, and an optional `ensures` block after `emits` in
+Outcome and in the shorthand Command.
 
 ## 5. AI syntax trial
 
-Build each variant as a prototype branch or parser/checker variant flag. The language maintainer implements the grammar
-and checker variants; one guide template generates variant-specific syntax examples so all non-syntax instructions
-stay identical. Use current syntax as baseline only for constructs being renamed; compare genuinely new constructs
-variant against variant. Run tasks in a domain other than shop so the existing example does not leak answers. Include
-arithmetic, conditional expressions, optional tests, collection methods, `ensures`, equality, and the needed list
-construction/`sum` operations.
+Build the remaining `match` forms as a prototype branch or parser/checker variant flag. Use one guide template to keep
+non-syntax instructions identical. Compare only the listed `match` forms and quantifier names; confirm `x => …`. Run
+tasks
+in a domain other than shop so the existing example does not leak answers. The `match` trial has three forms, producing
+three pairwise comparisons per task packet. Task (b) is a task in the trial domain that needs `.sum`, for example a
+total over line items.
 
-Teach agents only with `dt guide`, as in Phase 2 of the plan and ADR 0038. Stage the trial to isolate constructs: first
-compare each bundled syntax family (logic/implication/optional tests; collections/size/regex;
-conditional/arithmetic/list construction and `sum`; command contracts/equality), then run one integrated
-recommended-syntax comparison against the current-syntax baseline for renamed constructs. Each task packet is one
-attempt. For each paired comparison, use at least 12 independent attempts per arm, balanced across two pinned model
-families. Set improvement as
+Teach agents only with `dt guide`, as in Phase 2 of the plan and ADR 0038. Each task packet is one attempt. Use at least
+12 independent attempts per arm, balanced across latest Claude and Codex versions pinned at trial start. Run a
+three-attempt pilot per arm first. Set improvement as
 at least +10 percentage points in first-pass parse or type-check rate, or at least 15% fewer repair tokens; set
-regression as at least -10 percentage points or at least 15% more repair tokens. Aggregate all staged comparisons and
+regression as at least -10 percentage points or at least 15% more repair tokens. Aggregate the pairwise comparisons
+as stated above and below, and
 report uncertainty; do not declare a winner from one task. Compare token counts only within one model and one
 requirement packet. Semantic correctness is a gate: reviewers blind to syntax variant judge normalized Typed Model
 or Semantic IR dumps against a hidden acceptance matrix, then check scenario outcomes. Do not judge correctness from
@@ -275,44 +319,39 @@ exhaustion; repair success is whether those diagnostics lead to a passing check 
 record prompt, guide version, model/version, outputs, every diagnostic and repair, normalized model and scenario
 results.
 Report attempts per arm, paired comparisons, task packets, model families, and total runs as attempts per arm × 2 arms
-× comparisons × tasks. For example, 12 attempts per arm × 2 arms × 5 staged comparisons (four families plus
-integrated) × 3 task packets = 360 model runs; state the chosen task packet count and any bundling. Use at least two
-reviewers blind to variant; adjudicate any disagreement with a third reviewer and report agreement and adjudication.
-Keep the task packet and model budgets identical and randomize variant order. The exact model versions and pilot size
-remain maintainer choices; ADR 0038 reports six Sonnet agents taught from `dt guide` only
+× comparisons × tasks. The main-run count is 12 attempts per arm × 2 arms × 4 comparisons (three pairwise `match`
+comparisons and quantifier names) × task packets. Report the task-packet count and add the three-attempt-per-arm pilot.
+Use at least two reviewers blind to variant; adjudicate any disagreement with a third reviewer and report agreement and
+adjudication.
+Keep task-packet and model budgets identical and randomize variant order. ADR 0038 reports six Sonnet agents taught
+from `dt guide` only
 ([ADR 0038, six-agent trial](../../adr/0038-date-and-time.md#L11)).
 
-## 6. Decisions still needed
+## 6. Decision status
 
-1. Confirm the recommended surface forms and trial alternatives described above.
-2. Confirm equality by declared type and its list/optional extensions, including Semantic IR equality kinds.
-3. Set Int/Decimal arithmetic, `/` or `div`, division-by-zero, Decimal precision/rounding, and domain-primitive result
-   rules.
-4. Confirm `ensures` grammar position, `before`/`after` scope, diagnostics for kept fields, and create construction.
-5. Decide whether to include list literals, concatenation/append, and `sum`; task (b) depends on `sum`.
-6. Decide whether pure user-defined predicates remain deferred; no trial evidence is included here.
-7. Confirm `dt migrate domain` reporting details and prototype implementation approach.
-8. Confirm trial model versions and whether 12 attempts per variant are feasible.
+The arithmetic, surface syntax, design D, list operations, pure functions, and recursive equality decisions are recorded
+in “Maintainer decisions (2026-11-27)”. The trial protocol remains useful, with comparisons narrowed as stated there.
+Verification profile, tool distribution, IR
+compatibility, and variant IDs are in [the plan decision table](../formal-verification.md#L343).
 
 ## Report
 
-Equality recommendation: distinguish owned entities from references, with structural list/optional comparison built from
-the element/payload equality kinds. Semantic IR must preserve every kind through lowering. The `addItem` argument is:
+Equality follows declared type and composes through lists and optionals; see “Maintainer decisions (2026-11-27)”.
+Semantic IR must preserve every kind through lowering. Under design D the `addItem` argument is:
 
 1. Shop's real `requires newSku` says every existing item's SKU differs from `item.sku`
    ([shop command](../../../examples/shop/sales/order.dt#L43),
    [new-SKU requirement](../../../examples/shop/sales/order.dt#L45)).
 2. Remove that requirement while keeping `changes items`; Level 2 leaves `items'` unconstrained, so the duplicate-SKU
    invariant can be violated without the removed input guard ([spike Level 2 result](spike/results.md#L61)).
-3. Add `ensures { after.items == [...before.items, item] }`. With ordered structural list equality and owned
-   `OrderItem` equality, the post-state must contain the exact prior list plus the parameter; choosing an existing
-   SKU parameter now forces duplicate SKUs. The Level 3 no-successor probe must report `Counterexample found`,
-   attributed to `addItem`, against `distinctSkus`.
+3. `after.items` is determined by the assignment `changes items = [...before.items, item]`. Choosing an existing SKU
+   parameter forces duplicate SKUs. The Level 3
+   no-successor probe must report `Counterexample found`, attributed to `addItem`, against `distinctSkus`.
 4. Restore `requires newSku`. The duplicate input is disabled, all admitted appends preserve `distinctSkus`, and the
    correct AddItem-only run (`NextOnly_AddItem`) passes the Level 3 probe. This assumes append/list-literal and equality
    lowering are implemented consistently in Semantic IR and both checker backends, TLC and Apalache.
 
-Still unconfirmed: exact arithmetic precision and exceptional behavior; final method/operator spellings; whether
-`sum`, list literals and concatenation ship in this revision; equality's implementation details and verifier support;
-prototype/model budget and trial sample feasibility. The migration behavior is confirmed by the current CLI help
+The remaining trial choices are the `match` spelling and quantifier names. Recursive bound depth is specified by the
+verification profile; verifier implementation remains an implementation task. Migration behavior is confirmed
+by the current CLI help
 ([migration behavior](../../../apps/dt/src/cli/main.ts#L547)).
