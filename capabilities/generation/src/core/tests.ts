@@ -1,5 +1,15 @@
 import * as posix from 'node:path/posix';
-import type { AggregateModel, CommandModel, DomainModel, ElementModel, ExprModel, FieldModel, InvariantModel, PolicyElement } from '@domaintrail/modeling';
+import type {
+    AggregateModel,
+    CommandModel,
+    DomainModel,
+    ElementModel,
+    ExprModel,
+    FieldModel,
+    InvariantModel,
+    PolicyElement,
+    SemanticIR,
+} from '@domaintrail/modeling';
 import {
     applicableOutcomes,
     BINARY_OP_TEXT,
@@ -7,12 +17,9 @@ import {
     contextNames,
     elementOf,
     elementsIn,
-    fieldsOf,
     invariantsOf,
     kindCase,
-    statesOf,
     validStatesFor,
-    variantsOf,
 } from '@domaintrail/modeling';
 import type { DomainPrimitive } from './checks.js';
 import {
@@ -103,13 +110,6 @@ export function register(suite: Suite): void {
 `;
 }
 
-/** The types whose arbitraries an element's arbitrary is made of (qualified names): those of its fields, its base. */
-function arbitraryParts(el: ElementModel): string[] {
-    const fields = [...fieldsOf(el), ...statesOf(el).flatMap((s) => s.fields), ...variantsOf(el).flatMap((v) => v.fields)];
-    const types = [...fields.map((f) => f.type), ...(el.kind === 'verified' ? [el.verified.of] : [])];
-    return types.flatMap((t) => (t.kind === 'ref' ? [t.ref] : []));
-}
-
 /** `generate.ts.tests.maxRecursionDepth` when not configured: a binary tree of depth 4 has at most 15 nodes. */
 export const DEFAULT_MAX_RECURSION_DEPTH = 4;
 
@@ -131,63 +131,20 @@ export interface Cycle {
     readonly ending: ReadonlyMap<string, string>;
 }
 
-/** Whether a field of a type on a cycle may end it: not of a type of the cycle, optional, or a list that may be empty. */
-const endsCycle = (f: FieldModel, members: ReadonlySet<string>): boolean =>
-    f.type.kind !== 'ref' || !members.has(f.type.ref) || f.cardinality === 'optional' || bounds(f).lower === 0;
-
 /**
  * The cycles of the model's types, by each of their types (qualified names). A cycle uses the greatest of the depths
  * of its types: a per-type setting asks to reach at least that depth.
  */
-export function recursiveCycles(model: DomainModel, maxRecursionDepth: number = DEFAULT_MAX_RECURSION_DEPTH, types: TypeTestsOptions = {}): Map<string, Cycle> {
-    const parts = new Map<string, string[]>(model.elements.map((e) => [e.id, arbitraryParts(e)]));
-    // Tarjan's strongly connected components of the graph of parts
-    const index = new Map<string, number>();
-    const low = new Map<string, number>();
-    const stack: string[] = [];
-    const components: string[][] = [];
-    const visit = (id: string): void => {
-        index.set(id, index.size);
-        low.set(id, index.get(id)!);
-        stack.push(id);
-        for (const next of parts.get(id) ?? []) {
-            if (!parts.has(next)) continue;
-            if (!index.has(next)) {
-                visit(next);
-                low.set(id, Math.min(low.get(id)!, low.get(next)!));
-            } else if (stack.includes(next)) low.set(id, Math.min(low.get(id)!, index.get(next)!));
-        }
-        if (low.get(id) !== index.get(id)) return;
-        const component: string[] = [];
-        for (let top = stack.pop()!; ; top = stack.pop()!) {
-            component.push(top);
-            if (top === id) break;
-        }
-        components.push(component);
-    };
-    for (const id of parts.keys()) if (!index.has(id)) visit(id);
-    const order = new Map([...parts.keys()].map((id, i) => [id, i]));
+export function recursiveCycles(
+    model: DomainModel,
+    ir: SemanticIR,
+    maxRecursionDepth: number = DEFAULT_MAX_RECURSION_DEPTH,
+    types: TypeTestsOptions = {},
+): Map<string, Cycle> {
     const out = new Map<string, Cycle>();
-    for (const component of components) {
-        if (component.length === 1 && !parts.get(component[0])!.includes(component[0])) continue;
-        const members = component.sort((x, y) => order.get(x)! - order.get(y)!);
-        const set = new Set(members);
-        const els = members.map((id) => elementOf(model, id)!);
-        // the types whose values end the cycle once the depth is reached, as M012 finds that they have a finite value
-        const ended = new Set<string>();
-        const ending = new Map<string, string>();
-        const ends = (fields: readonly FieldModel[]): boolean => fields.every((f) => endsCycle(f, set) || (f.type.kind === 'ref' && ended.has(f.type.ref)));
-        for (let grew = true; grew;) {
-            grew = false;
-            for (const el of els) {
-                if (ended.has(el.id)) continue;
-                const variant = el.kind === 'union' ? el.variants.find((v) => ends(v.fields)) : undefined;
-                if (el.kind === 'union' ? !variant : !ends(fieldsOf(el))) continue;
-                if (variant) ending.set(el.id, variant.name);
-                ended.add(el.id);
-                grew = true;
-            }
-        }
+    for (const source of ir.cycles) {
+        const members = source.members.map((id) => elementOf(model, id)!.id);
+        const ending = new Map(source.ending.map(({ union, variant }) => [elementOf(model, union)!.id, variant]));
         const depth = Math.max(...members.map((id) => types[id]?.maxRecursionDepth ?? maxRecursionDepth));
         const cycle: Cycle = { id: members[0], members, maxRecursionDepth: depth, ending };
         for (const id of members) out.set(id, cycle);
@@ -199,8 +156,8 @@ export function recursiveCycles(model: DomainModel, maxRecursionDepth: number = 
  * The warnings of `dt generate ts` about the contract tests: a type in `generate.ts.tests.types` that is on no cycle,
  * whose `maxRecursionDepth` is then unused (a name that is no type of the model is a configuration error).
  */
-export function testsWarnings(model: DomainModel, types: TypeTestsOptions = {}): string[] {
-    const cycles = recursiveCycles(model);
+export function testsWarnings(model: DomainModel, ir: SemanticIR, types: TypeTestsOptions = {}): string[] {
+    const cycles = recursiveCycles(model, ir);
     const unused = Object.keys(types).filter((t) => elementOf(model, t) && !cycles.has(t));
     return unused.map((t) => `'generate.ts.tests.types' names '${t}', which is not a recursive type: its 'maxRecursionDepth' is not used.`);
 }
@@ -212,8 +169,8 @@ export function testsWarnings(model: DomainModel, types: TypeTestsOptions = {}):
  * domaintrail that generated it. `moduleOf(from, ctx)` is the import specifier of a context's module from directory
  * `from`.
  */
-export function generateTests(model: DomainModel, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
-    const cycles = recursiveCycles(model, opts.maxRecursionDepth, opts.types);
+export function generateTests(model: DomainModel, ir: SemanticIR, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
+    const cycles = recursiveCycles(model, ir, opts.maxRecursionDepth, opts.types);
     const dirOf = (ctx: string): string => posix.normalize(opts.dirs?.[ctx] ?? opts.dir);
     // the tests of another context: next to these, from its package (`<module>/tests`), or by relative path
     const testsOf = (from: string, ctx: string): string => {

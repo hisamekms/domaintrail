@@ -617,7 +617,7 @@ export function generateTypeScript(
     }
     if (tests)
         files.push(
-            ...generateTests(model, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies, dirs: testsDirs, modules }, (from, ctx) =>
+            ...generateTests(model, ir, HEADER, { ...tests, dir: posix.normalize(tests.dir), policies, dirs: testsDirs, modules }, (from, ctx) =>
                 // the tests in a context's own package import it by relative path
                 modules[ctx] && testsDirs[ctx] !== from ? modules[ctx] : moduleSpecifier(from, dirOf(ctx), ctx),
             ),

@@ -7,6 +7,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import * as fc from 'fast-check';
+import { buildSemanticIR } from '@domaintrail/modeling';
 import { generateTypeScript } from './typescript.js';
 import { recursiveCycles, testsWarnings } from './tests.js';
 import { generateFromAnalysis, check, linkNodeModules } from '../test-helpers.js';
@@ -70,7 +71,7 @@ async function project(
     tests: Omit<Parameters<typeof generateTypeScript>[2] & object, 'dir'>,
     policies: Parameters<typeof generateTypeScript>[3] = {},
     dirs: string[],
-): Promise<{ dir: string; diagnostics: unknown[]; model: NonNullable<Awaited<ReturnType<typeof check>>['model']> }> {
+): Promise<{ dir: string; diagnostics: unknown[]; model: NonNullable<Awaited<ReturnType<typeof check>>['model']>; ir: ReturnType<typeof buildSemanticIR> }> {
     const a = await check(files);
     const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-recursion-'));
     dirs.push(dir);
@@ -81,7 +82,7 @@ async function project(
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }
-    return { dir, diagnostics: a.diagnostics, model: a.model! };
+    return { dir, diagnostics: a.diagnostics, model: a.model!, ir: buildSemanticIR(a.sourceModel!, a.model!) };
 }
 
 describe('recursive value types', async () => {
@@ -90,7 +91,7 @@ describe('recursive value types', async () => {
         for (const d of dirs) await rm(d, { recursive: true, force: true });
     });
     const types = { 'M.Rule': { maxRecursionDepth: 3 }, 'M.Chain': { maxRecursionDepth: 2 } };
-    const { dir, diagnostics, model } = await project({ 'm.dt': MODEL }, { maxRecursionDepth: 5, types }, { M: 'required' }, dirs);
+    const { dir, diagnostics, model, ir } = await project({ 'm.dt': MODEL }, { maxRecursionDepth: 5, types }, { M: 'required' }, dirs);
     const tests = await import(path.join(dir, 'tests', 'index.ts'));
     const { cases } = await import(path.join(dir, 'node_modules', 'domaintrail', 'testing', 'index.ts'));
 
@@ -109,7 +110,7 @@ describe('recursive value types', async () => {
     });
 
     test('the cycles, each with the greatest depth of its types, and the variant that ends a union', () => {
-        const cycles = recursiveCycles(model, 3, { 'M.Call': { maxRecursionDepth: 6 } });
+        const cycles = recursiveCycles(model, ir, 3, { 'M.Call': { maxRecursionDepth: 6 } });
         expect([...new Set(cycles.values())].map((c) => ({ ...c, ending: Object.fromEntries(c.ending) }))).toEqual([
             { id: 'M.Expr', members: ['M.Expr', 'M.Call'], maxRecursionDepth: 6, ending: { 'M.Expr': 'lit' } },
             { id: 'M.Rule', members: ['M.Rule'], maxRecursionDepth: 3, ending: {} },
@@ -215,10 +216,10 @@ describe('recursive value types', async () => {
     });
 
     test('a per-type setting of a type that is not recursive is warned about', () => {
-        expect(testsWarnings(model, { 'M.Rule': { maxRecursionDepth: 2 }, 'M.Note': { maxRecursionDepth: 2 } })).toEqual([
+        expect(testsWarnings(model, ir, { 'M.Rule': { maxRecursionDepth: 2 }, 'M.Note': { maxRecursionDepth: 2 } })).toEqual([
             "'generate.ts.tests.types' names 'M.Note', which is not a recursive type: its 'maxRecursionDepth' is not used.",
         ]);
-        expect(testsWarnings(model)).toEqual([]);
+        expect(testsWarnings(model, ir)).toEqual([]);
     });
 });
 

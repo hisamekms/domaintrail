@@ -441,8 +441,8 @@ Examples:
                   }
                 : undefined;
             const policies = policyModes(cfg, contextNames(a.model));
-            if (tests) for (const w of testsWarnings(a.model, tests.types)) io.err(`Warning: ${w}`);
             const ir = buildSemanticIR(a.sourceModel!, a.model);
+            if (tests) for (const w of testsWarnings(a.model, ir, tests.types)) io.err(`Warning: ${w}`);
             const files = generateTypeScript(a.model, dirs, tests, policies, cfg.tsModules, { ir }).map((f) => ({
                 ...f,
                 file: path.resolve(cfg.root, f.path),
