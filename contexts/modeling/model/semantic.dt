@@ -65,6 +65,8 @@ context Modeling {
   value SemanticExpression {
     id: String
     owner: String
+    root: String
+    path: String
     site: SemanticSpan
     syntaxKind: String
     source: String

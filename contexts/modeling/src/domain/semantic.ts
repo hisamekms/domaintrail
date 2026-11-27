@@ -115,6 +115,8 @@ function expression(
     facts?: Map<Expr, ExpressionFact>,
     declarationIds?: Map<object, string>,
     expressionIds?: Map<Expr, string>,
+    rootId: string = expr.at.elementId ?? '',
+    childPath = '',
 ): SemanticExpression {
     const children = expressionChildren(expr);
     const fact = facts?.get(expr);
@@ -154,13 +156,17 @@ function expression(
     return {
         id: `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`,
         owner: expr.at.elementId ?? '',
+        root: rootId,
+        path: childPath,
         site: span(expr.at),
         syntaxKind: expr.k,
         source: expr.text,
         ...(symbol ? { symbol } : {}),
         ...(type ? { type } : {}),
         ...(fact?.comparison ? { comparison: fact.comparison } : {}),
-        children: children.map((child, index) => expression(child, `${path}.${index}`, facts, declarationIds, expressionIds)),
+        children: children.map((child, index) =>
+            expression(child, `${path}.${index}`, facts, declarationIds, expressionIds, rootId, childPath ? `${childPath}.${index}` : `${index}`),
+        ),
     };
 }
 
@@ -259,7 +265,9 @@ const outcome = (
                     : source?.select?.text
                       ? 'naturalLanguage'
                       : 'absent',
-    ...(o.select?.kind === 'expression' && source?.select?.expr ? { select: expression(source.select.expr) } : {}),
+    ...(o.select?.kind === 'expression' && source?.select?.expr
+        ? { select: expression(source.select.expr, 'root', undefined, undefined, undefined, outcomeId(ownerId, o.name)) }
+        : {}),
     changes: o.changes,
     site: span(at),
 });
@@ -268,7 +276,7 @@ const outcome = (
 const requirement = (cmd: CommandDecl, r: RequirementDecl, ownerId = cmd.id): SemanticRequirement => ({
     id: requirementId(ownerId, r.name),
     name: r.name,
-    ...(r.expr ? { expression: expression(r.expr) } : {}),
+    ...(r.expr ? { expression: expression(r.expr, 'root', undefined, undefined, undefined, requirementId(ownerId, r.name)) } : {}),
     error: r.error.target?.id ?? r.error.text,
     ...(r.externalReason !== undefined ? { externalReason: r.externalReason } : {}),
     site: span(r.at),
@@ -733,4 +741,12 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
         unspecified,
         provenance,
     };
+}
+
+/** Find an IR expression by its declaration root and ExprModel child-index path. */
+export function irExpressionAt(ir: SemanticIR, root: string, path: string): SemanticExpression | undefined {
+    const parts = path === '' ? [] : path.split('.').map(Number);
+    let current = ir.expressions.find((item) => item.root === root);
+    for (const index of parts) current = current?.children[index];
+    return current;
 }
