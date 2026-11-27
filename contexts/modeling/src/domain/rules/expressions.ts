@@ -46,6 +46,8 @@ export interface ExpressionFact {
         sourceStates?: object[];
         targetOutcome?: object;
         kind?: object;
+        command?: object;
+        onCase?: object;
     };
 }
 export type ExpressionFactsSink = (fact: ExpressionFact) => void;
@@ -199,15 +201,23 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         // a kind's command sees its kind's fields; a common command the common ones
         const own = kindNamed(cmd.ofKind);
         if (cmd.requirements.length) checkRequirements(agg, cmd, withKind(own), kindOnly(own?.name), ctx, model, rules, sink);
-        for (const outcome of cmd.outcomes) checkChoice(outcome, cmd, withKind(own), ctx, model, rules);
+        for (const outcome of cmd.outcomes)
+            checkChoice(outcome, cmd, withKind(own), ctx, model, rules, sink, { owner: agg, command: cmd, targetOutcome: outcome, kind: own });
         for (const k of kinds) {
             for (const c of k.cases.filter((c) => c.command.text === cmd.name)) {
                 const sources = c.outcomes.flatMap((o) => o.from.map((r) => r.target)).filter((s): s is StateDecl => !!s);
                 for (const r of c.requirements) {
                     checkDeclared(r, rules);
-                    checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, withKind(k), ctx, model, rules, sources, kindOnly(k.name));
+                    checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, withKind(k), ctx, model, rules, sources, kindOnly(k.name), sink, {
+                        owner: k,
+                        command: cmd,
+                        onCase: c,
+                        sourceStates: sources,
+                        kind: k,
+                    });
                 }
-                for (const outcome of c.outcomes) checkChoice(outcome, cmd, withKind(k), ctx, model, rules);
+                for (const outcome of c.outcomes)
+                    checkChoice(outcome, cmd, withKind(k), ctx, model, rules, sink, { owner: k, command: cmd, onCase: c, targetOutcome: outcome, kind: k });
             }
         }
     }
@@ -220,6 +230,8 @@ function checkChoice(
     ctx: string,
     model: SourceModel,
     rules: RuleSink,
+    sink: ExpressionFactsSink | undefined,
+    scopeInfo: Pick<NonNullable<ExpressionFact['scope']>, 'owner' | 'command' | 'onCase' | 'targetOutcome' | 'kind' | 'sourceStates'>,
 ): void {
     checkDecisionExpr(
         outcome.select?.expr,
@@ -231,6 +243,9 @@ function checkChoice(
         model,
         rules,
         outcome.from.map((r) => r.target).filter((s): s is StateDecl => !!s),
+        new Map(),
+        sink,
+        { ...scopeInfo, sourceStates: outcome.from.map((r) => r.target).filter((s): s is StateDecl => !!s) },
     );
 }
 
@@ -246,7 +261,7 @@ function checkDecisionExpr(
     sources: StateDecl[] = [],
     hidden: Map<string, Hidden> = new Map(),
     sink?: ExpressionFactsSink,
-    scopeInfo?: NonNullable<ExpressionFact['scope']>,
+    scopeInfo?: Pick<NonNullable<ExpressionFact['scope']>, 'owner' | 'command' | 'onCase' | 'targetOutcome' | 'kind' | 'sourceStates'>,
 ): void {
     if (!expr) return;
     const fields = new Map(cmd.factory ? [] : common);
@@ -257,8 +272,22 @@ function checkDecisionExpr(
             if (rest.every((s) => fieldsOf(s.members).some((g) => g.name === f.name && sameType(memberType(g), ty)))) fields.set(f.name, f);
         }
     for (const p of cmd.params) fields.set(p.name, p);
-    if (scopeInfo) sink?.({ expression: expr, type: ERROR, scope: { ...scopeInfo, fields: [...fields.values()], parameters: cmd.params } });
-    const t = new ExprChecker(model, rules, sink).check(expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
+    const rootFact = scopeInfo
+        ? {
+              ...scopeInfo,
+              fields: [...fields.values()].filter((x) => !cmd.params.some((parameter) => parameter === x)),
+              parameters: cmd.params,
+              lambdas: [] as Array<{ name: string; binding?: Expr }>,
+          }
+        : undefined;
+    if (rootFact) sink?.({ expression: expr, type: ERROR, scope: rootFact });
+    const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(expr, {
+        ctx,
+        fields,
+        hidden,
+        lambdas: [],
+        present: new Set(),
+    });
     if (t.k !== 'error' && !isBool(t)) rules.error('M008', `${label} must be a Bool expression, but has type '${showType(t)}'.`, at);
 }
 
@@ -293,6 +322,13 @@ function checkRequirements(
     sink?: ExpressionFactsSink,
 ): void {
     const states = statesOf(agg);
+    const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
+    const sourceStates = [
+        ...new Set([
+            ...cmd.transitions.flatMap((t) => t.from.map((r) => r.target)),
+            ...[...cmd.outcomes, ...grouped].flatMap((o) => o.from.map((r) => r.target)),
+        ]),
+    ].filter((s): s is StateDecl => !!s);
     const fields = new Map<string, FieldDecl | ParamDecl>();
     const hidden = new Map<string, Hidden>(cmd.factory ? [] : kindHidden);
     if (cmd.factory) {
@@ -305,13 +341,7 @@ function checkRequirements(
         }
     } else {
         for (const [name, f] of common) fields.set(name, f);
-        const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
-        const sources = [
-            ...new Set([
-                ...cmd.transitions.flatMap((t) => t.from.map((r) => r.target)),
-                ...[...cmd.outcomes, ...grouped].flatMap((o) => o.from.map((r) => r.target)),
-            ]),
-        ].filter((s): s is StateDecl => !!s);
+        const sources = sourceStates;
         const [first, ...rest] = sources;
         for (const f of first ? fieldsOf(first.members) : []) {
             if (common.has(f.name)) continue;
@@ -342,12 +372,22 @@ function checkRequirements(
     for (const req of cmd.requirements) {
         checkDeclared(req, rules);
         if (!req.expr) continue;
-        sink?.({
-            expression: req.expr,
-            type: ERROR,
-            scope: { owner: agg, fields: [...fields.values()].filter((x) => !cmd.params.some((p) => p === x)), parameters: cmd.params, lambdas: [] },
+        const rootFact = {
+            owner: agg,
+            command: cmd,
+            sourceStates,
+            fields: [...fields.values()].filter((x) => !cmd.params.some((p) => p === x)),
+            parameters: cmd.params,
+            lambdas: [] as Array<{ name: string; binding?: Expr }>,
+        };
+        sink?.({ expression: req.expr, type: ERROR, scope: rootFact });
+        const t = new ExprChecker(model, rules, sink, (name, binding) => rootFact.lambdas.push({ name, binding })).check(req.expr, {
+            ctx,
+            fields,
+            hidden,
+            lambdas: [],
+            present: new Set(),
         });
-        const t = new ExprChecker(model, rules, sink).check(req.expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
         if (t.k !== 'error' && !isBool(t)) {
             rules.error('M008', `Requirement '${req.name}' of command '${cmd.name}' must be a Bool expression, but has type '${showType(t)}'.`, req.exprAt);
         }
@@ -381,13 +421,9 @@ function checkInvariant(
 ): void {
     checkDeclared(inv, rules);
     if (!inv.expr) return;
-    if (scopeInfo)
-        sink?.({
-            expression: inv.expr,
-            type: ERROR,
-            scope: { ...scopeInfo, lambdas: [...scopeInfo.lambdas, ...scope.lambdas.map(([name, , binding]) => ({ name, ...(binding ? { binding } : {}) }))] },
-        });
-    const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
+    const rootFact = scopeInfo ? { ...scopeInfo, lambdas: [...scopeInfo.lambdas] } : undefined;
+    if (rootFact) sink?.({ expression: inv.expr, type: ERROR, scope: rootFact });
+    const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(inv.expr, scope);
     if (t.k !== 'error' && !isBool(t)) {
         rules.error('M008', `Invariant '${inv.name}' must be a Bool expression, but has type '${showType(t)}'.`, inv.exprAt);
     }
@@ -403,6 +439,7 @@ class ExprChecker {
         private readonly model: SourceModel,
         private readonly rules: RuleSink,
         private readonly sink?: ExpressionFactsSink,
+        private readonly recordLambda?: (name: string, binding: Expr) => void,
     ) {}
 
     check(e: Expr, scope: Scope): Ty {
@@ -504,6 +541,7 @@ class ExprChecker {
                 return BOOL;
             }
             case 'quantifier': {
+                this.recordLambda?.(e.param, e);
                 const coll = this.check(e.collection, scope);
                 let elem: Ty = ERROR;
                 if (coll.k === 'list') elem = coll.elem;
@@ -536,6 +574,7 @@ class ExprChecker {
                     }
                     return BOOL;
                 }
+                this.recordLambda?.(e.param, e);
                 const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 e.keys.forEach((key, i) => {
                     const t = this.check(key, inner);

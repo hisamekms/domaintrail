@@ -614,10 +614,23 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
                 for (const field of fieldsOf(variant.members)) declarationIds.set(field, fieldId(variantId(el.id, variant.name), field.name));
         if (el.kind === 'aggregate') {
             for (const state of statesOf(el)) for (const field of fieldsOf(state.members)) declarationIds.set(field, fieldId(state.id, field.name));
-            for (const command of commandsOf(el)) for (const param of command.params) declarationIds.set(param, parameterId(command.id, param.name));
+            for (const command of commandsOf(el)) {
+                declarationIds.set(command, command.id);
+                for (const param of command.params) declarationIds.set(param, parameterId(command.id, param.name));
+                for (const item of command.outcomes) declarationIds.set(item, outcomeId(command.id, item.name));
+            }
             for (const kind of kindsOf(el))
                 for (const field of fieldsOf(kind.members)) declarationIds.set(field, fieldId(kindId(el.id, kind.name), field.name));
-            for (const kind of kindsOf(el)) declarationIds.set(kind, kindId(el.id, kind.name));
+            for (const kind of kindsOf(el)) {
+                declarationIds.set(kind, kindId(el.id, kind.name));
+                for (const c of kind.cases) {
+                    const command = commandsOf(el).find((candidate) => candidate.name === c.command.text);
+                    if (!command) continue;
+                    const scopedCommandId = onCaseId(kindId(el.id, kind.name), command.name);
+                    declarationIds.set(c, scopedCommandId);
+                    for (const item of c.outcomes) declarationIds.set(item, outcomeId(scopedCommandId, item.name));
+                }
+            }
         }
     }
     const facts = new Map<Expr, ExpressionFact>();
@@ -629,14 +642,16 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
             owner: (fact.scope && declarationIds.get(fact.scope.owner)) ?? fact.expression.at.elementId ?? '',
             fields: (fact.scope?.fields ?? []).flatMap((declaration) => {
                 const id = declarationIds.get(declaration);
-                return id ? [{ id, kind: 'field' as const, name: '' }] : [];
+                return id ? [{ id, kind: 'field' as const, name: 'name' in declaration && typeof declaration.name === 'string' ? declaration.name : '' }] : [];
             }),
             parameters: (fact.scope?.parameters ?? []).flatMap((declaration) => {
                 const id = declarationIds.get(declaration);
-                return id ? [{ id, kind: 'parameter' as const, name: '' }] : [];
+                return id
+                    ? [{ id, kind: 'parameter' as const, name: 'name' in declaration && typeof declaration.name === 'string' ? declaration.name : '' }]
+                    : [];
             }),
-            lambdas: (fact.scope?.lambdas ?? []).map((lambda, index) => ({
-                id: `${expressionIds.get(fact.expression) ?? ''}:lambda:${index}`,
+            lambdas: (fact.scope?.lambdas ?? []).map((lambda) => ({
+                id: lambda.binding ? (expressionIds.get(lambda.binding) ?? '') : (expressionIds.get(fact.expression) ?? ''),
                 kind: 'lambda' as const,
                 name: lambda.name,
             })),
@@ -648,6 +663,8 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
                 ? { targetOutcome: declarationIds.get(fact.scope.targetOutcome)! }
                 : {}),
             ...(fact.scope?.kind && declarationIds.get(fact.scope.kind) ? { kind: declarationIds.get(fact.scope.kind)! } : {}),
+            ...(fact.scope?.command && declarationIds.get(fact.scope.command) ? { command: declarationIds.get(fact.scope.command)! } : {}),
+            ...(fact.scope?.onCase && declarationIds.get(fact.scope.onCase) ? { onCase: declarationIds.get(fact.scope.onCase)! } : {}),
             presence: (fact.presence ?? []).flatMap((declaration) => {
                 const id = declarationIds.get(declaration);
                 return id ? [{ expression: expressionIds.get(fact.expression) ?? '', edge: id, present: true }] : [];

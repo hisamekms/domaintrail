@@ -83,6 +83,8 @@ context Modeling {
   value SemanticScopeFact {
     site: SemanticSpan
     owner: String
+    command: String?
+    onCase: String?
     fields: SemanticSymbol[0..*]
     parameters: SemanticSymbol[0..*]
     lambdas: SemanticSymbol[0..*]
