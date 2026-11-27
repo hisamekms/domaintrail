@@ -4,8 +4,9 @@ import * as path from 'node:path';
 import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
-import { stateId } from './ids.js';
-import { buildSemanticIR, SEMANTIC_IR_VERSION } from './semantic.js';
+import { invariantId, kindId, onCaseId, outcomeId, requirementId, stateId, variantId } from './ids.js';
+import { buildSemanticIR, irExpressionAt, SEMANTIC_IR_VERSION } from './semantic.js';
+import type { ExprModel } from './model.js';
 import { checkInvariants } from './rules/expressions.js';
 import { RuleSink } from './diagnostics.js';
 
@@ -23,7 +24,92 @@ const allExamples = async () => {
     return Promise.all(files.sort().map(async (file) => ({ path: file, text: await readFile(path.join(root, file), 'utf8') })));
 };
 
+function assertExpressionParity(typed: import('./model.js').DomainModel, ir: ReturnType<typeof buildSemanticIR>): void {
+    const roots: { id: string; expr: ExprModel }[] = [];
+    const invariants = (owner: string, items: readonly import('./model.js').InvariantModel[]) =>
+        items.forEach((item) => item.expr && roots.push({ id: invariantId(owner, item.name), expr: item.expr }));
+    const requirements = (owner: string, items: readonly import('./model.js').RequirementModel[]) =>
+        items.forEach((item) => item.expr && roots.push({ id: requirementId(owner, item.name), expr: item.expr }));
+    const outcomes = (owner: string, items: readonly import('./model.js').OutcomeModel[]) =>
+        items.forEach((item) => item.select?.kind === 'expression' && roots.push({ id: outcomeId(owner, item.name), expr: item.select.expr }));
+    for (const element of typed.elements) {
+        if ('invariants' in element) invariants(element.id, element.invariants);
+        if (element.kind === 'union') for (const variant of element.variants) invariants(variantId(element.id, variant.name), variant.invariants);
+        if (element.kind !== 'aggregate') continue;
+        for (const state of element.states) invariants(state.id, state.invariants);
+        for (const kind of element.kinds) {
+            invariants(kindId(element.id, kind.name), kind.invariants);
+            for (const c of kind.cases) {
+                const caseOwner = onCaseId(kindId(element.id, kind.name), c.command);
+                requirements(caseOwner, c.requires);
+                outcomes(caseOwner, c.outcomes);
+            }
+        }
+        for (const command of element.commands) {
+            requirements(command.id, command.requires);
+            outcomes(command.id, command.outcomes);
+        }
+    }
+    const children = (expr: ExprModel): ExprModel[] => {
+        switch (expr.k) {
+            case 'member':
+                return [expr.receiver];
+            case 'not':
+            case 'exists':
+            case 'length':
+            case 'matches':
+                return [expr.operand];
+            case 'binary':
+                return [expr.left, expr.right];
+            case 'range':
+                return [expr.operand, expr.lower, expr.upper];
+            case 'count':
+                return [expr.collection];
+            case 'unique':
+                return [expr.collection, ...expr.keys];
+            case 'contains':
+                return [expr.collection, expr.element];
+            case 'quantifier':
+                return [expr.collection, expr.body];
+            default:
+                return [];
+        }
+    };
+    const walk = (root: string, expr: ExprModel, path = ''): void => {
+        const found = irExpressionAt(ir, root, path);
+        expect(found, `${root} at ${path || '<root>'}`).toBeDefined();
+        expect(found!.syntaxKind).toBe(expr.k);
+        if (expr.k === 'binary') {
+            const operator = { eq: '==', ne: '!=', lt: '<', le: '<=', gt: '>', ge: '>=', implies: 'implies', and: 'and', or: 'or' }[expr.op];
+            expect(found!.source).toContain(operator);
+        }
+        if (expr.k === 'name') expect(found!.source).toBe(expr.name);
+        children(expr).forEach((child, index) => walk(root, child, path ? `${path}.${index}` : `${index}`));
+    };
+    for (const { id, expr } of roots) walk(id, expr);
+}
+
 describe('Semantic IR', () => {
+    test('keeps Typed Model invariant, requirement and select trees in parity with IR paths', async () => {
+        const modelingRoot = path.join(import.meta.dir, '..', '..', 'model');
+        const modelingFiles: string[] = [];
+        const walk = async (directory: string): Promise<void> => {
+            for (const entry of await readdir(directory, { withFileTypes: true })) {
+                if (entry.isDirectory()) await walk(path.join(directory, entry.name));
+                else if (entry.name.endsWith('.dt')) modelingFiles.push(path.relative(modelingRoot, path.join(directory, entry.name)));
+            }
+        };
+        await walk(modelingRoot);
+        const modelingSources = await Promise.all(
+            modelingFiles.sort().map(async (file) => ({ path: file, text: await readFile(path.join(modelingRoot, file), 'utf8') })),
+        );
+        for (const sources of [await exampleSources(), modelingSources]) {
+            const analysis = await analyzeDomain(sources);
+            expect(analysis.model).toBeDefined();
+            expect(analysis.sourceModel).toBeDefined();
+            assertExpressionParity(analysis.model!, buildSemanticIR(analysis.sourceModel!, analysis.model!));
+        }
+    });
     test('keeps Bool types on invariant, requirement and select roots', async () => {
         const analysis = await analyzeDomain([
             {

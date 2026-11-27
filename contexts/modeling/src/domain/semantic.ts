@@ -431,31 +431,32 @@ function choicesFor(agg: AggregateDecl, typed: AggregateModel): SemanticChoice[]
 }
 
 /** Find expression roots represented by the current step-one IR. */
-const expressionRoots = (model: SourceModel): Expr[] => {
-    const roots: Expr[] = [];
-    const addInvs = (items: readonly (AggregateMember | DataMember)[]) => {
-        for (const item of items) if (item.kind === 'invariant' && item.expr) roots.push(item.expr);
+const expressionRoots = (model: SourceModel): { expr: Expr; id: string }[] => {
+    const roots: { expr: Expr; id: string }[] = [];
+    const addInvs = (ownerId: string, items: readonly (AggregateMember | DataMember)[]) => {
+        for (const item of items) if (item.kind === 'invariant' && item.expr) roots.push({ expr: item.expr, id: invariantId(ownerId, item.name) });
     };
     for (const el of model.elements) {
         if (el.kind === 'id' || el.kind === 'primitive') {
-            for (const inv of el.invariants) if (inv.expr) roots.push(inv.expr);
-            if (el.constraint) roots.push(el.constraint);
+            for (const inv of el.invariants) if (inv.expr) roots.push({ expr: inv.expr, id: invariantId(el.id, inv.name) });
+            if (el.constraint) roots.push({ expr: el.constraint, id: invariantId(el.id, 'valid') });
         }
-        if ('members' in el) addInvs(el.members);
+        if ('members' in el) addInvs(el.id, el.members);
         if (el.kind === 'aggregate') {
-            for (const state of statesOf(el)) addInvs(state.members);
-            for (const kind of kindsOf(el)) addInvs(kind.members);
+            for (const state of statesOf(el)) addInvs(state.id, state.members);
+            for (const kind of kindsOf(el)) addInvs(kindId(el.id, kind.name), kind.members);
             for (const cmd of commandsOf(el)) {
-                roots.push(...cmd.requirements.flatMap((r) => (r.expr ? [r.expr] : [])));
-                roots.push(...cmd.outcomes.flatMap((o) => (o.select?.expr ? [o.select.expr] : [])));
+                roots.push(...cmd.requirements.flatMap((r) => (r.expr ? [{ expr: r.expr, id: requirementId(cmd.id, r.name) }] : [])));
+                roots.push(...cmd.outcomes.flatMap((o) => (o.select?.expr ? [{ expr: o.select.expr, id: outcomeId(cmd.id, o.name) }] : [])));
                 for (const kind of kindsOf(el))
                     for (const c of kind.cases.filter((x) => x.command.text === cmd.name)) {
-                        roots.push(...c.requirements.flatMap((r) => (r.expr ? [r.expr] : [])));
-                        roots.push(...c.outcomes.flatMap((o) => (o.select?.expr ? [o.select.expr] : [])));
+                        const ownerId = onCaseId(kindId(el.id, kind.name), cmd.name);
+                        roots.push(...c.requirements.flatMap((r) => (r.expr ? [{ expr: r.expr, id: requirementId(ownerId, r.name) }] : [])));
+                        roots.push(...c.outcomes.flatMap((o) => (o.select?.expr ? [{ expr: o.select.expr, id: outcomeId(ownerId, o.name) }] : [])));
                     }
             }
         }
-        if (el.kind === 'union') for (const v of el.variants) addInvs(v.members);
+        if (el.kind === 'union') for (const v of el.variants) addInvs(variantId(el.id, v.name), v.members);
     }
     return roots;
 };
@@ -631,7 +632,7 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
         const children = expressionChildren(expr);
         children.forEach((child, i) => indexExpressions(child, `${path}.${i}`));
     };
-    roots.forEach((root) => indexExpressions(root, 'root'));
+    roots.forEach(({ expr }) => indexExpressions(expr, 'root'));
     for (const el of model.elements) {
         declarationIds.set(el, el.id);
         if ('members' in el) for (const field of fieldsOf(el.members)) declarationIds.set(field, fieldId(el.id, field.name));
@@ -733,7 +734,7 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     return {
         version: SEMANTIC_IR_VERSION,
         declarations: declarationsOf(model),
-        expressions: roots.map((expr) => expression(expr, 'root', facts, declarationIds, expressionIds)),
+        expressions: roots.map(({ expr, id }) => expression(expr, 'root', facts, declarationIds, expressionIds, id)),
         scopes,
         presence,
         aggregates,
