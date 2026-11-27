@@ -54,12 +54,15 @@ const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNul
     switch (kind) {
         case 'lambdaVariable':
             return 'lambda';
+        case 'value':
+            return 'value';
         case 'field':
         case 'parameter':
         case 'state':
         case 'kind':
         case 'enumValue':
         case 'unionTag':
+        case 'discriminator':
         case 'context':
         case 'type':
             return kind;
@@ -121,11 +124,15 @@ function expression(
     expressionIds?: Map<Expr, string>,
     rootId: string = expr.at.elementId ?? '',
     childPath = '',
+    fieldOwner?: string,
 ): SemanticExpression {
     const children = expressionChildren(expr);
     const fact = facts?.get(expr);
     const found = fact?.symbol;
-    const id = found?.id ?? (found?.declaration ? declarationIds?.get(found.declaration) : undefined);
+    const id =
+        found?.id ??
+        (found?.kind === 'field' && fieldOwner ? fieldId(fieldOwner, found.name) : undefined) ??
+        (found?.declaration ? declarationIds?.get(found.declaration) : undefined);
     const symbol =
         found?.kind === 'lambdaVariable'
             ? { id: found.binding ? (expressionIds?.get(found.binding) ?? '') : '', kind: 'lambda' as const, name: found.name }
@@ -169,7 +176,7 @@ function expression(
         ...(type ? { type } : {}),
         ...(fact?.comparison ? { comparison: fact.comparison } : {}),
         children: children.map((child, index) =>
-            expression(child, `${path}.${index}`, facts, declarationIds, expressionIds, rootId, childPath ? `${childPath}.${index}` : `${index}`),
+            expression(child, `${path}.${index}`, facts, declarationIds, expressionIds, rootId, childPath ? `${childPath}.${index}` : `${index}`, fieldOwner),
         ),
     };
 }
@@ -741,7 +748,12 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     return {
         version: SEMANTIC_IR_VERSION,
         declarations: declarationsOf(model),
-        expressions: roots.map(({ expr, id }) => expression(expr, 'root', facts, declarationIds, expressionIds, id)),
+        expressions: roots.map(({ expr, id }) => {
+            const scopeOwner = facts.get(expr)?.scope?.owner;
+            const rawFieldOwner = scopeOwner ? declarationIds.get(scopeOwner) : undefined;
+            const fieldOwner = rawFieldOwner?.replace(/[#/:].*$/, '');
+            return expression(expr, 'root', facts, declarationIds, expressionIds, id, '', fieldOwner);
+        }),
         scopes,
         presence,
         aggregates,
@@ -766,6 +778,7 @@ export function irExpressionAt(ir: SemanticIR, root: string, path: string): Sema
 /** Map every expression object in Typed Model declaration roots to its Semantic IR node. */
 export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprModel, SemanticExpression> {
     const result = new Map<ExprModel, SemanticExpression>();
+    const expressionsByRoot = new Map(ir.expressions.map((expression) => [expression.root, expression]));
     const roots: { id: string; expr: ExprModel }[] = [];
     const invariants = (owner: string, items: readonly import('./model.js').InvariantModel[]) =>
         items.forEach((item) => item.expr && roots.push({ id: invariantId(owner, item.name), expr: item.expr }));
@@ -817,7 +830,8 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
         }
     };
     const walk = (root: string, expr: ExprModel, path = ''): void => {
-        const found = irExpressionAt(ir, root, path);
+        let found = expressionsByRoot.get(root);
+        for (const index of path === '' ? [] : path.split('.').map(Number)) found = found?.children[index];
         if (found) result.set(expr, found);
         children(expr).forEach((child, i) => walk(root, child, path ? `${path}.${i}` : `${i}`));
     };

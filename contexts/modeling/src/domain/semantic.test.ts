@@ -91,6 +91,39 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
 }
 
 describe('Semantic IR', () => {
+    test('field set symbols use the element that owns each access', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fields.dt',
+                text: `context Sales {
+          fields Audit { createdAt: Int }
+          id OId: UUID
+          aggregate O with Audit { id: OId
+            state S { x: Int invariant si { createdAt > x } }
+            command go(n: Int) S -> S requires r { createdAt > n } else Bad
+          }
+          error Bad
+          value V with Audit { n: Int }
+          value W { v: V invariant m { v.createdAt > 0 } }
+        }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const symbols = (root: string, source: string) => {
+            const walk = (node: (typeof ir.expressions)[number]): string | undefined => {
+                if (node.source === source) return node.symbol?.id;
+                for (const child of node.children) {
+                    const found = walk(child);
+                    if (found) return found;
+                }
+                return undefined;
+            };
+            return walk(ir.expressions.find((expression) => expression.root === root)!);
+        };
+        expect(symbols('Sales.O#S.invariant.si', 'createdAt')).toBe('Sales.O.createdAt');
+        expect(symbols('Sales.O:go.requires.r', 'createdAt')).toBe('Sales.O.createdAt');
+        expect(symbols('Sales.W.invariant.m', 'v.createdAt')).toBe('Sales.V.createdAt');
+    });
     test('records symbols on keyword and union member expressions', async () => {
         const fixtures = [
             `context Model {
@@ -858,7 +891,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const root = ir.expressions.find((expression) => expression.source === 'value > 0')!;
         const value = root.children[0]!;
-        expect(value.symbol).toEqual({ id: root.id, kind: 'lambda', name: 'value' });
+        expect(value.symbol).toEqual({ id: 'Sales.Quantity', kind: 'value', name: 'value' });
         expect(ir.scopes).toContainEqual(
             expect.objectContaining({
                 expression: root.id,

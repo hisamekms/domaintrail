@@ -1104,7 +1104,7 @@ export function equalVerifiedFor(a: VerifiedFor, b: VerifiedFor): boolean {
 export type SemanticDeclarationKind = 'id' | 'primitive' | 'verified' | 'enum' | 'valueObject' | 'union' | 'entity' | 'aggregate' | 'event' | 'error' | 'fieldSet' | 'policy' | 'field' | 'invariant' | 'state' | 'command' | 'parameter' | 'requirement' | 'outcome' | 'kind' | 'variant' | 'variantField' | 'enumValue' | 'onCase';
 
 /** @see contexts/modeling/model/semantic.dt:28 */
-export type SemanticSymbolKind = 'field' | 'parameter' | 'lambda' | 'state' | 'kind' | 'enumValue' | 'type' | 'unionTag' | 'context';
+export type SemanticSymbolKind = 'field' | 'parameter' | 'lambda' | 'value' | 'state' | 'kind' | 'enumValue' | 'type' | 'unionTag' | 'discriminator' | 'context';
 
 /** @see contexts/modeling/model/semantic.dt:29 */
 export type SemanticCardinality = 'one' | 'optional' | 'many' | 'nonEmpty';

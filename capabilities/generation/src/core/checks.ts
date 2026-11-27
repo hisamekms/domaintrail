@@ -144,8 +144,10 @@ export const declaredRequiresName = (commandType: string): string => `${commandT
 
 /** Test-only count of expression nodes compiled without a corresponding Semantic IR expression. */
 export let irMisses = 0;
+export let irSymbolMisses = 0;
 export const resetIrMisses = (): void => {
     irMisses = 0;
+    irSymbolMisses = 0;
 };
 
 /** Whether an element's or state's invariants include one without an expression (a slot). */
@@ -321,7 +323,9 @@ export class ExprCompiler {
     }
 
     compile(e: ExprModel, scope: Scope): Binding {
-        if (this.env.ir && !this.irNode(e) && !syntheticUuidExpressions.has(e)) irMisses++;
+        const irNode = this.irNode(e);
+        if (this.env.ir && !irNode && !syntheticUuidExpressions.has(e)) irMisses++;
+        if (this.env.ir && (e.k === 'name' || e.k === 'member') && !irNode?.symbol && !syntheticUuidExpressions.has(e)) irSymbolMisses++;
         const bool = (js: string): Binding => ({ js, ty: { k: 'prim', name: 'Bool' } });
         /** `(js)`; `loose` when `js` is a `||` at the top. */
         const wrapped = (js: string, loose = false): Binding => ({ ...bool(`(${js})`), wrapped: true, inner: js, tight: !loose });
@@ -448,10 +452,14 @@ export class ExprCompiler {
                 if (symbol?.kind === 'enumValue' || symbol?.kind === 'unionTag') return { js: quote(m), ty: { k: 'enum' } };
                 throw new Error(`no enum value or union tag '${m}'`);
             case 'union':
+                if (symbol?.kind !== 'discriminator') throw new Error(`union member '${m}' has no discriminator symbol`);
                 return { js: `${r.js}.${m}`, ty: { k: 'enum' } }; // only the discriminator is accessible (M009)
             case 'struct': {
-                const fieldId = symbol?.kind === 'field' ? symbol.id.split('.').at(-1) : undefined;
-                const f = fieldId ? t.el.fields.find((x) => x.name === fieldId) : undefined;
+                const separator = symbol?.kind === 'field' ? symbol.id.lastIndexOf('.') : -1;
+                const ownerId = separator >= 0 ? symbol!.id.slice(0, separator) : undefined;
+                if (ownerId !== t.el.id) throw new Error(`field '${m}' belongs to '${ownerId ?? 'unknown'}', not '${t.el.id}'`);
+                const fieldName = separator >= 0 ? symbol!.id.slice(separator + 1) : undefined;
+                const f = fieldName ? t.el.fields.find((x) => x.name === fieldName) : undefined;
                 if (!f) throw new Error(`'${t.el.name}' has no field '${m}'`);
                 return { js: `${r.js}.${m}`, ty: fieldTy(this.env.model, f) };
             }
