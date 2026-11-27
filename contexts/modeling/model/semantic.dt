@@ -37,13 +37,7 @@ context Modeling {
     notComparable
   }
   enum SemanticObligationKind { externalCheck naturalLanguage }
-  enum SemanticUnspecifiedKind {
-    createField
-    targetOnlyField
-    changesWithoutExpression
-    expressionFreeRequirement
-    nondeterministicChoice
-  }
+  enum SemanticUnspecifiedKind { createField targetOnlyField changesWithoutExpression expressionFreeRequirement }
   enum SemanticProvenanceKind { parameter explicitAssignment carried unspecified selectedChoice }
   enum SemanticSelectKind { executable naturalLanguage externalCheck absent }
 
@@ -142,6 +136,12 @@ context Modeling {
     site: SemanticSpan
   }
 
+  value SemanticChoice {
+    kind: String
+    source: String
+    outcomes: String[1..*]
+  }
+
   value SemanticKindLifecycle {
     kind: String
     initialStates: String[0..*]
@@ -164,6 +164,7 @@ context Modeling {
     validStates: String[0..*]
     kinds: SemanticKindLifecycle[0..*]
     outcomes: SemanticOutcome[0..*]
+    choices: SemanticChoice[0..*]
     requirements: SemanticRequirement[0..*]
   }
 

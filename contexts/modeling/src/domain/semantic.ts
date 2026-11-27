@@ -1,5 +1,6 @@
 import type {
     SemanticAggregate,
+    SemanticChoice,
     SemanticDeclaration,
     SemanticExpression,
     SemanticIR,
@@ -285,6 +286,7 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
                 }),
             ),
         ],
+        choices: choicesFor(agg, typed),
         requirements: [
             ...commands.flatMap((cmd) => cmd.requirements.map((r) => requirement(cmd, r))),
             ...kindsOf(agg).flatMap((kind) =>
@@ -295,6 +297,38 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
             ),
         ],
     };
+}
+
+/** Resolve one typed outcome to the source declaration ID, including on-cases and legacy transitions. */
+function declaredOutcomeId(agg: AggregateDecl, command: CommandDecl, typedCommand: CommandModel, kind: string, item: OutcomeModel): string {
+    const onCase = kindsOf(agg)
+        .find((candidate) => candidate.name === kind)
+        ?.cases.find((candidate) => candidate.command.text === command.name)
+        ?.outcomes.find((candidate) => candidate.name === item.name);
+    if (onCase) return outcomeId(onCaseId(kindId(agg.id, kind), command.name), onCase.name);
+    const named = command.outcomes.find((candidate) => candidate.name === item.name);
+    if (named) return outcomeId(command.id, named.name);
+    return shorthandOutcomeId(typedCommand.id, item.to || undefined);
+}
+
+/** Compute unresolved competing outcomes for each kind and source state. */
+function choicesFor(agg: AggregateDecl, typed: AggregateModel): SemanticChoice[] {
+    const result: SemanticChoice[] = [];
+    for (const typedCommand of typed.commands) {
+        const command = commandsOf(agg).find((candidate) => candidate.name === typedCommand.name);
+        if (!command) continue;
+        for (const kind of typed.kinds.length ? typed.kinds.map((item) => item.name) : ['*']) {
+            const applicable = applicableOutcomes(typed, typedCommand, kind);
+            const outcomes = typedCommand.transitions.length ? outcomesOfCommand(typedCommand) : applicable;
+            for (const [source, group] of outcomesBySource(outcomes, typedCommand.factory)) {
+                if (group.length < 2 || group.some((item) => item.select?.kind === 'expression')) continue;
+                const outcomes = [...new Set(group.map((item) => declaredOutcomeId(agg, command, typedCommand, kind, item)))];
+                if (outcomes.length < 2) continue;
+                result.push({ kind, source: stateId(agg.id, source), outcomes: [outcomes[0]!, ...outcomes.slice(1)] });
+            }
+        }
+    }
+    return result;
 }
 
 /** Merge source-specific frames for a multi-source outcome while retaining each field name once. */
@@ -448,34 +482,6 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
                             result.push({ kind: 'targetOnlyField', declaration: id, field: field.name, site: span(declaration.at) });
                     }
                 }
-            }
-        }
-    }
-    for (const typedCommand of typed.commands) {
-        for (const choiceKind of typed.kinds.length ? typed.kinds.map((item) => item.name) : ['*']) {
-            const groups = outcomesBySource(applicableOutcomes(typed, typedCommand, choiceKind), typedCommand.factory);
-            const declaration = commandsOf(agg).find((item) => item.name === typedCommand.name);
-            for (const [source, group] of groups) {
-                if (group.length < 2 || group.some((candidate) => candidate.select?.kind === 'expression')) continue;
-                const outcomes = group.map((candidate) => {
-                    const onCase = kindsOf(agg).find((kind) => kind.name === choiceKind)?.cases
-                        .find((item) => item.command.text === typedCommand.name)?.outcomes
-                        .find((item) => item.name === candidate.name);
-                    const sourceOutcome = onCase ?? declaration?.outcomes.find((item) => item.name === candidate.name);
-                    const owner = onCase ? onCaseId(kindId(agg.id, choiceKind), typedCommand.name) : typedCommand.id;
-                    return sourceOutcome ? outcomeId(owner, sourceOutcome.name) : shorthandOutcomeId(typedCommand.id, candidate.to || undefined);
-                });
-                const first = group[0]!;
-                const onCase = kindsOf(agg).find((kind) => kind.name === choiceKind)?.cases
-                    .find((item) => item.command.text === typedCommand.name)?.outcomes
-                    .find((item) => item.name === first.name);
-                const sourceOutcome = onCase ?? declaration?.outcomes.find((item) => item.name === first.name);
-                const owner = onCase ? onCaseId(kindId(agg.id, choiceKind), typedCommand.name) : typedCommand.id;
-                result.push({
-                    kind: 'nondeterministicChoice',
-                    declaration: outcomes[0]!,
-                    site: span(sourceOutcome?.select?.at ?? sourceOutcome?.at ?? declaration?.at ?? agg.at),
-                });
             }
         }
     }

@@ -297,7 +297,7 @@ describe('Semantic IR', () => {
         expect(ir.unspecified.some((fact) => fact.kind === 'changesWithoutExpression' && fact.field === 'total')).toBe(true);
     });
 
-    test('reports choices only for competing outcomes and records select kinds', async () => {
+    test('reports unresolved choices separately and records select kinds', async () => {
         const analysis = await analyzeDomain([
             {
                 path: 'sales.dt',
@@ -312,11 +312,10 @@ describe('Semantic IR', () => {
         ]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const aggregate = ir.aggregates[0]!;
-        expect(ir.unspecified.filter((fact) => fact.kind === 'nondeterministicChoice').map((fact) => fact.declaration)).toEqual([
-            'Sales.Item:choose->first',
-            'Sales.Item:choose->second',
-            'Sales.Item:described->first',
-            'Sales.Item:described->second',
+        expect(ir.unspecified.some((fact) => 'nondeterministicChoice' in fact)).toBe(false);
+        expect(aggregate.choices).toEqual([
+            { kind: '*', source: 'Sales.Item#Start', outcomes: ['Sales.Item:choose->first', 'Sales.Item:choose->second'] },
+            { kind: '*', source: 'Sales.Item#Start', outcomes: ['Sales.Item:described->first', 'Sales.Item:described->second'] },
         ]);
         expect(aggregate.outcomes.filter((item) => item.command === 'Sales.Item:described').map((item) => item.selectKind)).toEqual([
             'naturalLanguage',
@@ -327,6 +326,34 @@ describe('Semantic IR', () => {
         ).toEqual([
             { kind: 'naturalLanguage', declaration: 'Sales.Item:described->first', reason: 'first option' },
             { kind: 'externalCheck', declaration: 'Sales.Item:described->second', reason: 'decide externally' },
+        ]);
+    });
+
+    test('keys choices by kind and resolves legacy and on-case outcome IDs', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'sales.dt',
+                text: `context Sales { id ItemId: UUID aggregate Item {
+                  id: ItemId state Start state A state B state C
+                  kind Retail { on choose { outcome yes: Start -> A outcome no: Start -> B } }
+                  kind Wholesale { on choose { outcome accept: Start -> B outcome reject: Start -> C } }
+                  command choose() { }
+                } }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        expect(ir.aggregates[0]!.choices).toEqual([
+            { kind: 'Retail', source: 'Sales.Item#Start', outcomes: ['Sales.Item/Retail:on:choose->yes', 'Sales.Item/Retail:on:choose->no'] },
+            { kind: 'Wholesale', source: 'Sales.Item#Start', outcomes: ['Sales.Item/Wholesale:on:choose->accept', 'Sales.Item/Wholesale:on:choose->reject'] },
+        ]);
+        const legacy = await analyzeDomain([
+            {
+                path: 'legacy.dt',
+                text: `context Legacy { id ItemId: UUID aggregate Item { id: ItemId state A state B state C command change() A -> B | C } }`,
+            },
+        ]);
+        expect(buildSemanticIR(legacy.sourceModel!, legacy.model!).aggregates[0]!.choices).toEqual([
+            { kind: '*', source: 'Legacy.Item#A', outcomes: ['Legacy.Item:change->B', 'Legacy.Item:change->C'] },
         ]);
     });
 
