@@ -38,6 +38,15 @@ export interface ExpressionFact {
     comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
     presence?: object[];
+    scope?: {
+        owner: object;
+        fields: object[];
+        parameters: object[];
+        lambdas: Array<{ name: string; binding?: Expr }>;
+        sourceStates?: object[];
+        targetOutcome?: object;
+        kind?: object;
+    };
 }
 export type ExpressionFactsSink = (fact: ExpressionFact) => void;
 
@@ -67,14 +76,24 @@ export function checkInvariants(model: SourceModel, rules: RuleSink, sink?: Expr
         } else if (el.kind === 'entity' || el.kind === 'valueObject') {
             const fields = new Map<string, FieldDecl | ParamDecl>([...includedFields(el).map((x) => x.field), ...fieldsOf(el.members)].map((f) => [f.name, f]));
             for (const inv of invariantsOf(el.members)) {
-                checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules, sink);
+                checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules, sink, {
+                    owner: el,
+                    fields: [...fields.values()],
+                    parameters: [],
+                    lambdas: [],
+                });
             }
         } else if (el.kind === 'union') {
             // Variant invariants see the fields of their own variant.
             for (const v of el.variants) {
                 const fields = new Map<string, FieldDecl | ParamDecl>(fieldsOf(v.members).map((f) => [f.name, f]));
                 for (const inv of invariantsOf(v.members)) {
-                    checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules, sink);
+                    checkInvariant(inv, { ctx, fields, hidden: new Map(), lambdas: [], present: new Set() }, model, rules, sink, {
+                        owner: v,
+                        fields: [...fields.values()],
+                        parameters: [],
+                        lambdas: [],
+                    });
                 }
             }
         } else if (el.kind === 'id' || el.kind === 'primitive') {
@@ -97,6 +116,7 @@ function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel,
         if ('kind' in inv.decl) checkDeclared(inv.decl, rules);
         if (!inv.expr) continue;
         const scope: Scope = { ctx, fields: new Map(), hidden: new Map(), lambdas: [['value', { k: 'prim', name: p.base }]], present: new Set() };
+        sink?.({ expression: inv.expr, type: ERROR, scope: { owner: p, fields: [], parameters: [], lambdas: [{ name: 'value' }] } });
         const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
         if (t.k !== 'error' && !isBool(t)) {
             const what = inv.decl === inv.expr ? `The constraint of '${p.name}'` : `Invariant '${inv.name}'`;
@@ -141,7 +161,12 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
 
     // Aggregate-level invariants: common fields only, applied to every state.
     for (const inv of invariantsOf(agg.members)) {
-        checkInvariant(inv, { ctx, fields: common, hidden: new Map([...stateOnly(), ...kindOnly()]), lambdas: [], present: new Set() }, model, rules, sink);
+        checkInvariant(inv, { ctx, fields: common, hidden: new Map([...stateOnly(), ...kindOnly()]), lambdas: [], present: new Set() }, model, rules, sink, {
+            owner: agg,
+            fields: [...common.values()],
+            parameters: [],
+            lambdas: [],
+        });
     }
     // Kind-level invariants: common + that kind's own fields, applied to every state of the kind.
     for (const k of kinds)
@@ -152,6 +177,7 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
                 model,
                 rules,
                 sink,
+                { owner: k, fields: [...withKind(k).values()], parameters: [], lambdas: [], kind: k },
             );
     // State-level invariants: common + that state's own fields.
     for (const s of states) {
@@ -160,7 +186,13 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         const hidden = new Map([...stateOnly(s.name), ...kindOnly()]);
         for (const name of fields.keys()) hidden.delete(name);
         for (const inv of invariantsOf(s.members)) {
-            checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, model, rules, sink);
+            checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, model, rules, sink, {
+                owner: s,
+                fields: [...fields.values()],
+                parameters: [],
+                lambdas: [],
+                sourceStates: [s],
+            });
         }
     }
     for (const cmd of commandsOf(agg)) {
@@ -214,6 +246,7 @@ function checkDecisionExpr(
     sources: StateDecl[] = [],
     hidden: Map<string, Hidden> = new Map(),
     sink?: ExpressionFactsSink,
+    scopeInfo?: NonNullable<ExpressionFact['scope']>,
 ): void {
     if (!expr) return;
     const fields = new Map(cmd.factory ? [] : common);
@@ -224,6 +257,7 @@ function checkDecisionExpr(
             if (rest.every((s) => fieldsOf(s.members).some((g) => g.name === f.name && sameType(memberType(g), ty)))) fields.set(f.name, f);
         }
     for (const p of cmd.params) fields.set(p.name, p);
+    if (scopeInfo) sink?.({ expression: expr, type: ERROR, scope: { ...scopeInfo, fields: [...fields.values()], parameters: cmd.params } });
     const t = new ExprChecker(model, rules, sink).check(expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
     if (t.k !== 'error' && !isBool(t)) rules.error('M008', `${label} must be a Bool expression, but has type '${showType(t)}'.`, at);
 }
@@ -308,6 +342,11 @@ function checkRequirements(
     for (const req of cmd.requirements) {
         checkDeclared(req, rules);
         if (!req.expr) continue;
+        sink?.({
+            expression: req.expr,
+            type: ERROR,
+            scope: { owner: agg, fields: [...fields.values()].filter((x) => !cmd.params.some((p) => p === x)), parameters: cmd.params, lambdas: [] },
+        });
         const t = new ExprChecker(model, rules, sink).check(req.expr, { ctx, fields, hidden, lambdas: [], present: new Set() });
         if (t.k !== 'error' && !isBool(t)) {
             rules.error('M008', `Requirement '${req.name}' of command '${cmd.name}' must be a Bool expression, but has type '${showType(t)}'.`, req.exprAt);
@@ -332,9 +371,22 @@ function checkDeclared(x: InvariantDecl | RequirementDecl, rules: RuleSink): voi
     );
 }
 
-function checkInvariant(inv: InvariantDecl, scope: Scope, model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
+function checkInvariant(
+    inv: InvariantDecl,
+    scope: Scope,
+    model: SourceModel,
+    rules: RuleSink,
+    sink?: ExpressionFactsSink,
+    scopeInfo?: NonNullable<ExpressionFact['scope']>,
+): void {
     checkDeclared(inv, rules);
     if (!inv.expr) return;
+    if (scopeInfo)
+        sink?.({
+            expression: inv.expr,
+            type: ERROR,
+            scope: { ...scopeInfo, lambdas: [...scopeInfo.lambdas, ...scope.lambdas.map(([name, , binding]) => ({ name, ...(binding ? { binding } : {}) }))] },
+        });
     const t = new ExprChecker(model, rules, sink).check(inv.expr, scope);
     if (t.k !== 'error' && !isBool(t)) {
         rules.error('M008', `Invariant '${inv.name}' must be a Bool expression, but has type '${showType(t)}'.`, inv.exprAt);
