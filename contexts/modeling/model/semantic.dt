@@ -109,6 +109,7 @@ context Modeling {
     kind: SemanticUnspecifiedKind
     declaration: String
     field: String?
+    source: String?
     site: SemanticSpan
   }
 
@@ -126,7 +127,7 @@ context Modeling {
     kind: String?
     name: String
     from: String[0..*]
-    to: String
+    to: String?
     selectKind: SemanticSelectKind
     select: SemanticExpression?
     changes: String[0..*]
@@ -138,7 +139,7 @@ context Modeling {
 
   value SemanticChoice {
     kind: String
-    source: String
+    source: String?
     outcomes: String[1..*]
   }
 

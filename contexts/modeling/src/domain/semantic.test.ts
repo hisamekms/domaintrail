@@ -99,9 +99,9 @@ describe('Semantic IR', () => {
                 'Billing.Invoice:pay': [{ from: ['Billing.Invoice#Open'], to: 'Billing.Invoice#Paid', changes: [] }],
             },
             'Sales.Customer': {
-                'Sales.Customer:register': [{ from: [], to: '', changes: [] }],
-                'Sales.Customer:rename': [{ from: [], to: '', changes: ['name'] }],
-                'Sales.Customer:changeEmail': [{ from: [], to: '', changes: ['email'] }],
+                'Sales.Customer:register': [{ from: [], to: undefined, changes: [] }],
+                'Sales.Customer:rename': [{ from: [], to: undefined, changes: ['name'] }],
+                'Sales.Customer:changeEmail': [{ from: [], to: undefined, changes: ['email'] }],
             },
             'Sales.Order': {
                 'Sales.Order:place': [{ from: [], to: 'Sales.Order#Draft', changes: [] }],
@@ -140,6 +140,9 @@ describe('Semantic IR', () => {
         ]);
         const outcomeIds = new Set(ir.aggregates.flatMap((aggregate) => aggregate.outcomes.map((item) => item.id)));
         expect(ir.unspecified.filter((fact) => fact.declaration.includes('->')).every((fact) => outcomeIds.has(fact.declaration))).toBe(true);
+        expect(
+            ir.unspecified.filter((fact) => fact.declaration === 'Sales.Order:cancel->Cancelled' && fact.field === 'reason').map(({ source }) => source),
+        ).toEqual(['Sales.Order#Draft', 'Sales.Order#Confirmed']);
     });
 
     test('projects a kind on-case outcome from the Typed Model', async () => {
@@ -200,12 +203,12 @@ describe('Semantic IR', () => {
         expect(analysis.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const aggregate = ir.aggregates[0]!;
-        expect(aggregate.outcomes.map(({ id }) => id)).toEqual(['Sales.Order:finish->*', 'Sales.Order/Retail:on:finish->completed']);
+        expect(aggregate.outcomes.map(({ id }) => id)).toEqual(['Sales.Order/Retail:on:finish->completed']);
         expect(aggregate.requirements.map(({ id }) => id)).toEqual(['Sales.Order/Retail:on:finish.requires.ready']);
-        expect(ir.unspecified.map(({ kind, declaration, field }) => [kind, declaration, field])).toEqual([
-            ['expressionFreeRequirement', 'Sales.Order/Retail:on:finish.requires.ready', undefined],
-            ['changesWithoutExpression', 'Sales.Order/Retail:on:finish->completed', 'note'],
-            ['targetOnlyField', 'Sales.Order/Retail:on:finish->completed', 'marker'],
+        expect(ir.unspecified.map(({ kind, declaration, field, source }) => [kind, declaration, field, source])).toEqual([
+            ['expressionFreeRequirement', 'Sales.Order/Retail:on:finish.requires.ready', undefined, undefined],
+            ['changesWithoutExpression', 'Sales.Order/Retail:on:finish->completed', 'note', 'Sales.Order#Draft'],
+            ['targetOnlyField', 'Sales.Order/Retail:on:finish->completed', 'marker', 'Sales.Order#Draft'],
         ]);
         for (const id of ['Sales.Order/Retail:on:finish->completed', 'Sales.Order/Retail:on:finish.requires.ready']) {
             expect(aggregate.outcomes.filter((item) => item.id === id)).toHaveLength(id.endsWith('completed') ? 1 : 0);

@@ -41,6 +41,21 @@ const BASE = `
 `;
 
 describe('kind-specific lifecycle', () => {
+    test('preserves diagnostics for a kind without declared states', async () => {
+        const a = await checkSales(`id XId: UUID aggregate X {
+          id: XId
+          n: Int
+          kind K { on go { outcome o: -> X } }
+          command go() changes n
+        }`);
+        expect(a.diagnostics.map(({ code, message }) => [code, message])).toEqual([
+            ['M030', expect.any(String)],
+            ['M028', "Outcome 'o' needs a source state."],
+            ['M006', expect.any(String)],
+        ]);
+        expect(a.diagnostics.some(({ message }) => message.includes('mixes named outcomes'))).toBe(false);
+    });
+
     test('keeps M028 create reachability unchanged when there are no declared initials', async () => {
         const a = await checkSales(`id ItemId: UUID aggregate Item {
           id: ItemId state Draft state Done

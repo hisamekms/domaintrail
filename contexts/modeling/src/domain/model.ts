@@ -132,7 +132,7 @@ export function outcomesBySource(outcomes: readonly M.OutcomeModel[], factory = 
 }
 
 /** Named outcomes plus shorthand outcomes expanded once per target (or one stateless outcome). */
-export function outcomesOfCommand(command: M.CommandModel): M.OutcomeModel[] {
+export function outcomesOfCommand(command: M.CommandModel, hasStatesOrKindCases = false): M.OutcomeModel[] {
     if (command.outcomes.length)
         return command.outcomes.flatMap((outcome) => (outcome.from.length ? outcome.from : ['']).map((from) => ({ ...outcome, from: from ? [from] : [] })));
     if (command.transitions.length) {
@@ -148,6 +148,7 @@ export function outcomesOfCommand(command: M.CommandModel): M.OutcomeModel[] {
             ),
         );
     }
+    if (hasStatesOrKindCases) return [];
     return [{ name: '*', from: [], to: '', changes: command.changes, emits: command.emits }];
 }
 

@@ -160,7 +160,7 @@ const outcome = (
     kind?: string,
     frames: { set: FieldModel[]; carried: FieldModel[]; dropped: FieldModel[] } = { set: [], carried: [], dropped: [] },
 ): SemanticOutcome => ({
-    id: ownerId.endsWith(':') ? outcomeId(ownerId, o.name) : outcomeId(ownerId, o.name),
+    id: outcomeId(ownerId, o.name),
     command: command.id,
     ...(kind ? { kind } : {}),
     set: frames.set.map((field) => field.name),
@@ -168,7 +168,7 @@ const outcome = (
     dropped: frames.dropped.map((field) => field.name),
     name: o.name,
     from: o.from.map((s) => stateId(aggregateId, s)),
-    to: o.to ? stateId(aggregateId, o.to) : '',
+    ...(o.to ? { to: stateId(aggregateId, o.to) } : {}),
     selectKind:
         o.select?.kind === 'expression'
             ? 'executable'
@@ -207,23 +207,23 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
             const cmd = commands.find((candidate) => candidate.name === c.command.text);
             const typedCommand = typed.commands.find((candidate) => candidate.name === c.command.text);
             return cmd && typedCommand
-                ? c.outcomes
-                      .map((sourceOutcome) => {
-                          const item = applicableOutcomes(typed, typedCommand, lifecycle.kind).find((candidate) => candidate.name === sourceOutcome.name);
-                          return item
-                              ? outcome(
-                                    typedCommand,
-                                    item,
-                                    sourceOutcome,
-                                    sourceOutcome.at,
-                                    agg.id,
-                                    onCaseId(kindId(agg.id, lifecycle.kind), cmd.name),
-                                    lifecycle.kind,
-                                    outcomeFields(typed, typedCommand, item.from[0], item.to, item, lifecycle.kind),
-                                )
-                              : undefined;
-                      })
-                      .filter((item): item is SemanticOutcome => item !== undefined)
+                ? c.outcomes.flatMap((sourceOutcome) => {
+                      const item = applicableOutcomes(typed, typedCommand, lifecycle.kind).find((candidate) => candidate.name === sourceOutcome.name);
+                      if (!item) return [];
+                      return (item.from.length ? item.from : ['']).map((from) => {
+                          const sourced = { ...item, from: from ? [from] : [] };
+                          return outcome(
+                              typedCommand,
+                              sourced,
+                              sourceOutcome,
+                              sourceOutcome.at,
+                              agg.id,
+                              onCaseId(kindId(agg.id, lifecycle.kind), cmd.name),
+                              lifecycle.kind,
+                              outcomeFields(typed, typedCommand, from || undefined, item.to, item, lifecycle.kind),
+                          );
+                      });
+                  })
                 : [];
         });
         const toStateIds = (names: readonly string[]) => names.map((name) => stateId(agg.id, name));
@@ -242,7 +242,10 @@ function aggregate(agg: AggregateDecl, typed: AggregateModel): SemanticAggregate
         outcomes: [
             ...typed.commands
                 .flatMap((cmd) =>
-                    outcomesOfCommand(cmd).map((o) => {
+                    outcomesOfCommand(
+                        cmd,
+                        statesOf(agg).length > 0 || kindsOf(agg).some((kind) => kind.cases.some((item) => item.command.text === cmd.name)),
+                    ).map((o) => {
                         const declaration = commands.find((candidate) => candidate.name === cmd.name);
                         const source = declaration?.outcomes.find((candidate) => candidate.name === o.name);
                         const transitionIndex = cmd.transitions.findIndex(
@@ -336,7 +339,7 @@ function choicesFor(agg: AggregateDecl, typed: AggregateModel): SemanticChoice[]
                 if (group.length < 2 || group.some((item) => item.select?.kind === 'expression')) continue;
                 const outcomes = [...new Set(group.map((item) => declaredOutcomeId(agg, command, typedCommand, kind, item)))];
                 if (outcomes.length < 2) continue;
-                result.push({ kind, source: stateId(agg.id, source), outcomes: [outcomes[0]!, ...outcomes.slice(1)] });
+                result.push({ kind, ...(typedCommand.factory ? {} : { source: stateId(agg.id, source) }), outcomes: [outcomes[0]!, ...outcomes.slice(1)] });
             }
         }
     }
@@ -416,7 +419,10 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
             if (!req.expr) result.push({ kind: 'expressionFreeRequirement', declaration: requirementId(cmd.id, req.name), site: span(req.at) });
         const typedCommand = typed.commands.find((candidate) => candidate.name === cmd.name);
         if (!typedCommand) continue;
-        for (const o of outcomesOfCommand(typedCommand)) {
+        for (const o of outcomesOfCommand(
+            typedCommand,
+            statesOf(agg).length > 0 || kindsOf(agg).some((kind) => kind.cases.some((item) => item.command.text === cmd.name)),
+        )) {
             const sourceOutcome = cmd.outcomes.find((item) => item.name === o.name);
             const id = sourceOutcome ? outcomeId(cmd.id, o.name) : shorthandOutcomeId(cmd.id, o.to || undefined);
             const frames = (o.from.length ? o.from : [undefined]).map((from) =>
@@ -424,7 +430,13 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
             );
             const target = statesOf(agg).find((state) => state.name === o.to);
             for (const change of sourceOutcome?.changes ?? cmd.changes)
-                result.push({ kind: 'changesWithoutExpression', declaration: id, field: change.name, site: span(change.at) });
+                result.push({
+                    kind: 'changesWithoutExpression',
+                    declaration: id,
+                    ...(o.from[0] ? { source: stateId(agg.id, o.from[0]) } : {}),
+                    field: change.name,
+                    site: span(change.at),
+                });
             if (typedCommand.factory) {
                 for (const field of frames.flatMap((frame) => frame.set))
                     result.push({
@@ -441,7 +453,14 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
             ];
             for (const field of setFields) {
                 const declaration = target?.members.find((member) => member.kind === 'field' && member.name === field.name);
-                if (declaration?.kind === 'field') result.push({ kind: 'targetOnlyField', declaration: id, field: field.name, site: span(declaration.at) });
+                if (declaration?.kind === 'field')
+                    result.push({
+                        kind: 'targetOnlyField',
+                        declaration: id,
+                        ...(o.from[0] ? { source: stateId(agg.id, o.from[0]) } : {}),
+                        field: field.name,
+                        site: span(declaration.at),
+                    });
             }
         }
     }
@@ -461,7 +480,13 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
                 const frames = (o.from.length ? o.from : [undefined]).map((from) => outcomeFields(typed, typedCommand, from, o.to || undefined, o, kind.name));
                 const target = statesOf(agg).find((state) => state.name === o.to);
                 for (const change of sourceOutcome.changes)
-                    result.push({ kind: 'changesWithoutExpression', declaration: id, field: change.name, site: span(change.at) });
+                    result.push({
+                        kind: 'changesWithoutExpression',
+                        declaration: id,
+                        ...(o.from[0] ? { source: stateId(agg.id, o.from[0]) } : {}),
+                        field: change.name,
+                        site: span(change.at),
+                    });
                 if (typedCommand.factory) {
                     for (const field of frames.flatMap((frame) => frame.set))
                         result.push({
@@ -480,7 +505,13 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
                     for (const field of setFields) {
                         const declaration = target?.members.find((member) => member.kind === 'field' && member.name === field.name);
                         if (declaration?.kind === 'field')
-                            result.push({ kind: 'targetOnlyField', declaration: id, field: field.name, site: span(declaration.at) });
+                            result.push({
+                                kind: 'targetOnlyField',
+                                declaration: id,
+                                ...(o.from[0] ? { source: stateId(agg.id, o.from[0]) } : {}),
+                                field: field.name,
+                                site: span(declaration.at),
+                            });
                     }
                 }
             }
@@ -489,8 +520,7 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
     return result;
 }
 
-/** Build the versioned semantic projection from the source model, retaining the syntax's exact source spans. */
-/** @internal Beta Semantic IR; its shape has no compatibility promise before 1.0. */
+/** Build the versioned beta semantic projection from the source model, retaining exact syntax spans. */
 export function buildSemanticIR(model: SourceModel, typed: DomainModel): SemanticIR {
     return {
         version: SEMANTIC_IR_VERSION,
