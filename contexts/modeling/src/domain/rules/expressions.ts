@@ -35,7 +35,7 @@ import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, is
 export interface ExpressionFact {
     expression: Expr;
     type: Ty;
-    symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object };
+    symbol?: { kind: 'field' | 'parameter' | 'lambdaVariable' | 'state' | 'kind' | 'enumValue' | 'type'; name: string; declaration?: object; binding?: Expr };
 }
 export type ExpressionFactsSink = (fact: ExpressionFact) => void;
 
@@ -46,7 +46,7 @@ interface Scope {
     /** M010 diagnostics for fields of the aggregate that exist but are not in scope here, by name. */
     hidden: Map<string, Hidden>;
     /** Lambda parameters, innermost last. */
-    lambdas: Array<[string, Ty]>;
+    lambdas: Array<[string, Ty, Expr?]>;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
 }
@@ -360,6 +360,12 @@ class ExprChecker {
     }
 
     private infer(e: Expr, scope: Scope): Ty {
+        const type = this.inferNode(e, scope);
+        if (type.k !== 'error') this.sink?.({ expression: e, type, ...(this.symbols.has(e) ? { symbol: this.symbols.get(e) } : {}) });
+        return type;
+    }
+
+    private inferNode(e: Expr, scope: Scope): Ty {
         switch (e.k) {
             case 'int':
                 return { k: 'prim', name: 'Int', literal: true };
@@ -434,7 +440,7 @@ class ExprChecker {
                 else if (coll.k !== 'error') {
                     this.rules.error('M009', `${e.quantifier}() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 }
-                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem]] };
+                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 const body = this.check(e.body, inner);
                 if (body.k !== 'error' && !isBool(body)) {
                     this.rules.error('M009', `The predicate of ${e.quantifier}() must be Bool, but has type '${showType(body)}'.`, e.bodyAt);
@@ -458,7 +464,7 @@ class ExprChecker {
                     }
                     return BOOL;
                 }
-                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem]] };
+                const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 e.keys.forEach((key, i) => {
                     const t = this.check(key, inner);
                     if (t.k === 'error' || equatable(t, t)) return;
@@ -551,7 +557,7 @@ class ExprChecker {
     private name(name: string, node: Expr, scope: Scope): Ty {
         for (let i = scope.lambdas.length - 1; i >= 0; i--) {
             if (scope.lambdas[i][0] === name) {
-                this.symbols.set(node, { kind: 'lambdaVariable', name });
+                this.symbols.set(node, { kind: 'lambdaVariable', name, ...(scope.lambdas[i][2] ? { binding: scope.lambdas[i][2] } : {}) });
                 return narrow(scope.lambdas[i][1], name, scope);
             }
         }

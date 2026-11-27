@@ -1,11 +1,48 @@
 import { describe, expect, test } from 'bun:test';
+import { readdir, readFile } from 'node:fs/promises';
+import * as path from 'node:path';
 import { analyzeDomain } from '../application/analyze.js';
 import { exampleSources } from '../test-helpers.js';
 import { validStatesFor } from './model.js';
 import { stateId } from './ids.js';
 import { buildSemanticIR, SEMANTIC_IR_VERSION } from './semantic.js';
+import { checkInvariants } from './rules/expressions.js';
+import { RuleSink } from './diagnostics.js';
+
+const allExamples = async () => {
+    const root = path.join(import.meta.dir, '..', '..', '..', '..', 'examples');
+    const files: string[] = [];
+    const walk = async (directory: string): Promise<void> => {
+        for (const entry of await readdir(directory, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+                if (!['node_modules', '.git', '.domaintrail', 'generated'].includes(entry.name)) await walk(path.join(directory, entry.name));
+            } else if (entry.name.endsWith('.dt')) files.push(path.relative(root, path.join(directory, entry.name)));
+        }
+    };
+    await walk(root);
+    return Promise.all(files.sort().map(async (file) => ({ path: file, text: await readFile(path.join(root, file), 'utf8') })));
+};
 
 describe('Semantic IR', () => {
+    test('expression facts sink preserves checker diagnostics on all examples and a representative fixture', async () => {
+        const analyses = [
+            await analyzeDomain(await allExamples()),
+            await analyzeDomain([
+                {
+                    path: 'fixture.dt',
+                    text: `context Fixture { id ItemId: UUID aggregate Item { id: ItemId state Start state RetailDone kind Retail { initial Start on finish { outcome done: Start -> RetailDone } } command finish() { } } }`,
+                },
+            ]),
+        ];
+        for (const analysis of analyses) {
+            const model = analysis.sourceModel!;
+            const withoutSink = new RuleSink();
+            const withSink = new RuleSink();
+            checkInvariants(model, withoutSink);
+            checkInvariants(model, withSink, () => {});
+            expect(withSink.items).toEqual(withoutSink.items);
+        }
+    });
     test('projects the shop lifecycle facts as state IDs', async () => {
         const analysis = await analyzeDomain(await exampleSources());
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
@@ -22,6 +59,50 @@ describe('Semantic IR', () => {
         expect(lifecycle('Billing.Invoice')).toEqual([
             { kind: '*', initialStates: ['Billing.Invoice#Open'], validStates: ['Billing.Invoice#Open', 'Billing.Invoice#Paid'], onCases: [] },
         ]);
+    });
+
+    test('projects exact resolved symbols and static types for shop expressions', async () => {
+        const analysis = await analyzeDomain(await exampleSources());
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flat = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flat(node.children)]);
+        const nodes = flat(ir.expressions);
+        const source = (text: string) => nodes.find((node) => node.source === text);
+        expect(source('items')?.symbol).toEqual({ id: 'Sales.Order.items', kind: 'field', name: 'items' });
+        expect(source('items')?.type).toEqual({ name: 'OrderItem', cardinality: 'many' });
+        expect(nodes.find((node) => node.symbol?.id === 'Sales.Order:cancel(reason)')?.symbol).toEqual({
+            id: 'Sales.Order:cancel(reason)',
+            kind: 'parameter',
+            name: 'reason',
+        });
+        expect(source('CancelReason.Other')?.symbol).toEqual({ id: 'Sales.CancelReason=Other', kind: 'enumValue', name: 'Other' });
+        expect(source('item.quantity')?.symbol).toEqual({ id: 'Sales.OrderItem.quantity', kind: 'field', name: 'quantity' });
+        expect(source('item.unitPrice.currency')?.symbol).toEqual({ id: 'Common.Money.currency', kind: 'field', name: 'currency' });
+        expect(source('note')?.type).toEqual({ name: 'String', cardinality: 'optional' });
+        const lambda = nodes.find((node) => node.symbol?.kind === 'lambda');
+        expect(lambda?.symbol).toEqual({ id: expect.stringContaining(':expression:'), kind: 'lambda', name: 'item' });
+        expect(lambda?.type).toEqual({ name: 'OrderItem', cardinality: 'one' });
+    });
+
+    test('projects a focused value object member and guarded optional field', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'fixture.dt',
+                text: `context Fixture {
+              value Address { city: String }
+              entity Customer {
+                address: Address?
+                invariant hasCity { exists(address) and address.city != "" }
+              }
+            }`,
+            },
+        ]);
+        const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        expect(nodes.find((node) => node.source === 'address')?.symbol).toEqual({ id: 'Fixture.Customer.address', kind: 'field', name: 'address' });
+        expect(nodes.find((node) => node.source === 'address.city')?.symbol).toEqual({ id: 'Fixture.Address.city', kind: 'field', name: 'city' });
     });
 
     test('keeps lifecycle initials separate for each kind', async () => {

@@ -14,6 +14,9 @@ import type {
 import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel } from './model.js';
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
 import { lifecyclesOf } from './lifecycle.js';
+import { checkInvariants, type ExpressionFact } from './rules/expressions.js';
+import { RuleSink } from './diagnostics.js';
+import { showType } from './types.js';
 import { enumValueId, fieldId, invariantId, kindId, onCaseId, outcomeId, shorthandOutcomeId, parameterId, requirementId, stateId, variantId } from './ids.js';
 import {
     commandsOf,
@@ -44,8 +47,28 @@ const span = (site: Site): SemanticSpan => ({
     endColumn: site.end.column,
 });
 
+const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNullable<SemanticExpression['symbol']>['kind'] => {
+    switch (kind) {
+        case 'lambdaVariable':
+            return 'lambda';
+        case 'field':
+        case 'parameter':
+        case 'state':
+        case 'kind':
+        case 'enumValue':
+        case 'type':
+            return kind;
+    }
+};
+
 /** Project an expression tree, assigning each node a source-location identity. */
-function expression(expr: Expr, path = 'root'): SemanticExpression {
+function expression(
+    expr: Expr,
+    path = 'root',
+    facts?: Map<Expr, ExpressionFact>,
+    declarationIds?: Map<object, string>,
+    expressionIds?: Map<Expr, string>,
+): SemanticExpression {
     const children: Expr[] = [];
     switch (expr.k) {
         case 'member':
@@ -78,13 +101,32 @@ function expression(expr: Expr, path = 'root'): SemanticExpression {
             children.push(expr.collection, expr.body);
             break;
     }
+    const fact = facts?.get(expr);
+    const found = fact?.symbol;
+    const id = found?.declaration ? declarationIds?.get(found.declaration) : undefined;
+    const symbol =
+        found?.kind === 'lambdaVariable'
+            ? { id: found.binding ? (expressionIds?.get(found.binding) ?? '') : '', kind: 'lambda' as const, name: found.name }
+            : id && found
+              ? { id, kind: symbolKind(found.kind), name: found.name }
+              : undefined;
+    const type = fact
+        ? {
+              name: showType(fact.type)
+                  .replace(/\?$/, '')
+                  .replace(/\[0\.\.\*\]$/, ''),
+              cardinality: fact.type.k === 'opt' ? ('optional' as const) : fact.type.k === 'list' ? ('many' as const) : ('one' as const),
+          }
+        : undefined;
     return {
         id: `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`,
         owner: expr.at.elementId ?? '',
         site: span(expr.at),
         syntaxKind: expr.k,
         source: expr.text,
-        children: children.map((child, index) => expression(child, `${path}.${index}`)),
+        ...(symbol ? { symbol } : {}),
+        ...(type ? { type } : {}),
+        children: children.map((child, index) => expression(child, `${path}.${index}`, facts, declarationIds, expressionIds)),
     };
 }
 
@@ -522,10 +564,66 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
 
 /** Build the versioned beta semantic projection from the source model, retaining exact syntax spans. */
 export function buildSemanticIR(model: SourceModel, typed: DomainModel): SemanticIR {
+    const declarationIds = new Map<object, string>();
+    const expressionIds = new Map<Expr, string>();
+    const roots = expressionRoots(model);
+    const indexExpressions = (expr: Expr, path: string): void => {
+        expressionIds.set(expr, `${expr.at.elementId ?? ''}:expression:${expr.at.file}:${expr.at.start.line}:${expr.at.start.column}:${path}`);
+        const children: Expr[] = [];
+        switch (expr.k) {
+            case 'member':
+                children.push(expr.receiver);
+                break;
+            case 'not':
+            case 'exists':
+            case 'length':
+            case 'matches':
+                children.push(expr.operand);
+                break;
+            case 'count':
+                children.push(expr.collection);
+                break;
+            case 'binary':
+                children.push(expr.left, expr.right);
+                break;
+            case 'range':
+                children.push(expr.operand, expr.lower, expr.upper);
+                break;
+            case 'unique':
+                children.push(expr.collection, ...expr.keys);
+                break;
+            case 'contains':
+                children.push(expr.collection, expr.element);
+                break;
+            case 'quantifier':
+                children.push(expr.collection, expr.body);
+                break;
+        }
+        children.forEach((child, i) => indexExpressions(child, `${path}.${i}`));
+    };
+    roots.forEach((root) => indexExpressions(root, 'root'));
+    for (const el of model.elements) {
+        declarationIds.set(el, el.id);
+        if ('members' in el) for (const field of fieldsOf(el.members)) declarationIds.set(field, fieldId(el.id, field.name));
+        if (el.kind === 'enum') for (const value of el.values) declarationIds.set(value, enumValueId(el.id, value.name));
+        if (el.kind === 'aggregate') for (const state of statesOf(el)) declarationIds.set(state, state.id);
+        if (el.kind === 'union')
+            for (const variant of el.variants)
+                for (const field of fieldsOf(variant.members)) declarationIds.set(field, fieldId(variantId(el.id, variant.name), field.name));
+        if (el.kind === 'aggregate') {
+            for (const state of statesOf(el)) for (const field of fieldsOf(state.members)) declarationIds.set(field, fieldId(state.id, field.name));
+            for (const command of commandsOf(el)) for (const param of command.params) declarationIds.set(param, parameterId(command.id, param.name));
+            for (const kind of kindsOf(el))
+                for (const field of fieldsOf(kind.members)) declarationIds.set(field, fieldId(kindId(el.id, kind.name), field.name));
+            for (const kind of kindsOf(el)) declarationIds.set(kind, kindId(el.id, kind.name));
+        }
+    }
+    const facts = new Map<Expr, ExpressionFact>();
+    checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, fact));
     return {
         version: SEMANTIC_IR_VERSION,
         declarations: declarationsOf(model),
-        expressions: expressionRoots(model).map((expr) => expression(expr)),
+        expressions: roots.map((expr) => expression(expr, 'root', facts, declarationIds, expressionIds)),
         scopes: [],
         aggregates: model.elements
             .filter((e): e is AggregateDecl => e.kind === 'aggregate')
