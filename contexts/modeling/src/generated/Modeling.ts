@@ -1211,6 +1211,7 @@ export function equalSemanticPresenceFact(a: SemanticPresenceFact, b: SemanticPr
 
 /** @see contexts/modeling/model/semantic.dt:83 */
 export interface SemanticScopeFact {
+    readonly expression: string;
     readonly site: SemanticSpan;
     readonly owner: string;
     readonly command?: string;
@@ -1221,7 +1222,6 @@ export interface SemanticScopeFact {
     readonly sourceStates: readonly string[];
     readonly targetOutcome?: string;
     readonly kind?: string;
-    readonly presence: readonly SemanticPresenceFact[];
 }
 
 /**
@@ -1229,7 +1229,7 @@ export interface SemanticScopeFact {
  * @see contexts/modeling/model/semantic.dt:83
  */
 export function equalSemanticScopeFact(a: SemanticScopeFact, b: SemanticScopeFact): boolean {
-    return equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($152: string, $153: string) => $152 === $153) && sameOptional(a.onCase, b.onCase, ($154: string, $155: string) => $154 === $155) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($156: string, $157: string) => $156 === $157) && sameOptional(a.targetOutcome, b.targetOutcome, ($158: string, $159: string) => $158 === $159) && sameOptional(a.kind, b.kind, ($160: string, $161: string) => $160 === $161) && sameList(a.presence, b.presence, equalSemanticPresenceFact);
+    return a.expression === b.expression && equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($152: string, $153: string) => $152 === $153) && sameOptional(a.onCase, b.onCase, ($154: string, $155: string) => $154 === $155) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($156: string, $157: string) => $156 === $157) && sameOptional(a.targetOutcome, b.targetOutcome, ($158: string, $159: string) => $158 === $159) && sameOptional(a.kind, b.kind, ($160: string, $161: string) => $160 === $161);
 }
 
 /** @see contexts/modeling/model/semantic.dt:98 */
@@ -1401,6 +1401,7 @@ export interface SemanticIR {
     readonly declarations: readonly SemanticDeclaration[];
     readonly expressions: readonly SemanticExpression[];
     readonly scopes: readonly SemanticScopeFact[];
+    readonly presence: readonly SemanticPresenceFact[];
     readonly aggregates: readonly SemanticAggregate[];
     readonly obligations: readonly SemanticObligation[];
     readonly unspecified: readonly SemanticUnspecified[];
@@ -1412,5 +1413,5 @@ export interface SemanticIR {
  * @see contexts/modeling/model/semantic.dt:177
  */
 export function equalSemanticIR(a: SemanticIR, b: SemanticIR): boolean {
-    return a.version === b.version && sameList(a.declarations, b.declarations, equalSemanticDeclaration) && sameList(a.expressions, b.expressions, equalSemanticExpression) && sameList(a.scopes, b.scopes, equalSemanticScopeFact) && sameList(a.aggregates, b.aggregates, equalSemanticAggregate) && sameList(a.obligations, b.obligations, equalSemanticObligation) && sameList(a.unspecified, b.unspecified, equalSemanticUnspecified) && sameList(a.provenance, b.provenance, equalSemanticProvenance);
+    return a.version === b.version && sameList(a.declarations, b.declarations, equalSemanticDeclaration) && sameList(a.expressions, b.expressions, equalSemanticExpression) && sameList(a.scopes, b.scopes, equalSemanticScopeFact) && sameList(a.presence, b.presence, equalSemanticPresenceFact) && sameList(a.aggregates, b.aggregates, equalSemanticAggregate) && sameList(a.obligations, b.obligations, equalSemanticObligation) && sameList(a.unspecified, b.unspecified, equalSemanticUnspecified) && sameList(a.provenance, b.provenance, equalSemanticProvenance);
 }

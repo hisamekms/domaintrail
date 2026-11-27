@@ -158,11 +158,16 @@ describe('Semantic IR', () => {
             },
         ]);
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
-        const facts = ir.scopes.flatMap((scope) => scope.presence);
+        const facts = ir.presence;
         expect(facts).toContainEqual(expect.objectContaining({ edge: 'Fixture.Item.note', present: true }));
         expect(facts.filter((fact) => fact.edge === 'Fixture.Item.note')).toHaveLength(4);
-        const disjunction = ir.scopes.filter((scope) => scope.site.startLine === 6);
-        expect(disjunction.flatMap((scope) => scope.presence)).toEqual([]);
+        const disjunction = ir.expressions.filter((root) => root.site.startLine === 6);
+        expect(ir.presence.filter((fact) => disjunction.some((root) => root.id === fact.expression))).toEqual([]);
+        for (const scope of ir.scopes) {
+            const root = ir.expressions.find((expression) => expression.id === scope.expression);
+            expect(root?.site).toEqual(scope.site);
+        }
+        expect(ir.scopes.every((scope) => !('presence' in scope))).toBe(true);
     });
     test('projects the shop lifecycle facts as state IDs', async () => {
         const analysis = await analyzeDomain(await exampleSources());
@@ -652,6 +657,7 @@ describe('Semantic IR', () => {
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const scope = ir.scopes.find((fact) => fact.owner === 'Sales.Order#Confirmed' && fact.fields.some((field) => field.name === 'items'))!;
         expect(scope).toEqual({
+            expression: scope.expression,
             site: scope.site,
             owner: 'Sales.Order#Confirmed',
             fields: [
@@ -664,7 +670,6 @@ describe('Semantic IR', () => {
             parameters: [],
             lambdas: [],
             sourceStates: ['Sales.Order#Confirmed'],
-            presence: [],
         });
     });
 
@@ -680,6 +685,7 @@ describe('Semantic IR', () => {
         const lambda = ir.expressions.find((root) => flatten([root]).includes(reference))!;
         const scope = ir.scopes.find((fact) => fact.command === 'Sales.Order:addItem')!;
         expect(scope).toEqual({
+            expression: scope.expression,
             site: scope.site,
             owner: 'Sales.Order',
             command: 'Sales.Order:addItem',
@@ -692,7 +698,6 @@ describe('Semantic IR', () => {
             parameters: [{ id: 'Sales.Order:addItem(item)', kind: 'parameter', name: 'item' }],
             lambdas: [{ id: lambda.id, kind: 'lambda', name: 'i' }],
             sourceStates: ['Sales.Order#Draft'],
-            presence: [],
         });
     });
 
@@ -707,6 +712,7 @@ describe('Semantic IR', () => {
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const scope = ir.scopes.find((fact) => fact.onCase === 'Sales.Order/Retail:on:ship')!;
         expect(scope).toEqual({
+            expression: scope.expression,
             site: scope.site,
             owner: 'Sales.Order/Retail',
             command: 'Sales.Order:ship',
@@ -719,7 +725,6 @@ describe('Semantic IR', () => {
             parameters: [],
             lambdas: [],
             sourceStates: ['Sales.Order#Ready'],
-            presence: [],
         });
     });
 
@@ -734,6 +739,7 @@ describe('Semantic IR', () => {
         const ir = buildSemanticIR(analysis.sourceModel!, analysis.model!);
         const scope = ir.scopes.find((fact) => fact.targetOutcome === 'Sales.Order:ship->shipped')!;
         expect(scope).toEqual({
+            expression: scope.expression,
             site: scope.site,
             owner: 'Sales.Order',
             command: 'Sales.Order:ship',
@@ -742,7 +748,6 @@ describe('Semantic IR', () => {
             parameters: [],
             lambdas: [],
             sourceStates: ['Sales.Order#Ready'],
-            presence: [],
         });
     });
 });

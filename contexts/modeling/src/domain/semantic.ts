@@ -7,6 +7,7 @@ import type {
     SemanticKindLifecycle,
     SemanticObligation,
     SemanticOutcome,
+    SemanticPresenceFact,
     SemanticRequirement,
     SemanticSpan,
     SemanticScopeFact,
@@ -651,8 +652,9 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
     // later fact never drops what an earlier one recorded.
     checkInvariants(model, new RuleSink(), (fact) => facts.set(fact.expression, mergeFacts(facts.get(fact.expression), fact)));
     const scopes: SemanticScopeFact[] = [...facts.values()]
-        .filter((fact) => fact.scope || fact.presence?.length)
+        .filter((fact) => fact.scope)
         .map((fact) => ({
+            expression: expressionIds.get(fact.expression) ?? '',
             site: span(fact.expression.at),
             owner: (fact.scope && declarationIds.get(fact.scope.owner)) ?? fact.expression.at.elementId ?? '',
             fields: (fact.scope?.fields ?? []).flatMap((declaration) => {
@@ -680,11 +682,13 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
             ...(fact.scope?.kind && declarationIds.get(fact.scope.kind) ? { kind: declarationIds.get(fact.scope.kind)! } : {}),
             ...(fact.scope?.command && declarationIds.get(fact.scope.command) ? { command: declarationIds.get(fact.scope.command)! } : {}),
             ...(fact.scope?.onCase && declarationIds.get(fact.scope.onCase) ? { onCase: declarationIds.get(fact.scope.onCase)! } : {}),
-            presence: (fact.presence ?? []).flatMap((declaration) => {
-                const id = declarationIds.get(declaration);
-                return id ? [{ expression: expressionIds.get(fact.expression) ?? '', edge: id, present: true }] : [];
-            }),
         }));
+    const presence: SemanticPresenceFact[] = [...facts.values()].flatMap((fact) =>
+        (fact.presence ?? []).flatMap((declaration) => {
+            const id = declarationIds.get(declaration);
+            return id ? [{ expression: expressionIds.get(fact.expression) ?? '', edge: id, present: true }] : [];
+        }),
+    );
     const aggregates = model.elements
         .filter((e): e is AggregateDecl => e.kind === 'aggregate')
         .flatMap((agg) => {
@@ -720,6 +724,7 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel): Semanti
         declarations: declarationsOf(model),
         expressions: roots.map((expr) => expression(expr, 'root', facts, declarationIds, expressionIds)),
         scopes,
+        presence,
         aggregates,
         obligations: obligations(model),
         unspecified,
