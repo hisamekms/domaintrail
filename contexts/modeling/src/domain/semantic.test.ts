@@ -254,9 +254,9 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         const boolRoots = flatten(ir.expressions).filter((node) => node.source === 'true');
         expect(boolRoots).toHaveLength(3);
         expect(boolRoots.map(({ type }) => type)).toEqual([
-            { name: 'Bool', cardinality: 'one' },
-            { name: 'Bool', cardinality: 'one' },
-            { name: 'Bool', cardinality: 'one' },
+            { name: 'Bool', cardinality: 'one', tag: false },
+            { name: 'Bool', cardinality: 'one', tag: false },
+            { name: 'Bool', cardinality: 'one', tag: false },
         ]);
     });
     test('projects per-source field and choice provenance', async () => {
@@ -404,7 +404,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         const nodes = flat(ir.expressions);
         const source = (text: string) => nodes.find((node) => node.source === text);
         expect(source('items')?.symbol).toEqual({ id: 'Sales.Order.items', kind: 'field', name: 'items' });
-        expect(source('items')?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'many' });
+        expect(source('items')?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'many', tag: false });
         expect(nodes.find((node) => node.symbol?.id === 'Sales.Order:cancel(reason)')?.symbol).toEqual({
             id: 'Sales.Order:cancel(reason)',
             kind: 'parameter',
@@ -413,10 +413,10 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         expect(source('CancelReason.Other')?.symbol).toEqual({ id: 'Sales.CancelReason=Other', kind: 'enumValue', name: 'Other' });
         expect(source('item.quantity')?.symbol).toEqual({ id: 'Sales.OrderItem.quantity', kind: 'field', name: 'quantity' });
         expect(source('item.unitPrice.currency')?.symbol).toEqual({ id: 'Common.Money.currency', kind: 'field', name: 'currency' });
-        expect(source('note')?.type).toEqual({ name: 'String', cardinality: 'optional' });
+        expect(source('note')?.type).toEqual({ name: 'String', cardinality: 'optional', tag: false });
         const lambda = nodes.find((node) => node.symbol?.kind === 'lambda' && node.symbol.name === 'item');
         expect(lambda?.symbol).toEqual({ id: expect.stringContaining(':expression:'), kind: 'lambda', name: 'item' });
-        expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one' });
+        expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one', tag: false });
     });
 
     test('projects union tags, context qualifiers, and field set fields under the using element ID', async () => {
@@ -431,8 +431,12 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                   value Order with Tenanted { status: Shared.Status invariant valid { status == Shared.Status.Open and tenant > 0 } }
                   id UserId: UUID
                   id AccessId: UUID
-                  union Actor { INTERNAL_USER { userId: UserId } EXTERNAL_PARTY { name: String } }
-                  aggregate Access { id: AccessId actor: Actor invariant internal { actor.kind == Actor.INTERNAL_USER } }
+                  enum Process { DELIVERY PRINTING }
+                  union Actor { INTERNAL_USER { userId: UserId } EXTERNAL_PARTY { n: Int } }
+                  value DeliverySpec { planned: Int }
+                  value PrintingSpec { copies: Int }
+                  union Details by type: Process { DELIVERY { details: DeliverySpec } PRINTING { details: PrintingSpec } }
+                  aggregate Access { id: AccessId actor: Actor details: Details invariant internal { actor.kind == Actor.INTERNAL_USER and details.type == Process.DELIVERY } }
                 }`,
             },
         ]);
@@ -445,6 +449,9 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             kind: 'unionTag',
             name: 'INTERNAL_USER',
         });
+        expect(nodes.find((node) => node.source === 'actor.kind')?.type).toEqual({ name: 'Shop.Actor', cardinality: 'one', tag: true });
+        expect(nodes.find((node) => node.source === 'Actor.INTERNAL_USER')?.type).toEqual({ name: 'Shop.Actor', cardinality: 'one', tag: true });
+        expect(nodes.find((node) => node.source === 'details.type')?.type).toEqual({ name: 'Shop.Process', cardinality: 'one', tag: false });
         expect(nodes.find((node) => node.source === 'Shared')?.symbol).toEqual({ id: 'Shared', kind: 'context', name: 'Shared' });
         expect(nodes.find((node) => node.source === 'tenant')?.symbol).toEqual({ id: 'Shop.Order.tenant', kind: 'field', name: 'tenant' });
     });
@@ -472,14 +479,14 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
         const source = (text: string) => nodes.find((node) => node.source === text);
-        expect(source('quantity')?.type).toEqual({ name: 'Types.Quantity', cardinality: 'one' });
-        expect(source('plain')?.type).toEqual({ name: 'Int', cardinality: 'one' });
-        expect(source('item')?.type).toEqual({ name: 'Types.Item', cardinality: 'optional' });
-        expect(source('items')?.type).toEqual({ name: 'Types.Item', cardinality: 'many' });
-        expect(source('requiredItems')?.type).toEqual({ name: 'Types.Item', cardinality: 'nonEmpty' });
+        expect(source('quantity')?.type).toEqual({ name: 'Types.Quantity', cardinality: 'one', tag: false });
+        expect(source('plain')?.type).toEqual({ name: 'Int', cardinality: 'one', tag: false });
+        expect(source('item')?.type).toEqual({ name: 'Types.Item', cardinality: 'optional', tag: false });
+        expect(source('items')?.type).toEqual({ name: 'Types.Item', cardinality: 'many', tag: false });
+        expect(source('requiredItems')?.type).toEqual({ name: 'Types.Item', cardinality: 'nonEmpty', tag: false });
         expect(source('Status')?.type).toBeUndefined();
         expect(source('Status.Open')?.symbol).toEqual({ id: 'Types.Status=Open', kind: 'enumValue', name: 'Open' });
-        expect(source('Status.Open')?.type).toEqual({ name: 'Types.Status', cardinality: 'one' });
+        expect(source('Status.Open')?.type).toEqual({ name: 'Types.Status', cardinality: 'one', tag: false });
     });
 
     test('projects a focused value object member and guarded optional field', async () => {

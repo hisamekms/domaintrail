@@ -155,6 +155,7 @@ function expression(
         fact?.type && typeName
             ? {
                   name: typeName,
+                  tag: fact.type.k === 'tag',
                   cardinality: isNonEmpty
                       ? ('nonEmpty' as const)
                       : fact.type.k === 'opt'

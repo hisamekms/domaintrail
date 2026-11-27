@@ -53,6 +53,7 @@ context Modeling {
   value SemanticType {
     name: String
     cardinality: SemanticCardinality
+    tag: Bool
   }
 
   value SemanticSymbol {
