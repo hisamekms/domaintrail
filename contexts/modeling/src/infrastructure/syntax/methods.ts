@@ -3,12 +3,14 @@
 // which expression each one is, for both model builders and for the diagnostics of a call that is none of them.
 import type { AstNode } from 'langium';
 import { isBinaryExpr, isNullLiteral, isStringLiteral, type Expression, type MemberAccess, type StringLiteral } from './generated/ast.js';
+import { quantifiersOf, trialArm } from './trial-arm.js';
 
 /** What a member access with or without a call is. */
 export type MethodForm =
     | { readonly k: 'member' }
     | { readonly k: 'length' }
-    | { readonly k: 'quantifier'; readonly quantifier: 'all' | 'any'; readonly param: string; readonly body: Expression }
+    /** `method`: the name as written, `every`/`some` (or the trial's `forall`/`exists`). */
+    | { readonly k: 'quantifier'; readonly quantifier: 'all' | 'any'; readonly method: string; readonly param: string; readonly body: Expression }
     | { readonly k: 'contains'; readonly element: Expression }
     | { readonly k: 'unique'; readonly param?: string; readonly keys: readonly Expression[] }
     | { readonly k: 'matches'; readonly pattern: StringLiteral }
@@ -18,6 +20,8 @@ export type MethodForm =
 const usage: Record<string, string> = {
     every: 'xs.every(x => condition)',
     some: 'xs.some(x => condition)',
+    forall: 'xs.forall(x => condition)',
+    exists: 'xs.exists(x => condition)',
     includes: 'xs.includes(value)',
     unique: 'xs.unique() or xs.unique(x => key, …)',
     matches: 'text.matches("pattern")',
@@ -33,11 +37,12 @@ export function methodForm(e: MemberAccess): MethodForm {
     const param = e.param?.name;
     const args = e.args;
     const wrong = (): MethodForm => ({ k: 'invalid', message: `'.${e.member}(…)' is written ${usage[e.member]}.` });
+    const q = quantifiersOf(trialArm());
     switch (e.member) {
-        case 'every':
-        case 'some':
+        case q.all:
+        case q.any:
             return param !== undefined && args.length === 1
-                ? { k: 'quantifier', quantifier: e.member === 'every' ? 'all' : 'any', param, body: args[0] }
+                ? { k: 'quantifier', quantifier: e.member === q.all ? 'all' : 'any', method: e.member, param, body: args[0] }
                 : wrong();
         case 'includes':
             return param === undefined && args.length === 1 ? { k: 'contains', element: args[0] } : wrong();
@@ -56,7 +61,7 @@ export function methodForm(e: MemberAccess): MethodForm {
         default:
             return {
                 k: 'invalid',
-                message: `'${e.member}' is not a method: the methods are every, some, includes, unique, matches, map, filter and sum.`,
+                message: `'${e.member}' is not a method: the methods are ${q.all}, ${q.any}, includes, unique, matches, map, filter and sum.`,
             };
     }
 }

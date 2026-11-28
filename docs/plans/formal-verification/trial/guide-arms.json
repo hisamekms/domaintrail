@@ -1,0 +1,54 @@
+{
+  "version": "1",
+  "template": "docs/guide.md",
+  "note": "The only parameters of the arm guides: the match spelling (M2, M3) and the quantifier names (Q2). Each 'from' occurs exactly once in the template and 'to' keeps its line count; scripts/trial-guides.ts rejects any other difference.",
+  "arms": {
+    "A0": [],
+    "M2": [
+      {
+        "section": "unions: example",
+        "from": "  // one case per variant (all of them), reading the variant's fields by name\n  function isPersonal(payer: Payer): Bool {\n    match (payer) { CUSTOMER => true, COMPANY { billingEmail } => billingEmail == null }\n  }",
+        "to": "  // one case per variant (all of them), naming it by its tag and reading the variant's fields by name\n  function isPersonal(payer: Payer): Bool {\n    match (payer) { when { kind: Payer.CUSTOMER }: true; when { kind: Payer.COMPANY, billingEmail }: billingEmail == null; }\n  }"
+      },
+      {
+        "section": "unions: reference",
+        "from": "- `match (payer) { CUSTOMER => …, COMPANY { name } => … }` has one case per variant, each once, and gives a value of\n  one type; a case names the fields of its variant it reads.",
+        "to": "- `match (payer) { when { kind: Payer.CUSTOMER }: …; when { kind: Payer.COMPANY, name }: …; }` has one case per variant, each once, and gives a value of\n  one type; a case names its variant by the tag (`kind: Payer.COMPANY`, the union's discriminator) and then the fields of its variant it reads, and ends with `;`."
+      }
+    ],
+    "M3": [
+      {
+        "section": "unions: example",
+        "from": "  // one case per variant (all of them), reading the variant's fields by name\n  function isPersonal(payer: Payer): Bool {\n    match (payer) { CUSTOMER => true, COMPANY { billingEmail } => billingEmail == null }\n  }",
+        "to": "  // one handler per variant (all of them), reading the variant's fields from its parameter\n  function isPersonal(payer: Payer): Bool {\n    match(payer).with({ kind: Payer.CUSTOMER }, p => true).with({ kind: Payer.COMPANY }, p => p.billingEmail == null).exhaustive()\n  }"
+      },
+      {
+        "section": "unions: reference",
+        "from": "- `match (payer) { CUSTOMER => …, COMPANY { name } => … }` has one case per variant, each once, and gives a value of\n  one type; a case names the fields of its variant it reads.",
+        "to": "- `match(payer).with({ kind: Payer.CUSTOMER }, p => …).with({ kind: Payer.COMPANY }, p => … p.name …).exhaustive()` has one `.with` per variant, each once, ends with `.exhaustive()`, and gives a value of\n  one type; a `.with` names its variant by the tag (`kind: Payer.COMPANY`, the union's discriminator), and its handler's parameter is the matched variant, whose fields it reads as `p.name`."
+      }
+    ],
+    "Q2": [
+      {
+        "section": "aggregates: example",
+        "from": "      items.every(item => item.quantity > 0)",
+        "to": "      items.forall(item => item.quantity > 0)"
+      },
+      {
+        "section": "aggregates: example",
+        "from": "addresses.some(a => a.city == \"Tokyo\" || !(a.city == \"Osaka\"))",
+        "to": "addresses.exists(a => a.city == \"Tokyo\" || !(a.city == \"Osaka\"))"
+      },
+      {
+        "section": "expressions: reference",
+        "from": "`c.every(x => …)`, `c.some(x => …)`",
+        "to": "`c.forall(x => …)`, `c.exists(x => …)`"
+      },
+      {
+        "section": "expressions: reference",
+        "from": "A subset is written with `every`: `required.every(s => confirmed.includes(s))`.",
+        "to": "A subset is written with `forall`: `required.forall(s => confirmed.includes(s))`."
+      }
+    ]
+  }
+}
