@@ -1,5 +1,6 @@
 {
   "$schema": "../../schema/domaintrail.schema.json",
+  "language": 1,
   "sources": ["**/*.dt"],
   "open": { "port": 4341 },
 }

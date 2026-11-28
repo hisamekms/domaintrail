@@ -184,6 +184,10 @@ describe('migrateEntityComparisons: owned entities compared by id (ADR 0042)', (
         ['lines.includes(first)', 'lines.some(l => l.id == first.id)'],
         ['lines.every(l => lines.includes(l))', 'lines.every(l => lines.some(x => x.id == l.id))'],
         ['lines.every(x => x != first) && lines.some(l => l == second)', 'lines.every(x => x.id != first.id) && lines.some(l => l.id == second.id)'],
+        // comments between the tokens stay
+        ['lines /* all */ .unique( /* none */ )', 'lines /* all */ .unique(l => l.id /* none */ )'],
+        ['lines.includes( /* the first */ first)', 'lines.some(l => l.id ==  /* the first */ first.id)'],
+        ['lines // all\n      .includes(first)', 'lines // all\n      .some(l => l.id == first.id)'],
         // value objects and IDs keep their equality
         ['first.price == second.price', 'first.price == second.price'],
         ['first.id == second.id', 'first.id == second.id'],
@@ -209,6 +213,13 @@ describe('migrateEntityComparisons: owned entities compared by id (ADR 0042)', (
             { line: 19, from: 'xs.includes(e)', to: 'xs.some(l => l.id == e.id)' },
         ]);
         expect(await run(done!.text)).toEqual([]);
+    });
+
+    test('a function form it cannot rewrite is listed, to rewrite by hand, and the text is kept', async () => {
+        const src = shop('invariant x { unique(lines) }');
+        const [done] = await run(src);
+        expect(done!.skipped).toEqual([{ line: 15, from: 'xs.unique()', to: 'xs.unique(x => x.id)' }]);
+        expect(done!.text).toContain('{ unique(lines) }');
     });
 
     test('a source without entity comparisons is not listed', async () => {

@@ -76,7 +76,12 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - `dt migrate domain` also rewrites each comparison of owned entities to the `id` it compared, so that a model keeps
   its meaning: `a == b` → `a.id == b.id` (and `!=`), `xs.unique()` → `xs.unique(x => x.id)`, an entity key of
   `xs.unique(x => key)` → `key.id`, and `xs.includes(e)` → `xs.some(x => x.id == e.id)`. Value objects, unions and
-  IDs are left as they are.
+  IDs are left as they are. A comparison it cannot rewrite is listed as "not rewritten", to rewrite by hand.
+- `"language"` in `domaintrail.jsonc`: the DomainTrail language version of the workspace's model (absent: 0).
+  `dt migrate domain` runs each step that changes what a model means once, for the versions newer than the recorded
+  one, then records the version reached (not with `--dry-run`, with files given, or while a file does not parse).
+  Version 1 is the entity comparison rewrite above. `dt init` writes the current version, so a new model has no step
+  to run.
 
 ## Upgrading
 
@@ -84,6 +89,7 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   names. Regenerate TypeScript and update handwritten references to command function types to add the `Command` suffix.
   Rename the requirement keys in `declared` of contract tests the same way (`FinishOrder` → `FinishOrderCommand`).
 - Run `dt migrate domain` in each workspace, then `dt check`, then `dt generate ts`. The generated checks keep their
-  behaviour; their JSDoc shows the new spelling. Run it once, before relying on the structural entity equality: it
-  rewrites every comparison of owned entities to `id`, also one written for the new meaning. Where a model means the
-  whole value, write `a == b` again after the migration.
+  behaviour; their JSDoc shows the new spelling. Run it on the whole workspace (no files given): it rewrites the
+  comparisons of owned entities to `id` and records `"language": 1` in `domaintrail.jsonc` (it creates the file when
+  the workspace has none). Commit that change with the sources: later runs then leave a structural `a == b` as
+  written. A workspace without the key is taken as version 0, and its entity comparisons are rewritten.

@@ -218,12 +218,27 @@ export function migrateDomain(text: string): DomainMigration {
     return { text: out, rewrites: rewrites.sort((a, b) => a.line - b.line), parsed: true };
 }
 
+/**
+ * The DomainTrail language version a workspace records (`"language"` in domaintrail.jsonc) once `dt migrate domain`
+ * has run the steps that change what a model means. A workspace without one is of version 0, the oldest.
+ * - 1: owned entities compare by all their fields (ADR 0042); `migrateEntityComparisons` rewrites the comparisons of
+ *   version 0 to the `id` they compared.
+ * The syntax rewrite (`migrateDomain`) and the `changes` completion keep the meaning and rewrite only what is no
+ * longer valid, so they run on every `dt migrate domain`, whatever the version.
+ */
+export const DOMAIN_LANGUAGE = 1;
+
 /** A file `migrateEntityComparisons` rewrote, with what it rewrote for the report. */
 export interface MigratedComparisons {
     readonly path: string;
     readonly text: string;
     readonly rewrites: readonly DomainMigrationRewrite[];
+    /** The comparisons of owned entities it could not rewrite (not in the method form): to rewrite by hand. */
+    readonly skipped: readonly DomainMigrationRewrite[];
 }
+
+/** The text with its comments blanked out (same length), to find the tokens between them. */
+const masked = (text: string): string => text.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (c) => c.replace(/[^\n]/g, ' '));
 
 /** Whether a written operand takes `.id` as it stands: a name, a member, a call, or one wrapped in `( … )` as a whole. */
 function receiverSafe(e: Expr, written: string): boolean {
@@ -246,26 +261,29 @@ const isOwnedEntity = (t: Ty | undefined): t is Extract<Ty, { k: 'struct' }> => 
  * `xs.unique(x => key)` that is an entity → `key.id`, and `xs.includes(e)` → `xs.some(x => x.id == e.id)`. It needs
  * the checker's types, so it reads a workspace's analysis (of the sources in the method syntax, after
  * `migrateDomain`). Value objects, unions and IDs are not touched; a second run rewrites nothing (the new forms
- * compare IDs). Only the operators and the operands' ends are edited, so comments and layout stay.
+ * compare IDs). Only the operators and the operands' ends are edited, so comments and layout stay. A comparison it
+ * cannot rewrite (a function form `migrateDomain` left) is listed in `skipped`, for the report. It is a versioned step
+ * (`DOMAIN_LANGUAGE`): `dt migrate domain` runs it once per workspace, since afterwards `==` between entities means
+ * the whole value.
  */
 export function migrateEntityComparisons(analysis: {
     readonly documents: readonly DomainDocument[];
     readonly expressionFacts: ReadonlyMap<Expr, ExpressionFact>;
     readonly resolveFile: (uri: string) => string;
 }): MigratedComparisons[] {
-    const byFile = new Map<string, { text: string; lines: number[]; edits: Edit[]; rewrites: DomainMigrationRewrite[] }>();
+    const byFile = new Map<string, { text: string; lines: number[]; edits: Edit[]; rewrites: DomainMigrationRewrite[]; skipped: DomainMigrationRewrite[] }>();
     for (const doc of analysis.documents) {
         const text = doc.textDocument.getText();
         const lines = [0];
         for (let i = 0; i < text.length; i++) if (text[i] === '\n') lines.push(i + 1);
-        byFile.set(analysis.resolveFile(doc.uri.toString()), { text, lines, edits: [], rewrites: [] });
+        byFile.set(analysis.resolveFile(doc.uri.toString()), { text, lines, edits: [], rewrites: [], skipped: [] });
     }
     const typeOf = (e: Expr): Ty | undefined => analysis.expressionFacts.get(e)?.type;
     const seen = new Set<string>();
     for (const [e, fact] of analysis.expressionFacts) {
         const file = byFile.get(e.at.file);
         if (!file) continue;
-        const { text, lines, edits, rewrites } = file;
+        const { text, lines, edits, rewrites, skipped } = file;
         const offset = (p: Site['start']): number => lines[p.line - 1]! + p.column - 1;
         const range = (s: Site): { start: number; end: number } => ({ start: offset(s.start), end: offset(s.end) });
         const key = `${e.at.file}:${offset(e.at.start)}:${offset(e.at.end)}:${e.k}`;
@@ -290,49 +308,57 @@ export function migrateEntityComparisons(analysis: {
             idOf(e.left);
             idOf(e.right);
             rewrites.push({ line: e.at.start.line, from: `a ${e.op} b`, to: `a.id ${e.op} b.id` });
-        } else if (e.k === 'unique') {
+        } else if (e.k === 'unique' && !e.param) {
+            if (fact.comparison !== 'entityStructural') continue;
+            seen.add(key);
+            const c = range(e.collection.at);
+            // the method form, comments allowed between its tokens (`migrateDomain` has rewritten the function forms);
+            // the site of a parenthesized expression includes its parentheses
+            const call = /^\s*\.\s*unique\s*\(/.exec(masked(text.slice(c.end, at.end)));
             const coll = typeOf(e.collection);
-            const elem = coll?.k === 'list' ? coll.elem : undefined;
-            if (!e.param) {
-                if (!isOwnedEntity(elem)) continue;
-                const c = range(e.collection.at);
-                // the method form only: `migrateDomain` has rewritten the function forms
-                // (the site of a parenthesized expression includes its parentheses)
-                const call = /^\s*\.\s*unique\s*\(\s*\)/.exec(text.slice(c.end, at.end));
-                if (!call) continue;
-                seen.add(key);
-                const x = param(elem.decl.name, '');
-                edits.push({ start: c.end, end: c.end + call[0].length, text: `.unique(${x} => ${x}.id)` });
-                rewrites.push({ line: e.at.start.line, from: 'xs.unique()', to: `xs.unique(${x} => ${x}.id)` });
-            } else {
-                const keys = e.keys.filter((k) => isOwnedEntity(typeOf(k)));
-                if (!keys.length) continue;
-                seen.add(key);
-                keys.forEach(idOf);
-                rewrites.push({ line: e.at.start.line, from: 'xs.unique(x => key)', to: 'xs.unique(x => key.id)' });
+            if (!call || coll?.k !== 'list' || !isOwnedEntity(coll.elem)) {
+                skipped.push({ line: e.at.start.line, from: 'xs.unique()', to: 'xs.unique(x => x.id)' });
+                continue;
             }
+            const x = param(coll.elem.decl.name, '');
+            edits.push({ start: c.end + call[0].length, end: c.end + call[0].length, text: `${x} => ${x}.id` });
+            rewrites.push({ line: e.at.start.line, from: 'xs.unique()', to: `xs.unique(${x} => ${x}.id)` });
+        } else if (e.k === 'unique') {
+            // by the key's type: the checker records a key's comparison kind after its fact, so the fact has none
+            const keys = e.keys.filter((k) => isOwnedEntity(typeOf(k)));
+            if (!keys.length) continue;
+            seen.add(key);
+            keys.forEach(idOf);
+            rewrites.push({ line: e.at.start.line, from: 'xs.unique(x => key)', to: 'xs.unique(x => key.id)' });
         } else if (e.k === 'contains') {
-            const coll = typeOf(e.collection);
-            const elem = coll?.k === 'list' ? coll.elem : undefined;
-            if (!isOwnedEntity(elem)) continue;
+            if (fact.comparison !== 'entityStructural') continue;
+            seen.add(key);
             const c = range(e.collection.at);
             const x = range(e.elementAt);
-            if (!/^\s*\.\s*includes\s*\(\s*$/.test(text.slice(c.end, x.start)) || !/^\s*\)/.test(text.slice(x.end, at.end))) continue;
-            seen.add(key);
-            const v = param(elem.decl.name, text.slice(x.start, x.end));
-            edits.push({ start: c.end, end: x.start, text: `.some(${v} => ${v}.id == ` });
+            const call = /^(\s*\.\s*)includes(\s*\()\s*$/.exec(masked(text.slice(c.end, x.start)));
+            const coll = typeOf(e.collection);
+            if (!call || !/^\s*\)/.test(masked(text.slice(x.end, at.end))) || coll?.k !== 'list' || !isOwnedEntity(coll.elem)) {
+                skipped.push({ line: e.at.start.line, from: 'xs.includes(e)', to: 'xs.some(x => x.id == e.id)' });
+                continue;
+            }
+            const v = param(coll.elem.decl.name, text.slice(x.start, x.end));
+            // `includes` → `some`, and the lambda after its `(`: comments between the tokens stay
+            const name = c.end + call[1]!.length;
+            edits.push({ start: name, end: name + 'includes'.length, text: 'some' });
+            const open = name + 'includes'.length + call[2]!.length;
+            edits.push({ start: open, end: open, text: `${v} => ${v}.id == ` });
             idOf(e.element);
             rewrites.push({ line: e.at.start.line, from: 'xs.includes(e)', to: `xs.some(${v} => ${v}.id == e.id)` });
         }
     }
     const out: MigratedComparisons[] = [];
-    for (const [path, { text, edits, rewrites }] of byFile) {
-        if (!edits.length) continue;
+    for (const [path, { text, edits, rewrites, skipped }] of byFile) {
+        if (!edits.length && !skipped.length) continue;
         // from the end; at one offset, the edits made later (by inner expressions) go after those made earlier
         const ordered = edits.map((e, i) => ({ ...e, i })).sort((a, b) => b.start - a.start || b.end - a.end || a.i - b.i);
         let next = text;
         for (const e of ordered) next = next.slice(0, e.start) + e.text + next.slice(e.end);
-        out.push({ path, text: next, rewrites: rewrites.sort((a, b) => a.line - b.line) });
+        out.push({ path, text: next, rewrites: rewrites.sort((a, b) => a.line - b.line), skipped: skipped.sort((a, b) => a.line - b.line) });
     }
     return out;
 }

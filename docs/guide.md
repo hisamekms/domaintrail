@@ -98,6 +98,9 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
 - `dt fmt` — format the `.dt` and `.dtes` files in place (`--check` for CI).
 - `dt migrate dtes` — rewrite `.dtes` files of earlier versions (v0.1: `actor`, `target` in a command → `by`,
   `handledBy`; 0.8: the `reads` of a command a policy issues → that policy's `reads`).
+- `dt migrate domain` — rewrite `.dt` files to the current language, keeping their meaning (`--dry-run` lists): the
+  TS-like syntax, `changes` completion, and once per workspace the steps newer than its `"language"` version (1:
+  entity comparisons → `id` forms), then records that version.
 - `dt check` — check model, stormings, journey and file knowledge (`--format json` for JSON). `--no-knowledge` skips knowledge;
   `--scope dtes` reports only stormings, reads `.dt` for refs, skips journey/knowledge and fails if `.dt` cannot parse. Combining flags adds nothing.
 - `dt generate ts` — check, then write the TypeScript (and the contract tests, if configured).
@@ -925,7 +928,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
 - Equality — `==`, `!=`, `unique` and `includes` compare alike: primitives and domain primitives by value, enum
   values by name, value objects and owned entities by all their fields (an entity's `id` among them), references
   (IDs) by value, union values by discriminator and fields. To compare entities by identity, compare their IDs:
-  `a.id == b.id`, `lines.unique(l => l.id)`, `lines.some(l => l.id == line.id)`.
+  `a.id == b.id`, `lines.unique(l => l.id)`, `lines.some(l => l.id == line.id)`. Before language version 1
+  (`"language"` in `domaintrail.jsonc`), entities compared by `id`: `dt migrate domain` rewrites such a model's
+  entity comparisons to the `id` forms once and records version 1, so a later run leaves `a == b` as written.
   Both sides must be of the same type (domain primitives also compare with literals, and over `Int` or `Decimal` with
   `.length`, also in `<`, `<=`, `>`, `>=` and ranges); collections and optional values cannot be
   compared (compare an optional with null first: `x != null && …`).
@@ -3920,6 +3925,8 @@ without your seeing it.
 ```jsonc
 {
   "$schema": "./node_modules/domaintrail/schema/domaintrail.schema.json",
+  // the DomainTrail language version of the model: dt init writes it, dt migrate domain raises it (absent: 0)
+  "language": 1,
   // globs of DSL files; "!" excludes (node_modules, .git, .domaintrail are never scanned)
   "sources": ["domain/**/*.dt", "domain/**/*.dtes", "!domain/drafts/**"], // default: ["**/*.dt", "**/*.dtes"]
   // skip what .gitignore ignores when finding sources

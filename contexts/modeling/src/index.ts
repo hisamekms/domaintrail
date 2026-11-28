@@ -168,6 +168,7 @@ export { completeChanges, type CompletedChanges } from './infrastructure/syntax/
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './infrastructure/syntax/format.js';
 export {
+    DOMAIN_LANGUAGE,
     LEGACY_SPELLINGS,
     migrateDomain,
     migrateEntityComparisons,

@@ -38,6 +38,7 @@ import {
     type ResolvedKnowledgeConfig,
     validateKnowledgeConfig,
 } from '@domaintrail/knowledge';
+import { DOMAIN_LANGUAGE } from '@domaintrail/modeling';
 import { type OpenConfigFile, resolveOpenConfig, SERVER_CONFIG_KEYS, validateOpenConfig } from './server.js';
 import {
     type AgentSectionFile,
@@ -72,7 +73,7 @@ export function localConfigFiles(file: string): string[] {
 
 /** The keys of domaintrail.jsonc, by where they sit (`''`: the top level; `*`: any key), from every section's owner. */
 export const CONFIG_KEYS: Readonly<Record<string, readonly string[]>> = mergeKeys([
-    { '': ['$schema'] },
+    { '': ['$schema', 'language'] },
     SOURCES_CONFIG_KEYS,
     GENERATION_CONFIG_KEYS,
     SERVER_CONFIG_KEYS,
@@ -89,6 +90,8 @@ function mergeKeys(parts: readonly Readonly<Record<string, readonly string[]>>[]
 /** Contents of domaintrail.jsonc / domaintrail.json. Paths are relative to the config file. */
 export interface DomainTrailConfigFile extends SourcesConfigFile, GenerationConfigFile, OpenConfigFile {
     $schema?: string;
+    /** The DomainTrail language version of the model, which `dt migrate domain` records (absent: 0, the oldest). */
+    language?: number;
     /** Collaboration sessions (`dt collab`, ADR 0026, ADR 0030). */
     collab?: CollabSectionFile;
     /** The agent (`dt agent`, or in process): its API's port and its roles. */
@@ -111,6 +114,8 @@ export interface ResolvedConfig extends ResolvedSourcesConfig, ResolvedGeneratio
     file?: string;
     /** Absolute path of its local override (or of the local file alone), if one was found: merged into it. */
     localFile?: string;
+    /** The DomainTrail language version the workspace records (`DOMAIN_LANGUAGE`); absent: none, the oldest. */
+    language?: number;
     open: { port: number; host: string };
     collab: ResolvedCollabConfig;
     agent: ResolvedAgentSection;
@@ -230,6 +235,7 @@ function resolved(config: DomainTrailConfigFile, dir?: string, root: string | un
         classifier: resolveCollaborationConfig({ classifier: config.classifier }).classifier,
         templates: config.templates ?? [],
         knowledge: resolveKnowledgeConfig(config.knowledge, path.basename(root ?? '')),
+        ...(config.language !== undefined && { language: config.language }),
     };
 }
 
@@ -256,6 +262,46 @@ export function checkTsContexts(config: ResolvedConfig, contexts: readonly strin
 export function checkTestsTypes(config: ResolvedConfig, types: readonly string[]): void {
     const wrong = unknownTestsTypes(config, types);
     if (wrong !== undefined) throw new ConfigError(`${config.file ?? config.localFile ?? 'config'}: ${wrong}`);
+}
+
+/**
+ * The config file's text with `"language": version` at its top level (`dt migrate domain` records the version it
+ * reached): the value replaced where the key is, else the key added first in the object (after a leading
+ * `$schema`), at the indent of the next line. Comments and layout stay. `text` must be a valid config file (an object).
+ */
+export function withLanguage(text: string, version: number): string {
+    // the top-level tokens: skip strings, comments and nested objects/arrays to find the key and the opening brace
+    let depth = 0;
+    let open = -1;
+    for (let i = 0; i < text.length; i++) {
+        const ch = text[i];
+        if (ch === '/' && text[i + 1] === '/') i = text.indexOf('\n', i) === -1 ? text.length : text.indexOf('\n', i);
+        else if (ch === '/' && text[i + 1] === '*') i = text.indexOf('*/', i + 2) + 1;
+        else if (ch === '"') {
+            const start = i++;
+            while (i < text.length && text[i] !== '"') i += text[i] === '\\' ? 2 : 1;
+            const value = /^\s*:\s*/.exec(text.slice(i + 1));
+            if (depth === 1 && text.slice(start, i + 1) === '"language"' && value) {
+                const at = i + 1 + value[0].length;
+                const old = /^-?[\d.eE+-]+|^"(?:[^"\\]|\\.)*"|^\w+/.exec(text.slice(at))?.[0] ?? '';
+                return text.slice(0, at) + String(version) + text.slice(at + old.length);
+            }
+        } else if (ch === '{' || ch === '[') {
+            if (++depth === 1 && open === -1) open = i;
+        } else if (ch === '}' || ch === ']') depth--;
+    }
+    if (open === -1) return text;
+    const rest = text.slice(open + 1);
+    const indent = /^[ \t]*\r?\n([ \t]+)/.exec(rest)?.[1] ?? '  ';
+    // after a leading `"$schema": "…",` line, where `dt init` writes it
+    const schema = /^[ \t]*\r?\n[ \t]*"\$schema"\s*:\s*"[^"\n]*"\s*,[ \t]*\r?\n/.exec(rest);
+    if (schema) {
+        const at = open + 1 + schema[0].length;
+        return `${text.slice(0, at)}${indent}"language": ${version},\n${text.slice(at)}`;
+    }
+    // an empty object takes the key without a comma (a .json file has no trailing commas)
+    const empty = /^\s*}/.test(rest.replace(/\/\/[^\n]*|\/\*[\s\S]*?\*\//g, ''));
+    return `${text.slice(0, open + 1)}\n${indent}"language": ${version}${empty ? '' : ','}${empty ? '\n' : ''}${rest.replace(/^[ \t]*(?=\r?\n)/, '')}`;
 }
 
 /** JSON with comments and trailing commas (JSONC). */
@@ -295,6 +341,10 @@ function validate(raw: unknown, fail: (msg: string) => never): DomainTrailConfig
         if (key === 'view') fail(viewRenamed(raw.view));
         if (!CONFIG_KEYS[''].includes(key)) fail(`unknown key '${key}'`);
     }
+    if (raw.language !== undefined && (typeof raw.language !== 'number' || !Number.isInteger(raw.language) || raw.language < 0))
+        fail(`'language' must be a whole number from 0 (the DomainTrail language version), got ${JSON.stringify(raw.language)}`);
+    if (typeof raw.language === 'number' && raw.language > DOMAIN_LANGUAGE)
+        fail(`'language' is ${raw.language}, newer than this dt's language (${DOMAIN_LANGUAGE}): update dt`);
     validateSourcesConfig(raw, fail);
     validateGenerationConfig(raw, fail);
     validateOpenConfig(raw, fail);

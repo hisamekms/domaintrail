@@ -1,5 +1,6 @@
 {
   "$schema": "../../schema/domaintrail.schema.json",
+  "language": 1,
   // DSL files of this example (paths are relative to this file)
   "sources": ["**/*.dt", "**/*.dtes"],
   "generate": {

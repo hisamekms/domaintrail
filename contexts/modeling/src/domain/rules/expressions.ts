@@ -1452,8 +1452,8 @@ const baseOf = (t: Ty): Ty => ({ k: 'prim', name: basePrimitive(t)! });
 const MAX_ROUND_SCALE = 30;
 
 /**
- * `==`, `!=`, `unique` and `contains` compare by this rule: value objects by all their fields, entities by `id`,
- * unions by discriminator and fields. Lists and optionals cannot be compared.
+ * `==`, `!=`, `unique` and `contains` compare by this rule: value objects and owned entities by all their fields
+ * (ADR 0042), unions by discriminator and fields. Lists and optionals cannot be compared.
  */
 /**
  * Whether a value of type `got` can be passed where `want` is declared (an argument, a function's result); `scaled`
