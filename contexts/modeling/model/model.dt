@@ -305,8 +305,24 @@ context Modeling {
     from: String[0..*]
     to: String
     changes: String[0..*]
+    /// `changes x = expr`: the fields whose value the outcome determines.
+    assignments: ChangeAssignmentModel[0..*]
     emits: EmitModel[0..*]
     select: ChoiceRuleModel?
+    /// `ensures { expr }`: a relation the outcome's result satisfies, over `before.x`, `after.x` and the parameters.
+    ensures: EnsuresModel?
+  }
+
+  /// `changes x = expr`: the value of `x` after the outcome, over the parameters and `before.x`.
+  value ChangeAssignmentModel {
+    field: String
+    expr: ExprModel
+    source: String
+  }
+
+  value EnsuresModel {
+    expr: ExprModel
+    source: String
   }
 
   union ChoiceRuleModel {
@@ -370,8 +386,12 @@ context Modeling {
     /// `changes`: the fields the command may change, as written — common fields, and state-specific fields it would
     /// otherwise carry over. Empty: it changes no common field (a factory sets every field).
     changes: String[0..*]
+    /// `changes x = expr` of the shorthand form.
+    assignments: ChangeAssignmentModel[0..*]
     /// The events emitted on success, per entry of `emits`.
     emits: EmitModel[0..*]
+    /// `ensures { expr }` of the shorthand form.
+    ensures: EnsuresModel?
     /// Qualified error names: those listed in `errors`, then those named by `else` of the requirements, each once.
     /// Together they make the command's error union.
     errors: QualifiedName[0..*]

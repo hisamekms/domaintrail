@@ -291,8 +291,9 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         ...declared(o),
         from: refs<src.StateDecl>(o, 'from', o.from),
         to: ref<src.StateDecl>(o, 'to', o.to),
-        changes: o.changes.map((name, i) => ({ name, at: site(o, 'changes', i) })),
+        changes: o.changes.map((c, i) => ({ name: c.field, at: site(o, 'changes', i), ...(c.value && { value: expr(c.value) }) })),
         emits: o.emits.map(emit),
+        ...(o.ensures && { ensures: expr(o.ensures) }),
         ...((o.selectExpr || o.selectText !== undefined) && {
             select: {
                 ...(o.selectExpr && { expr: expr(o.selectExpr) }),
@@ -336,8 +337,9 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
             transitions: c.transitions.map(transition),
             transitionsAt: c.transitions.map((_, i) => site(c, 'transitions', i)),
             requirements: c.requirements.map(requirement),
-            changes: c.changes.map((name, i) => ({ name, at: site(c, 'changes', i) })),
+            changes: c.changes.map((ch, i) => ({ name: ch.field, at: site(c, 'changes', i), ...(ch.value && { value: expr(ch.value) }) })),
             emits: c.emits.map(emit),
+            ...(c.ensures && { ensures: expr(c.ensures) }),
             errors: refs<src.ErrorDecl>(c, 'errors', c.errors),
             outcomes: c.outcomes.map(outcome),
             ...(isKind(c.$container) && { ofKind: c.$container.name }),

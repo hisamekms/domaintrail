@@ -40,6 +40,8 @@ export type Ty =
     | { k: 'unionType'; decl: UnionDecl }
     /** A context name used as a qualifier, e.g. `Sales` in `Sales.Status.Open`. */
     | { k: 'ctx'; name: string }
+    /** `before` / `after` in `changes x = …` and `ensures`: the aggregate's fields before and after the outcome. */
+    | { k: 'frame'; name: 'before' | 'after'; fields: ReadonlyMap<string, FieldDecl | ParamDecl> }
     /** Already reported; suppresses cascading diagnostics. */
     | { k: 'error' };
 
@@ -134,6 +136,8 @@ export function showType(t: Ty): string {
             return `union ${t.decl.name}`;
         case 'ctx':
             return `context ${t.name}`;
+        case 'frame':
+            return t.name;
         case 'error':
             return '<error>';
     }
@@ -181,6 +185,8 @@ export function sameType(a: Ty, b: Ty): boolean {
             return b.k === 'opt' && sameType(a.inner, b.inner);
         case 'ctx':
             return b.k === 'ctx' && a.name === b.name;
+        case 'frame':
+            return false;
         case 'error':
             return true;
     }

@@ -154,13 +154,25 @@ export function outcomesOfCommand(command: M.CommandModel, hasStatesOrKindCases 
                     from: from ? [from] : [],
                     to: target,
                     changes: command.changes,
+                    assignments: command.assignments,
                     emits: command.emits,
+                    ...(command.ensures && { ensures: command.ensures }),
                 })),
             ),
         );
     }
     if (hasStatesOrKindCases) return [];
-    return [{ name: '*', from: [], to: '', changes: command.changes, emits: command.emits }];
+    return [
+        {
+            name: '*',
+            from: [],
+            to: '',
+            changes: command.changes,
+            assignments: command.assignments,
+            emits: command.emits,
+            ...(command.ensures && { ensures: command.ensures }),
+        },
+    ];
 }
 
 /** The requirements of a command for a kind: the common ones first, then those of the kind's `on` case. */

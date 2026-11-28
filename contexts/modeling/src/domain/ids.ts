@@ -39,6 +39,12 @@ export const parameterId = (command: string, parameter: string): DeclarationId =
 /** A function of a context: `Sales.discounted`. */
 export const functionId = (context: string, name: string): DeclarationId => as<DeclarationId>(`${context}.${name}`);
 
+/** `changes x = …` of an outcome (or of a shorthand command): `Sales.Order:confirm->confirmed.changes.confirmedAt`. */
+export const changeId = (ownerId: string, field: string): DeclarationId => as<DeclarationId>(`${ownerId}.changes.${field}`);
+
+/** `ensures { … }` of an outcome (or of a shorthand command). */
+export const ensuresId = (ownerId: string): DeclarationId => as<DeclarationId>(`${ownerId}.ensures`);
+
 export const invariantId = (ownerId: string, invariant: string): DeclarationId => as<DeclarationId>(`${ownerId}.invariant.${invariant}`);
 export const requirementId = (command: string, requirement: string): DeclarationId => as<DeclarationId>(`${command}.requires.${requirement}`);
 export const outcomeId = (command: string, outcome: string): DeclarationId => as<DeclarationId>(`${command}->${outcome}`);

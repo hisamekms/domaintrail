@@ -55,7 +55,7 @@
 (reference_field name: (identifier) @property)
 (term_entry name: (identifier) @property)
 (union_declaration discriminator: (identifier) @property)
-(changes_clause field: (identifier) @property)
+(change field: (identifier) @property)
 (parameter name: (identifier) @variable.parameter)
 (lambda parameter: (identifier) @variable.parameter)
 
@@ -104,6 +104,7 @@
   "requires"
   "else"
   "changes"
+  "ensures"
   "emits"
   "when"
   "errors"

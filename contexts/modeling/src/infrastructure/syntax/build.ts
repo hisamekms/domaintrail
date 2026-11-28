@@ -42,6 +42,7 @@ import {
     isValueObject,
     isVerifiedDecl,
     type Command,
+    type Change,
     type Outcome,
     type Kind,
     type ContextElement,
@@ -416,7 +417,9 @@ function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, fi
         legacy: c.transitions.length > 0 || c.changes.length > 0 || c.emits.length > 0 || (c.outcomes.length === 0 && !kindCases(c).length),
         ...(isKind(c.$container) && { kind: c.$container.name }),
         requires: c.requirements.map(requirement),
-        changes: [...c.changes],
+        changes: c.changes.map((ch) => ch.field),
+        assignments: assignments(c.changes),
+        ...(c.ensures && { ensures: { expr: exprModel(c.ensures), source: sourceText(c.ensures) } }),
         emits: c.emits.map((e) => ({
             event: refName(e.event),
             cardinality: cardinality(e.multiplicity),
@@ -429,12 +432,18 @@ function command(aggId: ElementId, c: Command, loc: (n: AstNode) => Location, fi
     };
 }
 
+/** `changes x = expr` entries, in order. */
+const assignments = (changes: readonly Change[]) =>
+    changes.flatMap((ch) => (ch.value ? [{ field: ch.field, expr: exprModel(ch.value), source: sourceText(ch.value) }] : []));
+
 function outcome(o: Outcome): import('../../domain/model.js').OutcomeModel {
     return {
         name: o.name,
         from: o.from.map((r) => r.$refText),
         to: o.to.$refText,
-        changes: [...o.changes],
+        changes: o.changes.map((ch) => ch.field),
+        assignments: assignments(o.changes),
+        ...(o.ensures && { ensures: { expr: exprModel(o.ensures), source: sourceText(o.ensures) } }),
         emits: o.emits.map((e) => ({
             event: refName(e.event),
             cardinality: cardinality(e.multiplicity),

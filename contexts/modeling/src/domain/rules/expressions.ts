@@ -83,6 +83,8 @@ interface Scope {
     implicitValueId?: string;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
+    /** `before` / `after` where an outcome's contract is checked (`changes x = …`, `ensures`). */
+    frames?: ReadonlyMap<string, Ty>;
 }
 
 interface Hidden {
@@ -318,9 +320,70 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
             });
         }
     }
+    const stateFields = (s: StateDecl): Map<string, FieldDecl | ParamDecl> => new Map(fieldsOf(s.members).map((f) => [f.name, f]));
+    /** The fields every one of `states` has, with one type (all of them: none listed). */
+    const inEvery = (list: readonly StateDecl[]): Map<string, FieldDecl | ParamDecl> => {
+        if (!list.length) return new Map();
+        const [first, ...rest] = list.map(stateFields);
+        return new Map([...first!].filter(([n, f]) => rest.every((r) => r.has(n) && sameType(memberType(r.get(n)!), memberType(f)))));
+    };
+    const contract = (
+        cmd: CommandDecl,
+        base: ReadonlyMap<string, FieldDecl | ParamDecl>,
+        from: readonly StateDecl[],
+        to: readonly StateDecl[],
+        changes: CommandDecl['changes'],
+        ensures: Expr | undefined,
+    ): void => {
+        if (!changes.some((c) => c.value) && !ensures) return;
+        const params = new Map<string, FieldDecl | ParamDecl>(cmd.params.map((p) => [p.name, p]));
+        const before: Ty | undefined = cmd.factory ? undefined : { k: 'frame', name: 'before', fields: new Map([...base, ...inEvery(from)]) };
+        const after: Ty = { k: 'frame', name: 'after', fields: new Map([...base, ...inEvery(to)]) };
+        const scope = (frames: [string, Ty][]): Scope => ({ ctx, fields: params, hidden: new Map(), lambdas: [], present: new Set(), frames: new Map(frames) });
+        for (const c of changes) {
+            if (!c.value) continue;
+            const t = new ExprChecker(model, rules, sink).check(c.value, scope(before ? [['before', before]] : []));
+            const f = after.k === 'frame' ? after.fields.get(c.name) : undefined;
+            if (t.k !== 'error' && f && !assignable(memberType(f), t))
+                rules.error('M021', `'${c.name}' is a '${showType(memberType(f))}', but '${c.value.text}' is a '${showType(t)}'.`, c.value.at);
+        }
+        if (!ensures) return;
+        const t = new ExprChecker(model, rules, sink).check(ensures, scope([...(before ? [['before', before] as [string, Ty]] : []), ['after', after]]));
+        if (t.k !== 'error' && !isBool(t)) rules.error('M021', `'ensures' must be a Bool expression, but has type '${showType(t)}'.`, ensures.at);
+        // an equality that determines a field of `after` alone belongs in `changes x = …`
+        const conjuncts = (x: Expr): Expr[] => (x.k === 'binary' && x.op === 'and' ? [...conjuncts(x.left), ...conjuncts(x.right)] : [x]);
+        const mentionsAfter = (x: Expr): boolean => (x.k === 'name' && x.name === 'after') || childExprs(x).some(mentionsAfter);
+        for (const c of conjuncts(ensures)) {
+            if (c.k !== 'binary' || c.op !== '==') continue;
+            const [field, other] =
+                c.left.k === 'member' && c.left.receiver.k === 'name' && c.left.receiver.name === 'after'
+                    ? [c.left, c.right]
+                    : c.right.k === 'member' && c.right.receiver.k === 'name' && c.right.receiver.name === 'after'
+                      ? [c.right, c.left]
+                      : [];
+            if (field?.k === 'member' && other && !mentionsAfter(other))
+                rules.error('M021', `'${c.text}' determines '${field.member}': write 'changes ${field.member} = ${other.text}' instead.`, c.at);
+        }
+    };
     for (const cmd of commandsOf(agg)) {
         // a kind's command sees its kind's fields; a common command the common ones
         const own = kindNamed(cmd.ofKind);
+        const base = withKind(own);
+        const targets = (o: { to: { target?: StateDecl } }): StateDecl[] => (o.to.target ? [o.to.target] : []);
+        const sources = (o: { from: { target?: StateDecl }[] }): StateDecl[] => o.from.flatMap((r) => (r.target ? [r.target] : []));
+        for (const o of cmd.outcomes) contract(cmd, base, sources(o), targets(o), o.changes, o.ensures);
+        for (const k of kinds)
+            for (const c of k.cases.filter((x) => x.command.text === cmd.name))
+                for (const o of c.outcomes) contract(cmd, withKind(k), sources(o), targets(o), o.changes, o.ensures);
+        if (!cmd.outcomes.length)
+            contract(
+                cmd,
+                base,
+                cmd.transitions.flatMap((tr) => tr.from.flatMap((r) => (r.target ? [r.target] : []))),
+                cmd.transitions.flatMap((tr) => tr.to.flatMap((r) => (r.target ? [r.target] : []))),
+                cmd.changes,
+                cmd.ensures,
+            );
         if (cmd.requirements.length) checkRequirements(agg, cmd, withKind(own), kindOnly(own?.name), ctx, model, rules, sink);
         for (const outcome of cmd.outcomes)
             checkChoice(outcome, cmd, withKind(own), ctx, model, rules, sink, { owner: agg, command: cmd, targetOutcome: outcome, kind: own });
@@ -1035,6 +1098,8 @@ class ExprChecker {
     }
 
     private name(name: string, node: Expr, scope: Scope): Ty {
+        const frame = scope.frames?.get(name);
+        if (frame) return frame;
         for (let i = scope.lambdas.length - 1; i >= 0; i--) {
             if (scope.lambdas[i][0] === name) {
                 this.symbols.set(node, {
@@ -1115,6 +1180,21 @@ class ExprChecker {
         switch (recv.k) {
             case 'error':
                 return ERROR;
+            case 'frame': {
+                // `before.x` / `after.x`: a field the aggregate has before / after the outcome
+                const f = recv.fields.get(m);
+                if (!f) {
+                    this.rules.error(
+                        'M001',
+                        `'${recv.name}.${m}': the aggregate has no field '${m}' ${recv.name} this outcome.`,
+                        e.memberAt,
+                        didYouMean(m, [...recv.fields.keys()]),
+                    );
+                    return ERROR;
+                }
+                this.symbols.set(e, { kind: 'field', name: m, declaration: f });
+                return memberType(f);
+            }
             case 'ctx': {
                 const el = lookup(this.model, `${recv.name}.${m}`);
                 if (el?.kind === 'enum') {

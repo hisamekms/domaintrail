@@ -30,7 +30,7 @@ const FEATURE_KEYWORDS = [
   'context', 'shared', 'terms', 'primitive', 'enum', 'union', 'entity', 'aggregate', 'state', 'owns', 'references', 'create',
   'command', 'emits', 'errors', 'event', 'error', 'invariant',
   'readonly', 'initial', 'kind', 'on', 'outcome', 'select',
-  'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains', 'function', 'match',
+  'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains', 'function', 'match', 'ensures',
 ];
 
 /** The other keywords that may name enum values, union variants and members after `.` (ValueName). */
@@ -265,6 +265,7 @@ module.exports = grammar({
           repeat($.requirement),
           optional($.changes_clause),
           optional($.emits_clause),
+          optional($.ensures_clause),
           optional($.errors_clause),
         ),
       ),
@@ -285,7 +286,7 @@ module.exports = grammar({
       'outcome', field('name', $._feature_name), ':',
       optional(pipeSep1(field('from', $.identifier))), '->', field('to', $.identifier),
       optional(seq('select', choice(seq('{', field('condition', $._expression), '}'), field('declaration', $.string)), optional($.external_check))),
-      optional($.changes_clause), optional($.emits_clause),
+      optional($.changes_clause), optional($.emits_clause), optional($.ensures_clause),
     ),
 
     external_check: ($) => seq('@externalCheck', '(', field('reason', $.string), ')'),
@@ -300,7 +301,12 @@ module.exports = grammar({
       field('error', $.qualified_name),
     ),
 
-    changes_clause: ($) => seq('changes', commaSep1(field('field', $._feature_name))),
+    changes_clause: ($) => seq('changes', commaSep1($.change)),
+
+    // `x` or `x = value`
+    change: ($) => seq(field('field', $._feature_name), optional(seq('=', field('value', $._expression)))),
+
+    ensures_clause: ($) => seq('ensures', '{', field('condition', $._expression), '}'),
 
     emits_clause: ($) => seq('emits', commaSep1($.emit)),
 
