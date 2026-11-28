@@ -38,7 +38,7 @@ shared context Common {
   enum Currency { JPY USD }
   primitive Amount: Decimal { invariant nonNegative { value >= 0 } }
   value Money { amount: Amount  currency: Currency }
-  value Caption { text: String  max: Amount  invariant fits { length(text) <= max } }
+  value Caption { text: String  max: Amount  invariant fits { text.length <= max } }
 }`,
     'sales.dt': `
 context Sales {
@@ -46,23 +46,23 @@ context Sales {
   id OrderId: UUID
   primitive Quantity: Int { value in 1..999 }
   primitive Sku: String {
-    invariant format { matches(value, "^[A-Z]{3}-\\d{4}$") }
+    invariant format { value.matches("^[A-Z]{3}-\\d{4}$") }
     invariant reserved "予約語でない"
-    invariant short { length(value) <= 8 }
+    invariant short { value.length <= 8 }
   }
-  primitive Code: String { matches(value, "^a/b$") }
+  primitive Code: String { value.matches("^a/b$") }
   enum Reason { Requested Other }
   value Period {
     from: Timestamp
     until: Timestamp?
     invariant ordered { !(exists(until)) || from <= until }
   }
-  value Tags { names: String[0..*]  invariant distinctNames { unique(names) } }
+  value Tags { names: String[0..*]  invariant distinctNames { names.unique() } }
   value Approval {
     needed: Quantity
     confirmedBy: String[0..*]
-    invariant enough { count(confirmedBy) >= needed }
-    invariant exact { needed == count(confirmedBy) || (count(confirmedBy) in 0..needed) }
+    invariant enough { confirmedBy.length >= needed }
+    invariant exact { needed == confirmedBy.length || (confirmedBy.length in 0..needed) }
   }
   entity Line {
     id: LineId
@@ -71,7 +71,7 @@ context Sales {
     price: Money
   }
   union Payment {
-    Card { last4: String  invariant digits { matches(last4, "^\\d{4}$") } }
+    Card { last4: String  invariant digits { last4.matches("^\\d{4}$") } }
     Cash
   }
   aggregate Order {
@@ -79,8 +79,8 @@ context Sales {
     owns lines: Line[0..*]
     payment: Payment?
     prices: Money[0..*]
-    invariant distinctSkus { unique(lines, l => l.sku) }
-    invariant distinctLines { unique(lines) }
+    invariant distinctSkus { lines.unique(l => l.sku) }
+    invariant distinctLines { lines.unique() }
     state Draft
     state Cancelled {
       reason: Reason
@@ -91,10 +91,10 @@ context Sales {
     create command place(id: OrderId) -> Draft
     command add(line: Line, total: Decimal)
       Draft -> Draft
-      requires newSku { all(lines, x => x.sku != line.sku) } else Duplicate
+      requires newSku { lines.every(x => x.sku != line.sku) } else Duplicate
       requires known "既知の商品" else Unknown
       requires small { total < 100.5 } else TooLarge
-      requires priced { contains(prices, line.price) } else Unpriced
+      requires priced { prices.includes(line.price) } else Unpriced
       changes lines
     command cancel(reason: Reason) Draft -> Cancelled
   }
@@ -104,7 +104,7 @@ context Sales {
     title: String
     invariant titled "件名がある"
     state Open
-    state Closed { invariant short { length(title) <= 80 } }
+    state Closed { invariant short { title.length <= 80 } }
   }
   id MemoId: UUID
   aggregate Memo {

@@ -4,10 +4,10 @@ context Collaboration {
 
   /// 変更案の文（「どう」）。上限はコード（`domain/proposals.ts` の `PROPOSAL_LIMITS`）が決める: AI の文は短く、
   /// ファシリテーターの編集は長くてもよい。前の形（何を・どこを・どう）で保存した変更案は、3つをつないだ文として読む。
-  primitive ProposalText "変更案の文": String { length(value) >= 1 && length(value) <= 2000 }
+  primitive ProposalText "変更案の文": String { value.length >= 1 && value.length <= 2000 }
 
   /// 変更案の選択肢の見出し（「集約だけ」など）。上限はコードが決める。
-  primitive ProposalLabel "選択肢の見出し": String { length(value) >= 1 && length(value) <= 200 }
+  primitive ProposalLabel "選択肢の見出し": String { value.length >= 1 && value.length <= 200 }
 
   /// 変更案の選択肢の番号（0 から）。
   primitive ProposalOptionIndex "選択肢の番号": Int { value >= 0 && value <= 2 }
@@ -29,7 +29,7 @@ context Collaboration {
     how: ProposalText "どう"
     options: ProposalOption[0..3] "選択肢"
 
-    invariant choiceOfTwoOrMore "選択肢はないか、2つ以上" { count(options) == 0 || count(options) >= 2 }
+    invariant choiceOfTwoOrMore "選択肢はないか、2つ以上" { options.length == 0 || options.length >= 2 }
     invariant oneRecommended "選択肢があれば、AI の勧めはちょうど1つ" @externalCheck("選択肢のうち推奨された件数の集計をアプリケーションで行う")
   }
 
@@ -52,7 +52,7 @@ context Collaboration {
   value ApprovedProposals "承認した変更案の組" {
     approved: ApprovedProposal[1..*] "変更案"
 
-    invariant distinctProposals "変更案は1回" { unique(approved, p => p.proposal) }
+    invariant distinctProposals "変更案は1回" { approved.unique(p => p.proposal) }
   }
 
   /// 参加者の変更依頼について、回答役（読むだけの AI）が書いた変更案。ファシリテーターが承認（編集してもよい）か却下し、
@@ -100,7 +100,7 @@ context Collaboration {
         approvedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
       requires optionOfProposal "選択肢があれば、そのうちの1つを選ぶ" {
-        (!(count(content.options) == 0) || !exists(option)) && (!(count(content.options) >= 1) || exists(option) && option < count(content.options))
+        (!(content.options.length == 0) || !exists(option)) && (!(content.options.length >= 1) || exists(option) && option < content.options.length)
       } else NoSuchOption
       emits ProposalApproved
 

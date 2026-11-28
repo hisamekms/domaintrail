@@ -8,40 +8,40 @@ context Knowledge "ナレッジ" {
   }
 
   /// ナレッジの識別子（`kn_` と小文字の英数字）。抽出の操作を作るときに dt が決める（同じ抽出を送り直しても同じ ID）。
-  id KnowledgeItemId "ナレッジID": String { matches(value, "^kn_[0-9a-z]{8,32}$") }
+  id KnowledgeItemId "ナレッジID": String { value.matches("^kn_[0-9a-z]{8,32}$") }
 
   /// 画像の識別子（`img_` と小文字の英数字）。本文は `![…](image:img_…)` で画像を指す。
-  primitive ImageId "画像ID": String { matches(value, "^img_[0-9a-z]{8,32}$") }
+  primitive ImageId "画像ID": String { value.matches("^img_[0-9a-z]{8,32}$") }
 
   /// ナレッジとメンバーを持つ共有の単位の名前。ワークスペースは `knowledge.project` でこれを指す。API のパスに入る。
-  primitive ProjectName "プロジェクト名": String { matches(value, "^[a-z0-9][a-z0-9-]{0,62}$") }
+  primitive ProjectName "プロジェクト名": String { value.matches("^[a-z0-9][a-z0-9-]{0,62}$") }
 
   /// ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
-  primitive ItemTitle "見出し": String { length(value) <= 40 && matches(value, "^\S(.*\S)?$") }
+  primitive ItemTitle "見出し": String { value.length <= 40 && value.matches("^\S(.*\S)?$") }
 
   /// ナレッジの本文（Markdown）。
-  primitive ItemText "本文": String { length(value) >= 1 && length(value) <= 20000 }
+  primitive ItemText "本文": String { value.length >= 1 && value.length <= 20000 }
 
   /// 出典のメッセージの短い引用。セッションのデータベースは1台にしか残らないので、AI の言い換えを読み手が確かめられるのはこれ。
-  primitive Quote "引用": String { length(value) >= 1 && length(value) <= 500 }
+  primitive Quote "引用": String { value.length >= 1 && value.length <= 500 }
 
   /// 立場（案件担当、営業、外注先など）。役割で書き、人の名前は書かない。
-  primitive Perspective "立場": String { length(value) >= 1 && length(value) <= 100 }
+  primitive Perspective "立場": String { value.length >= 1 && value.length <= 100 }
 
   /// 抽出が操作ごとに添える理由。監査のログに残る。
-  primitive Reason "理由": String { length(value) >= 1 && length(value) <= 2000 }
+  primitive Reason "理由": String { value.length >= 1 && value.length <= 2000 }
 
   /// 付箋の参照 `<Storming>.<LocalId>`。ラベルを変えても切れない。付箋があるかは `dt check` が確かめる。
-  primitive StickyRef "付箋": String { matches(value, "^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$") }
+  primitive StickyRef "付箋": String { value.matches("^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$") }
 
   /// セッションの ID（コラボレーションのセッション）。
-  primitive SessionRef "セッション": String { length(value) >= 1 && length(value) <= 100 }
+  primitive SessionRef "セッション": String { value.length >= 1 && value.length <= 100 }
 
   /// セッションの中のメッセージの ID（人のメッセージか AI の答え）。
-  primitive MessageRef "メッセージ": String { length(value) >= 1 && length(value) <= 100 }
+  primitive MessageRef "メッセージ": String { value.length >= 1 && value.length <= 100 }
 
   /// ユーザー（Access のメールアドレス）。
-  primitive UserName "ユーザー": String { length(value) >= 1 && length(value) <= 320 }
+  primitive UserName "ユーザー": String { value.length >= 1 && value.length <= 320 }
 
   /// ナレッジの版（1 から）。
   primitive ItemVersion "版": Int { value >= 1 }
@@ -81,7 +81,7 @@ context Knowledge "ナレッジ" {
     labels: Labels "ラベル"
     about: StickyRef[0..*] "付箋"
 
-    invariant distinctAbout "付箋は1回" { unique(about) }
+    invariant distinctAbout "付箋は1回" { about.unique() }
   }
 
   /// ナレッジのもとになったメッセージ1つ。

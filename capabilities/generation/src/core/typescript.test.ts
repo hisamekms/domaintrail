@@ -255,13 +255,13 @@ describe('invariants without an expression', () => {
     const FACTORY = `context Factory {
   id TaskId: UUID
   primitive Code: String {
-    invariant format { matches(value, "^[A-Z]+$") }
+    invariant format { value.matches("^[A-Z]+$") }
     invariant registered "登録済みのコード"
   }
   aggregate Task {
     id: TaskId
     depends: TaskId[0..*]
-    invariant distinctDeps { unique(depends) }
+    invariant distinctDeps { depends.unique() }
     /// depends を辺とするグラフに閉路がない
     invariant acyclicDeps "タスク依存が循環しない"
   }
@@ -273,7 +273,7 @@ describe('invariants without an expression', () => {
         expect(a.diagnostics.filter((diagnostic) => diagnostic.severity === 'error')).toEqual([]);
         const code = generateFromAnalysis(a).find((f) => f.path === 'Factory.ts')!.content;
         expect(code).toContain(
-            '/**\n * @invariant distinctDeps: unique(depends)\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {',
+            '/**\n * @invariant distinctDeps: depends.unique()\n * @invariant acyclicDeps (タスク依存が循環しない): not expressed in the DSL\n * @see factory.dt:7\n */\nexport interface Task {',
         );
         expect(code).toContain(' * @invariant registered (登録済みのコード): not expressed in the DSL\n');
         expect(code).toContain("    readonly invariant: 'format' | 'registered';");

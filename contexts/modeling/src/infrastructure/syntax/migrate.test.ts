@@ -119,3 +119,8 @@ describe('migrateDomain: method forms', () => {
             expect(migrateDomain(once).rewrites).toEqual([]);
         });
 });
+
+test('a function form inside parentheses keeps them', () => {
+    const src = `context L {\n  value V {\n    ns: Int[0..*]\n    p: Bool\n    invariant x { !(any(ns, n => n > 0)) || p }\n  }\n}\n`;
+    expect(migrateDomain(src).text).toContain('{ !(ns.some(n => n > 0)) || p }');
+});

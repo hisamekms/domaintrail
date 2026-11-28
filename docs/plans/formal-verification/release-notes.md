@@ -14,11 +14,19 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   the left side shows present when it does not hold is narrowed, so `!exists(note) || note.length > 0` checks as
   `exists(note) implies …` did.
 
+- Collection and string operations are methods: `xs.length` (lists and strings; in code points for strings),
+  `xs.every(x => p)`, `xs.some(x => p)`, `xs.includes(x)`, `xs.unique()`, `xs.unique(x => key, …)`,
+  `text.matches("pattern")`. `count`, `length`, `all`, `any`, `contains`, `unique` and `matches` as functions are no
+  longer syntax: `dt check` reports each one. `x.length` is always the size of a list or a string: a field named
+  `length` is no longer read through `.`.
+
 ## Added
 
 - `dt migrate domain [files...] [--dry-run]` rewrites `.dt` files to the new syntax: `and` → `&&`, `or` → `||`,
   `not x` → `!x`, and `p implies q` → `!(p) || q`, with parentheses only where the meaning needs them. Comments and
-  layout stay, and a second run changes nothing.
+  layout stay, and a second run changes nothing. It also rewrites `count(xs)` and `length(s)` to `.length`,
+  `all`/`any` to `.every`/`.some`, `contains(xs, x)` to `xs.includes(x)`, `unique(xs, …)` to `xs.unique(…)`, and
+  `matches(t, "r")` to `t.matches("r")`.
 
 ## Upgrading
 

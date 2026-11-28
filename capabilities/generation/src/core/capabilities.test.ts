@@ -21,7 +21,7 @@ test('portable regex rejects a negative shorthand inside a character class', () 
 });
 
 test('target capability gate rejects a regex outside the portable subset', async () => {
-    const result = await check({ 'bad.dt': 'context X { primitive Code: String { matches(value, "^(?=a)a$") } }' });
+    const result = await check({ 'bad.dt': 'context X { primitive Code: String { value.matches("^(?=a)a$") } }' });
     expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
     expect(targetCapabilityDiagnostics(result.model!, 'ts').map((d) => d.code)).toEqual(['G001']);
 });

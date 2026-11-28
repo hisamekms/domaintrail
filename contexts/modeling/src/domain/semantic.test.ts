@@ -140,7 +140,7 @@ describe('Semantic IR', () => {
   value Use {
     context: String event: String? errors: String[0..*] op: BinaryOp type: TypeExpr
     invariant k { !(op != BinaryOp.and) || exists(event) }
-    invariant p { type.kind == TypeExpr.primitive || count(errors) > 0 }
+    invariant p { type.kind == TypeExpr.primitive || errors.length > 0 }
   }
 }`,
             `context Sales {
@@ -151,7 +151,7 @@ describe('Semantic IR', () => {
   value DeliverySpec { planned: Int? }
   value PrintingSpec { copies: Int? }
   union Details by type: Process { DELIVERY { details: DeliverySpec } PRINTING { details: PrintingSpec } }
-  union Coverage by form { DESCRIPTION { text: String invariant notBlank { length(text) > 0 } } }
+  union Coverage by form { DESCRIPTION { text: String invariant notBlank { text.length > 0 } } }
   id SpecId: UUID
   aggregate Spec { id: SpecId process: Process owns details: Details actor: Actor coverage: Coverage?
     invariant detailsMatchProcess { details.type == process }
@@ -341,7 +341,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                     owns people: Person[0..*]
                     invariant comparisons {
                       first == second && home == office && choice == otherChoice &&
-                      home.city < office.city && contains(people, first)
+                      home.city < office.city && people.includes(first)
                     }
                   }
                 }`,
@@ -961,7 +961,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                   aggregate Item {
                     id: ItemId
                     owns items: Details[0..*]
-                    invariant notesPresent { all(items, x => !(exists(x.note)) || length(x.note) > 0) }
+                    invariant notesPresent { items.every(x => !(exists(x.note)) || x.note.length > 0) }
                   }
                 }`,
             },

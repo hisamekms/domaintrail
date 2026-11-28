@@ -440,8 +440,8 @@ export function equalMoney(a: Money, b: Money): boolean {
 
 /**
  * メールアドレス
- * @invariant format (形式): matches(value, "^[^@\\s]+@[^@\\s]+$")
- * @invariant maxLength (254文字以内): length(value) <= 254
+ * @invariant format (形式): value.matches("^[^@\\s]+@[^@\\s]+$")
+ * @invariant maxLength (254文字以内): value.length <= 254
  * Make it with \`makeEmailAddress\`; never \`as EmailAddress\` (see dt guide lint).
  * @see common/context.dt:20
  */
@@ -901,7 +901,7 @@ export const makeQuantity: MakeQuantity = (value) => {
 /**
  * 商品コード
  * 英大文字3桁-数字4桁の商品コード。
- * @invariant valid: matches(value, "^[A-Z]{3}-\\d{4}$")
+ * @invariant valid: value.matches("^[A-Z]{3}-\\d{4}$")
  * Make it with \`makeSku\`; never \`as Sku\` (see dt guide lint).
  * @see sales/order.dt:10
  */
@@ -946,9 +946,9 @@ export const makeSku: MakeSku = (value) => {
 
 /**
  * Fields shared by every state of 注文 (Order).
- * @invariant quantitiesPositive (数量は正の値): all(items, item => item.quantity > 0)
- * @invariant distinctSkus (商品コードは明細ごとに一意): unique(items, item => item.sku)
- * @invariant singleCurrency (単価の通貨が揃っている): all(items, a => all(items, b => a.unitPrice.currency == b.unitPrice.currency))
+ * @invariant quantitiesPositive (数量は正の値): items.every(item => item.quantity > 0)
+ * @invariant distinctSkus (商品コードは明細ごとに一意): items.unique(item => item.sku)
+ * @invariant singleCurrency (単価の通貨が揃っている): items.every(a => items.every(b => a.unitPrice.currency == b.unitPrice.currency))
  * @see sales/order.dt:13
  */
 export interface OrderCommon {
@@ -975,7 +975,7 @@ export interface DraftOrder extends OrderCommon {
 
 /**
  * 確定済み
- * @invariant hasItems (明細が1件以上): count(items) > 0
+ * @invariant hasItems (明細が1件以上): items.length > 0
  * @see sales/order.dt:32
  */
 export interface ConfirmedOrder extends OrderCommon {
@@ -1124,8 +1124,8 @@ export interface AddItemOrderParams {
 /**
  * Order.addItem (Draft -> Draft)
  * 明細を追加する
- * @requires newSku (同じ商品コードの明細がない) else DuplicateSku: all(items, i => i.sku != item.sku)
- * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: all(items, i => i.unitPrice.currency == item.unitPrice.currency)
+ * @requires newSku (同じ商品コードの明細がない) else DuplicateSku: items.every(i => i.sku != item.sku)
+ * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: items.every(i => i.unitPrice.currency == item.unitPrice.currency)
  * @changes items
  * @emits nothing
  * @see sales/order.dt:43
@@ -1143,8 +1143,8 @@ export type AddItemOrder = (
 /**
  * Order.addItem, decided per source state; implement it with \`decide(OrderShape, …)\` from the runtime.
  * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
- * @requires newSku (同じ商品コードの明細がない) else DuplicateSku: all(items, i => i.sku != item.sku)
- * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: all(items, i => i.unitPrice.currency == item.unitPrice.currency)
+ * @requires newSku (同じ商品コードの明細がない) else DuplicateSku: items.every(i => i.sku != item.sku)
+ * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: items.every(i => i.unitPrice.currency == item.unitPrice.currency)
  * @changes items
  * Draft -> Draft — set: items; carried over: id, customer, note
  * @see sales/order.dt:43
@@ -1181,7 +1181,7 @@ export interface ConfirmOrderParams {
 /**
  * Order.confirm (Draft -> Confirmed)
  * 注文を確定する
- * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @requires hasItems (明細が1件以上) else EmptyOrder: items.length > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
  * @see sales/order.dt:51
@@ -1199,7 +1199,7 @@ export type ConfirmOrder = (
 /**
  * Order.confirm, decided per source state; implement it with \`decide(OrderShape, …)\` from the runtime.
  * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
- * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @requires hasItems (明細が1件以上) else EmptyOrder: items.length > 0
  * @changes none — the command changes no common field
  * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
  * @see sales/order.dt:51

@@ -18,7 +18,7 @@ const MODEL = `context Model {
     op: BinaryOp
     type: TypeExpr
     invariant k { !(op != BinaryOp.and) || exists(event) }
-    invariant p { type.kind == TypeExpr.primitive || count(errors) > 0 }
+    invariant p { type.kind == TypeExpr.primitive || errors.length > 0 }
   }
   id GId: UUID
   aggregate G {

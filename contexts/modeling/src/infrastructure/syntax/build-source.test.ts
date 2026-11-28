@@ -30,7 +30,7 @@ shared context Common "共通" {
   terms { note: "備考" }
   id OrderId: UUID
   id CustomerId: UUID
-  primitive Code: String { invariant shape "形" { matches(value, "^[A-Z]\\d+$") } invariant short { length(value) < 10 } }
+  primitive Code: String { invariant shape "形" { value.matches("^[A-Z]\\d+$") } invariant short { value.length < 10 } }
   error NotFound { orderId: OrderId }
   error Missing
   verified KnownCustomer of CustomerId for Code? errors NotFound
@@ -46,12 +46,12 @@ shared context Common "共通" {
     owns lines: Line[0..*]
     references customer: CustomerId -> Customer
     note: String? "備考"
-    invariant sane { !(count(lines) >= 0 && all(lines, l => l.qty > -1)) || !(note == "x") }
+    invariant sane { !(lines.length >= 0 && lines.every(l => l.qty > -1)) || !(note == "x") }
     create command place(id: OrderId, customer: KnownCustomer) -> Draft emits Placed
     state Draft
-    state Done { at: Timestamp  invariant later { exists(note) || unique(lines, l => l.id) } }
+    state Done { at: Timestamp  invariant later { exists(note) || lines.unique(l => l.id) } }
     command finish(at: Timestamp) Draft -> Done
-      requires hasLines "明細がある" { count(lines) > 0 && contains(lines, lines) && any(lines, l => l.qty in 1..2) } else Missing
+      requires hasLines "明細がある" { lines.length > 0 && lines.includes(lines) && lines.some(l => l.qty in 1..2) } else Missing
       requires documented else Missing
       changes note, note
       emits Placed[0..*] when Draft -> Done, Unknown
@@ -148,8 +148,11 @@ describe('the model as written', () => {
     test('has a site at the range of every element, member, expression and type reference of the sources', async () => {
         for (const [, a] of await sources()) {
             const sites = new Set(collect(a.sourceModel!, (v): v is { at: Site } => 'at' in v && !isRef(v)).map((x) => siteRange(x.at)));
-            // the AST nodes that are no declaration of their own: a terms block, a lambda's parameter, a multiplicity
-            const nodes = nodesOf(a).filter((n) => !['Terms', 'LambdaParam', 'Multiplicity'].includes(n.$type));
+            // the AST nodes that are no declaration of their own: a terms block, a lambda's parameter, a multiplicity, and
+            // the pattern of `.matches("…")` (a part of that expression, sited as its `patternAt`)
+            const pattern = (n: { $type: string; $container?: unknown }): boolean =>
+                n.$type === 'StringLiteral' && (n.$container as { $type?: string; member?: string } | undefined)?.member === 'matches';
+            const nodes = nodesOf(a).filter((n) => !['Terms', 'LambdaParam', 'Multiplicity'].includes(n.$type) && !pattern(n));
             expect(nodes.length).toBeGreaterThan(100);
             const missing = nodes.filter((n) => !sites.has(rangeKey(fileOf(a, n), rangeOf(n.$cstNode)))).map((n) => n.$type);
             expect(missing).toEqual([]);
@@ -281,12 +284,12 @@ describe('the fixture as written', () => {
         const m = await model();
         const code = named(m, 'Sales.Code');
         const shape = code.kind === 'primitive' ? code.invariants[0].expr : undefined;
-        expect(shape).toMatchObject({ k: 'matches', pattern: '^[A-Z]\\d+$', text: 'matches(value, "^[A-Z]\\d+$")' });
+        expect(shape).toMatchObject({ k: 'matches', pattern: '^[A-Z]\\d+$', text: 'value.matches("^[A-Z]\\d+$")' });
         const order = named(m, 'Sales.Order') as AggregateDecl;
         const sane = order.members.find((x) => x.name === 'sane');
         const e = sane?.kind === 'invariant' ? sane.expr : undefined;
         expect(e?.k).toBe('binary');
-        expect(e?.text).toBe('!(count(lines) >= 0 && all(lines, l => l.qty > -1)) || !(note == "x")');
+        expect(e?.text).toBe('!(lines.length >= 0 && lines.every(l => l.qty > -1)) || !(note == "x")');
         if (e?.k !== 'binary') return;
         expect(e.op).toBe('or');
         expect(toExprModel(e.right)).toEqual({

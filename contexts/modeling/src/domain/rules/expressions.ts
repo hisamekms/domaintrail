@@ -508,7 +508,7 @@ class ExprChecker {
             case 'count': {
                 const t = this.check(e.collection, scope);
                 if (t.k !== 'error' && t.k !== 'list') {
-                    this.rules.error('M009', `count() requires a collection, but got '${showType(t)}'.`, e.collectionAt);
+                    this.rules.error('M009', `'.length' is the size of a list or a string, not of '${showType(t)}'.`, e.collectionAt);
                 }
                 return COMPUTED_INT;
             }
@@ -530,7 +530,7 @@ class ExprChecker {
             case 'matches': {
                 const t = this.check(e.operand, scope);
                 if (t.k !== 'error' && !isTextual(t)) {
-                    this.rules.error('M009', `matches() requires a String value, but got '${showType(t)}'.`, e.operandAt);
+                    this.rules.error('M009', `'.matches(…)' requires a String value, but got '${showType(t)}'.`, e.operandAt);
                 }
                 // the regular expression as written (backslashes are not string escapes)
                 const pattern = e.pattern;
@@ -558,12 +558,20 @@ class ExprChecker {
                 let elem: Ty = ERROR;
                 if (coll.k === 'list') elem = coll.elem;
                 else if (coll.k !== 'error') {
-                    this.rules.error('M009', `${e.quantifier}() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
+                    this.rules.error(
+                        'M009',
+                        `'.${e.quantifier === 'all' ? 'every' : 'some'}(…)' requires a collection, but got '${showType(coll)}'.`,
+                        e.collectionAt,
+                    );
                 }
                 const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 const body = this.check(e.body, inner);
                 if (body.k !== 'error' && !isBool(body)) {
-                    this.rules.error('M009', `The predicate of ${e.quantifier}() must be Bool, but has type '${showType(body)}'.`, e.bodyAt);
+                    this.rules.error(
+                        'M009',
+                        `The predicate of '.${e.quantifier === 'all' ? 'every' : 'some'}(…)' must be Bool, but has type '${showType(body)}'.`,
+                        e.bodyAt,
+                    );
                 }
                 return BOOL;
             }
@@ -572,7 +580,7 @@ class ExprChecker {
                 let elem: Ty = ERROR;
                 if (coll.k === 'list') elem = coll.elem;
                 else if (coll.k !== 'error') {
-                    this.rules.error('M009', `unique() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
+                    this.rules.error('M009', `'.unique(…)' requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 }
                 if (e.param === undefined) {
                     const ok = elem.k !== 'error' && equatable(elem, elem);
@@ -580,7 +588,7 @@ class ExprChecker {
                     if (elem.k !== 'error' && !ok) {
                         this.rules.error(
                             'M009',
-                            `unique() requires elements that can be compared with '==', but they have type '${showType(elem)}'.`,
+                            `'.unique()' requires elements that can be compared with '==', but they have type '${showType(elem)}'.`,
                             e.collectionAt,
                         );
                     }
@@ -592,7 +600,7 @@ class ExprChecker {
                     const t = this.check(key, inner);
                     if (t.k !== 'error') this.comparisons.set(key, equatable(t, t) ? comparisonKind(t, t, false) : 'notComparable');
                     if (t.k === 'error' || equatable(t, t)) return;
-                    const what = `Key '${key.text}' of unique()`;
+                    const what = `Key '${key.text}' of '.unique(…)'`;
                     if (t.k === 'opt') {
                         this.rules.error(
                             'M009',
@@ -609,10 +617,14 @@ class ExprChecker {
                 const coll = this.check(e.collection, scope);
                 const x = this.check(e.element, scope);
                 if (coll.k !== 'error' && coll.k !== 'list') {
-                    this.rules.error('M009', `contains() requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
+                    this.rules.error('M009', `'.includes(…)' requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 } else if (coll.k === 'list' && coll.elem.k !== 'error' && x.k !== 'error' && !equatable(coll.elem, x)) {
                     const hint = x.k === 'opt' ? ' Optional values must be guarded with exists(...) first.' : '';
-                    this.rules.error('M009', `contains() cannot compare elements of type '${showType(coll.elem)}' with '${showType(x)}'.${hint}`, e.elementAt);
+                    this.rules.error(
+                        'M009',
+                        `'.includes(…)' cannot compare elements of type '${showType(coll.elem)}' with '${showType(x)}'.${hint}`,
+                        e.elementAt,
+                    );
                 }
                 if (coll.k === 'list' && coll.elem.k !== 'error' && x.k !== 'error')
                     this.comparisons.set(e, equatable(coll.elem, x) ? comparisonKind(coll.elem, x, false) : 'notComparable');

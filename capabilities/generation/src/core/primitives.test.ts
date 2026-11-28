@@ -12,10 +12,10 @@ const DECLS = `
   primitive Price: Int { value in 0..1000000 }
   primitive Celsius: Decimal { value in -273.15..1000 }
   primitive Email: String {
-    invariant format "形式" { matches(value, "^[^@\\s]+@[^@\\s]+$") }
-    invariant maxLength { length(value) <= 254 }
+    invariant format "形式" { value.matches("^[^@\\s]+@[^@\\s]+$") }
+    invariant maxLength { value.length <= 254 }
   }
-  id InvoiceNo: String { matches(value, "^INV-\\d{8}$") }
+  id InvoiceNo: String { value.matches("^INV-\\d{8}$") }
 `;
 
 describe('domain primitives: the name check of the generator (M011)', () => {
@@ -58,6 +58,6 @@ describe('generated TypeScript for domain primitives', () => {
         );
         expect(sales).toContain('export type MakeOrderId = (value: string) => Result<OrderId, InvalidOrderId>;');
         expect(sales).toContain(' * @invariant uuid: the form of a UUID (RFC 9562): 8-4-4-4-12 hexadecimal digits, in either case, of any version');
-        expect(common).toContain(' * @invariant format (形式): matches(value, "^[^@\\s]+@[^@\\s]+$")');
+        expect(common).toContain(' * @invariant format (形式): value.matches("^[^@\\s]+@[^@\\s]+$")');
     });
 });

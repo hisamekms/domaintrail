@@ -35,7 +35,7 @@ context A {
   id OrderId "注文ID": UUID
   primitive Quantity: Int { value in 1..999 }
   primitive Email "メール": String {
-    invariant format "形式" { matches(value, "^[^@]+@[^@]+$") }
+    invariant format "形式" { value.matches("^[^@]+@[^@]+$") }
     invariant short
   }
 }
@@ -67,9 +67,10 @@ context A {
         (invariant
           (identifier)
           (string)
-          (call_expression
-            (function_name)
+          (method_call
             (identifier)
+            (function_name
+              (identifier))
             (string)))
         (invariant
           (identifier))))))

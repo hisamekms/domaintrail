@@ -7,7 +7,7 @@ context Sales {
   primitive Quantity "数量": Int { value in 1..999 }
 
   /// 英大文字3桁-数字4桁の商品コード。
-  primitive Sku "商品コード": String { matches(value, "^[A-Z]{3}-\d{4}$") }
+  primitive Sku "商品コード": String { value.matches("^[A-Z]{3}-\d{4}$") }
 
   /// 顧客からの購入依頼。確定後は明細を変更できない。
   aggregate Order "注文" {
@@ -16,11 +16,11 @@ context Sales {
     references customer: CustomerId -> Customer
     note: String?
 
-    invariant quantitiesPositive "数量は正の値" { all(items, item => item.quantity > 0) }
-    invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }
+    invariant quantitiesPositive "数量は正の値" { items.every(item => item.quantity > 0) }
+    invariant distinctSkus "商品コードは明細ごとに一意" { items.unique(item => item.sku) }
     /// 請求額を1つの金額にまとめられるよう、注文の単価は1つの通貨で揃える。
     invariant singleCurrency "単価の通貨が揃っている" {
-      all(items, a => all(items, b => a.unitPrice.currency == b.unitPrice.currency))
+      items.every(a => items.every(b => a.unitPrice.currency == b.unitPrice.currency))
     }
 
     create command place(id: OrderId, customer: CustomerId) "注文する"
@@ -31,7 +31,7 @@ context Sales {
 
     state Confirmed "確定済み" {
       confirmedAt: Timestamp
-      invariant hasItems "明細が1件以上" { count(items) > 0 }
+      invariant hasItems "明細が1件以上" { items.length > 0 }
     }
 
     state Cancelled "取消済み" {
@@ -42,15 +42,15 @@ context Sales {
 
     command addItem(item: OrderItem "追加する明細") "明細を追加する"
       Draft -> Draft
-      requires newSku "同じ商品コードの明細がない" { all(items, i => i.sku != item.sku) } else DuplicateSku
+      requires newSku "同じ商品コードの明細がない" { items.every(i => i.sku != item.sku) } else DuplicateSku
       requires sameCurrency "既存の明細と同じ通貨" {
-        all(items, i => i.unitPrice.currency == item.unitPrice.currency)
+        items.every(i => i.unitPrice.currency == item.unitPrice.currency)
       } else CurrencyMismatch
       changes items
 
     command confirm(at: Timestamp) "注文を確定する"
       Draft -> Confirmed
-      requires hasItems "明細が1件以上" { count(items) > 0 } else EmptyOrder
+      requires hasItems "明細が1件以上" { items.length > 0 } else EmptyOrder
       emits OrderConfirmed
 
     command cancel(reason: CancelReason) "注文を取り消す"

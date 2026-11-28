@@ -32,13 +32,13 @@ describe('requires in the generated TypeScript', () => {
     command accept(person: PersonId) "受入"
       Reviewing -> Accepted
       Escalated -> Escalated | Accepted
-      requires authorizedApprover "承認者である" { contains(policy.approvers, person) } else NotApprover
+      requires authorizedApprover "承認者である" { policy.approvers.includes(person) } else NotApprover
       requires noOpenBlocker "未解決の阻害がない" else Blocked
       errors Blocked, Conflict`);
         expect(a.diagnostics).toEqual([]);
         const code = generateFromAnalysis(a).find((f) => f.path === 'Review.ts')!.content;
         const lines = [
-            ' * @requires authorizedApprover (承認者である) else NotApprover: contains(policy.approvers, person)',
+            ' * @requires authorizedApprover (承認者である) else NotApprover: policy.approvers.includes(person)',
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
         ].join('\n');
         const changes = ' * @changes none — the command changes no common field';

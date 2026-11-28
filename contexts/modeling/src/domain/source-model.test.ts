@@ -33,7 +33,7 @@ const SOURCES = {
     'sales.dt': `context Sales {
   id OrderId: UUID
   primitive Qty: Int { value > 0 }
-  primitive Code: String { invariant short { length(value) < 4 } invariant documented "説明" }
+  primitive Code: String { invariant short { value.length < 4 } invariant documented "説明" }
   fields Audit { by: Name  at: Timestamp }
   fields More { note: String }
   enum Unit { BOX }

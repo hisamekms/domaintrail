@@ -10,7 +10,7 @@ import { migrateDomain } from '@domaintrail/modeling';
 
 const ROOT = path.join(import.meta.dir, '..');
 const dryRun = process.argv.includes('--dry-run');
-const OLD = /\b(and|or|not|implies)\b/;
+const OLD = /\b(and|or|not|implies|count|length|all|any|contains|unique|matches)\b/;
 
 /** The template literals of a TypeScript source: `[start, end)` of each one's text between the backticks. */
 function templateLiterals(src: string): { start: number; end: number }[] {

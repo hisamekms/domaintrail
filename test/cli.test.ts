@@ -38,7 +38,7 @@ describe('dt check', () => {
     id: OrderId
     total: Money
     state Draft
-    invariant positive { count(total) > 0 }
+    invariant positive { total.length > 0 }
     command confirm() Draft -> Shipped
   }
   value Money { amount: Decimal owns order: Order }
@@ -48,7 +48,7 @@ describe('dt check', () => {
         const r = await run('-r', dir, 'check');
         expect(r.code).toBe(1);
         expect(r.err).toEqual([
-            "order.dt:7:32 - error M009: count() requires a collection, but got 'Money'.",
+            "order.dt:7:26 - error M009: '.length' is the size of a list or a string, not of 'Money'.",
             "order.dt:8:32 - error M006: Cannot resolve state 'Shipped' in this aggregate.",
             "  hint: use a state of 'Order': Draft",
             "order.dt:10:45 - error M004: 'Money' cannot own aggregate 'Order'; aggregates are referenced by ID ('references').",

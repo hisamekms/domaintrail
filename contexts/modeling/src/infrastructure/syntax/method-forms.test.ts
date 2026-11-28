@@ -21,7 +21,8 @@ async function invariants(members: string): Promise<{ exprs: ExprModel[]; errors
     const v = a.model!.elements.find((e) => e.name === 'V')!;
     return {
         exprs: 'invariants' in v ? v.invariants.map((i) => i.expr!) : [],
-        errors: a.diagnostics.filter((d) => d.severity === 'error').map((d) => `${d.code} ${d.message}`),
+        // the function forms are old spellings, reported as such; nothing else may be
+        errors: a.diagnostics.filter((d) => d.severity === 'error' && !d.message.includes('no longer DomainTrail syntax')).map((d) => `${d.code} ${d.message}`),
     };
 }
 

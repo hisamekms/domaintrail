@@ -78,7 +78,7 @@ describe('tree-sitter grammar', () => {
             }
             kind COLLECT "回収" {
               readonly depot: String
-              invariant named { length(depot) > 0 }
+              invariant named { depot.length > 0 }
               initial Open
               create command openCollect(depot: String) { outcome opened: -> Open }
               on finish { outcome held: Open -> Done select "carrier confirmed" @externalCheck("carrier service") }

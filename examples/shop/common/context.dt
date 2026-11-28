@@ -18,7 +18,7 @@ shared context Common "共通" {
   }
 
   primitive EmailAddress "メールアドレス": String {
-    invariant format "形式" { matches(value, "^[^@\s]+@[^@\s]+$") }
-    invariant maxLength "254文字以内" { length(value) <= 254 }
+    invariant format "形式" { value.matches("^[^@\s]+@[^@\s]+$") }
+    invariant maxLength "254文字以内" { value.length <= 254 }
   }
 }

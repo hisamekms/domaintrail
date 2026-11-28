@@ -280,7 +280,7 @@ context Sales { // a bounded context; may be split across files
     note: String?
 
     invariant quantitiesPositive { // applies to every state; sees the common fields
-      all(items, item => item.quantity > 0)
+      items.every(item => item.quantity > 0)
     }
 
     create command place(id: OrderId, customer: CustomerId)
@@ -290,7 +290,7 @@ context Sales { // a bounded context; may be split across files
     state Draft
     state Confirmed {
       confirmedAt: Timestamp // exists only in this state
-      invariant hasItems { count(items) > 0 && count(items) <= 100 } // sees common + Confirmed fields
+      invariant hasItems { items.length > 0 && items.length <= 100 } // sees common + Confirmed fields
     }
     state Cancelled {
       reason: CancelReason
@@ -299,7 +299,7 @@ context Sales { // a bounded context; may be split across files
 
     command confirm(at: Timestamp)
       Draft -> Confirmed // a transition: source state(s) -> target state(s)
-      requires hasItems { count(items) > 0 } else EmptyOrder // accepted only if; otherwise returns EmptyOrder
+      requires hasItems { items.length > 0 } else EmptyOrder // accepted only if; otherwise returns EmptyOrder
       emits OrderConfirmed // exactly one OrderConfirmed whenever it succeeds
 
     command cancel(reason: CancelReason)
@@ -351,10 +351,10 @@ context Sales {
     owns addresses: Address[0..*]
     owns shipping: Address?
 
-    invariant activeHasAddress { !(active == true) || count(addresses) > 0 }
-    invariant servedArea { active == false || any(addresses, a => a.city == "Tokyo" || !(a.city == "Osaka")) }
-    invariant distinctAddresses { unique(addresses, a => a.city, a.street) } // the combination is distinct
-    invariant shippingListed { !(exists(shipping)) || contains(addresses, shipping) }
+    invariant activeHasAddress { !(active == true) || addresses.length > 0 }
+    invariant servedArea { active == false || addresses.some(a => a.city == "Tokyo" || !(a.city == "Osaka")) }
+    invariant distinctAddresses { addresses.unique(a => a.city, a.street) } // the combination is distinct
+    invariant shippingListed { !(exists(shipping)) || addresses.includes(shipping) }
 
     /// No other customer has the same email address: checked when one is given (AvailableEmail), kept by the store.
     invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体の照会が必要")
@@ -412,19 +412,19 @@ value objects.
 context Sales {
   primitive Quantity "数量": Int { value in 1..999 } // one anonymous constraint
   primitive Sku: String { // or named invariants
-    invariant format "形式" { matches(value, "^[A-Z]{3}-\d{4}$") }
-    invariant maxLength { length(value) <= 8 }
+    invariant format "形式" { value.matches("^[A-Z]{3}-\d{4}$") }
+    invariant maxLength { value.length <= 8 }
   }
-  id InvoiceNo: String { matches(value, "^INV-\d{8}$") } // an ID is a domain primitive used as identity
+  id InvoiceNo: String { value.matches("^INV-\d{8}$") } // an ID is a domain primitive used as identity
 }
 ```
 
 - The base is always a primitive type; a domain primitive cannot refine another one or an enum.
-- Inside the constraint only `value` (of the base type) is visible; `length(value)`, `matches(value, "regex")` and
+- Inside the constraint only `value` (of the base type) is visible; `value.length`, `value.matches("regex")` and
   ranges `value in 1..999` (negative literals allowed) are available there.
 - Regular expressions are written as in JavaScript: backslashes are not string escapes (`"\d"` means `\d`).
 - Elsewhere a domain primitive compares with literals, with the same domain primitive and, over `Int` or `Decimal`,
-  with the numbers `count(…)` and `length(…)` compute (`count(approvedBy) >= policy.requiredApprovals`); not with
+  with the numbers `.length` computes (`approvedBy.length >= policy.requiredApprovals`); not with
   another domain primitive or a plain field or parameter of its base type (M009).
 - Only IDs can be identity fields and reference types. Domain primitives cannot be owned.
 - An ID or domain primitive on `UUID` holds a UUID: 8-4-4-4-12 hexadecimal digits (RFC 9562), in either case, of any
@@ -570,7 +570,7 @@ shared context Common "共通" { // shared kernel: usable by simple name from ev
     amount: Decimal
     currency: Currency
   }
-  primitive EmailAddress: String { matches(value, "^[^@\s]+@[^@\s]+$") }
+  primitive EmailAddress: String { value.matches("^[^@\s]+@[^@\s]+$") }
 }
 ```
 
@@ -859,18 +859,18 @@ the valid states and named outcomes per kind; restored data and migrations remai
 - Field paths: `note`, `item.quantity`, `amount.amount`.
 - Operators, loosest first: `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
   `!(A) || B`.
-- Functions: `exists(x)` (an optional is present; narrows `x` on the right of `&&`, and of `||` after `!exists(x)`), `count(c)`,
-  `all(c, x => …)`, `any(c, x => …)`, `unique(c)`, `unique(c, x => key, …)`, `contains(c, x)`, and in domain
-  primitives `length(value)`, `matches(value, "regex")`.
-- `unique(c)`: the elements of a collection are distinct. With keys, `unique(lines, l => l.sku)` means no two
-  elements have the same key, and `unique(confirmations, c => c.scenario, c.reviewer)` that no two have the same
+- Functions and methods: `exists(x)` (an optional is present; narrows `x` on the right of `&&`, and of `||` after
+  `!exists(x)`), and on a list `c`: `c.length`, `c.every(x => …)`, `c.some(x => …)`, `c.unique()`,
+  `c.unique(x => key, …)`, `c.includes(x)`; on a string `s`: `s.length` (in code points), `s.matches("regex")`.
+- `c.unique()`: the elements of a collection are distinct. With keys, `lines.unique(l => l.sku)` means no two
+  elements have the same key, and `confirmations.unique(c => c.scenario, c.reviewer)` that no two have the same
   combination of keys. A key cannot be optional (M009); to include an optional field, group the keys into a value
   object and use it as the key.
-- `contains(c, x)`: `x` is an element of `c`. A subset is written with `all`: `all(required, s => contains(confirmed, s))`.
-- Equality — `==`, `!=`, `unique` and `contains` compare alike: primitives and domain primitives by value, enum
+- `c.includes(x)`: `x` is an element of `c`. A subset is written with `every`: `required.every(s => confirmed.includes(s))`.
+- Equality — `==`, `!=`, `unique` and `includes` compare alike: primitives and domain primitives by value, enum
   values by name, value objects by all their fields, entities by `id`, union values by discriminator and fields.
   Both sides must be of the same type (domain primitives also compare with literals, and over `Int` or `Decimal` with
-  `count(…)` and `length(…)`, also in `<`, `<=`, `>`, `>=` and ranges); collections and optional values cannot be
+  `.length`, also in `<`, `<=`, `>`, `>=` and ranges); collections and optional values cannot be
   compared (guard an optional with `exists(...)` first).
 - An invariant must be a Bool expression. `dt check` checks only its type; whether a value holds it is checked by the
   generated check functions (`checkConfirmedOrder`, see [Generated checks](#generated-checks)), with exactly these
@@ -916,7 +916,7 @@ context Review {
     command accept(person: PersonId) "受入"
       Reviewing | Escalated -> Accepted
       requires authorizedApprover "承認者である" { // depends on the parameters and the current state
-        contains(policy.approvers, person)
+        policy.approvers.includes(person)
       } else NotApprover
       requires noOpenBlocker "未解決の阻害がない" { openBlockers == 0 } else Blocked
       /// The reviewer's own sign-off is recorded outside this model.
@@ -991,7 +991,7 @@ context Purchasing {
     approvedBy: PersonId[0..*]
     state Pending
     state Approved {
-      invariant enoughApprovals { count(approvedBy) >= policy.requiredApprovals }
+      invariant enoughApprovals { approvedBy.length >= policy.requiredApprovals }
     }
 
     create command submit(id: RequestId, policy: ApprovalPolicy) -> Pending
@@ -1003,7 +1003,7 @@ context Purchasing {
 ```
 
 `requiredApprovals` may be an `Int` or, as here, a domain primitive over `Int` or `Decimal`: a domain primitive
-compares with the numbers `count(…)` and `length(…)` compute.
+compares with the numbers `.length` computes.
 
 **2. The current policy decides only whether a command runs**: pass the policy as a parameter of the command and
 state the condition with `requires`. Existing aggregates stay valid whatever the policy becomes.
@@ -1024,7 +1024,7 @@ context Purchasing {
 
     command list(person: PersonId, current: ApproverList)
       Candidate -> Listed
-      requires authorized { contains(current.approvers, person) } else NotApprover
+      requires authorized { current.approvers.includes(person) } else NotApprover
   }
 
   error NotApprover
@@ -1044,7 +1044,7 @@ context Purchasing {
     id: ContractId
     signOff: SignOff
     signedBy: PersonId[0..*]
-    invariant dualSignOff { !(signOff == SignOff.Dual) || count(signedBy) >= 2 }
+    invariant dualSignOff { !(signOff == SignOff.Dual) || signedBy.length >= 2 }
   }
 }
 ```
@@ -1597,7 +1597,7 @@ export interface ConfirmOrderParams {
 /**
  * Order.confirm (Draft -> Confirmed)
  * 注文を確定する
- * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @requires hasItems (明細が1件以上) else EmptyOrder: items.length > 0
  * @changes none — the command changes no common field
  * @emits OrderConfirmed — exactly once when the command succeeds
  * @see sales/order.dt:51
@@ -1704,7 +1704,7 @@ instead.
 /**
  * Order.confirm, decided per source state; implement it with `decide(OrderShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires hasItems (明細が1件以上) else EmptyOrder: count(items) > 0
+ * @requires hasItems (明細が1件以上) else EmptyOrder: items.length > 0
  * @changes none — the command changes no common field
  * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
  * @see sales/order.dt:51
@@ -3537,7 +3537,7 @@ storming](#diagnostics-of-a-storming).
 | M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
-| M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `count(…)` / `length(…)` |
+| M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length` |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them; a kind's fields only inside its kind |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
@@ -3776,7 +3776,7 @@ summary. When the message does not say how to fix the problem, an indented `hint
 ```text
 sales/order.dt:2:11 - warning L002: Term 'notes' ("備考") is not used by any field or parameter in context 'Sales'.
   hint: did you mean 'note'?
-sales/order.dt:8:32 - error M009: count() requires a collection, but got 'Money'.
+sales/order.dt:8:32 - error M009: '.length' is the size of a list or a string, not of 'Money'.
 sales/order.dt:12:30 - error M006: Cannot resolve state 'Confirmd' in this aggregate.
   hint: did you mean 'Confirmed'?
 1 file(s) checked: 2 error(s), 1 warning(s).

@@ -56,13 +56,34 @@ const childrenOf = (node: AstNode): AstNode[] => AstUtils.streamContents(node).t
 const rangeOf = (node: AstNode): { start: number; end: number } => ({ start: node.$cstNode!.offset, end: node.$cstNode!.end });
 
 /** The spellings the parser still reads only so that `dt migrate domain` can rewrite them, with their replacement. */
-export const LEGACY_SPELLINGS: Readonly<Record<string, string>> = { and: '&&', or: '||', not: '!', implies: '!(p) || q' };
+export const LEGACY_SPELLINGS: Readonly<Record<string, string>> = {
+    and: '&&',
+    or: '||',
+    not: '!',
+    implies: '!(p) || q',
+    count: 'xs.length',
+    length: 'text.length',
+    all: 'xs.every(x => …)',
+    any: 'xs.some(x => …)',
+    contains: 'xs.includes(x)',
+    unique: 'xs.unique() or xs.unique(x => key, …)',
+    matches: 'text.matches("pattern")',
+};
 
 /** The legacy operator tokens of a parsed model, in source order. */
 export function legacyTokens(root: AstNode): LeafCstNode[] {
     const out: LeafCstNode[] = [];
     for (const node of AstUtils.streamAst(root)) {
-        const op = ast.isBinaryExpr(node) ? ownToken(node, ['and', 'or', 'implies']) : ast.isNotExpr(node) ? ownToken(node, ['not']) : undefined;
+        const op = ast.isBinaryExpr(node)
+            ? ownToken(node, ['and', 'or', 'implies'])
+            : ast.isNotExpr(node)
+              ? ownToken(node, ['not'])
+              : // the function forms: only the old syntax makes these nodes (the method forms are member calls)
+                ast.isCountExpr(node) || ast.isLengthExpr(node) || ast.isContainsExpr(node) || ast.isUniqueExpr(node) || ast.isMatchesExpr(node)
+                ? ownToken(node, ['count', 'length', 'contains', 'unique', 'matches'])
+                : ast.isQuantifierExpr(node)
+                  ? ownToken(node, ['all', 'any'])
+                  : undefined;
         if (op) out.push(op);
     }
     return out.sort((a, b) => a.offset - b.offset);
@@ -107,11 +128,13 @@ export function migrateDomain(text: string): DomainMigration {
             const name = ast.isQuantifierExpr(node) ? node.quantifier : ownToken(node, ['count', 'length', 'contains', 'unique', 'matches'])?.text;
             const receiver =
                 ast.isCountExpr(node) || ast.isContainsExpr(node) || ast.isUniqueExpr(node) || ast.isQuantifierExpr(node) ? node.collection : node.operand;
-            const open = ownTokens(node, '(')[0];
-            const comma = ownTokens(node, ',')[0];
-            const close = ownTokens(node, ')').at(-1);
+            // the parentheses written around the call are tokens of this node too: take those of the call itself
             const fn =
                 node.$cstNode && name ? CstUtils.streamCst(node.$cstNode).find((n) => isLeafCstNode(n) && n.astNode === node && n.text === name) : undefined;
+            const after = (t: LeafCstNode): boolean => !!fn && t.offset > fn.offset;
+            const open = ownTokens(node, '(').filter(after)[0];
+            const comma = ownTokens(node, ',').filter(after)[0];
+            const close = ownTokens(node, ')').filter(after)[0];
             if (open && close && fn && receiver.$cstNode) {
                 // the receiver as written, its own parentheses included, up to the `,` or the `)`
                 const written = text.slice(open.end, comma ? comma.offset : close.offset);

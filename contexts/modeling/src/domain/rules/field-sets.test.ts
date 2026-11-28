@@ -19,7 +19,7 @@ const FILES = {
   aggregate Order "注文" with Common.Tenanted {
     id: OrderId
     owns items: OrderItem[0..*]
-    invariant sameTenant { all(items, i => i.tenant == tenant) }
+    invariant sameTenant { items.every(i => i.tenant == tenant) }
     create command place(id: OrderId) -> Draft emits OrderPlaced
     command confirm() Draft -> Confirmed emits OrderConfirmed, Billing.Billed
     state Draft
@@ -83,7 +83,7 @@ describe('field sets', () => {
   fields Described { label: String  doc: String? }
   value State with Described {
     name: String
-    invariant named { length(name) > 0 && length(label) > 0 }
+    invariant named { name.length > 0 && label.length > 0 }
   }
   value Twice with Described { label: String }`);
         expect(only(a, 'M016').map((d) => d.message)).toEqual(["Field 'label' of 'Twice' is already taken from field set 'Described'."]);

@@ -1,21 +1,21 @@
 context Collaboration {
   /// `.dt` モデルの要素の名前（`Sales.Order`、`Sales.Order.confirm` など）。
-  primitive ElementName "要素名": String { length(value) >= 1 }
+  primitive ElementName "要素名": String { value.length >= 1 }
 
   /// ストーミングの名前。
-  primitive StormingName "ストーミング名": String { length(value) >= 1 }
+  primitive StormingName "ストーミング名": String { value.length >= 1 }
 
   /// ストーミングの中で要素を指す名前。
-  primitive StormingLocalName "ストーミング内の要素名": String { length(value) >= 1 }
+  primitive StormingLocalName "ストーミング内の要素名": String { value.length >= 1 }
 
   /// ストーミングのタイムラインの名前。
-  primitive TimelineName "タイムライン名": String { length(value) >= 1 }
+  primitive TimelineName "タイムライン名": String { value.length >= 1 }
 
   /// ストーミングのイベントの名前。
-  primitive StormingEventName "ストーミングのイベント名": String { length(value) >= 1 }
+  primitive StormingEventName "ストーミングのイベント名": String { value.length >= 1 }
 
   /// タイムラインの中でイベントの出現を指す道筋。
-  primitive OccurrencePath "出現の道筋": String { length(value) >= 1 }
+  primitive OccurrencePath "出現の道筋": String { value.length >= 1 }
 
   /// 依頼が指すもの。描画ノードの ID は保存しない。
   union ModelTarget "依頼の対象" {

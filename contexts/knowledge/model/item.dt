@@ -19,11 +19,11 @@ context Knowledge {
     /// 廃止したとき。中身・出典・版はそのまま残る（消すのとは別）。
     retirement: Retirement? "廃止"
 
-    invariant distinctSources "出典のメッセージは1回" { unique(sources, s => s.session, s.message) }
-    invariant distinctConflicts "食い違うナレッジは1回" { unique(conflictsWith) }
-    invariant notConflictingItself "自分とは食い違わない" { !contains(conflictsWith, id) }
+    invariant distinctSources "出典のメッセージは1回" { sources.unique(s => s.session, s.message) }
+    invariant distinctConflicts "食い違うナレッジは1回" { conflictsWith.unique() }
+    invariant notConflictingItself "自分とは食い違わない" { !conflictsWith.includes(id) }
     /// 食い違いは、両方がそれぞれの出典をもって言われたときだけ。
-    invariant conflictsSourced "食い違いには出典がある" { count(conflictsWith) == 0 || count(sources) >= 1 }
+    invariant conflictsSourced "食い違いには出典がある" { conflictsWith.length == 0 || sources.length >= 1 }
 
     state Live "見える"
     /// 消したナレッジは、すぐにだれからも見えなくなる。ストアの掃除が、元に戻せる間を過ぎてから、版と画像をすべて消す。
@@ -36,7 +36,7 @@ context Knowledge {
     create command add(id: KnowledgeItemId, content: ItemContent, sources: Source[1..*], by: ExtractionRef, reason: Reason?, at: Timestamp) "足す"
       -> Live
       requires distinctSources "出典のメッセージは1回" {
-        unique(sources, s => s.session, s.message)
+        sources.unique(s => s.session, s.message)
       } else DuplicateSource
       emits KnowledgeItemAdded
 
@@ -44,7 +44,7 @@ context Knowledge {
     create command addConflicting(id: KnowledgeItemId, content: ItemContent, sources: Source[1..*], other: KnowledgeItemId "食い違うナレッジ", by: ExtractionRef, reason: Reason?, at: Timestamp) "食い違いとして足す"
       -> Live
       requires distinctSources "出典のメッセージは1回" {
-        unique(sources, s => s.session, s.message)
+        sources.unique(s => s.session, s.message)
       } else DuplicateSource
       requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
       emits KnowledgeItemAdded
@@ -54,7 +54,7 @@ context Knowledge {
       Live -> Live
       requires current "抽出が見た版のまま" { base == version } else StaleOperation
       requires newSource "まだない出典" {
-        all(sources, s => s.session != source.session || s.message != source.message)
+        sources.every(s => s.session != source.session || s.message != source.message)
       } else DuplicateSource
       changes content, sources, updatedAt
       emits KnowledgeSourceAdded
@@ -74,7 +74,7 @@ context Knowledge {
       Live -> Live
       requires current "抽出が見た版のまま" { base == version } else StaleOperation
       requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
-      requires sourced "出典がある" { count(sources) >= 1 } else ConflictWithoutSource
+      requires sourced "出典がある" { sources.length >= 1 } else ConflictWithoutSource
       changes conflictsWith, updatedAt
       emits KnowledgeConflictLinked
 

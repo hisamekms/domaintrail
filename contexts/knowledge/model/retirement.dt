@@ -1,12 +1,12 @@
 context Knowledge {
   /// 廃止の候補の識別子（`rp_` と小文字の英数字）。候補を出す側の中身から決める（同じ候補を送り直しても同じ ID）。
-  id RetirementProposalId "廃止の候補ID": String { matches(value, "^rp_[0-9a-z]{8,32}$") }
+  id RetirementProposalId "廃止の候補ID": String { value.matches("^rp_[0-9a-z]{8,32}$") }
 
   /// 見直しの1回を指す名前。見直しの担当が決める。
-  primitive ReviewRef "見直し": String { length(value) >= 1 && length(value) <= 100 }
+  primitive ReviewRef "見直し": String { value.length >= 1 && value.length <= 100 }
 
   /// 根拠の短い説明（付箋がどう変わったか）。
-  primitive EvidenceNote "根拠の説明": String { length(value) >= 1 && length(value) <= 500 }
+  primitive EvidenceNote "根拠の説明": String { value.length >= 1 && value.length <= 500 }
 
   /// なぜ廃止するか。選ばなくても廃止できる。
   enum RetirementReason "廃止の理由" { replaced "置き換わった" obsolete "当てはまらなくなった" wrong "誤り" }
@@ -81,7 +81,7 @@ context Knowledge {
       !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
     }
     invariant notReplacedByItself "自分には置き換わらない" { !(exists(replacedBy)) || replacedBy != item }
-    invariant distinctEvidence "根拠は1回" { unique(evidence) }
+    invariant distinctEvidence "根拠は1回" { evidence.unique() }
 
     state Open "未決"
     state Approved "承認した" {
@@ -109,7 +109,7 @@ context Knowledge {
       requires notReplacedByItself "自分には置き換わらない" {
         !(exists(replacedBy)) || replacedBy != item
       } else MalformedProposal
-      requires distinctEvidence "根拠は1回" { unique(evidence) } else MalformedProposal
+      requires distinctEvidence "根拠は1回" { evidence.unique() } else MalformedProposal
       emits RetirementProposed
 
     /// 人が承認する（ストアはナレッジを廃止する、または廃止を取り消す）。

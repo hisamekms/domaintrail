@@ -203,7 +203,7 @@ describe('dt lsp', () => {
     test('publishes the diagnostics of dt check, cross-file and rule-only ones included', async () => {
         const client = await start({
             'common.dt': COMMON,
-            'sales.dt': SALES.replace('total.amount > 0', 'count(total) > 0'),
+            'sales.dt': SALES.replace('total.amount > 0', 'total.length > 0'),
             'billing.dt': BILLING.replace('-> Sales.Order', '-> Sales.Missing'),
         });
         const billing = await client.until('billing.dt', (d) => d.length > 0);

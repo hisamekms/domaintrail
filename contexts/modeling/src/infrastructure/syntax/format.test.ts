@@ -219,7 +219,7 @@ context Sales { // trailing the brace
 
     test('leaves string contents and regular expressions untouched; Japanese text counts double for the width', () => {
         const text = `context S {
-  primitive P: String { matches(value, "^ a  b\\\\d{2}$") }
+  primitive P: String { value.matches("^ a  b\\\\d{2}$") }
 }
 `;
         expect(formatDomain(text)).toBe(text);

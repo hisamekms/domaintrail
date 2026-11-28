@@ -6,7 +6,7 @@ context Collaboration {
   /// 与えない。正規化した形で持つ: NFC で、テキスト表示が既定の絵文字には VS16（U+FE0F）を付けた完全修飾の形（❤ と ❤️ は
   /// 同じ反応）。
   primitive Emoji "絵文字": String {
-    invariant bounded "長すぎない" { length(value) >= 1 && length(value) <= 64 }
+    invariant bounded "長すぎない" { value.length >= 1 && value.length <= 64 }
     /// 書記素1つの絵文字で、正規化した形（`@domaintrail/modeling/core/emoji`）。
     invariant singleEmoji "正規化した絵文字1つ" @externalCheck("Unicode の絵文字グラフェム判定と正規化をアプリケーションで行う")
   }
