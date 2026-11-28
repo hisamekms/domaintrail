@@ -304,6 +304,7 @@ const BINARY_OPS: Readonly<Record<string, BinaryOp>> = {
     '<=': 'le',
     '>': 'gt',
     '>=': 'ge',
+    '??': 'coalesce',
 };
 
 /** The tree of an expression (syntax only; the model has no errors when it is read for generated checks). */
@@ -322,7 +323,7 @@ function exprModel(e: Expression): ExprModel {
         if (m.k === 'unique')
             return { k: 'unique', collection: exprModel(e.receiver), ...(m.param !== undefined && { param: m.param }), keys: m.keys.map(exprModel) };
         if (m.k === 'matches') return { k: 'matches', operand: exprModel(e.receiver), pattern: patternSource(m.pattern) };
-        return { k: 'member', receiver: exprModel(e.receiver), member: e.member };
+        return { k: 'member', receiver: exprModel(e.receiver), member: e.member, ...(e.optional && { optional: true }) };
     }
     if (isNotExpr(e)) return { k: 'not', operand: exprModel(e.operand) };
     const nullCompared = nullComparison(e);

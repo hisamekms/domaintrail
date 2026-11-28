@@ -1,6 +1,6 @@
 context Modeling {
   /// The binary operators of expressions: `implies`, `or`, `and`, `==`, `!=`, `<`, `<=`, `>`, `>=`.
-  enum BinaryOp { implies or and eq ne lt le gt ge }
+  enum BinaryOp { implies or and eq ne lt le gt ge coalesce }
 
   /// `all(collection, x => body)` and `any(collection, x => body)`.
   enum Quantifier { all any }
@@ -25,9 +25,11 @@ context Modeling {
     name {
       name: String
     }
+    /// `receiver.member`, or `receiver?.member` (`optional`): absent when the receiver is absent.
     member {
       receiver: ExprModel
       member: String
+      optional: Bool?
     }
     not {
       operand: ExprModel

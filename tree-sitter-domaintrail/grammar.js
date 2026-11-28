@@ -13,6 +13,7 @@
 // @ts-check
 
 const PREC = {
+  coalesce: 1,
   or: 2,
   and: 3,
   comparison: 4,
@@ -357,6 +358,7 @@ module.exports = grammar({
     ),
 
     binary_expression: ($) => choice(
+      prec.left(PREC.coalesce, seq(field('left', $._expression), field('operator', '??'), field('right', $._expression))),
       prec.left(PREC.or, seq(field('left', $._expression), field('operator', '||'), field('right', $._expression))),
       prec.left(PREC.and, seq(field('left', $._expression), field('operator', '&&'), field('right', $._expression))),
       prec.left(PREC.comparison, seq(
@@ -376,7 +378,7 @@ module.exports = grammar({
 
     not_expression: ($) => prec(PREC.not, seq('!', field('operand', $._expression))),
 
-    member_expression: ($) => prec(PREC.member, seq(field('object', $._expression), '.', field('member', $._value_name))),
+    member_expression: ($) => prec(PREC.member, seq(field('object', $._expression), choice('.', '?.'), field('member', $._value_name))),
 
     parenthesized_expression: ($) => seq('(', $._expression, ')'),
 

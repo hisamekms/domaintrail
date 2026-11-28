@@ -223,14 +223,15 @@ export const allFieldsOf = (el: ElementModel): FieldModel[] => [
 /** How a binary operator is written in the DSL. */
 export const BINARY_OP_TEXT: Readonly<Record<M.BinaryOp, string>> = {
     implies: 'implies',
-    or: 'or',
-    and: 'and',
+    or: '||',
+    and: '&&',
     eq: '==',
     ne: '!=',
     lt: '<',
     le: '<=',
     gt: '>',
     ge: '>=',
+    coalesce: '??',
 };
 
 /** `when` of an `emits` entry as written, e.g. `Confirmed ->` (empty without one). */

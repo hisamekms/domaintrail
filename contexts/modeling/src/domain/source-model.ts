@@ -345,11 +345,12 @@ export type Expr = ExprBase &
         | { k: 'decimal'; value: string; negative: boolean }
         | { k: 'string'; value: string }
         | { k: 'name'; name: string }
-        | { k: 'member'; receiver: Expr; member: string; memberAt: Site }
+        /** `optional`: `receiver?.member`. */
+        | { k: 'member'; receiver: Expr; member: string; memberAt: Site; optional?: boolean }
         | { k: 'not'; operand: Expr }
         | {
               k: 'binary';
-              op: 'implies' | 'or' | 'and' | '==' | '!=' | '<' | '<=' | '>' | '>=';
+              op: 'implies' | 'or' | 'and' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '??';
               left: Expr;
               right: Expr;
               leftAt: Site;

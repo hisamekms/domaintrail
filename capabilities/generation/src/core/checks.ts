@@ -468,6 +468,8 @@ export class ExprCompiler {
                     case 'gt':
                     case 'ge':
                         return wrapped(compare(l, r, BINARY_OP_TEXT[e.op]));
+                    case 'coalesce':
+                        return wrapped(`${l.js} ?? ${r.js}`);
                 }
             }
         }
@@ -530,7 +532,8 @@ export class ExprCompiler {
         const m = e.member;
         const symbol = this.irNode(e)?.symbol;
         const r = this.compile(receiver, scope);
-        const t = strip(r.ty); // an optional receiver is guarded by exists(...) (M009)
+        const t = strip(r.ty); // an optional receiver is compared with null first (M009), or read with `?.`
+        const dot = e.optional ? '?.' : '.';
         switch (t.k) {
             case 'ctx': {
                 const el = symbol?.kind === 'type' ? elementOf(this.env.model, symbol.id) : undefined;
@@ -544,7 +547,7 @@ export class ExprCompiler {
                 throw new Error(`no enum value or union tag '${m}'`);
             case 'union':
                 if (symbol?.kind !== 'discriminator') throw new Error(`union member '${m}' has no discriminator symbol`);
-                return { js: `${r.js}.${m}` }; // only the discriminator is accessible (M009)
+                return { js: `${r.js}${dot}${m}` }; // only the discriminator is accessible (M009)
             case 'struct': {
                 const separator = symbol?.kind === 'field' ? symbol.id.lastIndexOf('.') : -1;
                 const ownerId = separator >= 0 ? symbol!.id.slice(0, separator) : undefined;
@@ -552,7 +555,7 @@ export class ExprCompiler {
                 const fieldName = separator >= 0 ? symbol!.id.slice(separator + 1) : undefined;
                 const f = fieldName ? t.el.fields.find((x) => x.name === fieldName) : undefined;
                 if (!f) throw new Error(`'${t.el.name}' has no field '${m}'`);
-                return { js: `${r.js}.${m}` };
+                return { js: `${r.js}${dot}${m}` };
             }
             default:
                 throw new Error(`no field '${m}'`);

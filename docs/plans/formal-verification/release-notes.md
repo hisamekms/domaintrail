@@ -22,6 +22,8 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - An optional value is compared with `null`: `x != null` replaces `exists(x)`, and `x == null` replaces
   `!exists(x)`. `x != null` narrows `x` on the right of `&&`, and `x == null` on the right of `||`. `exists` is no
   longer syntax, and `null` is valid only in such a comparison.
+- `x?.f` reads a field of an optional value (absent when the value is), and `a ?? b` gives `a` when it is present, else
+  `b` of the same type. Both compile to TypeScript's own `?.` and `??`.
 
 ## Added
 
