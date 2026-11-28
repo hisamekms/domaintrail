@@ -65,10 +65,21 @@ describe('generated TypeScript', () => {
         const result = tscIn(target, 'Sales.ts');
         expect(result.output).toBe('');
         expect(result.code).toBe(0);
+        // `pilot` → `PilotRotation` is also the kind type; `draft` → `DraftRotation` the state type
         const withKinds = await check({
-            'draft-kind.dt': `context Sales { id RotationId: UUID aggregate Rotation { id: RotationId state Draft kind HOLD { create command start(id: RotationId) { outcome started: -> Draft changes id = id } command draft() { outcome drafted: Draft -> Draft } } } }`,
+            'draft-kind.dt': `context Sales { id RotationId: UUID aggregate Rotation { id: RotationId state Draft state Open kind Pilot { create command start(id: RotationId) { outcome started: -> Draft changes id = id } command pilot() { outcome piloted: Draft -> Open } } command draft() { outcome drafted: Open -> Draft } } }`,
         });
         expect(withKinds.diagnostics).toEqual([]);
+        const kinds = path.join(dir, 'kind-collision');
+        await mkdir(kinds);
+        for (const f of generateFromAnalysis(withKinds)) await writeFile(path.join(kinds, f.path), f.content);
+        const kindsCode = await readFile(path.join(kinds, 'Sales.ts'), 'utf8');
+        expect(kindsCode).toContain('export type PilotRotation =');
+        expect(kindsCode).toContain('export type PilotRotationCommand =');
+        expect(kindsCode).toContain('export type DraftRotationCommand =');
+        const kindsResult = tscIn(kinds, 'Sales.ts');
+        expect(kindsResult.output).toBe('');
+        expect(kindsResult.code).toBe(0);
     });
 
     test('same-shaped errors in different contexts have distinct type tags at runtime and narrow by type', async () => {

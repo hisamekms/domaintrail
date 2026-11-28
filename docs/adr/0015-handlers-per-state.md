@@ -13,7 +13,7 @@ ADR 0014 made a command whose targets differ by transition (`Draft -> Draft, InP
 the input state, a chain of conditional types picking its output:
 
 ```ts
-export type ChangeWorkCommand = <S extends DraftWork | InProgressWork>(work: S, title: Title) => Result<readonly [
+export type ChangeWork = <S extends DraftWork | InProgressWork>(work: S, title: Title) => Result<readonly [
     S extends DraftWork ? DraftWork : InProgressWork,
     readonly WorkChanged[],
 ], never>;
@@ -51,7 +51,7 @@ The generic contract keeps its type parameter and parameters, and its output bec
 input's state:
 
 ```ts
-export type ChangeWorkCommand = <S extends DraftWork | InProgressWork>(
+export type ChangeWork = <S extends DraftWork | InProgressWork>(
     work: S,
     title: Title,
 ) => ReturnType<ChangeWorkByState[S['state']]>;
@@ -59,7 +59,7 @@ export type ChangeWorkCommand = <S extends DraftWork | InProgressWork>(
 
 A caller with a `DraftWork` gets the Draft handler's result. `ReturnType` distributes over a union of handlers, so a
 caller with `DraftWork | InProgressWork` gets the union of both results: after `if (r.ok)` the aggregate is
-`DraftWork | InProgressWork`, as before. `<Aggregate>Commands` still lists `change: ChangeWorkCommand`.
+`DraftWork | InProgressWork`, as before. `<Aggregate>Commands` still lists `change: ChangeWork`.
 
 The conditional chain had to go: no function built from the handlers can be shown to return
 `S extends DraftWork ? DraftWork : InProgressWork` for every `S` — TypeScript relates two conditional types only when

@@ -254,9 +254,9 @@ export interface DeclaredChecks {
     readonly Emoji?: Partial<Collaboration.EmojiDeclaredChecks>;
     readonly ProposalContent?: Partial<Collaboration.ProposalContentDeclaredChecks>;
     readonly Revision?: Partial<Collaboration.RevisionDeclaredChecks>;
-    readonly TakeRevision?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
-    readonly RestoreRevision?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
-    readonly RecordTriage?: Partial<Collaboration.RecordTriageDeclaredRequires>;
+    readonly TakeRevisionCommand?: Partial<Collaboration.TakeRevisionDeclaredRequires>;
+    readonly RestoreRevisionCommand?: Partial<Collaboration.RestoreRevisionDeclaredRequires>;
+    readonly RecordTriageCommand?: Partial<Collaboration.RecordTriageDeclaredRequires>;
 }
 
 /** Examples run before the generated inputs: aggregates per state (mixed into the generated ones) and arguments per command. */
@@ -317,7 +317,7 @@ export interface Generation extends testing.RunOptions {
 
 export interface Options extends Generation {
     readonly examples?: Examples;
-    readonly declared: { readonly Collaboration: { readonly Emoji: Pick<Collaboration.EmojiDeclaredChecks, 'singleEmoji'>; readonly ProposalContent: Pick<Collaboration.ProposalContentDeclaredChecks, 'oneRecommended'>; readonly Revision: Pick<Collaboration.RevisionDeclaredChecks, 'hashOfFiles'>; readonly TakeRevision: Pick<Collaboration.TakeRevisionDeclaredRequires, 'hashMatchesFiles'>; readonly RestoreRevision: Pick<Collaboration.RestoreRevisionDeclaredRequires, 'hashMatchesFiles'>; readonly RecordTriage: Pick<Collaboration.RecordTriageDeclaredRequires, 'inOrder'> } };
+    readonly declared: { readonly Collaboration: { readonly Emoji: Pick<Collaboration.EmojiDeclaredChecks, 'singleEmoji'>; readonly ProposalContent: Pick<Collaboration.ProposalContentDeclaredChecks, 'oneRecommended'>; readonly Revision: Pick<Collaboration.RevisionDeclaredChecks, 'hashOfFiles'>; readonly TakeRevisionCommand: Pick<Collaboration.TakeRevisionDeclaredRequires, 'hashMatchesFiles'>; readonly RestoreRevisionCommand: Pick<Collaboration.RestoreRevisionDeclaredRequires, 'hashMatchesFiles'>; readonly RecordTriageCommand: Pick<Collaboration.RecordTriageDeclaredRequires, 'inOrder'> } };
 }
 
 /** What `contract` tests: the constructors of domain primitives and the commands of aggregates, each optional. */
@@ -595,9 +595,9 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
     if (typeof options?.declared?.Collaboration?.Emoji?.singleEmoji !== 'function') throw new Error('Missing external check Collaboration.Emoji.singleEmoji');
     if (typeof options?.declared?.Collaboration?.ProposalContent?.oneRecommended !== 'function') throw new Error('Missing external check Collaboration.ProposalContent.oneRecommended');
     if (typeof options?.declared?.Collaboration?.Revision?.hashOfFiles !== 'function') throw new Error('Missing external check Collaboration.Revision.hashOfFiles');
-    if (typeof options?.declared?.Collaboration?.TakeRevision?.hashMatchesFiles !== 'function') throw new Error('Missing external check Collaboration.TakeRevision.hashMatchesFiles');
-    if (typeof options?.declared?.Collaboration?.RestoreRevision?.hashMatchesFiles !== 'function') throw new Error('Missing external check Collaboration.RestoreRevision.hashMatchesFiles');
-    if (typeof options?.declared?.Collaboration?.RecordTriage?.inOrder !== 'function') throw new Error('Missing external check Collaboration.RecordTriage.inOrder');
+    if (typeof options?.declared?.Collaboration?.TakeRevisionCommand?.hashMatchesFiles !== 'function') throw new Error('Missing external check Collaboration.TakeRevisionCommand.hashMatchesFiles');
+    if (typeof options?.declared?.Collaboration?.RestoreRevisionCommand?.hashMatchesFiles !== 'function') throw new Error('Missing external check Collaboration.RestoreRevisionCommand.hashMatchesFiles');
+    if (typeof options?.declared?.Collaboration?.RecordTriageCommand?.inOrder !== 'function') throw new Error('Missing external check Collaboration.RecordTriageCommand.inOrder');
     const a = arbitraries(options);
     const declared: DeclaredChecks = options.declared?.Collaboration ?? {};
     const scalar = testing.scalars(options.seed ?? testing.DEFAULT_SEED);
@@ -1582,7 +1582,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
                 requires: [{ name: 'notRestored', error: 'Collaboration.RestoreNeedsCheck' }, { name: 'hashMatchesFiles', error: 'Collaboration.ContentHashMismatch' }],
                 declaredRequires: ['hashMatchesFiles'],
                 firstFailing: Collaboration.checkTakeRevisionRequiresWith,
-                givenRequires: declared.TakeRevision,
+                givenRequires: declared.TakeRevisionCommand,
                 invariants: Collaboration.checkRevisionWith,
                 declaredInvariants: ['hashOfFiles'],
                 givenInvariants: declared.Revision,
@@ -1598,7 +1598,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
                 requires: [{ name: 'facilitatorRestores', error: 'Collaboration.FacilitatorOnly' }, { name: 'hashMatchesFiles', error: 'Collaboration.ContentHashMismatch' }],
                 declaredRequires: ['hashMatchesFiles'],
                 firstFailing: Collaboration.checkRestoreRevisionRequiresWith,
-                givenRequires: declared.RestoreRevision,
+                givenRequires: declared.RestoreRevisionCommand,
                 invariants: Collaboration.checkRevisionWith,
                 declaredInvariants: ['hashOfFiles'],
                 givenInvariants: declared.Revision,
@@ -1700,7 +1700,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
                 requires: [{ name: 'cascadeStage', error: 'Collaboration.InvalidTriageStep' }, { name: 'mechanicalDecidesNeither', error: 'Collaboration.InvalidTriageStep' }, { name: 'inOrder', error: 'Collaboration.TriageStepOutOfOrder' }],
                 declaredRequires: ['inOrder'],
                 firstFailing: Collaboration.checkRecordTriageRequiresWith,
-                givenRequires: declared.RecordTriage,
+                givenRequires: declared.RecordTriageCommand,
                 invariants: () => Collaboration.checkTriage,
                 declaredInvariants: [],
                 stateful: true,

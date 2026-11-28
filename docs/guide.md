@@ -2170,7 +2170,7 @@ Options, all optional:
 - `arbitraries: { Sales: { Sku: fc.stringMatching(/^ABC-\d{4}$/) } }`: replaces the arbitrary of a type, by context
   and type name (aggregates per state, e.g. `DraftOrder`). Its values are still filtered by the invariants. When
   filtering rejects 1000 values in a row, the case fails with a message naming the type to override.
-- `declared: { Sales: { Sku: { reserved: … }, Order: { … }, AcceptReview: { signedOff: … } } }`: the checks of the
+- `declared: { Sales: { Sku: { reserved: … }, Order: { … }, AcceptReviewCommand: { signedOff: … } } }`: the checks of the
   constraints without an expression, by context and type or command type; the same functions your code passes to the
   `…With` checks. A constraint whose check is not passed is listed as a **todo** case ("not expressed in the DSL and
   not checked"), and the tests accept either outcome where it would decide.

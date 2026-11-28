@@ -261,8 +261,8 @@ parameter, a call that forgot the context would compile, and the check would the
 **Today.** Command parameters are positional, after the aggregate:
 
 ```ts
-export type PlaceOrderCommand = (id: OrderId, customer: CustomerId) => Result<…>;
-export type CancelOrderCommand = <S extends DraftOrder | ConfirmedOrder>(order: S, reason: CancelReason) => …;
+export type PlaceOrder = (id: OrderId, customer: CustomerId) => Result<…>;
+export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(order: S, reason: CancelReason) => …;
 export type CancelOrderDecision = { readonly Draft: (order: DraftOrder, reason: CancelReason) => …; … };
 ```
 
@@ -273,8 +273,8 @@ billedAmount)` with two IDs), and reordering parameters in `.dt` breaks every ca
 without parameters takes none.
 
 ```ts
-export type PlaceOrderCommand = (params: { readonly id: OrderId; readonly customer: CustomerId }) => Result<…>;
-export type CancelOrderCommand = <S extends DraftOrder | ConfirmedOrder>(order: S, params: { readonly reason: CancelReason }) => …;
+export type PlaceOrder = (params: { readonly id: OrderId; readonly customer: CustomerId }) => Result<…>;
+export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(order: S, params: { readonly reason: CancelReason }) => …;
 export type CancelOrderDecision = { readonly Draft: (order: DraftOrder, params: { readonly reason: CancelReason }) => …; … };
 
 orderCommands.place({ id, customer });
@@ -425,7 +425,7 @@ the domain's.
 - [ADR 0027](0027-domain-and-application-boundaries.md), Implementation notes: the rule `generated` ("a package's
   generated code imports only its own files") lets generated code import the module of a context written into another package (decision 9);
   two items of "Left for later" are done (values of recursive types, the kernel's `Location` imported).
-- The examples of command types in ADR 0018 and 0019 (`ConfirmOrderCommand = (order: DraftOrder, at: Timestamp) => …`) show
+- The examples of command types in ADR 0018 and 0019 (`ConfirmOrder = (order: DraftOrder, at: Timestamp) => …`) show
   positional parameters; the generated code takes an object (decision 7). Their text is not rewritten.
 
 ## Details settled before the tasks

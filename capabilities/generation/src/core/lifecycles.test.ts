@@ -245,6 +245,68 @@ Tests.contract({}, { declared: { X: { Code: { registered: () => true } } } });
     }
 });
 
+test('the external checks of a value and of a command with the same stem have their own slots in contract options', async () => {
+    // `FinishOrder` is the value's slot; the requirements of `Order.finish` are under its command type, `FinishOrderCommand`
+    const result = await check({
+        'sales.dt': `context Sales {
+      id OrderId: UUID
+      value FinishOrder {
+        note: String
+        invariant audited "監査済み" @externalCheck("ext")
+      }
+      aggregate Order {
+        id: OrderId
+        state Draft
+        state Done
+        command finish()
+          Draft -> Done
+          requires known "既知" @externalCheck("ext") else Unknown
+      }
+      error Unknown
+    }`,
+    });
+    expect(result.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    const files = generateFromAnalysis(result, {}, { dir: 'tests' });
+    const tests = files.find((f) => f.path === 'tests/Sales.ts')!.content;
+    expect(tests).toContain('readonly FinishOrder?: Partial<Sales.FinishOrderDeclaredChecks>;');
+    expect(tests).toContain('readonly FinishOrderCommand?: Partial<Sales.FinishOrderDeclaredRequires>;');
+    expect(tests).toContain("throw new Error('Missing external check Sales.FinishOrderCommand.known')");
+    const dir = await mkdtemp(path.join(tmpdir(), 'domaintrail-external-slots-'));
+    try {
+        for (const file of files) await Bun.write(path.join(dir, file.path), file.content);
+        await symlink(path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules'), path.join(dir, 'node_modules'));
+        await writeFile(
+            path.join(dir, 'tsconfig.json'),
+            JSON.stringify({
+                compilerOptions: {
+                    strict: true,
+                    noEmit: true,
+                    target: 'ES2023',
+                    module: 'preserve',
+                    moduleResolution: 'bundler',
+                    paths: { 'domaintrail/testing': [path.join(import.meta.dir, '..', '..', '..', '..', 'testing', 'index.ts')] },
+                },
+                include: ['Sales.ts', '_runtime.ts', 'tests/Sales.ts', 'usage.ts'],
+            }),
+        );
+        await writeFile(
+            path.join(dir, 'usage.ts'),
+            `import * as Tests from './tests/Sales.js';
+declare const impl: Parameters<typeof Tests.contract>[0];
+Tests.contract(impl, { declared: { Sales: { FinishOrder: { audited: () => true }, FinishOrderCommand: { known: () => true } } } });
+// @ts-expect-error the command's external check is under its command type
+Tests.contract(impl, { declared: { Sales: { FinishOrder: { audited: () => true, known: () => true } } } });
+`,
+        );
+        const tsc = path.join(import.meta.dir, '..', '..', '..', '..', 'node_modules', '.bin', 'tsc');
+        const compiled = Bun.spawnSync([process.execPath, tsc, '-p', 'tsconfig.json'], { cwd: dir });
+        expect(compiled.stdout.toString() + compiled.stderr.toString()).toBe('');
+        expect(compiled.exitCode).toBe(0);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
 test('named requirement and choice expressions resolve fields of their source state', async () => {
     const result = await check({
         'run.dt': `context X {

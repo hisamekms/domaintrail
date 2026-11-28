@@ -78,3 +78,5 @@ re-exporting contexts as namespaces. Cross-context types are referenced as `impo
 `<State><Aggregate>` (state type), `<Aggregate>Common`, `<Command><Aggregate>` (command function type),
 `<Aggregate>Commands` (interface to implement). Events and errors carry a `type` discriminant; aggregate states a `state`
 discriminant. M011 checks collisions among these names, runtime names, context imports and reserved words.
+(Amended (formal verification work): the command function type is `<Command><Aggregate>Command`; the names derived
+from the command keep `<Command><Aggregate>` (`…Params`, `can…`, …).)

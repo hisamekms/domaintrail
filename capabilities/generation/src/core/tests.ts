@@ -44,6 +44,7 @@ import {
     aggregateParamName,
     choiceCheckName,
     commandStem,
+    commandTypeName,
     commandsInterfaceName,
     kindTypeName,
     makeTypeName,
@@ -555,7 +556,7 @@ class TestsEmitter {
         }
     }
 
-    /** Names of the slots for constraints without an expression, by the type or command they belong to. */
+    /** Names of the slots for constraints without an expression, by the type or the command type they belong to (`FinishOrder`, `FinishOrderCommand`): one namespace, kept apart by M011. */
     private declaredMembers(): string[] {
         const out: string[] = [];
         for (const el of this.els) {
@@ -572,7 +573,7 @@ class TestsEmitter {
             for (const c of el.commands) {
                 const t = commandStem(el, c);
                 const requirements = [...c.requires, ...el.kinds.flatMap((k) => kindCase(el, k.name, c.name)?.requires ?? [])];
-                if (hasDeclared(requirements)) out.push(`readonly ${t}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
+                if (hasDeclared(requirements)) out.push(`readonly ${commandTypeName(el, c)}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
             }
         }
         return out;
@@ -654,7 +655,7 @@ class TestsEmitter {
             ...(c.requires.length
                 ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`]
                 : []),
-            ...(declaredReqs.length ? [`    givenRequires: declared.${t},`] : []),
+            ...(declaredReqs.length ? [`    givenRequires: declared.${commandTypeName(agg, c)},`] : []),
             ...(invs.length
                 ? [`    invariants: ${declaredInvs.length ? `${this.ctx}.${checkWithName(agg.name)}` : `() => ${this.ctx}.${checkName(agg.name)}`},`]
                 : []),
@@ -717,7 +718,7 @@ class TestsEmitter {
             ...(requirements.length
                 ? [`    firstFailing: ${declaredReqs.length ? `${this.ctx}.${requiresWithName(t)}` : `() => ${this.ctx}.${requiresName(t)}`},`]
                 : []),
-            ...(declaredReqs.length ? [`    givenRequires: declared.${t},`] : []),
+            ...(declaredReqs.length ? [`    givenRequires: declared.${commandTypeName(agg, c)},`] : []),
             ...(invs.length
                 ? [`    invariants: ${declaredInvs.length ? `${this.ctx}.${checkWithName(agg.name)}` : `() => ${this.ctx}.${checkName(agg.name)}`},`]
                 : []),
@@ -865,7 +866,8 @@ class TestsEmitter {
                         ...c.requires.filter(hasExternalCheck).map((r) => r.name),
                         ...el.kinds.flatMap((k) => (kindCase(el, k.name, c.name)?.requires ?? []).filter(hasExternalCheck).map((r) => `${k.name}_${r.name}`)),
                     ];
-                    if (required.length) entries.push({ key: commandStem(el, c), type: `${ctx}.${declaredRequiresName(commandStem(el, c))}`, names: required });
+                    if (required.length)
+                        entries.push({ key: commandTypeName(el, c), type: `${ctx}.${declaredRequiresName(commandStem(el, c))}`, names: required });
                 }
             return entries;
         });

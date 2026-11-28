@@ -55,14 +55,14 @@ command progress(step: Step)
 ### Generated success value: keyed by the outcome
 
 ```ts
-export type ConfirmOrderCommand = (order: DraftOrder, at: Timestamp) => Result<{
+export type ConfirmOrder = (order: DraftOrder, at: Timestamp) => Result<{
     readonly Confirmed: {
         readonly aggregate: ConfirmedOrder;
         readonly events: { readonly OrderConfirmed: OrderConfirmed };
     };
 }, EmptyOrder>;
 
-export type ProgressWorkCommand = (work: InProgressWork, step: Step) => Result<
+export type ProgressWork = (work: InProgressWork, step: Step) => Result<
     | { readonly InProgress: { readonly aggregate: InProgressWork; readonly events: { readonly StepRecorded: StepRecorded } }; readonly Completed?: never }
     | { readonly Completed: { readonly aggregate: CompletedWork; readonly events: { readonly StepRecorded: StepRecorded; readonly WorkCompleted: WorkCompleted } }; readonly InProgress?: never },
     never

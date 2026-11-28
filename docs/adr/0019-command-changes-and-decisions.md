@@ -142,7 +142,7 @@ export type ConfirmOrderDecision = {
   the type — extra properties, which do not stop it from being assignable to the target state. The value is only ever
   used through the contract.
 
-The callers' contract does not change: `ConfirmOrderCommand`, `<Aggregate>Commands` and the keyed result of ADR 0018. Only
+The callers' contract does not change: `ConfirmOrder`, `<Aggregate>Commands` and the keyed result of ADR 0018. Only
 the spelling of a contract whose outputs depend on the input changes, since `…ByState` is gone: its result is looked up
 in an object keyed by the source states, `{ readonly Draft: Result<…>; readonly InProgress: Result<…> }[S['state']]`,
 which behaves as `ReturnType<…ByState[S['state']]>` did (a caller with a union gets the union of the results).
