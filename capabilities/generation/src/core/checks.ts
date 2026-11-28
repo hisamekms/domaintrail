@@ -416,6 +416,11 @@ export class ExprCompiler {
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
+            case 'round': {
+                // half-even to `n` digits: a division by one at scale `n`; `n` is an Int literal of 0 or more (M009)
+                if (e.scale.k !== 'int') throw new Error(`'.round(n)' has no Int literal scale`);
+                return { js: `decimalDiv(String(${this.compile(e.operand, scope).js}), '1', ${e.scale.value})` };
+            }
             case 'match': {
                 // nested conditionals on the discriminator, which TypeScript narrows; a binding reads the variant's field
                 const s = this.compile(e.subject, scope);

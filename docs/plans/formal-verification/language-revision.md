@@ -47,7 +47,9 @@ The right-hand side of `changes x = expr` uses the `ensures` scope: parameters a
 field is `null`. The same rule applies to fields new in a transition's target state, such as `confirmedAt` and
 `reason`. Grammar adds `ChangedField: FeatureName ('=' Expression)?` and optional `ensures` after `emits` in Outcome
 and shorthand Command. The default recursion depth for recursive values in the verification profile is 2. Mixed
-Int/Decimal arithmetic promotes the Int operand to Decimal and returns Decimal.
+Int/Decimal arithmetic promotes the Int operand to Decimal and returns Decimal. `x.round(n)` rounds a Decimal
+half-even to `n` digits after the point; a Decimal of known scale larger than the `Decimal(n)` it is placed in is an
+error until it is rounded.
 
 Implementation order (Phase 2). The revision goes in by construct group:
 1. logical operators;

@@ -100,6 +100,10 @@ context Modeling {
       operand: ExprModel
       pattern: String
     }
+    round {
+      operand: ExprModel
+      scale: ExprModel
+    }
     /// `unique(collection)`, or `unique(collection, x => key, …)`.
     unique {
       collection: ExprModel

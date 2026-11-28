@@ -60,6 +60,8 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
             case 'length':
             case 'matches':
                 return [expr.operand];
+            case 'round':
+                return [expr.operand, expr.scale];
             case 'binary':
                 return [expr.left, expr.right];
             case 'range':

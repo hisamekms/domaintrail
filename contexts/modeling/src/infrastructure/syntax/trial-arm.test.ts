@@ -63,7 +63,9 @@ describe('the arms of the AI trial', () => {
         expect(await errors(A0)).toEqual([]);
         expect(await errors(M2)).toEqual(["SYNTAX This form of 'match' is not DomainTrail syntax: write match (x) { Variant { field, … } => value, … }."]);
         expect(await errors(M3)).toEqual(["SYNTAX This form of 'match' is not DomainTrail syntax: write match (x) { Variant { field, … } => value, … }."]);
-        expect(await errors(Q2)).toEqual(["M001 'forall' is not a method: the methods are every, some, includes, unique, matches, map, filter and sum."]);
+        expect(await errors(Q2)).toEqual([
+            "M001 'forall' is not a method: the methods are every, some, includes, unique, matches, round, map, filter and sum.",
+        ]);
     });
 
     test('each arm reads its own spelling only, and its messages show only its own', async () => {
@@ -77,7 +79,7 @@ describe('the arms of the AI trial', () => {
         ]);
         expect(await errors(Q2, 'Q2')).toEqual([]);
         expect(await errors(A0, 'Q2')).toEqual([
-            "M001 'every' is not a method: the methods are forall, exists, includes, unique, matches, map, filter and sum.",
+            "M001 'every' is not a method: the methods are forall, exists, includes, unique, matches, round, map, filter and sum.",
         ]);
     });
 

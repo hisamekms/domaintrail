@@ -162,8 +162,16 @@ function checkFunctions(model: SourceModel, rules: RuleSink, sink?: ExpressionFa
             present: new Set(),
         });
         const declared = returnType(f);
-        if (t.k !== 'error' && declared.k !== 'error' && !assignable(declared, t))
-            rules.error('M032', `Function '${f.name}' returns '${showType(declared)}', but its body has type '${showType(t)}'.`, f.expr.at);
+        if (t.k !== 'error' && declared.k !== 'error' && !assignable(declared, t)) {
+            const overflow = scaleOverflow(declared, t);
+            const show = overflow ? showScaled : showType;
+            rules.error(
+                overflow ? 'M009' : 'M032',
+                `Function '${f.name}' returns '${show(declared)}', but its body has type '${show(t)}'.`,
+                f.expr.at,
+                overflow && roundHint(f.expr, overflow),
+            );
+        }
     }
     // a call graph without cycles: every function is pure and terminates
     const calls = (x: Expr): string[] => (x.k === 'call' ? [x.name, ...x.args.flatMap(calls)] : childExprs(x).flatMap(calls));
@@ -193,6 +201,8 @@ function childExprs(x: Expr): Expr[] {
         case 'length':
         case 'matches':
             return [x.operand];
+        case 'round':
+            return [x.operand, x.scale];
         case 'count':
             return [x.collection];
         case 'binary':
@@ -344,8 +354,16 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
             if (!c.value) continue;
             const t = new ExprChecker(model, rules, sink).check(c.value, scope(before ? [['before', before]] : []));
             const f = after.k === 'frame' ? after.fields.get(c.name) : undefined;
-            if (t.k !== 'error' && f && !assignable(memberType(f), t))
-                rules.error('M021', `'${c.name}' is a '${showType(memberType(f))}', but '${c.value.text}' is a '${showType(t)}'.`, c.value.at);
+            if (t.k !== 'error' && f && !assignable(memberType(f), t)) {
+                const overflow = scaleOverflow(memberType(f), t);
+                const show = overflow ? showScaled : showType;
+                rules.error(
+                    overflow ? 'M009' : 'M021',
+                    `'${c.name}' is a '${show(memberType(f))}', but '${c.value.text}' is a '${show(t)}'.`,
+                    c.value.at,
+                    overflow && roundHint(c.value, overflow),
+                );
+            }
         }
         if (!ensures) return;
         const t = new ExprChecker(model, rules, sink).check(ensures, scope([...(before ? [['before', before] as [string, Ty]] : []), ['after', after]]));
@@ -711,6 +729,29 @@ class ExprChecker {
                 }
                 return BOOL;
             }
+            case 'round': {
+                // `x.round(n)`: `x` rounded half-even to `n` digits after the point, a computed `Decimal(n)`
+                const t = this.check(e.operand, scope);
+                if (t.k === 'error') return ERROR;
+                if (basePrimitive(t) !== 'Decimal' || t.k === 'id') {
+                    this.rules.error(
+                        'M009',
+                        `'.round(n)' rounds a Decimal, but '${e.operand.text}' is a '${showType(t)}'.${basePrimitive(t) === 'Int' ? ' An Int needs no rounding.' : ''}`,
+                        e.operandAt,
+                    );
+                    return ERROR;
+                }
+                if (e.scale.k !== 'int' || e.scale.negative || !Number.isSafeInteger(e.scale.value)) {
+                    this.rules.error(
+                        'M009',
+                        `'.round(n)' takes the digits after the point as an Int literal of 0 or more, but got '${e.scale.text}'.`,
+                        e.scaleAt,
+                    );
+                    return ERROR;
+                }
+                this.check(e.scale, scope);
+                return { k: 'prim', name: 'Decimal', computed: true, scale: e.scale.value };
+            }
             case 'match': {
                 // `match (u) { V { f } => e, … }`: every variant of the union once, each body of one type
                 const subject = this.check(e.subject, scope);
@@ -770,6 +811,8 @@ class ExprChecker {
                         continue;
                     }
                     result = result && result.k !== 'opt' && t.k === 'opt' ? t : (result ?? t);
+                    if (result !== t)
+                        result = result.k === 'opt' ? { k: 'opt', inner: joinScale(result.inner, t.k === 'opt' ? t.inner : t) } : joinScale(result, t);
                 }
                 const missing = u.variants.filter((v) => !seen.has(v.name)).map((v) => v.name);
                 if (missing.length) {
@@ -794,12 +837,16 @@ class ExprChecker {
                 for (const [i, p] of f.params.entries()) {
                     const want = memberType(p);
                     const got = args[i]!;
-                    if (got.k !== 'error' && want.k !== 'error' && !assignable(want, got))
+                    if (got.k !== 'error' && want.k !== 'error' && !assignable(want, got)) {
+                        const overflow = scaleOverflow(want, got);
+                        const show = overflow ? showScaled : showType;
                         this.rules.error(
-                            'M032',
-                            `Argument '${p.name}' of '${f.name}' is a '${showType(want)}', but '${e.args[i]!.text}' is a '${showType(got)}'.`,
+                            overflow ? 'M009' : 'M032',
+                            `Argument '${p.name}' of '${f.name}' is a '${show(want)}', but '${e.args[i]!.text}' is a '${show(got)}'.`,
                             e.argsAt[i]!,
+                            overflow && roundHint(e.args[i]!, overflow),
                         );
+                    }
                 }
                 return returnType(f);
             }
@@ -822,7 +869,7 @@ class ExprChecker {
                         );
                         return ERROR;
                     }
-                    elem ??= x;
+                    elem = elem ? joinScale(elem, x) : x;
                 }
                 return { k: 'list', elem: elem ?? ERROR };
             }
@@ -878,7 +925,8 @@ class ExprChecker {
                     this.rules.error('M009', `'? :' gives '${showType(a)}' or '${showType(b)}': both branches must have the same type.`, e.at);
                     return ERROR;
                 }
-                return a.k === 'opt' || b.k === 'opt' ? { k: 'opt', inner: base(a) } : a;
+                const joined = joinScale(base(a), base(b));
+                return a.k === 'opt' || b.k === 'opt' ? { k: 'opt', inner: joined } : joined;
             }
             case 'range': {
                 const v = this.check(e.operand, scope);
@@ -1012,7 +1060,8 @@ class ExprChecker {
                 this.rules.error('M009', `'??' gives '${showType(l.inner)}' or '${showType(r)}': both sides must have the same type.`, e.at);
                 return ERROR;
             }
-            return r.k === 'opt' ? l : l.inner;
+            const joined = joinScale(l.inner, right);
+            return r.k === 'opt' ? { k: 'opt', inner: joined } : joined;
         }
         const l = this.check(e.left, scope);
         const r = this.check(e.right, scope);
@@ -1398,9 +1447,52 @@ const baseOf = (t: Ty): Ty => ({ k: 'prim', name: basePrimitive(t)! });
  */
 /** Whether a value of type `got` can be passed where `want` is declared (an argument, a function's result). */
 function assignable(want: Ty, got: Ty): boolean {
+    if (scaleOverflow(want, got)) return false;
     if (want.k === 'list') return got.k === 'list' && (got.elem.k === 'error' || assignable(want.elem, got.elem));
     if (want.k === 'opt') return assignable(want.inner, got.k === 'opt' ? got.inner : got);
     return got.k !== 'list' && got.k !== 'opt' && equatable(want, got);
+}
+
+/**
+ * Scale fit: a Decimal of known scale placed where a `Decimal(n)` (or a domain primitive over one) is declared has at
+ * most `n` digits after the point; a smaller scale widens. The declared and the actual scale when it has more, through
+ * lists and optionals; `undefined` when it fits or a scale is not known.
+ */
+function scaleOverflow(want: Ty, got: Ty): { want: number; got: number; list: boolean } | undefined {
+    if (want.k === 'list') {
+        const inner = got.k === 'list' ? scaleOverflow(want.elem, got.elem) : undefined;
+        return inner && { ...inner, list: true };
+    }
+    if (want.k === 'opt') return scaleOverflow(want.inner, got.k === 'opt' ? got.inner : got);
+    if (want.k === 'id' || got.k === 'id' || basePrimitive(want) !== 'Decimal' || basePrimitive(got) !== 'Decimal') return undefined;
+    const [w, g] = [scaleOf(want), scaleOf(got)];
+    return w !== undefined && g !== undefined && g > w ? { want: w, got: g, list: false } : undefined;
+}
+
+/** The hint of a scale that does not fit: the expression rounded (each element of a list). */
+function roundHint(expr: Expr, overflow: { want: number; list: boolean }): string {
+    if (overflow.list) return `round each element: '${expr.text}.map(x => x.round(${overflow.want}))'`;
+    const atomic = ['name', 'member', 'decimal', 'int', 'call', 'round', 'listMethod'].includes(expr.k);
+    return `round it: '${atomic ? expr.text : `(${expr.text})`}.round(${overflow.want})'`;
+}
+
+/** A type as `showType` writes it, with the scale of a Decimal: `Decimal(2)`, `Decimal(4)[0..*]`. */
+function showScaled(t: Ty): string {
+    if (t.k === 'prim' && t.name === 'Decimal' && t.scale !== undefined) return `Decimal(${t.scale})`;
+    if (t.k === 'list') return `${showScaled(t.elem)}[0..*]`;
+    if (t.k === 'opt') return `${showScaled(t.inner)}?`;
+    return showType(t);
+}
+
+/**
+ * The type of a value that is one of two of one type (the branches of `? :`, the sides of `??`, the elements of a
+ * list, the cases of `match`): `a`, with the larger scale of two Decimals of known scale, so that it fits where both
+ * fit; a Decimal of unknown scale makes it unknown.
+ */
+function joinScale(a: Ty, b: Ty): Ty {
+    if (a.k !== 'prim' || a.name !== 'Decimal' || b.k !== 'prim' || b.name !== 'Decimal' || a.scale === b.scale) return a;
+    const scale = a.scale === undefined || b.scale === undefined ? undefined : Math.max(a.scale, b.scale);
+    return { k: 'prim', name: 'Decimal', ...(a.literal && { literal: true }), ...(a.computed && { computed: true }), ...(scale !== undefined && { scale }) };
 }
 
 function equatable(l: Ty, r: Ty): boolean {

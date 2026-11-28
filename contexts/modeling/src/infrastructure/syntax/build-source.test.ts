@@ -157,6 +157,8 @@ function toExprModel(e: Expr): ExprModel {
             return { k: e.k, operand: toExprModel(e.operand) };
         case 'matches':
             return { k: 'matches', operand: toExprModel(e.operand), pattern: e.pattern };
+        case 'round':
+            return { k: 'round', operand: toExprModel(e.operand), scale: toExprModel(e.scale) };
         case 'unique':
             return { k: 'unique', collection: toExprModel(e.collection), ...(e.param && { param: e.param }), keys: e.keys.map(toExprModel) };
         case 'contains':

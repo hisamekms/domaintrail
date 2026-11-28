@@ -50,6 +50,8 @@ Arm-independent findings for the language and guide (not a reason to change the 
   check in all 24 WS-04 attempts. M028 (99 messages): lifecycle states without an initial state, create outcomes not
   ending at one, and unreachable source states (WS-01, WS-02, WS-04).
 - **Rounding.** All 13 semantic fails (10 Claude, 3 Codex, all arms) are WS-02 attempts that leave the approved total
-  unspecified, stating that the language cannot round a product to two decimals. It can: `*` adds the scales and
-  `hours * rate / 1.00` rounds half-even to scale 2, which the passing attempts wrote. The guide states the scale of
-  `/` but not of `*`, and has no example of rounding a product.
+  unspecified, stating that the language cannot round a product to two decimals. The passing attempts wrote
+  `hours * rate / 1.00`, but that did not round either: `*` adds the scales and `/` keeps the larger one, so the value
+  had scale 4, and nothing checked a scale against the declared `Decimal(2)`. The reviewers passed those attempts on
+  the total's formula. The language had no way to round; `x.round(n)` and the scale-fit check (M009) now give one and
+  enforce it. This affects every arm alike, so the decision stands.

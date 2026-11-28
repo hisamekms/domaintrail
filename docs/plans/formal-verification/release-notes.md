@@ -29,7 +29,10 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - Arithmetic: Int `+ - *` and Decimal `+ - * /` (exact; `/` rounds half-even to the larger declared scale). A
   Decimal declares its scale with `Decimal(n)` on fields, parameters and primitives, and `/` needs it. A divisor
   must be shown non-zero where it is divided by. The generated checks compute Decimals exactly with the runtime's
-  `decimalAdd`, `decimalSub`, `decimalMul` and `decimalDiv`.
+  `decimalAdd`, `decimalSub`, `decimalMul` and `decimalDiv`. `x.round(n)` rounds a Decimal half-even to `n` digits
+  after the point. A Decimal of known scale larger than a declared `Decimal(n)` it is placed in (a field in
+  `changes x = …`, a function's result or argument, a list element) is an error (M009) until it is rounded; a smaller
+  scale widens. Before, `hours * rate` (scale 4) returned as a `Decimal(2)` checked clean.
 - Lists: `[a, b]`, `[...xs, x]`, `xs.map(x => e)`, `xs.filter(x => p)`, `xs.sum(x => e)` and `xs.sum()`. A Decimal
   sum is exact.
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure, typed function of its parameters (a
