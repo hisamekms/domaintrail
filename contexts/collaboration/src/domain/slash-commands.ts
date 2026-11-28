@@ -411,87 +411,112 @@ export function chosenIndices(
 }
 
 export const slashCommandCommands: Collaboration.SlashCommandCommands = {
-    start: decide<Collaboration.StartSlashCommandDecision>(Collaboration.SlashCommandShape, (params) => {
-        const { id, kind, startedBy, opening, scope, language, startedAt, guide } = params;
-        // the session without its evidence: the aggregate stores the base type
-        const session: Collaboration.SessionId = params.session;
-        return ok({
-            Working: {
-                set: { id, session, kind, startedBy, opening, scope, language, startedAt, guide },
-                events: {
-                    'Collaboration.SlashCommandStarted': {
-                        type: 'Collaboration.SlashCommandStarted',
-                        commandId: id,
-                        session,
-                        kind,
-                        startedBy,
-                        opening,
-                        ...(scope && { scope }),
-                        language,
-                        startedAt,
-                        ...(guide && { guide }),
-                    },
-                },
-            },
-        });
-    }),
-
-    list: decide<Collaboration.ListSlashCommandDecision>(Collaboration.SlashCommandShape, {
-        Working: (command, { candidates, listedAt }) =>
-            ok({
-                Listed: {
-                    set: { candidates, listedAt },
-                    events: { 'Collaboration.CandidatesListed': { type: 'Collaboration.CandidatesListed', commandId: command.id, candidates, listedAt } },
-                },
-            }),
-    }),
-
-    answer: decide<Collaboration.AnswerSlashCommandDecision>(Collaboration.SlashCommandShape, {
-        Working: (command, { answer, next, answeredAt }) =>
-            ok({
-                Answered: {
-                    set: { answer, next, answeredAt },
-                    events: {
-                        'Collaboration.SlashCommandAnswered': {
-                            type: 'Collaboration.SlashCommandAnswered',
-                            commandId: command.id,
-                            answer,
-                            ...(next && { next }),
-                            answeredAt,
-                        },
-                    },
-                },
-            }),
-    }),
-
-    apply: decide<Collaboration.ApplySlashCommandDecision>(Collaboration.SlashCommandShape, {
-        Listed: (command, params) => {
-            const failed = Collaboration.checkApplySlashCommandRequires(command, params);
-            if (failed === 'facilitatorApplies') return err({ type: 'Collaboration.FacilitatorOnly' });
-            if (failed === 'chosenOfList') return err({ type: 'Collaboration.NoSuchCandidate' });
-            const { appliedBy, chosen, run, appliedAt } = params;
+    start: decide<Collaboration.StartSlashCommandDecision>(
+        Collaboration.SlashCommandShape,
+        (params) => {
+            const { id, kind, startedBy, opening, scope, language, startedAt, guide } = params;
+            // the session without its evidence: the aggregate stores the base type
+            const session: Collaboration.SessionId = params.session;
             return ok({
-                Applied: {
-                    set: { chosen, appliedBy, run, appliedAt },
+                Working: {
+                    set: { id, session, kind, startedBy, opening, scope, language, startedAt, guide },
                     events: {
-                        'Collaboration.CandidatesApplied': {
-                            type: 'Collaboration.CandidatesApplied',
-                            commandId: command.id,
-                            chosen,
-                            appliedBy,
-                            run,
-                            appliedAt,
+                        'Collaboration.SlashCommandStarted': {
+                            type: 'Collaboration.SlashCommandStarted',
+                            commandId: id,
+                            session,
+                            kind,
+                            startedBy,
+                            opening,
+                            ...(scope && { scope }),
+                            language,
+                            startedAt,
+                            ...(guide && { guide }),
                         },
                     },
                 },
             });
         },
-    }),
+        {},
+        { ensures: Collaboration.checkStartSlashCommandEnsures },
+    ),
 
-    stop: decide<Collaboration.StopSlashCommandDecision>(Collaboration.SlashCommandShape, {
-        Working: (command, params) => stopped(command, params),
-        Listed: (command, params) => stopped(command, params),
-    }),
+    list: decide<Collaboration.ListSlashCommandDecision>(
+        Collaboration.SlashCommandShape,
+        {
+            Working: (command, { candidates, listedAt }) =>
+                ok({
+                    Listed: {
+                        set: { candidates, listedAt },
+                        events: { 'Collaboration.CandidatesListed': { type: 'Collaboration.CandidatesListed', commandId: command.id, candidates, listedAt } },
+                    },
+                }),
+        },
+        {},
+        { ensures: Collaboration.checkListSlashCommandEnsures },
+    ),
+
+    answer: decide<Collaboration.AnswerSlashCommandDecision>(
+        Collaboration.SlashCommandShape,
+        {
+            Working: (command, { answer, next, answeredAt }) =>
+                ok({
+                    Answered: {
+                        set: { answer, next, answeredAt },
+                        events: {
+                            'Collaboration.SlashCommandAnswered': {
+                                type: 'Collaboration.SlashCommandAnswered',
+                                commandId: command.id,
+                                answer,
+                                ...(next && { next }),
+                                answeredAt,
+                            },
+                        },
+                    },
+                }),
+        },
+        {},
+        { ensures: Collaboration.checkAnswerSlashCommandEnsures },
+    ),
+
+    apply: decide<Collaboration.ApplySlashCommandDecision>(
+        Collaboration.SlashCommandShape,
+        {
+            Listed: (command, params) => {
+                const failed = Collaboration.checkApplySlashCommandRequires(command, params);
+                if (failed === 'facilitatorApplies') return err({ type: 'Collaboration.FacilitatorOnly' });
+                if (failed === 'chosenOfList') return err({ type: 'Collaboration.NoSuchCandidate' });
+                const { appliedBy, chosen, run, appliedAt } = params;
+                return ok({
+                    Applied: {
+                        set: { chosen, appliedBy, run, appliedAt },
+                        events: {
+                            'Collaboration.CandidatesApplied': {
+                                type: 'Collaboration.CandidatesApplied',
+                                commandId: command.id,
+                                chosen,
+                                appliedBy,
+                                run,
+                                appliedAt,
+                            },
+                        },
+                    },
+                });
+            },
+        },
+        {},
+        { ensures: Collaboration.checkApplySlashCommandEnsures },
+    ),
+
+    stop: decide<Collaboration.StopSlashCommandDecision>(
+        Collaboration.SlashCommandShape,
+        {
+            Working: (command, params) => stopped(command, params),
+            Listed: (command, params) => stopped(command, params),
+        },
+        {},
+        { ensures: Collaboration.checkStopSlashCommandEnsures },
+    ),
 };
 
 function stopped(

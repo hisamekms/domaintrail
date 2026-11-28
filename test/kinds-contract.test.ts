@@ -122,7 +122,9 @@ await linkNodeModules(dir);
 {
     const a = await check(MODEL);
     expect(a.diagnostics.filter((d) => d.severity !== 'info')).toEqual([]);
-    for (const f of generateFromAnalysis(a, {}, { dir: 'tests', runner: 'bun' })) {
+    const generatedTests = generateFromAnalysis(a, {}, { dir: 'tests', runner: 'bun' });
+    expect(generatedTests.find((f) => f.path === 'tests/Logistics.ts')?.content).toContain('ensures: Logistics.checkSuspendPickupSiteEnsures');
+    for (const f of generatedTests) {
         await mkdir(path.dirname(path.join(dir, f.path)), { recursive: true });
         await writeFile(path.join(dir, f.path), f.content);
     }
@@ -292,5 +294,32 @@ describe('aggregate kinds end to end', () => {
         });
         const r = await run(tests.Logistics.contract({ make, PickupSite: broken, Card: impl.card() }, { runs: 30 }));
         expect(failing(r).some((name) => name.includes('changeClosingTime'))).toBe(true);
+
+        const wrongCreate = impl.pickupSite({
+            registerStore: (({ id, name, storeCode, closingTime }: any) => ({
+                ok: true,
+                value: {
+                    registered: {
+                        aggregate: { state: 'Active', kind: 'Store', id: `${id}-wrong`, name, storeCode, closingTime },
+                        events: { 'Logistics.Registered': { type: 'Logistics.Registered', pickupSiteId: id } },
+                    },
+                },
+            })) as any,
+        });
+        const createResult = await run(tests.Logistics.contract({ make, PickupSite: wrongCreate, Card: impl.card() }, { runs: 30 }));
+        const createFailure = Object.entries(createResult).find(([name, message]) => name.includes('registerStore') && message);
+        expect(createFailure?.[1]).toContain('violates postcondition (changes id)');
+        expect(createFailure?.[1]).toContain("for outcome 'registered': id = id");
+
+        // suspend declares only a transition and emits; its generated frame check still rejects a changed carried id.
+        const brokenSuspend = impl.pickupSite({
+            suspend: ((site: any) => ({
+                ok: true,
+                value: { suspended: { aggregate: { ...site, state: 'Paused', id: `${site.id}-wrong` }, events: {} } },
+            })) as any,
+        });
+        const suspendResult = await run(tests.Logistics.contract({ make, PickupSite: brokenSuspend, Card: impl.card() }, { runs: 30 }));
+        const suspendFailure = Object.entries(suspendResult).find(([name, message]) => name.includes('suspend') && message);
+        expect(suspendFailure?.[1]).toContain('violates postcondition (unchanged id)');
     });
 });

@@ -12,63 +12,87 @@ const noteChanged = (order: Sales.Order, note: string | undefined) =>
     note === order.note ? {} : { 'Sales.NoteChanged': { type: 'Sales.NoteChanged', orderId: order.id, note } as const };
 
 export const orderCommands: Sales.OrderCommands = {
-    place: decide<Sales.PlaceOrderDecision>(Sales.OrderShape, ({ id, customer }) =>
-        ok({ Draft: { set: { id, items: [], customer, note: undefined }, events: { 'Sales.OrderPlaced': { type: 'Sales.OrderPlaced', orderId: id } } } }),
+    place: decide<Sales.PlaceOrderDecision>(
+        Sales.OrderShape,
+        ({ id, customer }) =>
+            ok({ Draft: { set: { id, items: [], customer, note: undefined }, events: { 'Sales.OrderPlaced': { type: 'Sales.OrderPlaced', orderId: id } } } }),
+        {},
+        { ensures: Sales.checkPlaceOrderEnsures },
     ),
 
     // `changes items`: the only field it sets. The requirements in declaration order: the first that fails decides the error.
-    addItem: decide<Sales.AddItemOrderDecision>(Sales.OrderShape, {
-        Draft: (order, params) => {
-            const { item } = params;
-            switch (Sales.checkAddItemOrderRequires(order, params)) {
-                case 'newSku':
-                    return err({ type: 'Sales.DuplicateSku', sku: item.sku });
-                case 'sameCurrency':
-                    return err({ type: 'Sales.CurrencyMismatch' });
-            }
-            return ok({ Draft: { set: { items: [...order.items, item] }, events: {} } });
+    addItem: decide<Sales.AddItemOrderDecision>(
+        Sales.OrderShape,
+        {
+            Draft: (order, params) => {
+                const { item } = params;
+                switch (Sales.checkAddItemOrderRequires(order, params)) {
+                    case 'newSku':
+                        return err({ type: 'Sales.DuplicateSku', sku: item.sku });
+                    case 'sameCurrency':
+                        return err({ type: 'Sales.CurrencyMismatch' });
+                }
+                return ok({ Draft: { set: { items: [...order.items, item] }, events: {} } });
+            },
         },
-    }),
+        {},
+        { ensures: Sales.checkAddItemOrderEnsures },
+    ),
 
     // Changes no common field: only `confirmedAt`, new in Confirmed, is set.
-    confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, {
-        Draft: (order, params) => {
-            if (Sales.checkConfirmOrderRequires(order, params) === 'hasItems') return err({ type: 'Sales.EmptyOrder' });
-            const { at } = params;
-            return ok({
-                Confirmed: {
-                    set: { confirmedAt: at },
-                    events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } },
-                },
-            });
+    confirm: decide<Sales.ConfirmOrderDecision>(
+        Sales.OrderShape,
+        {
+            Draft: (order, params) => {
+                if (Sales.checkConfirmOrderRequires(order, params) === 'hasItems') return err({ type: 'Sales.EmptyOrder' });
+                const { at } = params;
+                return ok({
+                    Confirmed: {
+                        set: { confirmedAt: at },
+                        events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } },
+                    },
+                });
+            },
         },
-    }),
+        {},
+        { ensures: Sales.checkConfirmOrderEnsures },
+    ),
 
     // The events depend on the input state (`RefundRequested when Confirmed ->`); `confirmedAt` is dropped by `decide`.
-    cancel: decide<Sales.CancelOrderDecision>(Sales.OrderShape, {
-        Draft: (order, params) => {
-            if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
-            const { reason } = params;
-            return ok({ Cancelled: { set: { reason }, events: { 'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: order.id, reason } } } });
-        },
-        Confirmed: (order, params) => {
-            if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
-            const { reason } = params;
-            return ok({
-                Cancelled: {
-                    set: { reason },
-                    events: {
-                        'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: order.id, reason },
-                        'Sales.RefundRequested': { type: 'Sales.RefundRequested', orderId: order.id },
+    cancel: decide<Sales.CancelOrderDecision>(
+        Sales.OrderShape,
+        {
+            Draft: (order, params) => {
+                if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
+                const { reason } = params;
+                return ok({ Cancelled: { set: { reason }, events: { 'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: order.id, reason } } } });
+            },
+            Confirmed: (order, params) => {
+                if (Sales.checkCancelOrderRequires(order, params) === 'noteForOther') return err({ type: 'Sales.NoteRequired' });
+                const { reason } = params;
+                return ok({
+                    Cancelled: {
+                        set: { reason },
+                        events: {
+                            'Sales.OrderCancelled': { type: 'Sales.OrderCancelled', orderId: order.id, reason },
+                            'Sales.RefundRequested': { type: 'Sales.RefundRequested', orderId: order.id },
+                        },
                     },
-                },
-            });
+                });
+            },
         },
-    }),
+        {},
+        { ensures: Sales.checkCancelOrderEnsures },
+    ),
 
     // `changes note`, in either state; `NoteChanged?`: nothing is emitted when the note stays the same.
-    changeNote: decide<Sales.ChangeNoteOrderDecision>(Sales.OrderShape, {
-        Draft: (order, { note }) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
-        Confirmed: (order, { note }) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
-    }),
+    changeNote: decide<Sales.ChangeNoteOrderDecision>(
+        Sales.OrderShape,
+        {
+            Draft: (order, { note }) => ok({ Draft: { set: { note }, events: noteChanged(order, note) } }),
+            Confirmed: (order, { note }) => ok({ Confirmed: { set: { note }, events: noteChanged(order, note) } }),
+        },
+        {},
+        { ensures: Sales.checkChangeNoteOrderEnsures },
+    ),
 };

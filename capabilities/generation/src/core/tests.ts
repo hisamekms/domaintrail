@@ -25,7 +25,7 @@ import {
     outcomesOfCommand,
     validStatesFor,
 } from '@domaintrail/modeling';
-import type { DomainPrimitive } from './checks.js';
+import { hasEnsuresCheck, type DomainPrimitive } from './checks.js';
 import {
     aggregateInvariants,
     checkName,
@@ -45,6 +45,7 @@ import {
     choiceCheckName,
     commandStem,
     commandTypeName,
+    ensuresName,
     commandsInterfaceName,
     kindTypeName,
     makeTypeName,
@@ -647,6 +648,7 @@ class TestsEmitter {
             `...testing.commandCases({`,
             `    name: '${agg.name}.${c.name}',`,
             `    run: impl.${agg.name}.${c.name},`,
+            ...(hasEnsuresCheck(agg, c) ? [`    ensures: ${this.ctx}.${ensuresName(t)},`] : []),
             `    input: () => ${input},`,
             `    examples: options.examples?.${agg.name}?.commands?.${c.name} ?? [],`,
             `    factory: ${c.factory},`,
@@ -710,6 +712,7 @@ class TestsEmitter {
             `...testing.commandCases({`,
             `    name: '${agg.name}.${c.name}',`,
             `    run: impl.${agg.name}.${c.name},`,
+            ...(hasEnsuresCheck(agg, c) ? [`    ensures: ${this.ctx}.${ensuresName(t)},`] : []),
             `    input: () => ${input},`,
             `    examples: options.examples?.${agg.name}?.commands?.${c.name} ?? [],`,
             `    factory: ${c.factory},`,

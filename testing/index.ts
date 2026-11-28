@@ -531,6 +531,8 @@ export interface CommandSpec {
     /** `Order.confirm`. */
     readonly name: string;
     readonly run: (...args: never[]) => unknown;
+    /** Generated command postcondition check, called with the original command arguments and success value. */
+    readonly ensures?: (...args: never[]) => Postcondition | undefined;
     /** The arguments: the aggregate (except for a factory) and the parameters as one object (none without parameters); made when a case runs. */
     readonly input: () => fc.Arbitrary<readonly unknown[]>;
     readonly examples: readonly (readonly unknown[])[];
@@ -560,6 +562,15 @@ export interface CommandSpec {
     readonly validStates?: readonly { readonly kind: string; readonly states: readonly string[] }[];
     /** Evaluates all executable outcome selection rules on the pre-command inputs. */
     readonly choices?: (...args: never[]) => Readonly<Record<string, boolean>>;
+}
+
+/** A generated postcondition that a successful command result violates. */
+export interface Postcondition {
+    readonly id: string;
+    readonly outcome: string;
+    readonly kind: 'changes' | 'unchanged' | 'ensures';
+    readonly field?: string;
+    readonly source: string;
 }
 
 type Res =
@@ -597,6 +608,23 @@ export function commandCases(s: CommandSpec, options: RunOptions): TestCase[] {
         property(s.input(), s.examples, options, predicate);
     };
     const out: TestCase[] = [];
+
+    if (s.ensures) {
+        out.push({
+            name: `${s.name} satisfies its postconditions`,
+            run: prop((args) => {
+                const original = structuredClone(args) as unknown[];
+                const r = callOn(structuredClone(original));
+                if (!r.ok) return;
+                const [, selected] = theOutcome(s.name, r);
+                const violation = (s.ensures as (...a: unknown[]) => Postcondition | undefined)(...original, r.value);
+                if (violation)
+                    fail(
+                        `${describe(args)} violates postcondition (${violation.kind}${violation.field ? ` ${violation.field}` : ''}) for outcome '${violation.outcome}': ${violation.source}; input: ${show(original)}; success value: ${show(r.value)}; aggregate: ${show(selected.aggregate)}; params: ${show(original.slice(s.factory ? 0 : 1))}`,
+                    );
+            }),
+        });
+    }
 
     if (s.outcomes) {
         out.push({

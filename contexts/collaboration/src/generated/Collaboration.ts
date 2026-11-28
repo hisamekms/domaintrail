@@ -1235,7 +1235,7 @@ export function checkRecordEditAgentRunRequires(params: RecordEditAgentRunParams
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkRecordEditAgentRunEnsures }`.
  * @see contexts/collaboration/model/agent-run.dt:395
  */
-export function checkRecordEditAgentRunEnsures(params: RecordEditAgentRunParams, value: SuccessOf<RecordEditAgentRunCommand>): Postcondition<'Collaboration.AgentRun:recordEdit.changes.id' | 'Collaboration.AgentRun:recordEdit.changes.session' | 'Collaboration.AgentRun:recordEdit.changes.input' | 'Collaboration.AgentRun:recordEdit.changes.queuedBy' | 'Collaboration.AgentRun:recordEdit.changes.queuedAt' | 'Collaboration.AgentRun:recordEdit.changes.baseRevision' | 'Collaboration.AgentRun:recordEdit.changes.resultRevision' | 'Collaboration.AgentRun:recordEdit.changes.finishedAt' | 'Collaboration.AgentRun:recordEdit->Edited.unchanged.reapplies' | 'Collaboration.AgentRun:recordEdit->Edited.unchanged.conflict' | 'Collaboration.AgentRun:recordEdit->Edited.unchanged.hotspotName'> | undefined {
+export function checkRecordEditAgentRunEnsures(params: RecordEditAgentRunParams, value: SuccessOf<RecordEditAgentRunCommand>): Postcondition<'Collaboration.AgentRun:recordEdit.changes.id' | 'Collaboration.AgentRun:recordEdit.changes.session' | 'Collaboration.AgentRun:recordEdit.changes.input' | 'Collaboration.AgentRun:recordEdit.changes.queuedBy' | 'Collaboration.AgentRun:recordEdit.changes.queuedAt' | 'Collaboration.AgentRun:recordEdit.changes.baseRevision' | 'Collaboration.AgentRun:recordEdit.changes.resultRevision' | 'Collaboration.AgentRun:recordEdit.changes.reapplies' | 'Collaboration.AgentRun:recordEdit.changes.finishedAt' | 'Collaboration.AgentRun:recordEdit->Edited.unchanged.conflict' | 'Collaboration.AgentRun:recordEdit->Edited.unchanged.hotspotName'> | undefined {
     if ('Edited' in value && value.Edited !== undefined) {
         if (value.Edited.aggregate.id !== params.id) return { id: 'Collaboration.AgentRun:recordEdit.changes.id', outcome: 'Edited', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Edited.aggregate.session !== params.session) return { id: 'Collaboration.AgentRun:recordEdit.changes.session', outcome: 'Edited', kind: 'changes', field: 'session', source: 'session = session' };
@@ -1244,8 +1244,8 @@ export function checkRecordEditAgentRunEnsures(params: RecordEditAgentRunParams,
         if (value.Edited.aggregate.queuedAt !== params.queuedAt) return { id: 'Collaboration.AgentRun:recordEdit.changes.queuedAt', outcome: 'Edited', kind: 'changes', field: 'queuedAt', source: 'queuedAt = queuedAt' };
         if (value.Edited.aggregate.baseRevision !== params.baseRevision) return { id: 'Collaboration.AgentRun:recordEdit.changes.baseRevision', outcome: 'Edited', kind: 'changes', field: 'baseRevision', source: 'baseRevision = baseRevision' };
         if (value.Edited.aggregate.resultRevision !== params.resultRevision) return { id: 'Collaboration.AgentRun:recordEdit.changes.resultRevision', outcome: 'Edited', kind: 'changes', field: 'resultRevision', source: 'resultRevision = resultRevision' };
+        if (value.Edited.aggregate.reapplies !== params.reapplies) return { id: 'Collaboration.AgentRun:recordEdit.changes.reapplies', outcome: 'Edited', kind: 'changes', field: 'reapplies', source: 'reapplies = reapplies' };
         if (value.Edited.aggregate.finishedAt !== params.finishedAt) return { id: 'Collaboration.AgentRun:recordEdit.changes.finishedAt', outcome: 'Edited', kind: 'changes', field: 'finishedAt', source: 'finishedAt = finishedAt' };
-        if (value.Edited.aggregate.reapplies !== undefined) return { id: 'Collaboration.AgentRun:recordEdit->Edited.unchanged.reapplies', outcome: 'Edited', kind: 'unchanged', field: 'reapplies', source: 'after.reapplies == null' };
         if (value.Edited.aggregate.conflict !== undefined) return { id: 'Collaboration.AgentRun:recordEdit->Edited.unchanged.conflict', outcome: 'Edited', kind: 'unchanged', field: 'conflict', source: 'after.conflict == null' };
         if (value.Edited.aggregate.hotspotName !== undefined) return { id: 'Collaboration.AgentRun:recordEdit->Edited.unchanged.hotspotName', outcome: 'Edited', kind: 'unchanged', field: 'hotspotName', source: 'after.hotspotName == null' };
     }
@@ -1707,11 +1707,13 @@ export function checkFinishAgentRunChoice(checks: FinishAgentRunChoiceChecks): (
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkFinishAgentRunEnsures }`.
  * @see contexts/collaboration/model/agent-run.dt:445
  */
-export function checkFinishAgentRunEnsures(agentRun: RunningAgentRun, params: FinishAgentRunParams, value: SuccessOf<FinishAgentRunCommand>): Postcondition<'Collaboration.AgentRun:finish->Completed.changes.report' | 'Collaboration.AgentRun:finish->Completed.changes.resultRevision' | 'Collaboration.AgentRun:finish->Completed.changes.changed' | 'Collaboration.AgentRun:finish->Completed.changes.finishedAt' | 'Collaboration.AgentRun:finish->Completed.unchanged.id' | 'Collaboration.AgentRun:finish->Completed.unchanged.session' | 'Collaboration.AgentRun:finish->Completed.unchanged.input' | 'Collaboration.AgentRun:finish->Completed.unchanged.queuedBy' | 'Collaboration.AgentRun:finish->Completed.unchanged.queuedAt' | 'Collaboration.AgentRun:finish->Completed.unchanged.baseRevision' | 'Collaboration.AgentRun:finish->Completed.unchanged.startedAt' | 'Collaboration.AgentRun:finish->Completed.unchanged.reply' | 'Collaboration.AgentRun:finish->Completed.unchanged.review' | 'Collaboration.AgentRun:finish->Failed.changes.finishedAt' | 'Collaboration.AgentRun:finish->Failed.unchanged.id' | 'Collaboration.AgentRun:finish->Failed.unchanged.session' | 'Collaboration.AgentRun:finish->Failed.unchanged.input' | 'Collaboration.AgentRun:finish->Failed.unchanged.queuedBy' | 'Collaboration.AgentRun:finish->Failed.unchanged.queuedAt' | 'Collaboration.AgentRun:finish->Failed.unchanged.baseRevision' | 'Collaboration.AgentRun:finish->Failed.unchanged.startedAt' | 'Collaboration.AgentRun:finish->Failed.unchanged.report' | 'Collaboration.AgentRun:finish->Failed.unchanged.resultRevision'> | undefined {
+export function checkFinishAgentRunEnsures(agentRun: RunningAgentRun, params: FinishAgentRunParams, value: SuccessOf<FinishAgentRunCommand>): Postcondition<'Collaboration.AgentRun:finish->Completed.changes.report' | 'Collaboration.AgentRun:finish->Completed.changes.resultRevision' | 'Collaboration.AgentRun:finish->Completed.changes.changed' | 'Collaboration.AgentRun:finish->Completed.changes.reply' | 'Collaboration.AgentRun:finish->Completed.changes.review' | 'Collaboration.AgentRun:finish->Completed.changes.finishedAt' | 'Collaboration.AgentRun:finish->Completed.unchanged.id' | 'Collaboration.AgentRun:finish->Completed.unchanged.session' | 'Collaboration.AgentRun:finish->Completed.unchanged.input' | 'Collaboration.AgentRun:finish->Completed.unchanged.queuedBy' | 'Collaboration.AgentRun:finish->Completed.unchanged.queuedAt' | 'Collaboration.AgentRun:finish->Completed.unchanged.baseRevision' | 'Collaboration.AgentRun:finish->Completed.unchanged.startedAt' | 'Collaboration.AgentRun:finish->Failed.changes.reason' | 'Collaboration.AgentRun:finish->Failed.changes.report' | 'Collaboration.AgentRun:finish->Failed.changes.resultRevision' | 'Collaboration.AgentRun:finish->Failed.changes.finishedAt' | 'Collaboration.AgentRun:finish->Failed.unchanged.id' | 'Collaboration.AgentRun:finish->Failed.unchanged.session' | 'Collaboration.AgentRun:finish->Failed.unchanged.input' | 'Collaboration.AgentRun:finish->Failed.unchanged.queuedBy' | 'Collaboration.AgentRun:finish->Failed.unchanged.queuedAt' | 'Collaboration.AgentRun:finish->Failed.unchanged.baseRevision' | 'Collaboration.AgentRun:finish->Failed.unchanged.startedAt'> | undefined {
     if ('Completed' in value && value.Completed !== undefined && agentRun.state === 'Running') {
         if (!equalRunReport(value.Completed.aggregate.report, params.report)) return { id: 'Collaboration.AgentRun:finish->Completed.changes.report', outcome: 'Completed', kind: 'changes', field: 'report', source: 'report = report' };
         if (value.Completed.aggregate.resultRevision !== params.resultRevision) return { id: 'Collaboration.AgentRun:finish->Completed.changes.resultRevision', outcome: 'Completed', kind: 'changes', field: 'resultRevision', source: 'resultRevision = resultRevision' };
         if (value.Completed.aggregate.changed !== params.changed) return { id: 'Collaboration.AgentRun:finish->Completed.changes.changed', outcome: 'Completed', kind: 'changes', field: 'changed', source: 'changed = changed' };
+        if (!sameOptional(value.Completed.aggregate.reply, params.reply, equalAgentReply)) return { id: 'Collaboration.AgentRun:finish->Completed.changes.reply', outcome: 'Completed', kind: 'changes', field: 'reply', source: 'reply = reply' };
+        if (!sameOptional(value.Completed.aggregate.review, params.review, equalRunReview)) return { id: 'Collaboration.AgentRun:finish->Completed.changes.review', outcome: 'Completed', kind: 'changes', field: 'review', source: 'review = review' };
         if (value.Completed.aggregate.finishedAt !== params.finishedAt) return { id: 'Collaboration.AgentRun:finish->Completed.changes.finishedAt', outcome: 'Completed', kind: 'changes', field: 'finishedAt', source: 'finishedAt = finishedAt' };
         if (value.Completed.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.id', outcome: 'Completed', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Completed.aggregate.session !== agentRun.session) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.session', outcome: 'Completed', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
@@ -1720,10 +1722,11 @@ export function checkFinishAgentRunEnsures(agentRun: RunningAgentRun, params: Fi
         if (value.Completed.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.queuedAt', outcome: 'Completed', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
         if (value.Completed.aggregate.baseRevision !== agentRun.baseRevision) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.baseRevision', outcome: 'Completed', kind: 'unchanged', field: 'baseRevision', source: 'after.baseRevision == before.baseRevision' };
         if (value.Completed.aggregate.startedAt !== agentRun.startedAt) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.startedAt', outcome: 'Completed', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
-        if (value.Completed.aggregate.reply !== undefined) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.reply', outcome: 'Completed', kind: 'unchanged', field: 'reply', source: 'after.reply == null' };
-        if (value.Completed.aggregate.review !== undefined) return { id: 'Collaboration.AgentRun:finish->Completed.unchanged.review', outcome: 'Completed', kind: 'unchanged', field: 'review', source: 'after.review == null' };
     }
     if ('Failed' in value && value.Failed !== undefined && agentRun.state === 'Running') {
+        if (value.Failed.aggregate.reason !== 'RuleNotMet') return { id: 'Collaboration.AgentRun:finish->Failed.changes.reason', outcome: 'Failed', kind: 'changes', field: 'reason', source: 'reason = FailureReason.RuleNotMet' };
+        if (!sameOptional(value.Failed.aggregate.report, params.report, equalRunReport)) return { id: 'Collaboration.AgentRun:finish->Failed.changes.report', outcome: 'Failed', kind: 'changes', field: 'report', source: 'report = report' };
+        if (value.Failed.aggregate.resultRevision !== params.resultRevision) return { id: 'Collaboration.AgentRun:finish->Failed.changes.resultRevision', outcome: 'Failed', kind: 'changes', field: 'resultRevision', source: 'resultRevision = resultRevision' };
         if (value.Failed.aggregate.finishedAt !== params.finishedAt) return { id: 'Collaboration.AgentRun:finish->Failed.changes.finishedAt', outcome: 'Failed', kind: 'changes', field: 'finishedAt', source: 'finishedAt = finishedAt' };
         if (value.Failed.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.id', outcome: 'Failed', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Failed.aggregate.session !== agentRun.session) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.session', outcome: 'Failed', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
@@ -1732,8 +1735,6 @@ export function checkFinishAgentRunEnsures(agentRun: RunningAgentRun, params: Fi
         if (value.Failed.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.queuedAt', outcome: 'Failed', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
         if (value.Failed.aggregate.baseRevision !== agentRun.baseRevision) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.baseRevision', outcome: 'Failed', kind: 'unchanged', field: 'baseRevision', source: 'after.baseRevision == before.baseRevision' };
         if (value.Failed.aggregate.startedAt !== agentRun.startedAt) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.startedAt', outcome: 'Failed', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
-        if (value.Failed.aggregate.report !== undefined) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.report', outcome: 'Failed', kind: 'unchanged', field: 'report', source: 'after.report == null' };
-        if (value.Failed.aggregate.resultRevision !== undefined) return { id: 'Collaboration.AgentRun:finish->Failed.unchanged.resultRevision', outcome: 'Failed', kind: 'unchanged', field: 'resultRevision', source: 'after.resultRevision == null' };
     }
     return undefined;
 }
@@ -1757,7 +1758,7 @@ export interface AskClarificationAgentRunParams {
  * 確認を求める
  * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: reply == null || reply.questions.length >= 1
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
- * @changes question, resultRevision, finishedAt
+ * @changes question, reply, resultRevision, finishedAt
  * @emits RunNeedsClarification — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:469
  */
@@ -1776,8 +1777,8 @@ export type AskClarificationAgentRunCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: reply == null || reply.questions.length >= 1
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
- * @changes question, resultRevision, finishedAt
- * Running -> NeedsClarification — set: question, reply (new in NeedsClarification), resultRevision, finishedAt; carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
+ * @changes question, reply, resultRevision, finishedAt
+ * Running -> NeedsClarification — set: question, reply, resultRevision, finishedAt; carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * @see contexts/collaboration/model/agent-run.dt:469
  */
 export type AskClarificationAgentRunDecision = {
@@ -1805,9 +1806,10 @@ export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun,
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkAskClarificationAgentRunEnsures }`.
  * @see contexts/collaboration/model/agent-run.dt:469
  */
-export function checkAskClarificationAgentRunEnsures(agentRun: RunningAgentRun, params: AskClarificationAgentRunParams, value: SuccessOf<AskClarificationAgentRunCommand>): Postcondition<'Collaboration.AgentRun:askClarification.changes.question' | 'Collaboration.AgentRun:askClarification.changes.resultRevision' | 'Collaboration.AgentRun:askClarification.changes.finishedAt' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.id' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.session' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.input' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.queuedBy' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.queuedAt' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.baseRevision' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.startedAt' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.reply'> | undefined {
+export function checkAskClarificationAgentRunEnsures(agentRun: RunningAgentRun, params: AskClarificationAgentRunParams, value: SuccessOf<AskClarificationAgentRunCommand>): Postcondition<'Collaboration.AgentRun:askClarification.changes.question' | 'Collaboration.AgentRun:askClarification.changes.reply' | 'Collaboration.AgentRun:askClarification.changes.resultRevision' | 'Collaboration.AgentRun:askClarification.changes.finishedAt' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.id' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.session' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.input' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.queuedBy' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.queuedAt' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.baseRevision' | 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.startedAt'> | undefined {
     if ('NeedsClarification' in value && value.NeedsClarification !== undefined && agentRun.state === 'Running') {
         if (value.NeedsClarification.aggregate.question !== params.question) return { id: 'Collaboration.AgentRun:askClarification.changes.question', outcome: 'NeedsClarification', kind: 'changes', field: 'question', source: 'question = question' };
+        if (!sameOptional(value.NeedsClarification.aggregate.reply, params.reply, equalAgentReply)) return { id: 'Collaboration.AgentRun:askClarification.changes.reply', outcome: 'NeedsClarification', kind: 'changes', field: 'reply', source: 'reply = reply' };
         if (value.NeedsClarification.aggregate.resultRevision !== params.resultRevision) return { id: 'Collaboration.AgentRun:askClarification.changes.resultRevision', outcome: 'NeedsClarification', kind: 'changes', field: 'resultRevision', source: 'resultRevision = resultRevision' };
         if (value.NeedsClarification.aggregate.finishedAt !== params.finishedAt) return { id: 'Collaboration.AgentRun:askClarification.changes.finishedAt', outcome: 'NeedsClarification', kind: 'changes', field: 'finishedAt', source: 'finishedAt = finishedAt' };
         if (value.NeedsClarification.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.id', outcome: 'NeedsClarification', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
@@ -1817,7 +1819,6 @@ export function checkAskClarificationAgentRunEnsures(agentRun: RunningAgentRun, 
         if (value.NeedsClarification.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.queuedAt', outcome: 'NeedsClarification', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
         if (value.NeedsClarification.aggregate.baseRevision !== agentRun.baseRevision) return { id: 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.baseRevision', outcome: 'NeedsClarification', kind: 'unchanged', field: 'baseRevision', source: 'after.baseRevision == before.baseRevision' };
         if (value.NeedsClarification.aggregate.startedAt !== agentRun.startedAt) return { id: 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.startedAt', outcome: 'NeedsClarification', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
-        if (value.NeedsClarification.aggregate.reply !== undefined) return { id: 'Collaboration.AgentRun:askClarification->NeedsClarification.unchanged.reply', outcome: 'NeedsClarification', kind: 'unchanged', field: 'reply', source: 'after.reply == null' };
     }
     return undefined;
 }
@@ -1995,57 +1996,66 @@ export interface CancelAgentRunParams {
 }
 
 /**
- * AgentRun.cancel (Queued | Running -> Cancelled)
+ * AgentRun.cancel
  * 実行を中止する
  * 中止するのはファシリテーター。
  * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
- * @changes cancelledBy, cancelledAt
- * @emits RunCancelled — exactly once when the command succeeds
+ * @outcome QueuedCancelled: Queued -> Cancelled
+ * @outcome RunningCancelled: Running -> Cancelled
  * @see contexts/collaboration/model/agent-run.dt:498
  */
-export type CancelAgentRunCommand = (
-    agentRun: QueuedAgentRun | RunningAgentRun,
+export type CancelAgentRunCommand = <S extends QueuedAgentRun | RunningAgentRun>(
+    agentRun: S,
     params: CancelAgentRunParams,
-) => Result<{
-    readonly Cancelled: {
-        readonly aggregate: CancelledAgentRun;
-        readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
-    };
-}, FacilitatorOnly>;
+) =>
+    S extends QueuedAgentRun ?
+        Result<{
+            readonly QueuedCancelled: {
+                readonly aggregate: CancelledAgentRun;
+                readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
+            };
+        }, FacilitatorOnly> :
+    S extends RunningAgentRun ?
+        Result<{
+            readonly RunningCancelled: {
+                readonly aggregate: CancelledAgentRun;
+                readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
+            };
+        }, FacilitatorOnly> : never;
 
 /**
- * AgentRun.cancel, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
- * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
- * @changes cancelledBy, cancelledAt
- * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy, cancelledAt; carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
- * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy, cancelledAt; carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
+ * Decision of AgentRun.cancel; each named outcome gives only its set fields and events.
+ * Use decideNamed with an outcome-to-target map to form the aggregate, and `{ availability: AgentRunAvailability, command: 'cancel' }` to check the source states.
  * @see contexts/collaboration/model/agent-run.dt:498
  */
-export type CancelAgentRunDecision = {
-    /** @emits RunCancelled — exactly once when the command succeeds */
-    readonly Queued: (agentRun: QueuedAgentRun, params: CancelAgentRunParams) => Result<{
-        readonly Cancelled: {
-            readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
-            readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
-        };
-    }, FacilitatorOnly>;
-    /** @emits RunCancelled — exactly once when the command succeeds */
-    readonly Running: (agentRun: RunningAgentRun, params: CancelAgentRunParams) => Result<{
-        readonly Cancelled: {
-            readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
-            readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
-        };
-    }, FacilitatorOnly>;
-};
+export type CancelAgentRunDecision = <S extends QueuedAgentRun | RunningAgentRun>(
+    agentRun: S,
+    params: CancelAgentRunParams,
+) =>
+    S extends QueuedAgentRun ?
+        Result<{
+            readonly QueuedCancelled: {
+                readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
+                readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
+            };
+        }, FacilitatorOnly> :
+    S extends RunningAgentRun ?
+        Result<{
+            readonly RunningCancelled: {
+                readonly set: { readonly baseRevision: RevisionId | undefined; readonly cancelledBy: ParticipantId; readonly cancelledAt: Timestamp };
+                readonly events: { readonly 'Collaboration.RunCancelled': RunCancelled };
+            };
+        }, FacilitatorOnly> : never;
 
-/**
- * The first requirement of AgentRun.cancel that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:498
- */
 export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams): 'facilitatorCancels' | undefined {
-    if (!(params.cancelledByRole === 'Facilitator')) return 'facilitatorCancels';
+    if (!((params.cancelledByRole === 'Facilitator'))) return 'facilitatorCancels';
     return undefined;
+}
+
+export type CancelAgentRunChoiceChecks = {  };
+
+export function checkCancelAgentRunChoice(checks: CancelAgentRunChoiceChecks): (agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams) => { readonly QueuedCancelled: boolean; readonly RunningCancelled: boolean } {
+    return (agentRun: QueuedAgentRun | RunningAgentRun, _params: CancelAgentRunParams) => { return { QueuedCancelled: ((agentRun.state === 'Queued')) && (true), RunningCancelled: ((agentRun.state === 'Running')) && (true) }; };
 }
 
 /**
@@ -2053,26 +2063,26 @@ export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningA
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkCancelAgentRunEnsures }`.
  * @see contexts/collaboration/model/agent-run.dt:498
  */
-export function checkCancelAgentRunEnsures(agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams, value: SuccessOf<CancelAgentRunCommand>): Postcondition<'Collaboration.AgentRun:cancel.changes.cancelledBy' | 'Collaboration.AgentRun:cancel.changes.cancelledAt' | 'Collaboration.AgentRun:cancel->Cancelled.unchanged.id' | 'Collaboration.AgentRun:cancel->Cancelled.unchanged.session' | 'Collaboration.AgentRun:cancel->Cancelled.unchanged.input' | 'Collaboration.AgentRun:cancel->Cancelled.unchanged.queuedBy' | 'Collaboration.AgentRun:cancel->Cancelled.unchanged.queuedAt' | 'Collaboration.AgentRun:cancel->Cancelled.unchanged.baseRevision'> | undefined {
-    if ('Cancelled' in value && value.Cancelled !== undefined && agentRun.state === 'Queued') {
-        if (value.Cancelled.aggregate.cancelledBy !== params.cancelledBy) return { id: 'Collaboration.AgentRun:cancel.changes.cancelledBy', outcome: 'Cancelled', kind: 'changes', field: 'cancelledBy', source: 'cancelledBy = cancelledBy' };
-        if (value.Cancelled.aggregate.cancelledAt !== params.cancelledAt) return { id: 'Collaboration.AgentRun:cancel.changes.cancelledAt', outcome: 'Cancelled', kind: 'changes', field: 'cancelledAt', source: 'cancelledAt = cancelledAt' };
-        if (value.Cancelled.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.id', outcome: 'Cancelled', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
-        if (value.Cancelled.aggregate.session !== agentRun.session) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.session', outcome: 'Cancelled', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
-        if (value.Cancelled.aggregate.input !== agentRun.input && !equalRunInput(value.Cancelled.aggregate.input, agentRun.input)) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.input', outcome: 'Cancelled', kind: 'unchanged', field: 'input', source: 'after.input == before.input' };
-        if (value.Cancelled.aggregate.queuedBy !== agentRun.queuedBy) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.queuedBy', outcome: 'Cancelled', kind: 'unchanged', field: 'queuedBy', source: 'after.queuedBy == before.queuedBy' };
-        if (value.Cancelled.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.queuedAt', outcome: 'Cancelled', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
-        if (value.Cancelled.aggregate.baseRevision !== undefined) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.baseRevision', outcome: 'Cancelled', kind: 'unchanged', field: 'baseRevision', source: 'after.baseRevision == null' };
+export function checkCancelAgentRunEnsures(agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams, value: SuccessOf<CancelAgentRunCommand>): Postcondition<'Collaboration.AgentRun:cancel->QueuedCancelled.changes.cancelledBy' | 'Collaboration.AgentRun:cancel->QueuedCancelled.changes.cancelledAt' | 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.id' | 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.session' | 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.input' | 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.queuedBy' | 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.queuedAt' | 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.baseRevision' | 'Collaboration.AgentRun:cancel->RunningCancelled.changes.baseRevision' | 'Collaboration.AgentRun:cancel->RunningCancelled.changes.cancelledBy' | 'Collaboration.AgentRun:cancel->RunningCancelled.changes.cancelledAt' | 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.id' | 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.session' | 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.input' | 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.queuedBy' | 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.queuedAt'> | undefined {
+    if ('QueuedCancelled' in value && value.QueuedCancelled !== undefined && agentRun.state === 'Queued') {
+        if (value.QueuedCancelled.aggregate.cancelledBy !== params.cancelledBy) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.changes.cancelledBy', outcome: 'QueuedCancelled', kind: 'changes', field: 'cancelledBy', source: 'cancelledBy = cancelledBy' };
+        if (value.QueuedCancelled.aggregate.cancelledAt !== params.cancelledAt) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.changes.cancelledAt', outcome: 'QueuedCancelled', kind: 'changes', field: 'cancelledAt', source: 'cancelledAt = cancelledAt' };
+        if (value.QueuedCancelled.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.id', outcome: 'QueuedCancelled', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
+        if (value.QueuedCancelled.aggregate.session !== agentRun.session) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.session', outcome: 'QueuedCancelled', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
+        if (value.QueuedCancelled.aggregate.input !== agentRun.input && !equalRunInput(value.QueuedCancelled.aggregate.input, agentRun.input)) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.input', outcome: 'QueuedCancelled', kind: 'unchanged', field: 'input', source: 'after.input == before.input' };
+        if (value.QueuedCancelled.aggregate.queuedBy !== agentRun.queuedBy) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.queuedBy', outcome: 'QueuedCancelled', kind: 'unchanged', field: 'queuedBy', source: 'after.queuedBy == before.queuedBy' };
+        if (value.QueuedCancelled.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.queuedAt', outcome: 'QueuedCancelled', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
+        if (value.QueuedCancelled.aggregate.baseRevision !== undefined) return { id: 'Collaboration.AgentRun:cancel->QueuedCancelled.unchanged.baseRevision', outcome: 'QueuedCancelled', kind: 'unchanged', field: 'baseRevision', source: 'after.baseRevision == null' };
     }
-    if ('Cancelled' in value && value.Cancelled !== undefined && agentRun.state === 'Running') {
-        if (value.Cancelled.aggregate.cancelledBy !== params.cancelledBy) return { id: 'Collaboration.AgentRun:cancel.changes.cancelledBy', outcome: 'Cancelled', kind: 'changes', field: 'cancelledBy', source: 'cancelledBy = cancelledBy' };
-        if (value.Cancelled.aggregate.cancelledAt !== params.cancelledAt) return { id: 'Collaboration.AgentRun:cancel.changes.cancelledAt', outcome: 'Cancelled', kind: 'changes', field: 'cancelledAt', source: 'cancelledAt = cancelledAt' };
-        if (value.Cancelled.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.id', outcome: 'Cancelled', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
-        if (value.Cancelled.aggregate.session !== agentRun.session) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.session', outcome: 'Cancelled', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
-        if (value.Cancelled.aggregate.input !== agentRun.input && !equalRunInput(value.Cancelled.aggregate.input, agentRun.input)) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.input', outcome: 'Cancelled', kind: 'unchanged', field: 'input', source: 'after.input == before.input' };
-        if (value.Cancelled.aggregate.queuedBy !== agentRun.queuedBy) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.queuedBy', outcome: 'Cancelled', kind: 'unchanged', field: 'queuedBy', source: 'after.queuedBy == before.queuedBy' };
-        if (value.Cancelled.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.queuedAt', outcome: 'Cancelled', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
-        if (value.Cancelled.aggregate.baseRevision !== undefined) return { id: 'Collaboration.AgentRun:cancel->Cancelled.unchanged.baseRevision', outcome: 'Cancelled', kind: 'unchanged', field: 'baseRevision', source: 'after.baseRevision == null' };
+    if ('RunningCancelled' in value && value.RunningCancelled !== undefined && agentRun.state === 'Running') {
+        if (value.RunningCancelled.aggregate.baseRevision !== agentRun.baseRevision) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.changes.baseRevision', outcome: 'RunningCancelled', kind: 'changes', field: 'baseRevision', source: 'baseRevision = before.baseRevision' };
+        if (value.RunningCancelled.aggregate.cancelledBy !== params.cancelledBy) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.changes.cancelledBy', outcome: 'RunningCancelled', kind: 'changes', field: 'cancelledBy', source: 'cancelledBy = cancelledBy' };
+        if (value.RunningCancelled.aggregate.cancelledAt !== params.cancelledAt) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.changes.cancelledAt', outcome: 'RunningCancelled', kind: 'changes', field: 'cancelledAt', source: 'cancelledAt = cancelledAt' };
+        if (value.RunningCancelled.aggregate.id !== agentRun.id) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.id', outcome: 'RunningCancelled', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
+        if (value.RunningCancelled.aggregate.session !== agentRun.session) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.session', outcome: 'RunningCancelled', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
+        if (value.RunningCancelled.aggregate.input !== agentRun.input && !equalRunInput(value.RunningCancelled.aggregate.input, agentRun.input)) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.input', outcome: 'RunningCancelled', kind: 'unchanged', field: 'input', source: 'after.input == before.input' };
+        if (value.RunningCancelled.aggregate.queuedBy !== agentRun.queuedBy) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.queuedBy', outcome: 'RunningCancelled', kind: 'unchanged', field: 'queuedBy', source: 'after.queuedBy == before.queuedBy' };
+        if (value.RunningCancelled.aggregate.queuedAt !== agentRun.queuedAt) return { id: 'Collaboration.AgentRun:cancel->RunningCancelled.unchanged.queuedAt', outcome: 'RunningCancelled', kind: 'unchanged', field: 'queuedAt', source: 'after.queuedAt == before.queuedAt' };
     }
     return undefined;
 }
@@ -2388,7 +2398,7 @@ export const availableAgentRunCommands = (agentRun: AgentRun): (keyof AgentRunCo
 /**
  * 実行登録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:507
+ * @see contexts/collaboration/model/agent-run.dt:511
  */
 export interface RunQueued {
     readonly type: 'Collaboration.RunQueued';
@@ -2406,7 +2416,7 @@ export interface RunQueued {
 /**
  * 打ち消し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:515
+ * @see contexts/collaboration/model/agent-run.dt:519
  */
 export interface RunReverted {
     readonly type: 'Collaboration.RunReverted';
@@ -2424,7 +2434,7 @@ export interface RunReverted {
 /**
  * 人の手直し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:523
+ * @see contexts/collaboration/model/agent-run.dt:527
  */
 export interface RunEdited {
     readonly type: 'Collaboration.RunEdited';
@@ -2448,7 +2458,7 @@ export interface RunEdited {
 /**
  * ホットスポットの名前
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:534
+ * @see contexts/collaboration/model/agent-run.dt:538
  */
 export interface RunHotspotNamed {
     readonly type: 'Collaboration.RunHotspotNamed';
@@ -2463,7 +2473,7 @@ export interface RunHotspotNamed {
 /**
  * 手直しの食い違い
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:540
+ * @see contexts/collaboration/model/agent-run.dt:544
  */
 export interface RunEditConflicted {
     readonly type: 'Collaboration.RunEditConflicted';
@@ -2476,7 +2486,7 @@ export interface RunEditConflicted {
 /**
  * AI に任せた打ち消し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:545
+ * @see contexts/collaboration/model/agent-run.dt:549
  */
 export interface RevertLeftToAgent {
     readonly type: 'Collaboration.RevertLeftToAgent';
@@ -2489,7 +2499,7 @@ export interface RevertLeftToAgent {
 /**
  * 実行開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:550
+ * @see contexts/collaboration/model/agent-run.dt:554
  */
 export interface RunStarted {
     readonly type: 'Collaboration.RunStarted';
@@ -2503,7 +2513,7 @@ export interface RunStarted {
 /**
  * 実行完了
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:556
+ * @see contexts/collaboration/model/agent-run.dt:560
  */
 export interface RunCompleted {
     readonly type: 'Collaboration.RunCompleted';
@@ -2518,7 +2528,7 @@ export interface RunCompleted {
 /**
  * 確認依頼
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:563
+ * @see contexts/collaboration/model/agent-run.dt:567
  */
 export interface RunNeedsClarification {
     readonly type: 'Collaboration.RunNeedsClarification';
@@ -2534,7 +2544,7 @@ export interface RunNeedsClarification {
 /**
  * 実行辞退
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:570
+ * @see contexts/collaboration/model/agent-run.dt:574
  */
 export interface RunDeclined {
     readonly type: 'Collaboration.RunDeclined';
@@ -2548,7 +2558,7 @@ export interface RunDeclined {
 /**
  * 実行失敗
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:576
+ * @see contexts/collaboration/model/agent-run.dt:580
  */
 export interface RunFailed {
     readonly type: 'Collaboration.RunFailed';
@@ -2562,7 +2572,7 @@ export interface RunFailed {
 /**
  * 実行中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:582
+ * @see contexts/collaboration/model/agent-run.dt:586
  */
 export interface RunCancelled {
     readonly type: 'Collaboration.RunCancelled';
@@ -2576,7 +2586,7 @@ export interface RunCancelled {
 /**
  * 依頼の重複
  * 同じ依頼を2回束ねた。
- * @see contexts/collaboration/model/agent-run.dt:589
+ * @see contexts/collaboration/model/agent-run.dt:593
  */
 export interface DuplicateRequest {
     readonly type: 'Collaboration.DuplicateRequest';
@@ -2585,7 +2595,7 @@ export interface DuplicateRequest {
 /**
  * 入力の不一致
  * 凍結した入力が、束ねた依頼と合わない。
- * @see contexts/collaboration/model/agent-run.dt:592
+ * @see contexts/collaboration/model/agent-run.dt:596
  */
 export interface InputMismatch {
     readonly type: 'Collaboration.InputMismatch';
@@ -2594,7 +2604,7 @@ export interface InputMismatch {
 /**
  * 変更の有無の不一致
  * 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
- * @see contexts/collaboration/model/agent-run.dt:595
+ * @see contexts/collaboration/model/agent-run.dt:599
  */
 export interface ChangedMismatch {
     readonly type: 'Collaboration.ChangedMismatch';
@@ -2603,7 +2613,7 @@ export interface ChangedMismatch {
 /**
  * 報告が必要
  * 成功の条件を満たさない失敗は、報告とともに finish で終える。
- * @see contexts/collaboration/model/agent-run.dt:598
+ * @see contexts/collaboration/model/agent-run.dt:602
  */
 export interface ReportRequired {
     readonly type: 'Collaboration.ReportRequired';
@@ -2612,7 +2622,7 @@ export interface ReportRequired {
 /**
  * 別案を選べない実行
  * 別案を選んだ実行は、完了していないか、返答に前提がない（別案を選べるのは前提のある完了の実行）。
- * @see contexts/collaboration/model/agent-run.dt:601
+ * @see contexts/collaboration/model/agent-run.dt:605
  */
 export interface RunNotPickable {
     readonly type: 'Collaboration.RunNotPickable';
@@ -2623,7 +2633,7 @@ export interface RunNotPickable {
 /**
  * 返答にない別案
  * 選んだ前提の番号または別案のキーが、その実行の返答にない。
- * @see contexts/collaboration/model/agent-run.dt:606
+ * @see contexts/collaboration/model/agent-run.dt:610
  */
 export interface AlternativeNotFound {
     readonly type: 'Collaboration.AlternativeNotFound';
@@ -2634,7 +2644,7 @@ export interface AlternativeNotFound {
 /**
  * 選んだ実行と依頼の不一致
  * 別案を選んでやり直す実行の依頼が、選んだ実行の依頼と同じでない。
- * @see contexts/collaboration/model/agent-run.dt:611
+ * @see contexts/collaboration/model/agent-run.dt:615
  */
 export interface PickMismatch {
     readonly type: 'Collaboration.PickMismatch';
@@ -2645,7 +2655,7 @@ export interface PickMismatch {
 /**
  * 返答の不整合
  * エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
- * @see contexts/collaboration/model/agent-run.dt:616
+ * @see contexts/collaboration/model/agent-run.dt:620
  */
 export interface InvalidReply {
     readonly type: 'Collaboration.InvalidReply';
@@ -3399,17 +3409,17 @@ export type StartSlashCommandDecision = (
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkStartSlashCommandEnsures }`.
  * @see contexts/collaboration/model/command.dt:111
  */
-export function checkStartSlashCommandEnsures(params: StartSlashCommandParams, value: SuccessOf<StartSlashCommandCommand>): Postcondition<'Collaboration.SlashCommand:start.changes.id' | 'Collaboration.SlashCommand:start.changes.session' | 'Collaboration.SlashCommand:start.changes.kind' | 'Collaboration.SlashCommand:start.changes.startedBy' | 'Collaboration.SlashCommand:start.changes.opening' | 'Collaboration.SlashCommand:start.changes.language' | 'Collaboration.SlashCommand:start.changes.startedAt' | 'Collaboration.SlashCommand:start->Working.unchanged.scope' | 'Collaboration.SlashCommand:start->Working.unchanged.guide'> | undefined {
+export function checkStartSlashCommandEnsures(params: StartSlashCommandParams, value: SuccessOf<StartSlashCommandCommand>): Postcondition<'Collaboration.SlashCommand:start.changes.id' | 'Collaboration.SlashCommand:start.changes.session' | 'Collaboration.SlashCommand:start.changes.kind' | 'Collaboration.SlashCommand:start.changes.startedBy' | 'Collaboration.SlashCommand:start.changes.opening' | 'Collaboration.SlashCommand:start.changes.scope' | 'Collaboration.SlashCommand:start.changes.language' | 'Collaboration.SlashCommand:start.changes.startedAt' | 'Collaboration.SlashCommand:start.changes.guide'> | undefined {
     if ('Working' in value && value.Working !== undefined) {
         if (value.Working.aggregate.id !== params.id) return { id: 'Collaboration.SlashCommand:start.changes.id', outcome: 'Working', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Working.aggregate.session !== params.session) return { id: 'Collaboration.SlashCommand:start.changes.session', outcome: 'Working', kind: 'changes', field: 'session', source: 'session = session' };
         if (value.Working.aggregate.kind !== params.kind) return { id: 'Collaboration.SlashCommand:start.changes.kind', outcome: 'Working', kind: 'changes', field: 'kind', source: 'kind = kind' };
         if (value.Working.aggregate.startedBy !== params.startedBy) return { id: 'Collaboration.SlashCommand:start.changes.startedBy', outcome: 'Working', kind: 'changes', field: 'startedBy', source: 'startedBy = startedBy' };
         if (value.Working.aggregate.opening !== params.opening) return { id: 'Collaboration.SlashCommand:start.changes.opening', outcome: 'Working', kind: 'changes', field: 'opening', source: 'opening = opening' };
+        if (value.Working.aggregate.scope !== params.scope) return { id: 'Collaboration.SlashCommand:start.changes.scope', outcome: 'Working', kind: 'changes', field: 'scope', source: 'scope = scope' };
         if (value.Working.aggregate.language !== params.language) return { id: 'Collaboration.SlashCommand:start.changes.language', outcome: 'Working', kind: 'changes', field: 'language', source: 'language = language' };
         if (value.Working.aggregate.startedAt !== params.startedAt) return { id: 'Collaboration.SlashCommand:start.changes.startedAt', outcome: 'Working', kind: 'changes', field: 'startedAt', source: 'startedAt = startedAt' };
-        if (value.Working.aggregate.scope !== undefined) return { id: 'Collaboration.SlashCommand:start->Working.unchanged.scope', outcome: 'Working', kind: 'unchanged', field: 'scope', source: 'after.scope == null' };
-        if (value.Working.aggregate.guide !== undefined) return { id: 'Collaboration.SlashCommand:start->Working.unchanged.guide', outcome: 'Working', kind: 'unchanged', field: 'guide', source: 'after.guide == null' };
+        if (!sameOptional(value.Working.aggregate.guide, params.guide, equalGuideSnapshot)) return { id: 'Collaboration.SlashCommand:start.changes.guide', outcome: 'Working', kind: 'changes', field: 'guide', source: 'guide = guide' };
     }
     return undefined;
 }
@@ -3497,7 +3507,7 @@ export interface AnswerSlashCommandParams {
  * SlashCommand.answer (Working -> Answered)
  * 答える
  * AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/guide` は、その中身も。
- * @changes answer, answeredAt
+ * @changes answer, next, answeredAt
  * @emits SlashCommandAnswered — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:123
  */
@@ -3514,8 +3524,8 @@ export type AnswerSlashCommandCommand = (
 /**
  * SlashCommand.answer, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes answer, answeredAt
- * Working -> Answered — set: answer, next (new in Answered), answeredAt; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
+ * @changes answer, next, answeredAt
+ * Working -> Answered — set: answer, next, answeredAt; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
  * @see contexts/collaboration/model/command.dt:123
  */
 export type AnswerSlashCommandDecision = {
@@ -3533,9 +3543,10 @@ export type AnswerSlashCommandDecision = {
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkAnswerSlashCommandEnsures }`.
  * @see contexts/collaboration/model/command.dt:123
  */
-export function checkAnswerSlashCommandEnsures(slashCommand: WorkingSlashCommand, params: AnswerSlashCommandParams, value: SuccessOf<AnswerSlashCommandCommand>): Postcondition<'Collaboration.SlashCommand:answer.changes.answer' | 'Collaboration.SlashCommand:answer.changes.answeredAt' | 'Collaboration.SlashCommand:answer->Answered.unchanged.id' | 'Collaboration.SlashCommand:answer->Answered.unchanged.session' | 'Collaboration.SlashCommand:answer->Answered.unchanged.kind' | 'Collaboration.SlashCommand:answer->Answered.unchanged.startedBy' | 'Collaboration.SlashCommand:answer->Answered.unchanged.opening' | 'Collaboration.SlashCommand:answer->Answered.unchanged.scope' | 'Collaboration.SlashCommand:answer->Answered.unchanged.language' | 'Collaboration.SlashCommand:answer->Answered.unchanged.startedAt' | 'Collaboration.SlashCommand:answer->Answered.unchanged.guide' | 'Collaboration.SlashCommand:answer->Answered.unchanged.next'> | undefined {
+export function checkAnswerSlashCommandEnsures(slashCommand: WorkingSlashCommand, params: AnswerSlashCommandParams, value: SuccessOf<AnswerSlashCommandCommand>): Postcondition<'Collaboration.SlashCommand:answer.changes.answer' | 'Collaboration.SlashCommand:answer.changes.next' | 'Collaboration.SlashCommand:answer.changes.answeredAt' | 'Collaboration.SlashCommand:answer->Answered.unchanged.id' | 'Collaboration.SlashCommand:answer->Answered.unchanged.session' | 'Collaboration.SlashCommand:answer->Answered.unchanged.kind' | 'Collaboration.SlashCommand:answer->Answered.unchanged.startedBy' | 'Collaboration.SlashCommand:answer->Answered.unchanged.opening' | 'Collaboration.SlashCommand:answer->Answered.unchanged.scope' | 'Collaboration.SlashCommand:answer->Answered.unchanged.language' | 'Collaboration.SlashCommand:answer->Answered.unchanged.startedAt' | 'Collaboration.SlashCommand:answer->Answered.unchanged.guide'> | undefined {
     if ('Answered' in value && value.Answered !== undefined && slashCommand.state === 'Working') {
         if (value.Answered.aggregate.answer !== params.answer) return { id: 'Collaboration.SlashCommand:answer.changes.answer', outcome: 'Answered', kind: 'changes', field: 'answer', source: 'answer = answer' };
+        if (!sameOptional(value.Answered.aggregate.next, params.next, equalNextAnswer)) return { id: 'Collaboration.SlashCommand:answer.changes.next', outcome: 'Answered', kind: 'changes', field: 'next', source: 'next = next' };
         if (value.Answered.aggregate.answeredAt !== params.answeredAt) return { id: 'Collaboration.SlashCommand:answer.changes.answeredAt', outcome: 'Answered', kind: 'changes', field: 'answeredAt', source: 'answeredAt = answeredAt' };
         if (value.Answered.aggregate.id !== slashCommand.id) return { id: 'Collaboration.SlashCommand:answer->Answered.unchanged.id', outcome: 'Answered', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Answered.aggregate.session !== slashCommand.session) return { id: 'Collaboration.SlashCommand:answer->Answered.unchanged.session', outcome: 'Answered', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
@@ -3546,7 +3557,6 @@ export function checkAnswerSlashCommandEnsures(slashCommand: WorkingSlashCommand
         if (value.Answered.aggregate.language !== slashCommand.language) return { id: 'Collaboration.SlashCommand:answer->Answered.unchanged.language', outcome: 'Answered', kind: 'unchanged', field: 'language', source: 'after.language == before.language' };
         if (value.Answered.aggregate.startedAt !== slashCommand.startedAt) return { id: 'Collaboration.SlashCommand:answer->Answered.unchanged.startedAt', outcome: 'Answered', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
         if (value.Answered.aggregate.guide !== slashCommand.guide && !sameOptional(value.Answered.aggregate.guide, slashCommand.guide, equalGuideSnapshot)) return { id: 'Collaboration.SlashCommand:answer->Answered.unchanged.guide', outcome: 'Answered', kind: 'unchanged', field: 'guide', source: 'after.guide == before.guide' };
-        if (value.Answered.aggregate.next !== undefined) return { id: 'Collaboration.SlashCommand:answer->Answered.unchanged.next', outcome: 'Answered', kind: 'unchanged', field: 'next', source: 'after.next == null' };
     }
     return undefined;
 }
@@ -3574,7 +3584,7 @@ export interface ApplySlashCommandParams {
  * 実行を記録する。
  * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: chosen.every(c => c < candidates.length)
- * @changes chosen, appliedAt, run
+ * @changes chosen, appliedBy, appliedAt, run
  * @emits CandidatesApplied — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:130
  */
@@ -3593,8 +3603,8 @@ export type ApplySlashCommandCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: chosen.every(c => c < candidates.length)
- * @changes chosen, appliedAt, run
- * Listed -> Applied — set: chosen, appliedBy (new in Applied), appliedAt, run; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide, candidates; dropped: listedAt
+ * @changes chosen, appliedBy, appliedAt, run
+ * Listed -> Applied — set: chosen, appliedBy, appliedAt, run; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide, candidates; dropped: listedAt
  * @see contexts/collaboration/model/command.dt:130
  */
 export type ApplySlashCommandDecision = {
@@ -3622,9 +3632,10 @@ export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand,
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkApplySlashCommandEnsures }`.
  * @see contexts/collaboration/model/command.dt:130
  */
-export function checkApplySlashCommandEnsures(slashCommand: ListedSlashCommand, params: ApplySlashCommandParams, value: SuccessOf<ApplySlashCommandCommand>): Postcondition<'Collaboration.SlashCommand:apply.changes.chosen' | 'Collaboration.SlashCommand:apply.changes.appliedAt' | 'Collaboration.SlashCommand:apply.changes.run' | 'Collaboration.SlashCommand:apply->Applied.unchanged.id' | 'Collaboration.SlashCommand:apply->Applied.unchanged.session' | 'Collaboration.SlashCommand:apply->Applied.unchanged.kind' | 'Collaboration.SlashCommand:apply->Applied.unchanged.startedBy' | 'Collaboration.SlashCommand:apply->Applied.unchanged.opening' | 'Collaboration.SlashCommand:apply->Applied.unchanged.scope' | 'Collaboration.SlashCommand:apply->Applied.unchanged.language' | 'Collaboration.SlashCommand:apply->Applied.unchanged.startedAt' | 'Collaboration.SlashCommand:apply->Applied.unchanged.guide' | 'Collaboration.SlashCommand:apply->Applied.unchanged.candidates' | 'Collaboration.SlashCommand:apply->Applied.unchanged.appliedBy'> | undefined {
+export function checkApplySlashCommandEnsures(slashCommand: ListedSlashCommand, params: ApplySlashCommandParams, value: SuccessOf<ApplySlashCommandCommand>): Postcondition<'Collaboration.SlashCommand:apply.changes.chosen' | 'Collaboration.SlashCommand:apply.changes.appliedBy' | 'Collaboration.SlashCommand:apply.changes.appliedAt' | 'Collaboration.SlashCommand:apply.changes.run' | 'Collaboration.SlashCommand:apply->Applied.unchanged.id' | 'Collaboration.SlashCommand:apply->Applied.unchanged.session' | 'Collaboration.SlashCommand:apply->Applied.unchanged.kind' | 'Collaboration.SlashCommand:apply->Applied.unchanged.startedBy' | 'Collaboration.SlashCommand:apply->Applied.unchanged.opening' | 'Collaboration.SlashCommand:apply->Applied.unchanged.scope' | 'Collaboration.SlashCommand:apply->Applied.unchanged.language' | 'Collaboration.SlashCommand:apply->Applied.unchanged.startedAt' | 'Collaboration.SlashCommand:apply->Applied.unchanged.guide' | 'Collaboration.SlashCommand:apply->Applied.unchanged.candidates'> | undefined {
     if ('Applied' in value && value.Applied !== undefined && slashCommand.state === 'Listed') {
         if (!sameList(value.Applied.aggregate.chosen, params.chosen, ($40: CandidateIndex, $41: CandidateIndex) => $40 === $41)) return { id: 'Collaboration.SlashCommand:apply.changes.chosen', outcome: 'Applied', kind: 'changes', field: 'chosen', source: 'chosen = chosen' };
+        if (value.Applied.aggregate.appliedBy !== params.appliedBy) return { id: 'Collaboration.SlashCommand:apply.changes.appliedBy', outcome: 'Applied', kind: 'changes', field: 'appliedBy', source: 'appliedBy = appliedBy' };
         if (value.Applied.aggregate.appliedAt !== params.appliedAt) return { id: 'Collaboration.SlashCommand:apply.changes.appliedAt', outcome: 'Applied', kind: 'changes', field: 'appliedAt', source: 'appliedAt = appliedAt' };
         if (value.Applied.aggregate.run !== params.run) return { id: 'Collaboration.SlashCommand:apply.changes.run', outcome: 'Applied', kind: 'changes', field: 'run', source: 'run = run' };
         if (value.Applied.aggregate.id !== slashCommand.id) return { id: 'Collaboration.SlashCommand:apply->Applied.unchanged.id', outcome: 'Applied', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
@@ -3637,7 +3648,6 @@ export function checkApplySlashCommandEnsures(slashCommand: ListedSlashCommand, 
         if (value.Applied.aggregate.startedAt !== slashCommand.startedAt) return { id: 'Collaboration.SlashCommand:apply->Applied.unchanged.startedAt', outcome: 'Applied', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
         if (value.Applied.aggregate.guide !== slashCommand.guide && !sameOptional(value.Applied.aggregate.guide, slashCommand.guide, equalGuideSnapshot)) return { id: 'Collaboration.SlashCommand:apply->Applied.unchanged.guide', outcome: 'Applied', kind: 'unchanged', field: 'guide', source: 'after.guide == before.guide' };
         if (value.Applied.aggregate.candidates !== slashCommand.candidates && !sameList(value.Applied.aggregate.candidates, slashCommand.candidates, equalCommandCandidate)) return { id: 'Collaboration.SlashCommand:apply->Applied.unchanged.candidates', outcome: 'Applied', kind: 'unchanged', field: 'candidates', source: 'after.candidates == before.candidates' };
-        if (value.Applied.aggregate.appliedBy !== undefined) return { id: 'Collaboration.SlashCommand:apply->Applied.unchanged.appliedBy', outcome: 'Applied', kind: 'unchanged', field: 'appliedBy', source: 'after.appliedBy == null' };
     }
     return undefined;
 }
@@ -5350,17 +5360,17 @@ export type StartInterviewDecision = (
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkStartInterviewEnsures }`.
  * @see contexts/collaboration/model/interview.dt:157
  */
-export function checkStartInterviewEnsures(params: StartInterviewParams, value: SuccessOf<StartInterviewCommand>): Postcondition<'Collaboration.Interview:start.changes.id' | 'Collaboration.Interview:start.changes.session' | 'Collaboration.Interview:start.changes.command' | 'Collaboration.Interview:start.changes.startedBy' | 'Collaboration.Interview:start.changes.opening' | 'Collaboration.Interview:start.changes.language' | 'Collaboration.Interview:start.changes.startedAt' | 'Collaboration.Interview:start->Asking.unchanged.focus' | 'Collaboration.Interview:start->Asking.unchanged.awaiting' | 'Collaboration.Interview:start->Asking.unchanged.asked'> | undefined {
+export function checkStartInterviewEnsures(params: StartInterviewParams, value: SuccessOf<StartInterviewCommand>): Postcondition<'Collaboration.Interview:start.changes.id' | 'Collaboration.Interview:start.changes.session' | 'Collaboration.Interview:start.changes.command' | 'Collaboration.Interview:start.changes.startedBy' | 'Collaboration.Interview:start.changes.opening' | 'Collaboration.Interview:start.changes.focus' | 'Collaboration.Interview:start.changes.language' | 'Collaboration.Interview:start.changes.startedAt' | 'Collaboration.Interview:start.changes.awaiting' | 'Collaboration.Interview:start->Asking.unchanged.asked'> | undefined {
     if ('Asking' in value && value.Asking !== undefined) {
         if (value.Asking.aggregate.id !== params.id) return { id: 'Collaboration.Interview:start.changes.id', outcome: 'Asking', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Asking.aggregate.session !== params.session) return { id: 'Collaboration.Interview:start.changes.session', outcome: 'Asking', kind: 'changes', field: 'session', source: 'session = session' };
         if (value.Asking.aggregate.command !== params.command) return { id: 'Collaboration.Interview:start.changes.command', outcome: 'Asking', kind: 'changes', field: 'command', source: 'command = command' };
         if (value.Asking.aggregate.startedBy !== params.startedBy) return { id: 'Collaboration.Interview:start.changes.startedBy', outcome: 'Asking', kind: 'changes', field: 'startedBy', source: 'startedBy = startedBy' };
         if (value.Asking.aggregate.opening !== params.opening) return { id: 'Collaboration.Interview:start.changes.opening', outcome: 'Asking', kind: 'changes', field: 'opening', source: 'opening = opening' };
+        if (!sameOptional(value.Asking.aggregate.focus, params.focus, equalModelTarget)) return { id: 'Collaboration.Interview:start.changes.focus', outcome: 'Asking', kind: 'changes', field: 'focus', source: 'focus = focus' };
         if (value.Asking.aggregate.language !== params.language) return { id: 'Collaboration.Interview:start.changes.language', outcome: 'Asking', kind: 'changes', field: 'language', source: 'language = language' };
         if (value.Asking.aggregate.startedAt !== params.startedAt) return { id: 'Collaboration.Interview:start.changes.startedAt', outcome: 'Asking', kind: 'changes', field: 'startedAt', source: 'startedAt = startedAt' };
-        if (value.Asking.aggregate.focus !== undefined) return { id: 'Collaboration.Interview:start->Asking.unchanged.focus', outcome: 'Asking', kind: 'unchanged', field: 'focus', source: 'after.focus == null' };
-        if (value.Asking.aggregate.awaiting !== undefined) return { id: 'Collaboration.Interview:start->Asking.unchanged.awaiting', outcome: 'Asking', kind: 'unchanged', field: 'awaiting', source: 'after.awaiting == null' };
+        if (value.Asking.aggregate.awaiting !== params.opening) return { id: 'Collaboration.Interview:start.changes.awaiting', outcome: 'Asking', kind: 'changes', field: 'awaiting', source: 'awaiting = opening' };
         if (value.Asking.aggregate.asked !== undefined) return { id: 'Collaboration.Interview:start->Asking.unchanged.asked', outcome: 'Asking', kind: 'unchanged', field: 'asked', source: 'after.asked == null' };
     }
     return undefined;
@@ -5627,7 +5637,7 @@ export interface ConfirmInterviewParams {
  * ファシリテーターが要約を確定する（編集してもよい）。参加者が始めた聞き取りでは、それが承認になる。新しいストーミング
  * では、実行の登録と同じ取引で、その実行を記録する。
  * @requires facilitatorConfirms (ファシリテーターが確定する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
- * @changes brief, edited, confirmedAt
+ * @changes brief, edited, confirmedBy, confirmedAt, run
  * @emits InterviewConfirmed — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:188
  */
@@ -5645,8 +5655,8 @@ export type ConfirmInterviewCommand = (
  * Interview.confirm, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorConfirms (ファシリテーターが確定する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
- * @changes brief, edited, confirmedAt
- * Briefed -> Confirmed — set: brief, edited, confirmedBy (new in Confirmed), confirmedAt, run (new in Confirmed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
+ * @changes brief, edited, confirmedBy, confirmedAt, run
+ * Briefed -> Confirmed — set: brief, edited, confirmedBy, confirmedAt, run; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
  * @see contexts/collaboration/model/interview.dt:188
  */
 export type ConfirmInterviewDecision = {
@@ -5673,10 +5683,12 @@ export function checkConfirmInterviewRequires(_interview: BriefedInterview, para
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkConfirmInterviewEnsures }`.
  * @see contexts/collaboration/model/interview.dt:188
  */
-export function checkConfirmInterviewEnsures(interview: BriefedInterview, params: ConfirmInterviewParams, value: SuccessOf<ConfirmInterviewCommand>): Postcondition<'Collaboration.Interview:confirm.changes.edited' | 'Collaboration.Interview:confirm.changes.confirmedAt' | 'Collaboration.Interview:confirm->Confirmed.unchanged.id' | 'Collaboration.Interview:confirm->Confirmed.unchanged.session' | 'Collaboration.Interview:confirm->Confirmed.unchanged.command' | 'Collaboration.Interview:confirm->Confirmed.unchanged.startedBy' | 'Collaboration.Interview:confirm->Confirmed.unchanged.opening' | 'Collaboration.Interview:confirm->Confirmed.unchanged.focus' | 'Collaboration.Interview:confirm->Confirmed.unchanged.language' | 'Collaboration.Interview:confirm->Confirmed.unchanged.startedAt' | 'Collaboration.Interview:confirm->Confirmed.unchanged.confirmedBy' | 'Collaboration.Interview:confirm->Confirmed.unchanged.run'> | undefined {
+export function checkConfirmInterviewEnsures(interview: BriefedInterview, params: ConfirmInterviewParams, value: SuccessOf<ConfirmInterviewCommand>): Postcondition<'Collaboration.Interview:confirm.changes.edited' | 'Collaboration.Interview:confirm.changes.confirmedBy' | 'Collaboration.Interview:confirm.changes.confirmedAt' | 'Collaboration.Interview:confirm.changes.run' | 'Collaboration.Interview:confirm->Confirmed.unchanged.id' | 'Collaboration.Interview:confirm->Confirmed.unchanged.session' | 'Collaboration.Interview:confirm->Confirmed.unchanged.command' | 'Collaboration.Interview:confirm->Confirmed.unchanged.startedBy' | 'Collaboration.Interview:confirm->Confirmed.unchanged.opening' | 'Collaboration.Interview:confirm->Confirmed.unchanged.focus' | 'Collaboration.Interview:confirm->Confirmed.unchanged.language' | 'Collaboration.Interview:confirm->Confirmed.unchanged.startedAt'> | undefined {
     if ('Confirmed' in value && value.Confirmed !== undefined && interview.state === 'Briefed') {
         if (value.Confirmed.aggregate.edited !== params.edited) return { id: 'Collaboration.Interview:confirm.changes.edited', outcome: 'Confirmed', kind: 'changes', field: 'edited', source: 'edited = edited' };
+        if (value.Confirmed.aggregate.confirmedBy !== params.confirmedBy) return { id: 'Collaboration.Interview:confirm.changes.confirmedBy', outcome: 'Confirmed', kind: 'changes', field: 'confirmedBy', source: 'confirmedBy = confirmedBy' };
         if (value.Confirmed.aggregate.confirmedAt !== params.confirmedAt) return { id: 'Collaboration.Interview:confirm.changes.confirmedAt', outcome: 'Confirmed', kind: 'changes', field: 'confirmedAt', source: 'confirmedAt = confirmedAt' };
+        if (value.Confirmed.aggregate.run !== params.run) return { id: 'Collaboration.Interview:confirm.changes.run', outcome: 'Confirmed', kind: 'changes', field: 'run', source: 'run = run' };
         if (value.Confirmed.aggregate.id !== interview.id) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.id', outcome: 'Confirmed', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Confirmed.aggregate.session !== interview.session) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.session', outcome: 'Confirmed', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
         if (value.Confirmed.aggregate.command !== interview.command) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.command', outcome: 'Confirmed', kind: 'unchanged', field: 'command', source: 'after.command == before.command' };
@@ -5685,8 +5697,6 @@ export function checkConfirmInterviewEnsures(interview: BriefedInterview, params
         if (value.Confirmed.aggregate.focus !== interview.focus && !sameOptional(value.Confirmed.aggregate.focus, interview.focus, equalModelTarget)) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.focus', outcome: 'Confirmed', kind: 'unchanged', field: 'focus', source: 'after.focus == before.focus' };
         if (value.Confirmed.aggregate.language !== interview.language) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.language', outcome: 'Confirmed', kind: 'unchanged', field: 'language', source: 'after.language == before.language' };
         if (value.Confirmed.aggregate.startedAt !== interview.startedAt) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.startedAt', outcome: 'Confirmed', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
-        if (value.Confirmed.aggregate.confirmedBy !== undefined) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.confirmedBy', outcome: 'Confirmed', kind: 'unchanged', field: 'confirmedBy', source: 'after.confirmedBy == null' };
-        if (value.Confirmed.aggregate.run !== undefined) return { id: 'Collaboration.Interview:confirm->Confirmed.unchanged.run', outcome: 'Confirmed', kind: 'unchanged', field: 'run', source: 'after.run == null' };
     }
     return undefined;
 }
@@ -5710,7 +5720,7 @@ export interface RejectInterviewParams {
  * 要約を却下する
  * ファシリテーターが要約を却下する（ひとことを添えてもよい）。聞き取りはそこで終わる。
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes rejectedBy, rejectedAt
+ * @changes rejectedBy, note, rejectedAt
  * @emits InterviewRejected — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:197
  */
@@ -5728,8 +5738,8 @@ export type RejectInterviewCommand = (
  * Interview.reject, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes rejectedBy, rejectedAt
- * Briefed -> Rejected — set: rejectedBy, note (new in Rejected), rejectedAt; carried over: id, session, command, startedBy, opening, focus, language, startedAt, brief; dropped: answered, briefedAt
+ * @changes rejectedBy, note, rejectedAt
+ * Briefed -> Rejected — set: rejectedBy, note, rejectedAt; carried over: id, session, command, startedBy, opening, focus, language, startedAt, brief; dropped: answered, briefedAt
  * @see contexts/collaboration/model/interview.dt:197
  */
 export type RejectInterviewDecision = {
@@ -5756,9 +5766,10 @@ export function checkRejectInterviewRequires(_interview: BriefedInterview, param
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkRejectInterviewEnsures }`.
  * @see contexts/collaboration/model/interview.dt:197
  */
-export function checkRejectInterviewEnsures(interview: BriefedInterview, params: RejectInterviewParams, value: SuccessOf<RejectInterviewCommand>): Postcondition<'Collaboration.Interview:reject.changes.rejectedBy' | 'Collaboration.Interview:reject.changes.rejectedAt' | 'Collaboration.Interview:reject->Rejected.unchanged.id' | 'Collaboration.Interview:reject->Rejected.unchanged.session' | 'Collaboration.Interview:reject->Rejected.unchanged.command' | 'Collaboration.Interview:reject->Rejected.unchanged.startedBy' | 'Collaboration.Interview:reject->Rejected.unchanged.opening' | 'Collaboration.Interview:reject->Rejected.unchanged.focus' | 'Collaboration.Interview:reject->Rejected.unchanged.language' | 'Collaboration.Interview:reject->Rejected.unchanged.startedAt' | 'Collaboration.Interview:reject->Rejected.unchanged.brief' | 'Collaboration.Interview:reject->Rejected.unchanged.note'> | undefined {
+export function checkRejectInterviewEnsures(interview: BriefedInterview, params: RejectInterviewParams, value: SuccessOf<RejectInterviewCommand>): Postcondition<'Collaboration.Interview:reject.changes.rejectedBy' | 'Collaboration.Interview:reject.changes.note' | 'Collaboration.Interview:reject.changes.rejectedAt' | 'Collaboration.Interview:reject->Rejected.unchanged.id' | 'Collaboration.Interview:reject->Rejected.unchanged.session' | 'Collaboration.Interview:reject->Rejected.unchanged.command' | 'Collaboration.Interview:reject->Rejected.unchanged.startedBy' | 'Collaboration.Interview:reject->Rejected.unchanged.opening' | 'Collaboration.Interview:reject->Rejected.unchanged.focus' | 'Collaboration.Interview:reject->Rejected.unchanged.language' | 'Collaboration.Interview:reject->Rejected.unchanged.startedAt' | 'Collaboration.Interview:reject->Rejected.unchanged.brief'> | undefined {
     if ('Rejected' in value && value.Rejected !== undefined && interview.state === 'Briefed') {
         if (value.Rejected.aggregate.rejectedBy !== params.rejectedBy) return { id: 'Collaboration.Interview:reject.changes.rejectedBy', outcome: 'Rejected', kind: 'changes', field: 'rejectedBy', source: 'rejectedBy = rejectedBy' };
+        if (value.Rejected.aggregate.note !== params.note) return { id: 'Collaboration.Interview:reject.changes.note', outcome: 'Rejected', kind: 'changes', field: 'note', source: 'note = note' };
         if (value.Rejected.aggregate.rejectedAt !== params.rejectedAt) return { id: 'Collaboration.Interview:reject.changes.rejectedAt', outcome: 'Rejected', kind: 'changes', field: 'rejectedAt', source: 'rejectedAt = rejectedAt' };
         if (value.Rejected.aggregate.id !== interview.id) return { id: 'Collaboration.Interview:reject->Rejected.unchanged.id', outcome: 'Rejected', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Rejected.aggregate.session !== interview.session) return { id: 'Collaboration.Interview:reject->Rejected.unchanged.session', outcome: 'Rejected', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
@@ -5769,7 +5780,6 @@ export function checkRejectInterviewEnsures(interview: BriefedInterview, params:
         if (value.Rejected.aggregate.language !== interview.language) return { id: 'Collaboration.Interview:reject->Rejected.unchanged.language', outcome: 'Rejected', kind: 'unchanged', field: 'language', source: 'after.language == before.language' };
         if (value.Rejected.aggregate.startedAt !== interview.startedAt) return { id: 'Collaboration.Interview:reject->Rejected.unchanged.startedAt', outcome: 'Rejected', kind: 'unchanged', field: 'startedAt', source: 'after.startedAt == before.startedAt' };
         if (value.Rejected.aggregate.brief !== interview.brief && !equalInterviewBrief(value.Rejected.aggregate.brief, interview.brief)) return { id: 'Collaboration.Interview:reject->Rejected.unchanged.brief', outcome: 'Rejected', kind: 'unchanged', field: 'brief', source: 'after.brief == before.brief' };
-        if (value.Rejected.aggregate.note !== undefined) return { id: 'Collaboration.Interview:reject->Rejected.unchanged.note', outcome: 'Rejected', kind: 'unchanged', field: 'note', source: 'after.note == null' };
     }
     return undefined;
 }
@@ -7423,7 +7433,7 @@ export interface ApproveChangeProposalParams {
  * 実行を記録する。
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
  * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
- * @changes approvedBy, approvedAt, run
+ * @changes approvedBy, approvedAt, option, editedHow, run
  * @emits ProposalApproved — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:98
  */
@@ -7442,8 +7452,8 @@ export type ApproveChangeProposalCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
  * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
- * @changes approvedBy, approvedAt, run
- * Open -> Approved — set: approvedBy, approvedAt, option (new in Approved), editedHow (new in Approved), run; carried over: id, session, triage, request, requestedBy, content, proposedAt
+ * @changes approvedBy, approvedAt, option, editedHow, run
+ * Open -> Approved — set: approvedBy, approvedAt, option, editedHow, run; carried over: id, session, triage, request, requestedBy, content, proposedAt
  * @see contexts/collaboration/model/proposal.dt:98
  */
 export type ApproveChangeProposalDecision = {
@@ -7471,10 +7481,12 @@ export function checkApproveChangeProposalRequires(changeProposal: OpenChangePro
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkApproveChangeProposalEnsures }`.
  * @see contexts/collaboration/model/proposal.dt:98
  */
-export function checkApproveChangeProposalEnsures(changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams, value: SuccessOf<ApproveChangeProposalCommand>): Postcondition<'Collaboration.ChangeProposal:approve.changes.approvedBy' | 'Collaboration.ChangeProposal:approve.changes.approvedAt' | 'Collaboration.ChangeProposal:approve.changes.run' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.id' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.session' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.triage' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.request' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.requestedBy' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.content' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.proposedAt' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.option' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.editedHow'> | undefined {
+export function checkApproveChangeProposalEnsures(changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams, value: SuccessOf<ApproveChangeProposalCommand>): Postcondition<'Collaboration.ChangeProposal:approve.changes.approvedBy' | 'Collaboration.ChangeProposal:approve.changes.approvedAt' | 'Collaboration.ChangeProposal:approve.changes.option' | 'Collaboration.ChangeProposal:approve.changes.editedHow' | 'Collaboration.ChangeProposal:approve.changes.run' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.id' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.session' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.triage' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.request' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.requestedBy' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.content' | 'Collaboration.ChangeProposal:approve->Approved.unchanged.proposedAt'> | undefined {
     if ('Approved' in value && value.Approved !== undefined && changeProposal.state === 'Open') {
         if (value.Approved.aggregate.approvedBy !== params.approvedBy) return { id: 'Collaboration.ChangeProposal:approve.changes.approvedBy', outcome: 'Approved', kind: 'changes', field: 'approvedBy', source: 'approvedBy = approvedBy' };
         if (value.Approved.aggregate.approvedAt !== params.approvedAt) return { id: 'Collaboration.ChangeProposal:approve.changes.approvedAt', outcome: 'Approved', kind: 'changes', field: 'approvedAt', source: 'approvedAt = approvedAt' };
+        if (value.Approved.aggregate.option !== params.option) return { id: 'Collaboration.ChangeProposal:approve.changes.option', outcome: 'Approved', kind: 'changes', field: 'option', source: 'option = option' };
+        if (value.Approved.aggregate.editedHow !== params.editedHow) return { id: 'Collaboration.ChangeProposal:approve.changes.editedHow', outcome: 'Approved', kind: 'changes', field: 'editedHow', source: 'editedHow = editedHow' };
         if (value.Approved.aggregate.run !== params.run) return { id: 'Collaboration.ChangeProposal:approve.changes.run', outcome: 'Approved', kind: 'changes', field: 'run', source: 'run = run' };
         if (value.Approved.aggregate.id !== changeProposal.id) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.id', outcome: 'Approved', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Approved.aggregate.session !== changeProposal.session) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.session', outcome: 'Approved', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
@@ -7483,8 +7495,6 @@ export function checkApproveChangeProposalEnsures(changeProposal: OpenChangeProp
         if (value.Approved.aggregate.requestedBy !== changeProposal.requestedBy) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.requestedBy', outcome: 'Approved', kind: 'unchanged', field: 'requestedBy', source: 'after.requestedBy == before.requestedBy' };
         if (value.Approved.aggregate.content !== changeProposal.content && !equalProposalContent(value.Approved.aggregate.content, changeProposal.content)) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.content', outcome: 'Approved', kind: 'unchanged', field: 'content', source: 'after.content == before.content' };
         if (value.Approved.aggregate.proposedAt !== changeProposal.proposedAt) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.proposedAt', outcome: 'Approved', kind: 'unchanged', field: 'proposedAt', source: 'after.proposedAt == before.proposedAt' };
-        if (value.Approved.aggregate.option !== undefined) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.option', outcome: 'Approved', kind: 'unchanged', field: 'option', source: 'after.option == null' };
-        if (value.Approved.aggregate.editedHow !== undefined) return { id: 'Collaboration.ChangeProposal:approve->Approved.unchanged.editedHow', outcome: 'Approved', kind: 'unchanged', field: 'editedHow', source: 'after.editedHow == null' };
     }
     return undefined;
 }
@@ -7508,7 +7518,7 @@ export interface RejectChangeProposalParams {
  * 変更案を却下する
  * ファシリテーターが却下する（ひとことを添えてもよい）。
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes rejectedBy, rejectedAt
+ * @changes rejectedBy, rejectedAt, note
  * @emits ProposalRejected — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:110
  */
@@ -7526,8 +7536,8 @@ export type RejectChangeProposalCommand = (
  * ChangeProposal.reject, decided per source state; implement it with `decide(ChangeProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes rejectedBy, rejectedAt
- * Open -> Rejected — set: rejectedBy, rejectedAt, note (new in Rejected); carried over: id, session, triage, request, requestedBy, content, proposedAt
+ * @changes rejectedBy, rejectedAt, note
+ * Open -> Rejected — set: rejectedBy, rejectedAt, note; carried over: id, session, triage, request, requestedBy, content, proposedAt
  * @see contexts/collaboration/model/proposal.dt:110
  */
 export type RejectChangeProposalDecision = {
@@ -7554,10 +7564,11 @@ export function checkRejectChangeProposalRequires(_changeProposal: OpenChangePro
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkRejectChangeProposalEnsures }`.
  * @see contexts/collaboration/model/proposal.dt:110
  */
-export function checkRejectChangeProposalEnsures(changeProposal: OpenChangeProposal, params: RejectChangeProposalParams, value: SuccessOf<RejectChangeProposalCommand>): Postcondition<'Collaboration.ChangeProposal:reject.changes.rejectedBy' | 'Collaboration.ChangeProposal:reject.changes.rejectedAt' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.id' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.session' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.triage' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.request' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.requestedBy' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.content' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.proposedAt' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.note'> | undefined {
+export function checkRejectChangeProposalEnsures(changeProposal: OpenChangeProposal, params: RejectChangeProposalParams, value: SuccessOf<RejectChangeProposalCommand>): Postcondition<'Collaboration.ChangeProposal:reject.changes.rejectedBy' | 'Collaboration.ChangeProposal:reject.changes.rejectedAt' | 'Collaboration.ChangeProposal:reject.changes.note' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.id' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.session' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.triage' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.request' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.requestedBy' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.content' | 'Collaboration.ChangeProposal:reject->Rejected.unchanged.proposedAt'> | undefined {
     if ('Rejected' in value && value.Rejected !== undefined && changeProposal.state === 'Open') {
         if (value.Rejected.aggregate.rejectedBy !== params.rejectedBy) return { id: 'Collaboration.ChangeProposal:reject.changes.rejectedBy', outcome: 'Rejected', kind: 'changes', field: 'rejectedBy', source: 'rejectedBy = rejectedBy' };
         if (value.Rejected.aggregate.rejectedAt !== params.rejectedAt) return { id: 'Collaboration.ChangeProposal:reject.changes.rejectedAt', outcome: 'Rejected', kind: 'changes', field: 'rejectedAt', source: 'rejectedAt = rejectedAt' };
+        if (value.Rejected.aggregate.note !== params.note) return { id: 'Collaboration.ChangeProposal:reject.changes.note', outcome: 'Rejected', kind: 'changes', field: 'note', source: 'note = note' };
         if (value.Rejected.aggregate.id !== changeProposal.id) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.id', outcome: 'Rejected', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Rejected.aggregate.session !== changeProposal.session) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.session', outcome: 'Rejected', kind: 'unchanged', field: 'session', source: 'after.session == before.session' };
         if (value.Rejected.aggregate.triage !== changeProposal.triage) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.triage', outcome: 'Rejected', kind: 'unchanged', field: 'triage', source: 'after.triage == before.triage' };
@@ -7565,7 +7576,6 @@ export function checkRejectChangeProposalEnsures(changeProposal: OpenChangePropo
         if (value.Rejected.aggregate.requestedBy !== changeProposal.requestedBy) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.requestedBy', outcome: 'Rejected', kind: 'unchanged', field: 'requestedBy', source: 'after.requestedBy == before.requestedBy' };
         if (value.Rejected.aggregate.content !== changeProposal.content && !equalProposalContent(value.Rejected.aggregate.content, changeProposal.content)) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.content', outcome: 'Rejected', kind: 'unchanged', field: 'content', source: 'after.content == before.content' };
         if (value.Rejected.aggregate.proposedAt !== changeProposal.proposedAt) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.proposedAt', outcome: 'Rejected', kind: 'unchanged', field: 'proposedAt', source: 'after.proposedAt == before.proposedAt' };
-        if (value.Rejected.aggregate.note !== undefined) return { id: 'Collaboration.ChangeProposal:reject->Rejected.unchanged.note', outcome: 'Rejected', kind: 'unchanged', field: 'note', source: 'after.note == null' };
     }
     return undefined;
 }
@@ -8435,14 +8445,14 @@ export type WriteSessionRecordDecision = (
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkWriteSessionRecordEnsures }`.
  * @see contexts/collaboration/model/record.dt:140
  */
-export function checkWriteSessionRecordEnsures(params: WriteSessionRecordParams, value: SuccessOf<WriteSessionRecordCommand>): Postcondition<'Collaboration.SessionRecord:write.changes.id' | 'Collaboration.SessionRecord:write.changes.session' | 'Collaboration.SessionRecord:write.changes.fact' | 'Collaboration.SessionRecord:write.changes.at' | 'Collaboration.SessionRecord:write->Written.unchanged.by' | 'Collaboration.SessionRecord:write->Written.unchanged.replyTo' | 'Collaboration.SessionRecord:write->Written.unchanged.revisedAt'> | undefined {
+export function checkWriteSessionRecordEnsures(params: WriteSessionRecordParams, value: SuccessOf<WriteSessionRecordCommand>): Postcondition<'Collaboration.SessionRecord:write.changes.id' | 'Collaboration.SessionRecord:write.changes.session' | 'Collaboration.SessionRecord:write.changes.by' | 'Collaboration.SessionRecord:write.changes.fact' | 'Collaboration.SessionRecord:write.changes.replyTo' | 'Collaboration.SessionRecord:write.changes.at' | 'Collaboration.SessionRecord:write->Written.unchanged.revisedAt'> | undefined {
     if ('Written' in value && value.Written !== undefined) {
         if (value.Written.aggregate.id !== params.id) return { id: 'Collaboration.SessionRecord:write.changes.id', outcome: 'Written', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Written.aggregate.session !== params.session) return { id: 'Collaboration.SessionRecord:write.changes.session', outcome: 'Written', kind: 'changes', field: 'session', source: 'session = session' };
+        if (value.Written.aggregate.by !== params.by) return { id: 'Collaboration.SessionRecord:write.changes.by', outcome: 'Written', kind: 'changes', field: 'by', source: 'by = by' };
         if (!equalRecordFact(value.Written.aggregate.fact, params.fact)) return { id: 'Collaboration.SessionRecord:write.changes.fact', outcome: 'Written', kind: 'changes', field: 'fact', source: 'fact = fact' };
+        if (value.Written.aggregate.replyTo !== params.replyTo) return { id: 'Collaboration.SessionRecord:write.changes.replyTo', outcome: 'Written', kind: 'changes', field: 'replyTo', source: 'replyTo = replyTo' };
         if (value.Written.aggregate.at !== params.at) return { id: 'Collaboration.SessionRecord:write.changes.at', outcome: 'Written', kind: 'changes', field: 'at', source: 'at = at' };
-        if (value.Written.aggregate.by !== undefined) return { id: 'Collaboration.SessionRecord:write->Written.unchanged.by', outcome: 'Written', kind: 'unchanged', field: 'by', source: 'after.by == null' };
-        if (value.Written.aggregate.replyTo !== undefined) return { id: 'Collaboration.SessionRecord:write->Written.unchanged.replyTo', outcome: 'Written', kind: 'unchanged', field: 'replyTo', source: 'after.replyTo == null' };
         if (value.Written.aggregate.revisedAt !== undefined) return { id: 'Collaboration.SessionRecord:write->Written.unchanged.revisedAt', outcome: 'Written', kind: 'unchanged', field: 'revisedAt', source: 'after.revisedAt == null' };
     }
     return undefined;
@@ -9123,7 +9133,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkSendRequestEnsures }`.
  * @see contexts/collaboration/model/request.dt:125
  */
-export function checkSendRequestEnsures(params: SendRequestParams, value: SuccessOf<SendRequestCommand>): Postcondition<'Collaboration.Request:send.changes.id' | 'Collaboration.Request:send.changes.session' | 'Collaboration.Request:send.changes.author' | 'Collaboration.Request:send.changes.targets' | 'Collaboration.Request:send.changes.body' | 'Collaboration.Request:send.changes.sentAt' | 'Collaboration.Request:send.changes.mentions' | 'Collaboration.Request:send->Sent.unchanged.replyTo' | 'Collaboration.Request:send->Sent.unchanged.reverts' | 'Collaboration.Request:send->Sent.unchanged.viewedAt' | 'Collaboration.Request:send->Sent.unchanged.journeyNote' | 'Collaboration.Request:send->Sent.unchanged.edit' | 'Collaboration.Request:send->Sent.unchanged.redactedAt'> | undefined {
+export function checkSendRequestEnsures(params: SendRequestParams, value: SuccessOf<SendRequestCommand>): Postcondition<'Collaboration.Request:send.changes.id' | 'Collaboration.Request:send.changes.session' | 'Collaboration.Request:send.changes.author' | 'Collaboration.Request:send.changes.targets' | 'Collaboration.Request:send.changes.body' | 'Collaboration.Request:send.changes.sentAt' | 'Collaboration.Request:send.changes.replyTo' | 'Collaboration.Request:send.changes.mentions' | 'Collaboration.Request:send.changes.viewedAt' | 'Collaboration.Request:send->Sent.unchanged.reverts' | 'Collaboration.Request:send->Sent.unchanged.journeyNote' | 'Collaboration.Request:send->Sent.unchanged.edit' | 'Collaboration.Request:send->Sent.unchanged.redactedAt'> | undefined {
     if ('Sent' in value && value.Sent !== undefined) {
         if (value.Sent.aggregate.id !== params.id) return { id: 'Collaboration.Request:send.changes.id', outcome: 'Sent', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Sent.aggregate.session !== params.session) return { id: 'Collaboration.Request:send.changes.session', outcome: 'Sent', kind: 'changes', field: 'session', source: 'session = session' };
@@ -9131,10 +9141,10 @@ export function checkSendRequestEnsures(params: SendRequestParams, value: Succes
         if (!sameList(value.Sent.aggregate.targets, params.targets, equalTargetSnapshot)) return { id: 'Collaboration.Request:send.changes.targets', outcome: 'Sent', kind: 'changes', field: 'targets', source: 'targets = targets' };
         if (value.Sent.aggregate.body !== params.body) return { id: 'Collaboration.Request:send.changes.body', outcome: 'Sent', kind: 'changes', field: 'body', source: 'body = body' };
         if (value.Sent.aggregate.sentAt !== params.sentAt) return { id: 'Collaboration.Request:send.changes.sentAt', outcome: 'Sent', kind: 'changes', field: 'sentAt', source: 'sentAt = sentAt' };
+        if (!sameOptional(value.Sent.aggregate.replyTo, params.replyTo, equalReplyTarget)) return { id: 'Collaboration.Request:send.changes.replyTo', outcome: 'Sent', kind: 'changes', field: 'replyTo', source: 'replyTo = replyTo' };
         if (!sameList(value.Sent.aggregate.mentions, params.mentions, ($124: ParticipantId, $125: ParticipantId) => $124 === $125)) return { id: 'Collaboration.Request:send.changes.mentions', outcome: 'Sent', kind: 'changes', field: 'mentions', source: 'mentions = mentions' };
-        if (value.Sent.aggregate.replyTo !== undefined) return { id: 'Collaboration.Request:send->Sent.unchanged.replyTo', outcome: 'Sent', kind: 'unchanged', field: 'replyTo', source: 'after.replyTo == null' };
+        if (!sameOptional(value.Sent.aggregate.viewedAt, params.viewedAt, equalViewedAt)) return { id: 'Collaboration.Request:send.changes.viewedAt', outcome: 'Sent', kind: 'changes', field: 'viewedAt', source: 'viewedAt = viewedAt' };
         if (value.Sent.aggregate.reverts !== undefined) return { id: 'Collaboration.Request:send->Sent.unchanged.reverts', outcome: 'Sent', kind: 'unchanged', field: 'reverts', source: 'after.reverts == null' };
-        if (value.Sent.aggregate.viewedAt !== undefined) return { id: 'Collaboration.Request:send->Sent.unchanged.viewedAt', outcome: 'Sent', kind: 'unchanged', field: 'viewedAt', source: 'after.viewedAt == null' };
         if (value.Sent.aggregate.journeyNote !== undefined) return { id: 'Collaboration.Request:send->Sent.unchanged.journeyNote', outcome: 'Sent', kind: 'unchanged', field: 'journeyNote', source: 'after.journeyNote == null' };
         if (value.Sent.aggregate.edit !== undefined) return { id: 'Collaboration.Request:send->Sent.unchanged.edit', outcome: 'Sent', kind: 'unchanged', field: 'edit', source: 'after.edit == null' };
         if (value.Sent.aggregate.redactedAt !== undefined) return { id: 'Collaboration.Request:send->Sent.unchanged.redactedAt', outcome: 'Sent', kind: 'unchanged', field: 'redactedAt', source: 'after.redactedAt == null' };
@@ -9210,15 +9220,15 @@ export function checkRequestRevertRequestRequires(params: RequestRevertRequestPa
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkRequestRevertRequestEnsures }`.
  * @see contexts/collaboration/model/request.dt:138
  */
-export function checkRequestRevertRequestEnsures(params: RequestRevertRequestParams, value: SuccessOf<RequestRevertRequestCommand>): Postcondition<'Collaboration.Request:requestRevert.changes.id' | 'Collaboration.Request:requestRevert.changes.session' | 'Collaboration.Request:requestRevert.changes.author' | 'Collaboration.Request:requestRevert.changes.body' | 'Collaboration.Request:requestRevert.changes.sentAt' | 'Collaboration.Request:requestRevert->Sent.unchanged.replyTo' | 'Collaboration.Request:requestRevert->Sent.unchanged.reverts' | 'Collaboration.Request:requestRevert->Sent.unchanged.viewedAt' | 'Collaboration.Request:requestRevert->Sent.unchanged.journeyNote' | 'Collaboration.Request:requestRevert->Sent.unchanged.edit' | 'Collaboration.Request:requestRevert->Sent.unchanged.redactedAt'> | undefined {
+export function checkRequestRevertRequestEnsures(params: RequestRevertRequestParams, value: SuccessOf<RequestRevertRequestCommand>): Postcondition<'Collaboration.Request:requestRevert.changes.id' | 'Collaboration.Request:requestRevert.changes.session' | 'Collaboration.Request:requestRevert.changes.author' | 'Collaboration.Request:requestRevert.changes.body' | 'Collaboration.Request:requestRevert.changes.sentAt' | 'Collaboration.Request:requestRevert.changes.reverts' | 'Collaboration.Request:requestRevert->Sent.unchanged.replyTo' | 'Collaboration.Request:requestRevert->Sent.unchanged.viewedAt' | 'Collaboration.Request:requestRevert->Sent.unchanged.journeyNote' | 'Collaboration.Request:requestRevert->Sent.unchanged.edit' | 'Collaboration.Request:requestRevert->Sent.unchanged.redactedAt'> | undefined {
     if ('Sent' in value && value.Sent !== undefined) {
         if (value.Sent.aggregate.id !== params.id) return { id: 'Collaboration.Request:requestRevert.changes.id', outcome: 'Sent', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Sent.aggregate.session !== params.session) return { id: 'Collaboration.Request:requestRevert.changes.session', outcome: 'Sent', kind: 'changes', field: 'session', source: 'session = session' };
         if (value.Sent.aggregate.author !== params.author) return { id: 'Collaboration.Request:requestRevert.changes.author', outcome: 'Sent', kind: 'changes', field: 'author', source: 'author = author' };
         if (value.Sent.aggregate.body !== params.body) return { id: 'Collaboration.Request:requestRevert.changes.body', outcome: 'Sent', kind: 'changes', field: 'body', source: 'body = body' };
         if (value.Sent.aggregate.sentAt !== params.sentAt) return { id: 'Collaboration.Request:requestRevert.changes.sentAt', outcome: 'Sent', kind: 'changes', field: 'sentAt', source: 'sentAt = sentAt' };
+        if (value.Sent.aggregate.reverts !== params.reverts) return { id: 'Collaboration.Request:requestRevert.changes.reverts', outcome: 'Sent', kind: 'changes', field: 'reverts', source: 'reverts = reverts' };
         if (value.Sent.aggregate.replyTo !== undefined) return { id: 'Collaboration.Request:requestRevert->Sent.unchanged.replyTo', outcome: 'Sent', kind: 'unchanged', field: 'replyTo', source: 'after.replyTo == null' };
-        if (value.Sent.aggregate.reverts !== undefined) return { id: 'Collaboration.Request:requestRevert->Sent.unchanged.reverts', outcome: 'Sent', kind: 'unchanged', field: 'reverts', source: 'after.reverts == null' };
         if (value.Sent.aggregate.viewedAt !== undefined) return { id: 'Collaboration.Request:requestRevert->Sent.unchanged.viewedAt', outcome: 'Sent', kind: 'unchanged', field: 'viewedAt', source: 'after.viewedAt == null' };
         if (value.Sent.aggregate.journeyNote !== undefined) return { id: 'Collaboration.Request:requestRevert->Sent.unchanged.journeyNote', outcome: 'Sent', kind: 'unchanged', field: 'journeyNote', source: 'after.journeyNote == null' };
         if (value.Sent.aggregate.edit !== undefined) return { id: 'Collaboration.Request:requestRevert->Sent.unchanged.edit', outcome: 'Sent', kind: 'unchanged', field: 'edit', source: 'after.edit == null' };
@@ -9282,18 +9292,18 @@ export type RecordEditRequestDecision = (
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkRecordEditRequestEnsures }`.
  * @see contexts/collaboration/model/request.dt:147
  */
-export function checkRecordEditRequestEnsures(params: RecordEditRequestParams, value: SuccessOf<RecordEditRequestCommand>): Postcondition<'Collaboration.Request:recordEdit.changes.id' | 'Collaboration.Request:recordEdit.changes.session' | 'Collaboration.Request:recordEdit.changes.author' | 'Collaboration.Request:recordEdit.changes.body' | 'Collaboration.Request:recordEdit.changes.sentAt' | 'Collaboration.Request:recordEdit->Sent.unchanged.replyTo' | 'Collaboration.Request:recordEdit->Sent.unchanged.reverts' | 'Collaboration.Request:recordEdit->Sent.unchanged.viewedAt' | 'Collaboration.Request:recordEdit->Sent.unchanged.journeyNote' | 'Collaboration.Request:recordEdit->Sent.unchanged.edit' | 'Collaboration.Request:recordEdit->Sent.unchanged.redactedAt'> | undefined {
+export function checkRecordEditRequestEnsures(params: RecordEditRequestParams, value: SuccessOf<RecordEditRequestCommand>): Postcondition<'Collaboration.Request:recordEdit.changes.id' | 'Collaboration.Request:recordEdit.changes.session' | 'Collaboration.Request:recordEdit.changes.author' | 'Collaboration.Request:recordEdit.changes.body' | 'Collaboration.Request:recordEdit.changes.sentAt' | 'Collaboration.Request:recordEdit.changes.edit' | 'Collaboration.Request:recordEdit->Sent.unchanged.replyTo' | 'Collaboration.Request:recordEdit->Sent.unchanged.reverts' | 'Collaboration.Request:recordEdit->Sent.unchanged.viewedAt' | 'Collaboration.Request:recordEdit->Sent.unchanged.journeyNote' | 'Collaboration.Request:recordEdit->Sent.unchanged.redactedAt'> | undefined {
     if ('Sent' in value && value.Sent !== undefined) {
         if (value.Sent.aggregate.id !== params.id) return { id: 'Collaboration.Request:recordEdit.changes.id', outcome: 'Sent', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Sent.aggregate.session !== params.session) return { id: 'Collaboration.Request:recordEdit.changes.session', outcome: 'Sent', kind: 'changes', field: 'session', source: 'session = session' };
         if (value.Sent.aggregate.author !== params.author) return { id: 'Collaboration.Request:recordEdit.changes.author', outcome: 'Sent', kind: 'changes', field: 'author', source: 'author = author' };
         if (value.Sent.aggregate.body !== params.body) return { id: 'Collaboration.Request:recordEdit.changes.body', outcome: 'Sent', kind: 'changes', field: 'body', source: 'body = body' };
         if (value.Sent.aggregate.sentAt !== params.sentAt) return { id: 'Collaboration.Request:recordEdit.changes.sentAt', outcome: 'Sent', kind: 'changes', field: 'sentAt', source: 'sentAt = sentAt' };
+        if (!sameOptional(value.Sent.aggregate.edit, params.edit, equalStickyEdit)) return { id: 'Collaboration.Request:recordEdit.changes.edit', outcome: 'Sent', kind: 'changes', field: 'edit', source: 'edit = edit' };
         if (value.Sent.aggregate.replyTo !== undefined) return { id: 'Collaboration.Request:recordEdit->Sent.unchanged.replyTo', outcome: 'Sent', kind: 'unchanged', field: 'replyTo', source: 'after.replyTo == null' };
         if (value.Sent.aggregate.reverts !== undefined) return { id: 'Collaboration.Request:recordEdit->Sent.unchanged.reverts', outcome: 'Sent', kind: 'unchanged', field: 'reverts', source: 'after.reverts == null' };
         if (value.Sent.aggregate.viewedAt !== undefined) return { id: 'Collaboration.Request:recordEdit->Sent.unchanged.viewedAt', outcome: 'Sent', kind: 'unchanged', field: 'viewedAt', source: 'after.viewedAt == null' };
         if (value.Sent.aggregate.journeyNote !== undefined) return { id: 'Collaboration.Request:recordEdit->Sent.unchanged.journeyNote', outcome: 'Sent', kind: 'unchanged', field: 'journeyNote', source: 'after.journeyNote == null' };
-        if (value.Sent.aggregate.edit !== undefined) return { id: 'Collaboration.Request:recordEdit->Sent.unchanged.edit', outcome: 'Sent', kind: 'unchanged', field: 'edit', source: 'after.edit == null' };
         if (value.Sent.aggregate.redactedAt !== undefined) return { id: 'Collaboration.Request:recordEdit->Sent.unchanged.redactedAt', outcome: 'Sent', kind: 'unchanged', field: 'redactedAt', source: 'after.redactedAt == null' };
     }
     return undefined;
@@ -9356,16 +9366,15 @@ export type AnswerRequestDecision = (
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkAnswerRequestEnsures }`.
  * @see contexts/collaboration/model/request.dt:155
  */
-export function checkAnswerRequestEnsures(params: AnswerRequestParams, value: SuccessOf<AnswerRequestCommand>): Postcondition<'Collaboration.Request:answer.changes.id' | 'Collaboration.Request:answer.changes.session' | 'Collaboration.Request:answer.changes.body' | 'Collaboration.Request:answer.changes.sentAt' | 'Collaboration.Request:answer->Sent.unchanged.replyTo' | 'Collaboration.Request:answer->Sent.unchanged.reverts' | 'Collaboration.Request:answer->Sent.unchanged.viewedAt' | 'Collaboration.Request:answer->Sent.unchanged.journeyNote' | 'Collaboration.Request:answer->Sent.unchanged.edit' | 'Collaboration.Request:answer->Sent.unchanged.redactedAt'> | undefined {
+export function checkAnswerRequestEnsures(params: AnswerRequestParams, value: SuccessOf<AnswerRequestCommand>): Postcondition<'Collaboration.Request:answer.changes.id' | 'Collaboration.Request:answer.changes.session' | 'Collaboration.Request:answer.changes.body' | 'Collaboration.Request:answer.changes.sentAt' | 'Collaboration.Request:answer.changes.journeyNote' | 'Collaboration.Request:answer->Sent.unchanged.reverts' | 'Collaboration.Request:answer->Sent.unchanged.viewedAt' | 'Collaboration.Request:answer->Sent.unchanged.edit' | 'Collaboration.Request:answer->Sent.unchanged.redactedAt'> | undefined {
     if ('Sent' in value && value.Sent !== undefined) {
         if (value.Sent.aggregate.id !== params.id) return { id: 'Collaboration.Request:answer.changes.id', outcome: 'Sent', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Sent.aggregate.session !== params.session) return { id: 'Collaboration.Request:answer.changes.session', outcome: 'Sent', kind: 'changes', field: 'session', source: 'session = session' };
         if (value.Sent.aggregate.body !== params.body) return { id: 'Collaboration.Request:answer.changes.body', outcome: 'Sent', kind: 'changes', field: 'body', source: 'body = body' };
         if (value.Sent.aggregate.sentAt !== params.sentAt) return { id: 'Collaboration.Request:answer.changes.sentAt', outcome: 'Sent', kind: 'changes', field: 'sentAt', source: 'sentAt = sentAt' };
-        if (value.Sent.aggregate.replyTo !== undefined) return { id: 'Collaboration.Request:answer->Sent.unchanged.replyTo', outcome: 'Sent', kind: 'unchanged', field: 'replyTo', source: 'after.replyTo == null' };
+        if (!sameOptional(value.Sent.aggregate.journeyNote, params.journeyNote, equalJourneyNote)) return { id: 'Collaboration.Request:answer.changes.journeyNote', outcome: 'Sent', kind: 'changes', field: 'journeyNote', source: 'journeyNote = journeyNote' };
         if (value.Sent.aggregate.reverts !== undefined) return { id: 'Collaboration.Request:answer->Sent.unchanged.reverts', outcome: 'Sent', kind: 'unchanged', field: 'reverts', source: 'after.reverts == null' };
         if (value.Sent.aggregate.viewedAt !== undefined) return { id: 'Collaboration.Request:answer->Sent.unchanged.viewedAt', outcome: 'Sent', kind: 'unchanged', field: 'viewedAt', source: 'after.viewedAt == null' };
-        if (value.Sent.aggregate.journeyNote !== undefined) return { id: 'Collaboration.Request:answer->Sent.unchanged.journeyNote', outcome: 'Sent', kind: 'unchanged', field: 'journeyNote', source: 'after.journeyNote == null' };
         if (value.Sent.aggregate.edit !== undefined) return { id: 'Collaboration.Request:answer->Sent.unchanged.edit', outcome: 'Sent', kind: 'unchanged', field: 'edit', source: 'after.edit == null' };
         if (value.Sent.aggregate.redactedAt !== undefined) return { id: 'Collaboration.Request:answer->Sent.unchanged.redactedAt', outcome: 'Sent', kind: 'unchanged', field: 'redactedAt', source: 'after.redactedAt == null' };
     }

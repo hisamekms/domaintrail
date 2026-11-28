@@ -399,7 +399,7 @@ context Collaboration {
         input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
       } else InputMismatch
       requires editChanges "手直しはファイルを変える" { resultRevision != baseRevision } else ChangedMismatch
-      changes id = id, session = session, input = input, queuedBy = queuedBy, queuedAt = queuedAt, baseRevision = baseRevision, resultRevision = resultRevision, finishedAt = finishedAt
+      changes id = id, session = session, input = input, queuedBy = queuedBy, queuedAt = queuedAt, baseRevision = baseRevision, resultRevision = resultRevision, reapplies = reapplies, finishedAt = finishedAt
       emits RunEdited
 
     /// 付けたホットスポットの仮の名前を、AI が付けた名前に書き換えた（ほかに何も変わっていないときだけ）。同じ手直しの記録に
@@ -456,13 +456,13 @@ context Collaboration {
         select {
           report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))
         }
-        changes report = report, resultRevision = resultRevision, changed = changed, finishedAt = finishedAt
+        changes report = report, resultRevision = resultRevision, changed = changed, reply = reply, review = review, finishedAt = finishedAt
         emits RunCompleted
       outcome Failed: Running -> Failed
         select {
           !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran)))
         }
-        changes reason, finishedAt = finishedAt
+        changes reason = FailureReason.RuleNotMet, report = report, resultRevision = resultRevision, finishedAt = finishedAt
         emits RunFailed
     }
 
@@ -474,7 +474,7 @@ context Collaboration {
       requires replyAboutInput "返答の依頼は実行の依頼" {
         reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       } else InvalidReply
-      changes question = question, resultRevision = resultRevision, finishedAt = finishedAt
+      changes question = question, reply = reply, resultRevision = resultRevision, finishedAt = finishedAt
       emits RunNeedsClarification
 
     /// エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
@@ -495,13 +495,17 @@ context Collaboration {
       emits RunFailed
 
     /// 中止するのはファシリテーター。
-    command cancel(cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) "実行を中止する"
-      Queued | Running -> Cancelled
+    command cancel(cancelledBy: ParticipantId, cancelledByRole: ParticipantRole, cancelledAt: Timestamp) "実行を中止する" {
       requires facilitatorCancels "ファシリテーターが中止する" {
         cancelledByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
-      changes cancelledBy = cancelledBy, cancelledAt = cancelledAt
-      emits RunCancelled
+      outcome QueuedCancelled: Queued -> Cancelled
+        changes cancelledBy = cancelledBy, cancelledAt = cancelledAt
+        emits RunCancelled
+      outcome RunningCancelled: Running -> Cancelled
+        changes baseRevision = before.baseRevision, cancelledBy = cancelledBy, cancelledAt = cancelledAt
+        emits RunCancelled
+    }
   }
 
   persistent event RunQueued "実行登録" {

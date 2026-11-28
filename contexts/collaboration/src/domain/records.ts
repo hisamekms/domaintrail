@@ -24,33 +24,42 @@ type RecordFact = Collaboration.RecordFact;
 type MarksChanged = Extract<RecordFact, { readonly kind: 'MarksChanged' }>;
 
 export const recordCommands: Collaboration.SessionRecordCommands = {
-    write: decide<Collaboration.WriteSessionRecordDecision>(Collaboration.SessionRecordShape, ({ id, session, by, fact, replyTo, at }) =>
-        ok({
-            Written: {
-                set: { id, session, by, fact, replyTo, at, revisedAt: undefined },
-                events: {
-                    'Collaboration.RecordWritten': {
-                        type: 'Collaboration.RecordWritten',
-                        recordId: id,
-                        session,
-                        ...(by !== undefined && { by }),
-                        fact,
-                        ...(replyTo && { replyTo }),
-                        at,
-                    },
-                },
-            },
-        }),
-    ),
-    revise: decide<Collaboration.ReviseSessionRecordDecision>(Collaboration.SessionRecordShape, {
-        Written: (record, { fact, revisedAt }) =>
+    write: decide<Collaboration.WriteSessionRecordDecision>(
+        Collaboration.SessionRecordShape,
+        ({ id, session, by, fact, replyTo, at }) =>
             ok({
                 Written: {
-                    set: { fact, revisedAt },
-                    events: { 'Collaboration.RecordRevised': { type: 'Collaboration.RecordRevised', recordId: record.id, fact, revisedAt } },
+                    set: { id, session, by, fact, replyTo, at, revisedAt: undefined },
+                    events: {
+                        'Collaboration.RecordWritten': {
+                            type: 'Collaboration.RecordWritten',
+                            recordId: id,
+                            session,
+                            ...(by !== undefined && { by }),
+                            fact,
+                            ...(replyTo && { replyTo }),
+                            at,
+                        },
+                    },
                 },
             }),
-    }),
+        {},
+        { ensures: Collaboration.checkWriteSessionRecordEnsures },
+    ),
+    revise: decide<Collaboration.ReviseSessionRecordDecision>(
+        Collaboration.SessionRecordShape,
+        {
+            Written: (record, { fact, revisedAt }) =>
+                ok({
+                    Written: {
+                        set: { fact, revisedAt },
+                        events: { 'Collaboration.RecordRevised': { type: 'Collaboration.RecordRevised', recordId: record.id, fact, revisedAt } },
+                    },
+                }),
+        },
+        {},
+        { ensures: Collaboration.checkReviseSessionRecordEnsures },
+    ),
 };
 
 // ---- What a record names ----

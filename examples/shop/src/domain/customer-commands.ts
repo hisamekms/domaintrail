@@ -5,12 +5,26 @@
 import { Sales, decide, ok } from '../../generated/domain/index.js';
 
 export const customerCommands: Sales.CustomerCommands = {
-    register: decide<Sales.RegisterCustomerDecision>(Sales.CustomerShape, ({ id, name, email }) =>
-        ok({ Customer: { set: { id, name, email }, events: { 'Sales.CustomerRegistered': { type: 'Sales.CustomerRegistered', customerId: id } } } }),
+    register: decide<Sales.RegisterCustomerDecision>(
+        Sales.CustomerShape,
+        ({ id, name, email }) =>
+            ok({ Customer: { set: { id, name, email }, events: { 'Sales.CustomerRegistered': { type: 'Sales.CustomerRegistered', customerId: id } } } }),
+        {},
+        { ensures: Sales.checkRegisterCustomerEnsures },
     ),
 
     // `changes name` and no `emits`: renaming is not a fact other contexts react to.
-    rename: decide<Sales.RenameCustomerDecision>(Sales.CustomerShape, (_customer, { name }) => ok({ Customer: { set: { name }, events: {} } })),
+    rename: decide<Sales.RenameCustomerDecision>(
+        Sales.CustomerShape,
+        (_customer, { name }) => ok({ Customer: { set: { name }, events: {} } }),
+        {},
+        { ensures: Sales.checkRenameCustomerEnsures },
+    ),
 
-    changeEmail: decide<Sales.ChangeEmailCustomerDecision>(Sales.CustomerShape, (_customer, { email }) => ok({ Customer: { set: { email }, events: {} } })),
+    changeEmail: decide<Sales.ChangeEmailCustomerDecision>(
+        Sales.CustomerShape,
+        (_customer, { email }) => ok({ Customer: { set: { email }, events: {} } }),
+        {},
+        { ensures: Sales.checkChangeEmailCustomerEnsures },
+    ),
 };

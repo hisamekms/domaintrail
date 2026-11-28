@@ -2252,6 +2252,11 @@ With `generate.ts.tests` in the config, `dt generate ts` also writes **contract 
 | T4 | events whose bounds the types do not express (`X[2..5]`) are emitted that many times |
 | T5 | purity: the same input twice gives deep-equal results, and the input is not changed |
 | T6 | with `required` policies: for every event, the handler of a policy resolves to an input the command accepts — every argument present unless optional, of its type (the fields of value objects and entities in turn), holding the invariants of its type, a list within its multiplicity |
+| T7 | after every successful command, its generated postcondition check verifies each `changes x = …`, each field the outcome keeps unchanged, and each `ensures` clause |
+
+T7 calls the command's generated `check<Stem>Ensures` with the original aggregate and params and the success value. A
+violation reports the outcome, postcondition kind and field, source text, input, and returned value. Commands without a
+generated check omit T7.
 
 Inputs are generated with [fast-check](https://fast-check.dev) from the types: IDs, ranges, lengths and regular
 expressions of domain primitives, enums, value objects, entities, unions, collections with their multiplicities, and

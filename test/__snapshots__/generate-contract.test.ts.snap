@@ -1258,8 +1258,9 @@ export function checkAddItemOrderRequires(order: DraftOrder, params: AddItemOrde
  * Call it with the command's arguments and its result's \`value\`, or pass it to \`decide\` as \`{ ensures: checkAddItemOrderEnsures }\`.
  * @see sales/order.dt:44
  */
-export function checkAddItemOrderEnsures(order: DraftOrder, _params: AddItemOrderParams, value: SuccessOf<AddItemOrderCommand>): Postcondition<'Sales.Order:addItem->Draft.unchanged.id' | 'Sales.Order:addItem->Draft.unchanged.customer' | 'Sales.Order:addItem->Draft.unchanged.note'> | undefined {
+export function checkAddItemOrderEnsures(order: DraftOrder, params: AddItemOrderParams, value: SuccessOf<AddItemOrderCommand>): Postcondition<'Sales.Order:addItem.changes.items' | 'Sales.Order:addItem->Draft.unchanged.id' | 'Sales.Order:addItem->Draft.unchanged.customer' | 'Sales.Order:addItem->Draft.unchanged.note'> | undefined {
     if ('Draft' in value && value.Draft !== undefined && order.state === 'Draft') {
+        if (!sameList(value.Draft.aggregate.items, [...order.items, params.item], equalOrderItem)) return { id: 'Sales.Order:addItem.changes.items', outcome: 'Draft', kind: 'changes', field: 'items', source: 'items = [... before.items, item]' };
         if (value.Draft.aggregate.id !== order.id) return { id: 'Sales.Order:addItem->Draft.unchanged.id', outcome: 'Draft', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Draft.aggregate.customer !== order.customer) return { id: 'Sales.Order:addItem->Draft.unchanged.customer', outcome: 'Draft', kind: 'unchanged', field: 'customer', source: 'after.customer == before.customer' };
         if (value.Draft.aggregate.note !== order.note) return { id: 'Sales.Order:addItem->Draft.unchanged.note', outcome: 'Draft', kind: 'unchanged', field: 'note', source: 'after.note == before.note' };
@@ -1507,13 +1508,15 @@ export type ChangeNoteOrderDecision = {
  * Call it with the command's arguments and its result's \`value\`, or pass it to \`decide\` as \`{ ensures: checkChangeNoteOrderEnsures }\`.
  * @see sales/order.dt:69
  */
-export function checkChangeNoteOrderEnsures(order: DraftOrder | ConfirmedOrder, _params: ChangeNoteOrderParams, value: SuccessOf<ChangeNoteOrderCommand>): Postcondition<'Sales.Order:changeNote->Draft.unchanged.id' | 'Sales.Order:changeNote->Draft.unchanged.items' | 'Sales.Order:changeNote->Draft.unchanged.customer' | 'Sales.Order:changeNote->Confirmed.unchanged.id' | 'Sales.Order:changeNote->Confirmed.unchanged.items' | 'Sales.Order:changeNote->Confirmed.unchanged.customer' | 'Sales.Order:changeNote->Confirmed.unchanged.confirmedAt'> | undefined {
+export function checkChangeNoteOrderEnsures(order: DraftOrder | ConfirmedOrder, params: ChangeNoteOrderParams, value: SuccessOf<ChangeNoteOrderCommand>): Postcondition<'Sales.Order:changeNote.changes.note' | 'Sales.Order:changeNote->Draft.unchanged.id' | 'Sales.Order:changeNote->Draft.unchanged.items' | 'Sales.Order:changeNote->Draft.unchanged.customer' | 'Sales.Order:changeNote->Confirmed.unchanged.id' | 'Sales.Order:changeNote->Confirmed.unchanged.items' | 'Sales.Order:changeNote->Confirmed.unchanged.customer' | 'Sales.Order:changeNote->Confirmed.unchanged.confirmedAt'> | undefined {
     if ('Draft' in value && value.Draft !== undefined && order.state === 'Draft') {
+        if (value.Draft.aggregate.note !== params.note) return { id: 'Sales.Order:changeNote.changes.note', outcome: 'Draft', kind: 'changes', field: 'note', source: 'note = note' };
         if (value.Draft.aggregate.id !== order.id) return { id: 'Sales.Order:changeNote->Draft.unchanged.id', outcome: 'Draft', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Draft.aggregate.items !== order.items && !sameList(value.Draft.aggregate.items, order.items, equalOrderItem)) return { id: 'Sales.Order:changeNote->Draft.unchanged.items', outcome: 'Draft', kind: 'unchanged', field: 'items', source: 'after.items == before.items' };
         if (value.Draft.aggregate.customer !== order.customer) return { id: 'Sales.Order:changeNote->Draft.unchanged.customer', outcome: 'Draft', kind: 'unchanged', field: 'customer', source: 'after.customer == before.customer' };
     }
     if ('Confirmed' in value && value.Confirmed !== undefined && order.state === 'Confirmed') {
+        if (value.Confirmed.aggregate.note !== params.note) return { id: 'Sales.Order:changeNote.changes.note', outcome: 'Confirmed', kind: 'changes', field: 'note', source: 'note = note' };
         if (value.Confirmed.aggregate.id !== order.id) return { id: 'Sales.Order:changeNote->Confirmed.unchanged.id', outcome: 'Confirmed', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
         if (value.Confirmed.aggregate.items !== order.items && !sameList(value.Confirmed.aggregate.items, order.items, equalOrderItem)) return { id: 'Sales.Order:changeNote->Confirmed.unchanged.items', outcome: 'Confirmed', kind: 'unchanged', field: 'items', source: 'after.items == before.items' };
         if (value.Confirmed.aggregate.customer !== order.customer) return { id: 'Sales.Order:changeNote->Confirmed.unchanged.customer', outcome: 'Confirmed', kind: 'unchanged', field: 'customer', source: 'after.customer == before.customer' };
@@ -2515,6 +2518,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Invoice.issue',
                 run: impl.Invoice.issue,
+                ensures: Billing.checkIssueInvoiceEnsures,
                 input: () => fc.tuple(fc.record({ id: a.InvoiceId, order: SalesArbs().OrderId, billedAmount: CommonArbs().Money })),
                 examples: options.examples?.Invoice?.commands?.issue ?? [],
                 factory: true,
@@ -2527,6 +2531,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Invoice.pay',
                 run: impl.Invoice.pay,
+                ensures: Billing.checkPayInvoiceEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenInvoice), fc.record({ paidAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Invoice?.commands?.pay ?? [],
                 factory: false,
@@ -2805,6 +2810,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Customer.register',
                 run: impl.Customer.register,
+                ensures: Sales.checkRegisterCustomerEnsures,
                 input: () => fc.tuple(fc.record({ id: a.CustomerId, name: testing.cast<string>(scalar.String), email: a.AvailableEmail })),
                 examples: options.examples?.Customer?.commands?.register ?? [],
                 factory: true,
@@ -2817,6 +2823,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Customer.rename',
                 run: impl.Customer.rename,
+                ensures: Sales.checkRenameCustomerEnsures,
                 input: () => fc.tuple(a.Customer, fc.record({ name: testing.cast<string>(scalar.String) })),
                 examples: options.examples?.Customer?.commands?.rename ?? [],
                 factory: false,
@@ -2829,6 +2836,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Customer.changeEmail',
                 run: impl.Customer.changeEmail,
+                ensures: Sales.checkChangeEmailCustomerEnsures,
                 input: () => fc.tuple(a.Customer, fc.record({ email: a.AvailableEmail })),
                 examples: options.examples?.Customer?.commands?.changeEmail ?? [],
                 factory: false,
@@ -2843,6 +2851,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.place',
                 run: impl.Order.place,
+                ensures: Sales.checkPlaceOrderEnsures,
                 input: () => fc.tuple(fc.record({ id: a.OrderId, customer: a.CustomerId })),
                 examples: options.examples?.Order?.commands?.place ?? [],
                 factory: true,
@@ -2856,6 +2865,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.addItem',
                 run: impl.Order.addItem,
+                ensures: Sales.checkAddItemOrderEnsures,
                 input: () => fc.tuple(fc.oneof(a.DraftOrder), fc.record({ item: a.OrderItem })),
                 examples: options.examples?.Order?.commands?.addItem ?? [],
                 factory: false,
@@ -2870,6 +2880,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.confirm',
                 run: impl.Order.confirm,
+                ensures: Sales.checkConfirmOrderEnsures,
                 input: () => fc.tuple(fc.oneof(a.DraftOrder), fc.record({ at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Order?.commands?.confirm ?? [],
                 factory: false,
@@ -2884,6 +2895,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.cancel',
                 run: impl.Order.cancel,
+                ensures: Sales.checkCancelOrderEnsures,
                 input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), fc.record({ reason: a.CancelReason })),
                 examples: options.examples?.Order?.commands?.cancel ?? [],
                 factory: false,
@@ -2898,6 +2910,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'Order.changeNote',
                 run: impl.Order.changeNote,
+                ensures: Sales.checkChangeNoteOrderEnsures,
                 input: () => fc.tuple(fc.oneof(a.DraftOrder, a.ConfirmedOrder), fc.record({ note: testing.cast<string>(scalar.String) }, { requiredKeys: [] })),
                 examples: options.examples?.Order?.commands?.changeNote ?? [],
                 factory: false,

@@ -88,12 +88,14 @@ context Shop {
       requires fresh { lines.every(l => l.code != line.code) } else Duplicate
       requires underLimit { lines.length < limit } else Full
       requires allowed "許可された商品" else Forbidden
-      changes lines
+      changes lines = [...before.lines, line]
       emits Added[2..3]
 
     command close()
       Open -> Closed
-      requires notEmpty { lines.length > 0 } else Empty changes total
+      requires notEmpty { lines.length > 0 } else Empty
+      changes total
+      ensures { after.total >= before.lines.length }
   }
 
   event Opened {
@@ -291,7 +293,10 @@ describe('generated contract tests', () => {
             }),
         });
         const r = await run(contract({ Cart: zero }));
-        expect(failing(r)).toEqual(['Shop > Cart > Cart.close makes an aggregate that holds the invariants of its state']);
+        expect(failing(r)).toEqual([
+            'Shop > Cart > Cart.close satisfies its postconditions',
+            'Shop > Cart > Cart.close makes an aggregate that holds the invariants of its state',
+        ]);
         expect(Object.values(r).join()).toContain("made an aggregate that violates 'positive'");
     });
 
@@ -338,6 +343,92 @@ describe('generated contract tests', () => {
         });
         const r = await run(contract({ Cart: mutating }));
         expect(r['Shop > Cart > Cart.close is pure: the same input gives the same result, and the input is not changed']).toContain('changed its input');
+    });
+
+    test('T7 catches a wrong changes value', async () => {
+        const wrong = cart({
+            add: decide(Shop.CartShape, {
+                Open: (c: any, { line }: any) =>
+                    c.lines.some((l: any) => l.code === line.code)
+                        ? err({ type: 'Shop.Duplicate' })
+                        : ok({ Open: { set: { lines: c.lines }, events: added(c, 2) } }),
+            }),
+        });
+        const name = 'Shop > Cart > Cart.add satisfies its postconditions';
+        const good = await run(contract({ Cart: cart() }));
+        expect(good[name]).toBeUndefined();
+        const result = await run(contract({ Cart: wrong }));
+        expect(result[name]).toContain('violates postcondition (changes lines)');
+        expect(result[name]).toContain('lines = [... before.lines, line]');
+    });
+
+    test('T7 catches a field omitted from changes that was changed', async () => {
+        const wrong = cart({
+            close: decide(Shop.CartShape, {
+                Open: (c: any) =>
+                    c.lines.length === 0
+                        ? err({ type: 'Shop.Empty' })
+                        : ok({ Closed: { set: { total: c.lines.reduce((n: number, l: any) => n + l.qty, 0), lines: [] }, events: {} } }),
+            }),
+        });
+        const name = 'Shop > Cart > Cart.close satisfies its postconditions';
+        const good = await run(contract({ Cart: cart() }));
+        expect(good[name]).toBeUndefined();
+        const result = await run(contract({ Cart: wrong }));
+        expect(result[name]).toContain('violates postcondition (unchanged lines)');
+        expect(result[name]).toContain('unchanged lines');
+    });
+
+    test('T7 catches a violated ensures conjunct', async () => {
+        const wrong = cart({
+            close: decide(Shop.CartShape, {
+                Open: (c: any) => (c.lines.length === 0 ? err({ type: 'Shop.Empty' }) : ok({ Closed: { set: { total: 1 }, events: {} } })),
+            }),
+        });
+        const name = 'Shop > Cart > Cart.close satisfies its postconditions';
+        const good = await run(contract({ Cart: cart() }));
+        expect(good[name]).toBeUndefined();
+        const result = await run(
+            contract(
+                { Cart: wrong },
+                {
+                    examples: {
+                        Cart: {
+                            commands: {
+                                close: [
+                                    [
+                                        {
+                                            state: 'Open',
+                                            id: 'c',
+                                            lines: [
+                                                { code: 'AB1', qty: 2 },
+                                                { code: 'CD2', qty: 2 },
+                                            ],
+                                        },
+                                    ],
+                                ],
+                            },
+                        },
+                    },
+                },
+            ),
+        );
+        expect(result[name]).toContain('violates postcondition (ensures)');
+        expect(result[name]).toContain('after.total >= before.lines.length');
+    });
+
+    test('T7 catches a create command that sets a field to the wrong value', async () => {
+        const wrong = cart({
+            start: decide(Shop.CartShape, ({ id }: { id: string }) =>
+                ok({ Open: { set: { id: `${id}-wrong`, lines: [] }, events: { 'Shop.Opened': { type: 'Shop.Opened', cart: id } } } }),
+            ),
+        });
+        const name = 'Shop > Cart > Cart.start satisfies its postconditions';
+        const good = await run(contract({ Cart: cart() }));
+        expect(good[name]).toBeUndefined();
+        const result = await run(contract({ Cart: wrong }));
+        expect(result[name]).toContain('violates postcondition (changes id)');
+        expect(result[name]).toContain("for outcome 'Open': id = id");
     });
 
     test('are deterministic: the same seed gives the same failure, and the seed is an option', async () => {

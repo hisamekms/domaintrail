@@ -558,7 +558,7 @@ register(
 $ npx vitest run
 
  Test Files  1 passed (1)
-      Tests  6 passed (6)
+      Tests  8 passed (8)
 ```
 
 With `"runner": "bun"` the same file runs with `bun test` (add `"types": ["bun"]` to `tsconfig.json`). If `confirm`

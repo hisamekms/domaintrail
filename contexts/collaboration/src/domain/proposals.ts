@@ -304,89 +304,109 @@ export function approvedInstruction(proposal: Collaboration.ApprovedChangePropos
 }
 
 export const proposalCommands: Collaboration.ChangeProposalCommands = {
-    propose: decide<Collaboration.ProposeChangeProposalDecision>(Collaboration.ChangeProposalShape, (params) => {
-        const { id, session, request, requestedBy, content, proposedAt } = params;
-        // the triage without its evidence: the aggregate stores the base type
-        const triage: Collaboration.TriageId = params.triage;
-        return ok({
-            Open: {
-                set: { id, session, triage, request, requestedBy, content, proposedAt },
-                events: {
-                    'Collaboration.ChangeProposed': {
-                        type: 'Collaboration.ChangeProposed',
-                        proposalId: id,
-                        session,
-                        triage,
-                        request,
-                        requestedBy,
-                        content,
-                        proposedAt,
+    propose: decide<Collaboration.ProposeChangeProposalDecision>(
+        Collaboration.ChangeProposalShape,
+        (params) => {
+            const { id, session, request, requestedBy, content, proposedAt } = params;
+            // the triage without its evidence: the aggregate stores the base type
+            const triage: Collaboration.TriageId = params.triage;
+            return ok({
+                Open: {
+                    set: { id, session, triage, request, requestedBy, content, proposedAt },
+                    events: {
+                        'Collaboration.ChangeProposed': {
+                            type: 'Collaboration.ChangeProposed',
+                            proposalId: id,
+                            session,
+                            triage,
+                            request,
+                            requestedBy,
+                            content,
+                            proposedAt,
+                        },
                     },
                 },
+            });
+        },
+        {},
+        { ensures: Collaboration.checkProposeChangeProposalEnsures },
+    ),
+
+    approve: decide<Collaboration.ApproveChangeProposalDecision>(
+        Collaboration.ChangeProposalShape,
+        {
+            Open: (proposal, params) => {
+                const failed = Collaboration.checkApproveChangeProposalRequires(proposal, params);
+                if (failed === 'facilitatorApproves') return err({ type: 'Collaboration.FacilitatorOnly' });
+                if (failed === 'optionOfProposal') return err({ type: 'Collaboration.NoSuchOption' });
+                const { approvedBy, option, editedHow, run, approvedAt } = params;
+                return ok({
+                    Approved: {
+                        set: { approvedBy, approvedAt, option, editedHow, run },
+                        events: {
+                            'Collaboration.ProposalApproved': {
+                                type: 'Collaboration.ProposalApproved',
+                                proposalId: proposal.id,
+                                approvedBy,
+                                ...(option !== undefined && { option }),
+                                ...(editedHow && { editedHow }),
+                                run,
+                                approvedAt,
+                            },
+                        },
+                    },
+                });
             },
-        });
-    }),
+        },
+        {},
+        { ensures: Collaboration.checkApproveChangeProposalEnsures },
+    ),
 
-    approve: decide<Collaboration.ApproveChangeProposalDecision>(Collaboration.ChangeProposalShape, {
-        Open: (proposal, params) => {
-            const failed = Collaboration.checkApproveChangeProposalRequires(proposal, params);
-            if (failed === 'facilitatorApproves') return err({ type: 'Collaboration.FacilitatorOnly' });
-            if (failed === 'optionOfProposal') return err({ type: 'Collaboration.NoSuchOption' });
-            const { approvedBy, option, editedHow, run, approvedAt } = params;
-            return ok({
-                Approved: {
-                    set: { approvedBy, approvedAt, option, editedHow, run },
-                    events: {
-                        'Collaboration.ProposalApproved': {
-                            type: 'Collaboration.ProposalApproved',
-                            proposalId: proposal.id,
-                            approvedBy,
-                            ...(option !== undefined && { option }),
-                            ...(editedHow && { editedHow }),
-                            run,
-                            approvedAt,
+    reject: decide<Collaboration.RejectChangeProposalDecision>(
+        Collaboration.ChangeProposalShape,
+        {
+            Open: (proposal, params) => {
+                if (Collaboration.checkRejectChangeProposalRequires(proposal, params) === 'facilitatorRejects')
+                    return err({ type: 'Collaboration.FacilitatorOnly' });
+                const { rejectedBy, note, rejectedAt } = params;
+                return ok({
+                    Rejected: {
+                        set: { rejectedBy, rejectedAt, note },
+                        events: {
+                            'Collaboration.ProposalRejected': {
+                                type: 'Collaboration.ProposalRejected',
+                                proposalId: proposal.id,
+                                rejectedBy,
+                                ...(note && { note }),
+                                rejectedAt,
+                            },
                         },
                     },
-                },
-            });
+                });
+            },
         },
-    }),
+        {},
+        { ensures: Collaboration.checkRejectChangeProposalEnsures },
+    ),
 
-    reject: decide<Collaboration.RejectChangeProposalDecision>(Collaboration.ChangeProposalShape, {
-        Open: (proposal, params) => {
-            if (Collaboration.checkRejectChangeProposalRequires(proposal, params) === 'facilitatorRejects')
-                return err({ type: 'Collaboration.FacilitatorOnly' });
-            const { rejectedBy, note, rejectedAt } = params;
-            return ok({
-                Rejected: {
-                    set: { rejectedBy, rejectedAt, note },
-                    events: {
-                        'Collaboration.ProposalRejected': {
-                            type: 'Collaboration.ProposalRejected',
-                            proposalId: proposal.id,
-                            rejectedBy,
-                            ...(note && { note }),
-                            rejectedAt,
+    withdraw: decide<Collaboration.WithdrawChangeProposalDecision>(
+        Collaboration.ChangeProposalShape,
+        {
+            Open: (proposal, params) => {
+                if (Collaboration.checkWithdrawChangeProposalRequires(proposal, params) === 'requesterWithdraws')
+                    return err({ type: 'Collaboration.NotTheRequester' });
+                const { withdrawnBy, withdrawnAt } = params;
+                return ok({
+                    Withdrawn: {
+                        set: { withdrawnAt },
+                        events: {
+                            'Collaboration.ProposalWithdrawn': { type: 'Collaboration.ProposalWithdrawn', proposalId: proposal.id, withdrawnBy, withdrawnAt },
                         },
                     },
-                },
-            });
+                });
+            },
         },
-    }),
-
-    withdraw: decide<Collaboration.WithdrawChangeProposalDecision>(Collaboration.ChangeProposalShape, {
-        Open: (proposal, params) => {
-            if (Collaboration.checkWithdrawChangeProposalRequires(proposal, params) === 'requesterWithdraws')
-                return err({ type: 'Collaboration.NotTheRequester' });
-            const { withdrawnBy, withdrawnAt } = params;
-            return ok({
-                Withdrawn: {
-                    set: { withdrawnAt },
-                    events: {
-                        'Collaboration.ProposalWithdrawn': { type: 'Collaboration.ProposalWithdrawn', proposalId: proposal.id, withdrawnBy, withdrawnAt },
-                    },
-                },
-            });
-        },
-    }),
+        {},
+        { ensures: Collaboration.checkWithdrawChangeProposalEnsures },
+    ),
 };

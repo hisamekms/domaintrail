@@ -212,42 +212,52 @@ export function markChange<M extends MarkFacts>(
 
 /** The commands of a mark, checked against the generated contracts as the other aggregates' (`commands.ts`). */
 export const markCommands: Collaboration.MarkCommands = {
-    place: decide<Collaboration.PlaceMarkDecision>(Collaboration.MarkShape, (params) => {
-        switch (Collaboration.checkPlaceMarkRequires(params)) {
-            case 'fitsTarget':
-                return err({ type: 'Collaboration.MarkNotForTarget' });
-            case 'participantsVote':
-                return err({ type: 'Collaboration.FacilitatorDoesNotVote' });
-            case 'facilitatorMarksSteps':
-                return err({ type: 'Collaboration.FacilitatorOnly' });
-        }
-        const { id, session, participant, target, sign, placedAt } = params;
-        return ok({
-            Placed: {
-                set: { id, session, participant, target, sign, placedAt },
-                events: { 'Collaboration.MarkPlaced': { type: 'Collaboration.MarkPlaced', markId: id, session, participant, target, sign, placedAt } },
-            },
-        });
-    }),
+    place: decide<Collaboration.PlaceMarkDecision>(
+        Collaboration.MarkShape,
+        (params) => {
+            switch (Collaboration.checkPlaceMarkRequires(params)) {
+                case 'fitsTarget':
+                    return err({ type: 'Collaboration.MarkNotForTarget' });
+                case 'participantsVote':
+                    return err({ type: 'Collaboration.FacilitatorDoesNotVote' });
+                case 'facilitatorMarksSteps':
+                    return err({ type: 'Collaboration.FacilitatorOnly' });
+            }
+            const { id, session, participant, target, sign, placedAt } = params;
+            return ok({
+                Placed: {
+                    set: { id, session, participant, target, sign, placedAt },
+                    events: { 'Collaboration.MarkPlaced': { type: 'Collaboration.MarkPlaced', markId: id, session, participant, target, sign, placedAt } },
+                },
+            });
+        },
+        {},
+        { ensures: Collaboration.checkPlaceMarkEnsures },
+    ),
 
-    remove: decide<Collaboration.RemoveMarkDecision>(Collaboration.MarkShape, {
-        Placed: (mark, { removedAt }) =>
-            ok({
-                Removed: {
-                    set: { removedAt },
-                    events: {
-                        'Collaboration.MarkRemoved': {
-                            type: 'Collaboration.MarkRemoved',
-                            markId: mark.id,
-                            participant: mark.participant,
-                            target: mark.target,
-                            sign: mark.sign,
-                            removedAt,
+    remove: decide<Collaboration.RemoveMarkDecision>(
+        Collaboration.MarkShape,
+        {
+            Placed: (mark, { removedAt }) =>
+                ok({
+                    Removed: {
+                        set: { removedAt },
+                        events: {
+                            'Collaboration.MarkRemoved': {
+                                type: 'Collaboration.MarkRemoved',
+                                markId: mark.id,
+                                participant: mark.participant,
+                                target: mark.target,
+                                sign: mark.sign,
+                                removedAt,
+                            },
                         },
                     },
-                },
-            }),
-    }),
+                }),
+        },
+        {},
+        { ensures: Collaboration.checkRemoveMarkEnsures },
+    ),
 };
 
 /** The guide's marks among the session's placed marks: done on a step (or a BC row) of a journey. */

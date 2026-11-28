@@ -387,7 +387,7 @@ export type Expr = ExprBase &
               subjectAt: Site;
           }
         | { k: 'call'; name: string; args: Expr[]; nameAt: Site; argsAt: Site[] }
-        | { k: 'list'; items: { spread: boolean; value: Expr }[] }
+        | { k: 'list'; items: { at: Site; spread: boolean; value: Expr }[] }
         | { k: 'listMethod'; method: 'map' | 'filter' | 'sum'; collection: Expr; param?: string; body?: Expr; collectionAt: Site; bodyAt?: Site }
         | { k: 'conditional'; test: Expr; ifTrue: Expr; ifFalse: Expr; testAt: Site; ifTrueAt: Site; ifFalseAt: Site }
         | { k: 'range'; operand: Expr; lower: Expr; upper: Expr }

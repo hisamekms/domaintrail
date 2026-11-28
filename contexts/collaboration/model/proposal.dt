@@ -103,7 +103,7 @@ context Collaboration {
       requires optionOfProposal "選択肢があれば、そのうちの1つを選ぶ" {
         (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
       } else NoSuchOption
-      changes approvedBy = approvedBy, approvedAt = approvedAt, run = run
+      changes approvedBy = approvedBy, approvedAt = approvedAt, option = option, editedHow = editedHow, run = run
       emits ProposalApproved
 
     /// ファシリテーターが却下する（ひとことを添えてもよい）。
@@ -112,7 +112,7 @@ context Collaboration {
       requires facilitatorRejects "ファシリテーターが却下する" {
         rejectedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
-      changes rejectedBy = rejectedBy, rejectedAt = rejectedAt
+      changes rejectedBy = rejectedBy, rejectedAt = rejectedAt, note = note
       emits ProposalRejected
 
     /// 依頼した参加者が、承認待ちのあいだに取り下げる。

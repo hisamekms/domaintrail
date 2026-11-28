@@ -1059,6 +1059,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.queue',
                 run: impl.AgentRun.queue,
+                ensures: Collaboration.checkQueueAgentRunEnsures,
                 input: () => fc.tuple(fc.record({ id: a.AgentRunId, session: a.ActiveSession, requests: testing.many(a.PendingRequest, 1), input: a.RunInput, queuedBy: a.ParticipantId, queuedByRole: a.ParticipantRole, queuedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AgentRun?.commands?.queue ?? [],
                 factory: true,
@@ -1073,6 +1074,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.recordEdit',
                 run: impl.AgentRun.recordEdit,
+                ensures: Collaboration.checkRecordEditAgentRunEnsures,
                 input: () => fc.tuple(fc.record({ id: a.AgentRunId, session: a.ActiveSession, requests: testing.many(a.PendingRequest, 1), input: a.RunInput, queuedBy: a.ParticipantId, queuedAt: testing.cast<Timestamp>(scalar.Timestamp), baseRevision: a.RevisionId, resultRevision: a.RevisionId, reapplies: a.AgentRunId, finishedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'requests', 'input', 'queuedBy', 'queuedAt', 'baseRevision', 'resultRevision', 'finishedAt'] })),
                 examples: options.examples?.AgentRun?.commands?.recordEdit ?? [],
                 factory: true,
@@ -1087,6 +1089,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.nameHotspot',
                 run: impl.AgentRun.nameHotspot,
+                ensures: Collaboration.checkNameHotspotAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.EditedAgentRun), fc.record({ name: a.StormingLocalName, renamed: a.RevisionId })),
                 examples: options.examples?.AgentRun?.commands?.nameHotspot ?? [],
                 factory: false,
@@ -1101,6 +1104,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.noteConflict',
                 run: impl.AgentRun.noteConflict,
+                ensures: Collaboration.checkNoteConflictAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.EditedAgentRun), fc.record({ conflict: a.EditConflict })),
                 examples: options.examples?.AgentRun?.commands?.noteConflict ?? [],
                 factory: false,
@@ -1114,6 +1118,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.revert',
                 run: impl.AgentRun.revert,
+                ensures: Collaboration.checkRevertAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.QueuedAgentRun), fc.record({ baseRevision: a.RevisionId, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), finishedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AgentRun?.commands?.revert ?? [],
                 factory: false,
@@ -1128,6 +1133,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.leaveToAgent',
                 run: impl.AgentRun.leaveToAgent,
+                ensures: Collaboration.checkLeaveToAgentAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.QueuedAgentRun), fc.record({ obstacle: a.RevertObstacle })),
                 examples: options.examples?.AgentRun?.commands?.leaveToAgent ?? [],
                 factory: false,
@@ -1142,6 +1148,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.start',
                 run: impl.AgentRun.start,
+                ensures: Collaboration.checkStartAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.QueuedAgentRun), fc.record({ baseRevision: a.RevisionId, startedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AgentRun?.commands?.start ?? [],
                 factory: false,
@@ -1155,6 +1162,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.finish',
                 run: impl.AgentRun.finish,
+                ensures: Collaboration.checkFinishAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.RunningAgentRun), fc.record({ report: a.RunReport, resultRevision: a.RevisionId, changed: testing.cast<boolean>(scalar.Bool), reply: a.AgentReply, review: a.RunReview, finishedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['report', 'resultRevision', 'changed', 'finishedAt'] })),
                 examples: options.examples?.AgentRun?.commands?.finish ?? [],
                 factory: false,
@@ -1171,6 +1179,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.askClarification',
                 run: impl.AgentRun.askClarification,
+                ensures: Collaboration.checkAskClarificationAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.RunningAgentRun), fc.record({ question: a.Text, reply: a.AgentReply, resultRevision: a.RevisionId, finishedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['question', 'resultRevision', 'finishedAt'] })),
                 examples: options.examples?.AgentRun?.commands?.askClarification ?? [],
                 factory: false,
@@ -1185,6 +1194,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.decline',
                 run: impl.AgentRun.decline,
+                ensures: Collaboration.checkDeclineAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.RunningAgentRun), fc.record({ reply: a.AgentReply, resultRevision: a.RevisionId, finishedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AgentRun?.commands?.decline ?? [],
                 factory: false,
@@ -1199,6 +1209,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.fail',
                 run: impl.AgentRun.fail,
+                ensures: Collaboration.checkFailAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.RunningAgentRun), fc.record({ reason: a.FailureReason, finishedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AgentRun?.commands?.fail ?? [],
                 factory: false,
@@ -1213,6 +1224,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'AgentRun.cancel',
                 run: impl.AgentRun.cancel,
+                ensures: Collaboration.checkCancelAgentRunEnsures,
                 input: () => fc.tuple(fc.oneof(a.QueuedAgentRun, a.RunningAgentRun), fc.record({ cancelledBy: a.ParticipantId, cancelledByRole: a.ParticipantRole, cancelledAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AgentRun?.commands?.cancel ?? [],
                 factory: false,
@@ -1223,12 +1235,15 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
                 declaredInvariants: [],
                 stateful: true,
                 counted: [],
+                outcomes: [{ name: 'QueuedCancelled', to: 'Cancelled', from: ['Queued'], kinds: [] }, { name: 'RunningCancelled', to: 'Cancelled', from: ['Running'], kinds: [] }],
+                choices: Collaboration.checkCancelAgentRunChoice({}),
             }, options),
         ]),
         impl.AssumptionApproval && testing.suite('AssumptionApproval', [
             ...testing.commandCases({
                 name: 'AssumptionApproval.approve',
                 run: impl.AssumptionApproval.approve,
+                ensures: Collaboration.checkApproveAssumptionApprovalEnsures,
                 input: () => fc.tuple(fc.record({ id: a.AssumptionApprovalId, session: a.ActiveSession, assumption: a.DecidableAssumption, approvedBy: a.ParticipantId, approvedByRole: a.ParticipantRole, approvedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.AssumptionApproval?.commands?.approve ?? [],
                 factory: true,
@@ -1244,6 +1259,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SlashCommand.start',
                 run: impl.SlashCommand.start,
+                ensures: Collaboration.checkStartSlashCommandEnsures,
                 input: () => fc.tuple(fc.record({ id: a.SlashCommandId, session: a.ActiveSession, kind: a.SlashCommandKind, startedBy: a.ParticipantId, opening: a.RequestId, scope: a.StormingName, language: a.UiLanguage, startedAt: testing.cast<Timestamp>(scalar.Timestamp), guide: a.GuideSnapshot }, { requiredKeys: ['id', 'session', 'kind', 'startedBy', 'opening', 'language', 'startedAt'] })),
                 examples: options.examples?.SlashCommand?.commands?.start ?? [],
                 factory: true,
@@ -1256,6 +1272,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SlashCommand.list',
                 run: impl.SlashCommand.list,
+                ensures: Collaboration.checkListSlashCommandEnsures,
                 input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand), fc.record({ candidates: testing.many(a.CommandCandidate, 0, 20), listedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.SlashCommand?.commands?.list ?? [],
                 factory: false,
@@ -1268,6 +1285,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SlashCommand.answer',
                 run: impl.SlashCommand.answer,
+                ensures: Collaboration.checkAnswerSlashCommandEnsures,
                 input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand), fc.record({ answer: a.RequestId, next: a.NextAnswer, answeredAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['answer', 'answeredAt'] })),
                 examples: options.examples?.SlashCommand?.commands?.answer ?? [],
                 factory: false,
@@ -1280,6 +1298,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SlashCommand.apply',
                 run: impl.SlashCommand.apply,
+                ensures: Collaboration.checkApplySlashCommandEnsures,
                 input: () => fc.tuple(fc.oneof(a.ListedSlashCommand), fc.record({ appliedBy: a.ParticipantId, appliedByRole: a.ParticipantRole, chosen: testing.many(a.CandidateIndex, 1, 20), run: a.AgentRunId, appliedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.SlashCommand?.commands?.apply ?? [],
                 factory: false,
@@ -1293,6 +1312,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SlashCommand.stop',
                 run: impl.SlashCommand.stop,
+                ensures: Collaboration.checkStopSlashCommandEnsures,
                 input: () => fc.tuple(fc.oneof(a.WorkingSlashCommand, a.ListedSlashCommand), fc.record({ stoppedBy: a.ParticipantId, stoppedByRole: a.ParticipantRole, stoppedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.SlashCommand?.commands?.stop ?? [],
                 factory: false,
@@ -1308,6 +1328,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.start',
                 run: impl.Interview.start,
+                ensures: Collaboration.checkStartInterviewEnsures,
                 input: () => fc.tuple(fc.record({ id: a.InterviewId, session: a.ActiveSession, command: a.InterviewCommand, startedBy: a.ParticipantId, opening: a.RequestId, focus: a.ModelTarget, language: a.UiLanguage, startedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'command', 'startedBy', 'opening', 'language', 'startedAt'] })),
                 examples: options.examples?.Interview?.commands?.start ?? [],
                 factory: true,
@@ -1320,6 +1341,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.hear',
                 run: impl.Interview.hear,
+                ensures: Collaboration.checkHearInterviewEnsures,
                 input: () => fc.tuple(fc.oneof(a.AskingInterview, a.BriefedInterview), fc.record({ message: a.RequestId, heardAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Interview?.commands?.hear ?? [],
                 factory: false,
@@ -1332,6 +1354,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.ask',
                 run: impl.Interview.ask,
+                ensures: Collaboration.checkAskInterviewEnsures,
                 input: () => fc.tuple(fc.oneof(a.AskingInterview), fc.record({ answered: a.RequestId, question: a.AskedQuestion, askedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Interview?.commands?.ask ?? [],
                 factory: false,
@@ -1345,6 +1368,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.summarize',
                 run: impl.Interview.summarize,
+                ensures: Collaboration.checkSummarizeInterviewEnsures,
                 input: () => fc.tuple(fc.oneof(a.AskingInterview), fc.record({ answered: a.RequestId, summary: a.InterviewBrief, briefedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Interview?.commands?.summarize ?? [],
                 factory: false,
@@ -1358,6 +1382,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.confirm',
                 run: impl.Interview.confirm,
+                ensures: Collaboration.checkConfirmInterviewEnsures,
                 input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ confirmedBy: a.ParticipantId, confirmedByRole: a.ParticipantRole, confirmedBrief: a.InterviewBrief, edited: testing.cast<boolean>(scalar.Bool), run: a.AgentRunId, confirmedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['confirmedBy', 'confirmedByRole', 'confirmedBrief', 'edited', 'confirmedAt'] })),
                 examples: options.examples?.Interview?.commands?.confirm ?? [],
                 factory: false,
@@ -1371,6 +1396,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.reject',
                 run: impl.Interview.reject,
+                ensures: Collaboration.checkRejectInterviewEnsures,
                 input: () => fc.tuple(fc.oneof(a.BriefedInterview), fc.record({ rejectedBy: a.ParticipantId, rejectedByRole: a.ParticipantRole, note: a.Text, rejectedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['rejectedBy', 'rejectedByRole', 'rejectedAt'] })),
                 examples: options.examples?.Interview?.commands?.reject ?? [],
                 factory: false,
@@ -1384,6 +1410,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Interview.stop',
                 run: impl.Interview.stop,
+                ensures: Collaboration.checkStopInterviewEnsures,
                 input: () => fc.tuple(fc.oneof(a.AskingInterview, a.BriefedInterview), fc.record({ stoppedBy: a.ParticipantId, stoppedByRole: a.ParticipantRole, stoppedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Interview?.commands?.stop ?? [],
                 factory: false,
@@ -1399,6 +1426,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Mark.place',
                 run: impl.Mark.place,
+                ensures: Collaboration.checkPlaceMarkEnsures,
                 input: () => fc.tuple(fc.record({ id: a.MarkId, session: a.ActiveSession, participant: a.ParticipantId, role: a.ParticipantRole, target: a.OpenMarkTarget, sign: a.MarkSign, placedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Mark?.commands?.place ?? [],
                 factory: true,
@@ -1413,6 +1441,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Mark.remove',
                 run: impl.Mark.remove,
+                ensures: Collaboration.checkRemoveMarkEnsures,
                 input: () => fc.tuple(fc.oneof(a.PlacedMark), fc.record({ open: a.OpenMarkTarget, removedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Mark?.commands?.remove ?? [],
                 factory: false,
@@ -1428,6 +1457,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'ChangeProposal.propose',
                 run: impl.ChangeProposal.propose,
+                ensures: Collaboration.checkProposeChangeProposalEnsures,
                 input: () => fc.tuple(fc.record({ id: a.ChangeProposalId, session: a.ActiveSession, triage: a.ProposableTriage, request: a.RequestId, requestedBy: a.ParticipantId, content: a.ProposalContent, proposedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.ChangeProposal?.commands?.propose ?? [],
                 factory: true,
@@ -1440,6 +1470,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'ChangeProposal.approve',
                 run: impl.ChangeProposal.approve,
+                ensures: Collaboration.checkApproveChangeProposalEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ approvedBy: a.ParticipantId, approvedByRole: a.ParticipantRole, option: a.ProposalOptionIndex, editedHow: a.ProposalText, run: a.AgentRunId, approvedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['approvedBy', 'approvedByRole', 'run', 'approvedAt'] })),
                 examples: options.examples?.ChangeProposal?.commands?.approve ?? [],
                 factory: false,
@@ -1453,6 +1484,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'ChangeProposal.reject',
                 run: impl.ChangeProposal.reject,
+                ensures: Collaboration.checkRejectChangeProposalEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ rejectedBy: a.ParticipantId, rejectedByRole: a.ParticipantRole, note: a.Text, rejectedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['rejectedBy', 'rejectedByRole', 'rejectedAt'] })),
                 examples: options.examples?.ChangeProposal?.commands?.reject ?? [],
                 factory: false,
@@ -1466,6 +1498,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'ChangeProposal.withdraw',
                 run: impl.ChangeProposal.withdraw,
+                ensures: Collaboration.checkWithdrawChangeProposalEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenChangeProposal), fc.record({ withdrawnBy: a.ParticipantId, withdrawnAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.ChangeProposal?.commands?.withdraw ?? [],
                 factory: false,
@@ -1481,6 +1514,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SessionRecord.write',
                 run: impl.SessionRecord.write,
+                ensures: Collaboration.checkWriteSessionRecordEnsures,
                 input: () => fc.tuple(fc.record({ id: a.SessionRecordId, session: a.ActiveSession, by: a.ParticipantId, fact: a.RecordFact, replyTo: a.RequestId, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['id', 'session', 'fact', 'at'] })),
                 examples: options.examples?.SessionRecord?.commands?.write ?? [],
                 factory: true,
@@ -1493,6 +1527,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'SessionRecord.revise',
                 run: impl.SessionRecord.revise,
+                ensures: Collaboration.checkReviseSessionRecordEnsures,
                 input: () => fc.tuple(fc.oneof(a.WrittenSessionRecord), fc.record({ fact: a.RecordFact, revisedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.SessionRecord?.commands?.revise ?? [],
                 factory: false,
@@ -1507,6 +1542,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Request.send',
                 run: impl.Request.send,
+                ensures: Collaboration.checkSendRequestEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, author: a.ParticipantId, targets: testing.many(a.TargetSnapshot, 0, 20), body: a.Text, sentAt: testing.cast<Timestamp>(scalar.Timestamp), replyTo: a.ReplyableTarget, mentions: testing.many(a.MentionableParticipant, 0, 20), viewedAt: a.ViewedAt }, { requiredKeys: ['id', 'session', 'author', 'targets', 'body', 'sentAt', 'mentions'] })),
                 examples: options.examples?.Request?.commands?.send ?? [],
                 factory: true,
@@ -1521,6 +1557,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Request.requestRevert',
                 run: impl.Request.requestRevert,
+                ensures: Collaboration.checkRequestRevertRequestEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, author: a.ParticipantId, authorRole: a.ParticipantRole, body: a.Text, sentAt: testing.cast<Timestamp>(scalar.Timestamp), reverts: a.RevertableRun })),
                 examples: options.examples?.Request?.commands?.requestRevert ?? [],
                 factory: true,
@@ -1535,6 +1572,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Request.recordEdit',
                 run: impl.Request.recordEdit,
+                ensures: Collaboration.checkRecordEditRequestEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, author: a.ParticipantId, body: a.Text, sentAt: testing.cast<Timestamp>(scalar.Timestamp), edit: a.StickyEdit })),
                 examples: options.examples?.Request?.commands?.recordEdit ?? [],
                 factory: true,
@@ -1548,6 +1586,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Request.answer',
                 run: impl.Request.answer,
+                ensures: Collaboration.checkAnswerRequestEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RequestId, session: a.ActiveSession, answers: a.RequestId, body: a.Text, sentAt: testing.cast<Timestamp>(scalar.Timestamp), journeyNote: a.JourneyNote }, { requiredKeys: ['id', 'session', 'body', 'sentAt'] })),
                 examples: options.examples?.Request?.commands?.answer ?? [],
                 factory: true,
@@ -1561,6 +1600,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Request.redact',
                 run: impl.Request.redact,
+                ensures: Collaboration.checkRedactRequestEnsures,
                 input: () => fc.tuple(fc.oneof(a.SentRequest, a.DismissedRequest), fc.record({ body: a.Text, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Request?.commands?.redact ?? [],
                 factory: false,
@@ -1576,6 +1616,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Revision.take',
                 run: impl.Revision.take,
+                ensures: Collaboration.checkTakeRevisionEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RevisionId, session: a.SessionId, origin: a.RevisionOrigin, contentHash: a.ContentHash, files: testing.many(a.SnapshotFile, 0), validation: a.ValidationSummary, takenAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Revision?.commands?.take ?? [],
                 factory: true,
@@ -1592,6 +1633,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Revision.restore',
                 run: impl.Revision.restore,
+                ensures: Collaboration.checkRestoreRevisionEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RevisionId, session: a.SessionId, restoredFrom: a.RestorableRevision, preRestore: a.RevisionId, contentHash: a.ContentHash, files: testing.many(a.SnapshotFile, 0), validation: a.ValidationSummary, restoredByRole: a.ParticipantRole, takenAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Revision?.commands?.restore ?? [],
                 factory: true,
@@ -1610,6 +1652,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Session.start',
                 run: impl.Session.start,
+                ensures: Collaboration.checkStartSessionEnsures,
                 input: () => fc.tuple(fc.record({ id: a.SessionId, facilitator: a.ParticipantId, name: a.DisplayName, mode: a.SessionMode, startedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Session?.commands?.start ?? [],
                 factory: true,
@@ -1623,6 +1666,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Session.join',
                 run: impl.Session.join,
+                ensures: Collaboration.checkJoinSessionEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ participant: a.ParticipantId, name: a.DisplayName, joinedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Session?.commands?.join ?? [],
                 factory: false,
@@ -1637,6 +1681,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Session.collaborate',
                 run: impl.Session.collaborate,
+                ensures: Collaboration.checkCollaborateSessionEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ collaboratedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Session?.commands?.collaborate ?? [],
                 factory: false,
@@ -1651,6 +1696,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Session.chooseJourney',
                 run: impl.Session.chooseJourney,
+                ensures: Collaboration.checkChooseJourneySessionEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ journey: a.GuideJourneyKey, chosenByRole: a.ParticipantRole, chosenAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['chosenByRole', 'chosenAt'] })),
                 examples: options.examples?.Session?.commands?.chooseJourney ?? [],
                 factory: false,
@@ -1665,6 +1711,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Session.close',
                 run: impl.Session.close,
+                ensures: Collaboration.checkCloseSessionEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenSession), fc.record({ closedByRole: a.ParticipantRole, closedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Session?.commands?.close ?? [],
                 factory: false,
@@ -1681,6 +1728,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Triage.open',
                 run: impl.Triage.open,
+                ensures: Collaboration.checkOpenTriageEnsures,
                 input: () => fc.tuple(fc.record({ id: a.TriageId, session: a.ActiveSession, request: a.AddressableRequest, addressedBy: a.AddressedBy, addressedByParticipant: a.ParticipantId, openedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Triage?.commands?.open ?? [],
                 factory: true,
@@ -1694,6 +1742,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Triage.record',
                 run: impl.Triage.record,
+                ensures: Collaboration.checkRecordTriageEnsures,
                 input: () => fc.tuple(fc.oneof(a.PendingTriage), fc.record({ step: a.TriageStep, recordedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Triage?.commands?.record ?? [],
                 factory: false,
@@ -1711,6 +1760,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Triage.override',
                 run: impl.Triage.override,
+                ensures: Collaboration.checkOverrideTriageEnsures,
                 input: () => fc.tuple(fc.oneof(a.DecidedTriage), fc.record({ step: a.TriageStep, overriddenAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Triage?.commands?.override ?? [],
                 factory: false,
@@ -1725,6 +1775,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Triage.readdress',
                 run: impl.Triage.readdress,
+                ensures: Collaboration.checkReaddressTriageEnsures,
                 input: () => fc.tuple(fc.oneof(a.DecidedTriage), fc.record({ by: a.ParticipantId, byRole: a.ParticipantRole, readdressedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Triage?.commands?.readdress ?? [],
                 factory: false,
@@ -1739,6 +1790,7 @@ export function contract(impl: Implementation, options: Options): testing.Suite 
             ...testing.commandCases({
                 name: 'Triage.conclude',
                 run: impl.Triage.conclude,
+                ensures: Collaboration.checkConcludeTriageEnsures,
                 input: () => fc.tuple(fc.oneof(a.DecidedTriage), fc.record({ to: a.TriageOutcome, concludedAt: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.Triage?.commands?.conclude ?? [],
                 factory: false,

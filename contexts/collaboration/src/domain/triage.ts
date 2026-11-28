@@ -206,27 +206,32 @@ export function triageRoute(
 // ---- The commands ----
 
 export const triageCommands: Collaboration.TriageCommands = {
-    open: decide<Collaboration.OpenTriageDecision>(Collaboration.TriageShape, (params) => {
-        const { id, session, addressedBy, addressedByParticipant, openedAt } = params;
-        // the message without its evidence: the aggregate stores the base type
-        const request: Collaboration.RequestId = params.request;
-        return ok({
-            Pending: {
-                set: { id, session, request, addressedBy, addressedByParticipant, steps: [], openedAt },
-                events: {
-                    'Collaboration.TriageOpened': {
-                        type: 'Collaboration.TriageOpened',
-                        triageId: id,
-                        session,
-                        request,
-                        addressedBy,
-                        addressedByParticipant,
-                        openedAt,
+    open: decide<Collaboration.OpenTriageDecision>(
+        Collaboration.TriageShape,
+        (params) => {
+            const { id, session, addressedBy, addressedByParticipant, openedAt } = params;
+            // the message without its evidence: the aggregate stores the base type
+            const request: Collaboration.RequestId = params.request;
+            return ok({
+                Pending: {
+                    set: { id, session, request, addressedBy, addressedByParticipant, steps: [], openedAt },
+                    events: {
+                        'Collaboration.TriageOpened': {
+                            type: 'Collaboration.TriageOpened',
+                            triageId: id,
+                            session,
+                            request,
+                            addressedBy,
+                            addressedByParticipant,
+                            openedAt,
+                        },
                     },
                 },
-            },
-        });
-    }),
+            });
+        },
+        {},
+        { ensures: Collaboration.checkOpenTriageEnsures },
+    ),
 
     // a cascade stage's answer: decided when it knows (or after the last stage), still pending otherwise
     record: decideNamed<Collaboration.RecordTriageDecision>()(
@@ -263,66 +268,82 @@ export const triageCommands: Collaboration.TriageCommands = {
             });
         },
         { availability: Collaboration.TriageAvailability, command: 'record' },
+        { ensures: Collaboration.checkRecordTriageEnsures },
     ),
 
-    override: decide<Collaboration.OverrideTriageDecision>(Collaboration.TriageShape, {
-        Decided: (triage, params) => {
-            if (Collaboration.checkOverrideTriageRequires(triage, params) === 'overridable') return err({ type: 'Collaboration.TriageNotOverridable' });
-            const { step, overriddenAt } = params;
-            return ok({
-                Decided: {
-                    set: { steps: [...triage.steps, step], kind: step.verdict, decidedBy: step.stage, decidedAt: overriddenAt },
-                    events: { 'Collaboration.TriageOverridden': { type: 'Collaboration.TriageOverridden', triageId: triage.id, step, kind: step.verdict } },
-                },
-            });
+    override: decide<Collaboration.OverrideTriageDecision>(
+        Collaboration.TriageShape,
+        {
+            Decided: (triage, params) => {
+                if (Collaboration.checkOverrideTriageRequires(triage, params) === 'overridable') return err({ type: 'Collaboration.TriageNotOverridable' });
+                const { step, overriddenAt } = params;
+                return ok({
+                    Decided: {
+                        set: { steps: [...triage.steps, step], kind: step.verdict, decidedBy: step.stage, decidedAt: overriddenAt },
+                        events: { 'Collaboration.TriageOverridden': { type: 'Collaboration.TriageOverridden', triageId: triage.id, step, kind: step.verdict } },
+                    },
+                });
+            },
         },
-    }),
+        {},
+        { ensures: Collaboration.checkOverrideTriageEnsures },
+    ),
 
     // plan Q6: a message judged "neither" sent again by the facilitator skips the cascade and goes on as 相談, as the
     // facilitator's (a change request it turns out to be is then queued without a proposal)
-    readdress: decide<Collaboration.ReaddressTriageDecision>(Collaboration.TriageShape, {
-        Decided: (triage, params) => {
-            switch (Collaboration.checkReaddressTriageRequires(triage, params)) {
-                case 'facilitatorReaddresses':
-                    return err({ type: 'Collaboration.FacilitatorOnly' });
-                case 'decidedNotForAi':
-                    return err({ type: 'Collaboration.RequestAlreadyAddressed', request: triage.request });
-            }
-            const { by, readdressedAt } = params;
-            const step: Collaboration.TriageStep = { stage: 'Facilitator', verdict: 'Consultation', durationMs: zeroMs, at: readdressedAt };
-            return ok({
-                Decided: {
-                    set: {
-                        addressedBy: 'Facilitator',
-                        addressedByParticipant: by,
-                        steps: [...triage.steps, step],
-                        kind: 'Consultation',
-                        decidedBy: 'Facilitator',
-                        decidedAt: readdressedAt,
+    readdress: decide<Collaboration.ReaddressTriageDecision>(
+        Collaboration.TriageShape,
+        {
+            Decided: (triage, params) => {
+                switch (Collaboration.checkReaddressTriageRequires(triage, params)) {
+                    case 'facilitatorReaddresses':
+                        return err({ type: 'Collaboration.FacilitatorOnly' });
+                    case 'decidedNotForAi':
+                        return err({ type: 'Collaboration.RequestAlreadyAddressed', request: triage.request });
+                }
+                const { by, readdressedAt } = params;
+                const step: Collaboration.TriageStep = { stage: 'Facilitator', verdict: 'Consultation', durationMs: zeroMs, at: readdressedAt };
+                return ok({
+                    Decided: {
+                        set: {
+                            addressedBy: 'Facilitator',
+                            addressedByParticipant: by,
+                            steps: [...triage.steps, step],
+                            kind: 'Consultation',
+                            decidedBy: 'Facilitator',
+                            decidedAt: readdressedAt,
+                        },
+                        events: { 'Collaboration.TriageReaddressed': { type: 'Collaboration.TriageReaddressed', triageId: triage.id, by, readdressedAt } },
                     },
-                    events: { 'Collaboration.TriageReaddressed': { type: 'Collaboration.TriageReaddressed', triageId: triage.id, by, readdressedAt } },
-                },
-            });
+                });
+            },
         },
-    }),
+        {},
+        { ensures: Collaboration.checkReaddressTriageEnsures },
+    ),
 
-    conclude: decide<Collaboration.ConcludeTriageDecision>(Collaboration.TriageShape, {
-        Decided: (triage, params) => {
-            switch (Collaboration.checkConcludeTriageRequires(triage, params)) {
-                case 'noOutcomeYet':
-                    return err({ type: 'Collaboration.TriageAlreadyConcluded' });
-                case 'outcomeFits':
-                    return err({ type: 'Collaboration.TriageNotConcludable' });
-            }
-            const { to, concludedAt } = params;
-            return ok({
-                Decided: {
-                    set: { outcome: to },
-                    events: { 'Collaboration.TriageConcluded': { type: 'Collaboration.TriageConcluded', triageId: triage.id, to, concludedAt } },
-                },
-            });
+    conclude: decide<Collaboration.ConcludeTriageDecision>(
+        Collaboration.TriageShape,
+        {
+            Decided: (triage, params) => {
+                switch (Collaboration.checkConcludeTriageRequires(triage, params)) {
+                    case 'noOutcomeYet':
+                        return err({ type: 'Collaboration.TriageAlreadyConcluded' });
+                    case 'outcomeFits':
+                        return err({ type: 'Collaboration.TriageNotConcludable' });
+                }
+                const { to, concludedAt } = params;
+                return ok({
+                    Decided: {
+                        set: { outcome: to },
+                        events: { 'Collaboration.TriageConcluded': { type: 'Collaboration.TriageConcluded', triageId: triage.id, to, concludedAt } },
+                    },
+                });
+            },
         },
-    }),
+        {},
+        { ensures: Collaboration.checkConcludeTriageEnsures },
+    ),
 };
 
 const zero = Collaboration.makeMilliseconds(0);

@@ -8,7 +8,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "b6cf27de830ecb55",
+  "all": "6193aff41e1ae61c",
   "base": null,
   "baseline": {
     "kind": "previous",
@@ -46,7 +46,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "Sales",
   ],
   "layoutEngine": "elk",
-  "model": "3d204e3773e28bbd",
+  "model": "532bb02ea2395ec3",
   "modelVersion": 1,
   "overview": {
     "edges": 5,
@@ -54,7 +54,7 @@ exports[`the Live View payload of examples/shop with its stormings 1`] = `
     "nodes": 11,
     "sha": "ea7fa79a0f268706",
   },
-  "sources": "e9ef82416e2c759d",
+  "sources": "00d8f49dcffa30e4",
   "stale": false,
   "states": {
     "Billing.Invoice": {
@@ -230,7 +230,7 @@ exports[`the Live View payload of examples/shop without stormings 1`] = `
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "e3764648bfe18669",
+  "all": "6c2555f237516ffb",
   "base": null,
   "baseline": {
     "kind": "previous",
@@ -266,7 +266,7 @@ exports[`the Live View payload of examples/shop without stormings 1`] = `
     "Sales",
   ],
   "layoutEngine": "elk",
-  "model": "3d204e3773e28bbd",
+  "model": "532bb02ea2395ec3",
   "modelVersion": 1,
   "overview": {
     "edges": 5,
@@ -274,7 +274,7 @@ exports[`the Live View payload of examples/shop without stormings 1`] = `
     "nodes": 11,
     "sha": "ea7fa79a0f268706",
   },
-  "sources": "c4a1cb1c0c8cd470",
+  "sources": "50d2f8c7c374e745",
   "stale": false,
   "states": {
     "Billing.Invoice": {
@@ -357,7 +357,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "nodes": 5,
     "sha": "e071f5575a6c3fc9",
   },
-  "all": "672745cf35e52888",
+  "all": "ca3888c16757f695",
   "base": {
     "aggregates": {
       "edges": 2,
@@ -377,7 +377,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
       "nodes": 3,
       "sha": "68e0e43fcee4e1ed",
     },
-    "model": "3d204e3773e28bbd",
+    "model": "532bb02ea2395ec3",
     "overview": {
       "edges": 5,
       "id": "structure-overview",
@@ -430,7 +430,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "Sales",
   ],
   "layoutEngine": "elk",
-  "model": "d53e84bb08d2e6a6",
+  "model": "d4acf703e0da48c1",
   "modelVersion": 2,
   "overview": {
     "edges": 5,
@@ -438,7 +438,7 @@ exports[`the Live View payload of examples/shop after a change to a .dt file: th
     "nodes": 11,
     "sha": "ea7fa79a0f268706",
   },
-  "sources": "5ba1bbc5f14ceb04",
+  "sources": "ce1307474d3d29a0",
   "stale": false,
   "states": {
     "Billing.Invoice": {
