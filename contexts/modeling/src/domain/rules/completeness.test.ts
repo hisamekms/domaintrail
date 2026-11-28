@@ -53,6 +53,30 @@ describe('an outcome lists the fields it makes exist (M021)', () => {
         ).toEqual([]);
     });
 
+    test('a field of the source with another type in the target is new there: the outcome lists it', async () => {
+        const a = await analyzeDomain([
+            {
+                path: 'w.dt',
+                text: `context W {
+  id WorkId: UUID
+  aggregate Work {
+    id: WorkId
+    initial Draft
+    state Draft { level: Int }
+    state Done { level: String }
+    create command open(id: WorkId) -> Draft changes id = id, level = 0
+    command finish() Draft -> Done
+    command finishAs(level: String) Draft -> Done changes level = level
+  }
+}
+`,
+            },
+        ]);
+        expect(a.diagnostics.filter((d) => d.code === 'M021').map((d) => d.message)).toEqual([
+            "Outcome 'finish' makes field 'level' exist, but does not list it in 'changes'.",
+        ]);
+    });
+
     test('a kind create lists the common fields and its kind’s; a common create would not see them', async () => {
         const a = await analyzeDomain([
             {

@@ -1040,8 +1040,7 @@ export class CheckWriter {
                 const e = compiler.compileIn(a.expr, scope, names);
                 const t = fieldTy(model, f);
                 const x = `${after}.${f.name}`;
-                // a date or time literal as its canonical text (ADR 0038), which the aggregate holds
-                const differs = compiler.differs(t, x, scalar(e, { js: x, ty: t }), e.ty);
+                const differs = compiler.differs(t, x, e.js, e.ty);
                 entries.push(`if (${differs}) ${violation(changeId(b.contractId, f.name), 'changes', `${f.name} = ${a.source}`, f.name)}`);
             }
             // (2) the frame: what `changes` does not list stays as it was
@@ -1064,14 +1063,20 @@ export class CheckWriter {
                     entries.push(
                         `if (${compiler.violated(x, scope, names)}) ${violation(ensuresId(b.contractId), 'ensures', compiler.sourceOf(x) ?? o.ensures.source)}`,
                     );
-            if (!entries.length) continue;
             // the outcome `value` holds, from this source state (and kind): narrowed for TypeScript without assertions
             const guards = [
                 `'${b.key}' in ${value}`,
                 `${value}.${b.key} !== undefined`,
                 ...(!c.factory && agg.states.length && b.from ? [`${subject}.${STATE_TAG} === '${b.from}'`] : []),
-                ...(b.kind !== undefined ? [...(c.factory ? [] : [`${subject}.${KIND_TAG} === '${b.kind}'`]), `${after}.${KIND_TAG} === '${b.kind}'`] : []),
+                // a create makes the aggregate of a kind; any other outcome keeps the input's (checked first: the
+                // return narrows the aggregate made to the kind, for the entries after it)
+                ...(b.kind !== undefined ? [c.factory ? `${after}.${KIND_TAG} === '${b.kind}'` : `${subject}.${KIND_TAG} === '${b.kind}'`] : []),
             ];
+            if (b.kind !== undefined && !c.factory)
+                entries.unshift(
+                    `if (${after}.${KIND_TAG} !== '${b.kind}') ${violation(unchangedId(b.outcomeId, KIND_TAG), 'unchanged', `after.${KIND_TAG} == before.${KIND_TAG}`, KIND_TAG)}`,
+                );
+            if (!entries.length) continue;
             body.push(`if (${guards.join(' && ')}) {`, ...entries.map((l) => `    ${l}`), '}');
         }
         if (!body.length) return [];

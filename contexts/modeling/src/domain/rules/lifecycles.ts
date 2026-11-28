@@ -4,6 +4,7 @@ import { lifecyclesOf } from '../lifecycle.js';
 import {
     commandsOf,
     commonFields,
+    includedFields,
     kindFields,
     kindsOf,
     statesOf,
@@ -92,7 +93,8 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                     !c.ofKind && (c.outcomes.length || c.transitions.length || c.changes.length || c.emits.length) && kinds.some((k) => casesOf(k, c).length),
             ),
         );
-        const common = commonFields(agg);
+        // the common fields, those of its field sets (`with`) included
+        const common = [...includedFields(agg).map((x) => x.field), ...commonFields(agg)];
         const stateNames = new Set(statesOf(agg).map((s) => s.name));
         /** The fields an outcome of a command may change: the common ones, and those of the kind it is for. */
         const changeable = (kind: KindDecl | undefined) => [...common, ...(kind ? kindFields(kind) : [])];

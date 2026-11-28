@@ -25,8 +25,8 @@ const MODEL = `context Tasks {
         changes doneAt = at, tags
         ensures { after.tags.every(t => t != "") && before.tags.length <= after.tags.length }
     }
-    command retitle(title: String) Draft -> Draft | Done
-      changes title = title, doneAt = "2026-01-01T00:00:00Z"
+    command retitle(title: String, at: Timestamp) Draft -> Draft | Done
+      changes title = title, doneAt = at
       ensures { after.title != "" }
   }
   aggregate Value {
@@ -95,9 +95,8 @@ describe('postconditions in the generated TypeScript', () => {
         expect(draft).not.toContain('doneAt');
         expect(draft).toContain("{ id: 'Tasks.Work:retitle->Draft.unchanged.tags'");
         expect(draft).toContain("{ id: 'Tasks.Work:retitle.ensures', outcome: 'Draft', kind: 'ensures', source: 'after.title != \"\"' }");
-        // a date or time literal is compared as its canonical text
         expect(done).toContain(
-            "if (value.Done.aggregate.doneAt !== '2026-01-01T00:00:00.000Z') return { id: 'Tasks.Work:retitle.changes.doneAt', outcome: 'Done', kind: 'changes', field: 'doneAt', source: 'doneAt = \"2026-01-01T00:00:00Z\"' };",
+            "if (value.Done.aggregate.doneAt !== params.at) return { id: 'Tasks.Work:retitle.changes.doneAt', outcome: 'Done', kind: 'changes', field: 'doneAt', source: 'doneAt = at' };",
         );
         expect(done).toContain("if (value.Done.aggregate.by !== undefined) return { id: 'Tasks.Work:retitle->Done.unchanged.by'");
     });

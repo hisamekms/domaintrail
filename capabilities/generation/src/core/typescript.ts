@@ -199,17 +199,22 @@ export type Decide<D, Targets = {}> = D extends (...args: any[]) => unknown
  *
  *     decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, { Draft: … }, {}, { ensures: Sales.checkConfirmOrderEnsures })
  */
-export interface Verify {
-    /** With \`choices\`: the outcomes that apply to the input (the choice check runs only with both). */
-    readonly applicable?: (...args: readonly unknown[]) => readonly string[];
-    /** With \`applicable\`: each outcome's choice for the input (a generated \`check<Command>Choice(…)\`). */
-    readonly choices?: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
+export type Verify = (
+    | {
+          /** The outcomes that apply to the input. */
+          readonly applicable: (...args: readonly unknown[]) => readonly string[];
+          /** Each outcome's choice for the input (a generated \`check<Command>Choice(…)\`). */
+          readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
+      }
+    // the choice check takes both: neither is given without the other
+    | { readonly applicable?: never; readonly choices?: never }
+) & {
     /**
      * The postconditions of the command (a generated \`check<Command>Ensures\`), called with the command's arguments and
      * its success value: a violated one throws "DomainTrail postcondition violated", as a bug of the decision.
      */
     readonly ensures?: (...args: any[]) => Postcondition | undefined;
-}
+};
 /** The former name of \`Verify\`, from when it checked the choice only. */
 export type ChoiceVerifier = Verify;
 

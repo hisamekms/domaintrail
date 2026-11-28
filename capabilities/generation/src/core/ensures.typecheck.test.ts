@@ -108,7 +108,7 @@ const MODEL = `context Shop {
 `;
 
 /** The commands implemented with `decide`, `decideNamed` and `decideByKind`, each checking its postconditions. */
-const IMPLEMENTATION = `import { Shop, decide, decideByKind, decideNamed, decimalAdd, ok, parseDecimal } from '../generated/index.js';
+const IMPLEMENTATION = `import { Shop, decide, decideByKind, decideNamed, decimalAdd, ok, parseDecimal, type Verify } from '../generated/index.js';
 
 const zero = parseDecimal('0')!;
 
@@ -174,6 +174,10 @@ export const site: Shop.SiteCommands = {
         { ensures: Shop.checkPauseSiteEnsures },
     ),
 };
+
+// the choice check takes both of its functions: one alone does not type-check
+// @ts-expect-error choices without applicable
+export const partial: Verify = { choices: () => ({}) };
 
 /** The shorthand form with kinds: a command of every kind checks the fields each kind carries over. */
 export const card: Shop.CardCommands = {
@@ -340,6 +344,9 @@ describe('postcondition checks in the generated TypeScript', () => {
         violated(() => pause({ reason: 's', score: 1 }), 'Shop.Site/Store:on:pause->paused.changes.reason: reason = reason', { field: 'reason' });
         violated(() => pause({ reason: 'r', score: 1, hours: 10 }), 'Shop.Site/Store:on:pause->paused.unchanged.hours: after.hours == before.hours', {
             field: 'hours',
+        });
+        violated(() => pause({ reason: 'r', score: 1, kind: 'Center' }), 'Shop.Site/Store:on:pause->paused.unchanged.kind: after.kind == before.kind', {
+            field: 'kind',
         });
         violated(() => pause({ reason: 'r', score: 0 }), 'Shop.Site/Store:on:pause->paused.ensures: after.score > before.score', { kind: 'ensures' });
         const gift = { kind: 'Gift', id: CART, label: 'a', amount: 5 };

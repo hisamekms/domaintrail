@@ -86,13 +86,13 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - Generated postcondition checks (ADR 0043): `check<Command>Ensures(aggregate?, params?, value)` returns the first
   postcondition a command's success value violates, as a `Postcondition` (`id`, `outcome`, `kind`, `field`, `source`),
   or `undefined`. Per outcome it checks each `changes x = e`, then the frame — a field the outcome does not list in
-  `changes` is the input's (`kind: 'unchanged'`), and an optional field it makes exist without listing it is absent —
+  `changes` is the input's (`kind: 'unchanged'`), an optional field it makes exist without listing it is absent, and the kind is the input's —
   then each `&&`-conjunct of `ensures`. Values compare as `==` does (Decimals by value, lists element by element,
   value objects, owned entities and unions by their fields, dates and times by their canonical text). A command
   without any postcondition has none. The command and decision types document each `ensures` with an `@ensures` line.
 - `decide`, `decideNamed` and `decideByKind` check the postconditions when given `{ ensures: Ctx.check<Command>Ensures }`
-  in their last argument, which is now `Verify` (`applicable`, `choices` and `ensures`, each optional; `ChoiceVerifier`
-  stays as its other name): a violated postcondition throws `DomainTrail postcondition violated: <id>: <source>`, with
+  in their last argument, which is now `Verify` (`applicable` and `choices` together or neither, and `ensures`;
+  `ChoiceVerifier` stays as its other name): a violated postcondition throws `DomainTrail postcondition violated: <id>: <source>`, with
   the `Postcondition` as `cause`. It is a bug of the decision, not a domain error. The runtime also exports
   `SuccessOf<Command>`, the success value of a command.
 - The Semantic IR gives `before` and `after` a `frame` symbol (they have no IR type).
@@ -108,5 +108,10 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   the workspace has none). Commit that change with the sources: later runs then leave a structural `a == b` as
   written. A workspace without the key is taken as version 0, and its entity comparisons are rewritten.
 - A context with a type or value named `check<Command>Ensures` (for example `checkConfirmOrderEnsures`) now collides
-  with the generated postcondition check (M011): rename it. Code that implemented `ChoiceVerifier` keeps compiling;
-  its members are optional now.
+  with the generated postcondition check (M011): rename it. So does one named `Verify`, `Postcondition` or `SuccessOf`,
+  now names of the runtime that every context module may import. Code that implemented `ChoiceVerifier` keeps
+  compiling: it gives both `applicable` and `choices`, as a `Verify` must (or neither).
+- `dt check` reports more outcome contracts (M021): a `changes x = e` of the shorthand form is checked against `x` in
+  every target that has it (before, a value of another type passed when not every target had `x`), and must have one
+  target that has `x`; a field of the source of another type in the target is new there and must be listed;
+  `before` / `after` cannot name a lambda parameter or a `match` binding in `changes` and `ensures`.

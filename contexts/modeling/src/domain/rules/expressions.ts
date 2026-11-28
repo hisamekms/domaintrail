@@ -352,19 +352,48 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         const before: Ty | undefined = cmd.factory ? undefined : { k: 'frame', name: 'before', fields: new Map([...base, ...inEvery(from)]) };
         const after: Ty = { k: 'frame', name: 'after', fields: new Map([...base, ...inEvery(to)]) };
         const scope = (frames: [string, Ty][]): Scope => ({ ctx, fields: params, hidden: new Map(), lambdas: [], present: new Set(), frames: new Map(frames) });
+        // `before` / `after` are the frames here: a lambda of that name would read as one and be another
+        const shadowing = (x: Expr): void => {
+            const names =
+                x.k === 'listMethod' || x.k === 'unique' || x.k === 'quantifier' ? [x.param] : x.k === 'match' ? x.cases.flatMap((c) => c.bindings) : [];
+            for (const n of names)
+                if (n === 'before' || n === 'after')
+                    rules.error(
+                        'M021',
+                        `'${n}' is the aggregate ${n} the outcome in 'changes' and 'ensures': it cannot name a lambda parameter or a binding here.`,
+                        x.at,
+                        `give it another name`,
+                    );
+            childExprs(x).forEach(shadowing);
+        };
+        for (const c of changes) if (c.value) shadowing(c.value);
+        if (ensures) shadowing(ensures);
         for (const c of changes) {
             if (!c.value) continue;
             const t = new ExprChecker(model, rules, sink).check(c.value, scope(before ? [['before', before]] : []));
-            const f = after.k === 'frame' ? after.fields.get(c.name) : undefined;
-            if (t.k !== 'error' && f && !assignable(memberType(f), t)) {
+            // the field in each target that has it (the shorthand form may have several targets): each takes the value
+            const common = base.get(c.name);
+            const fields = common ? [common] : to.flatMap((s) => (stateFields(s).has(c.name) ? [stateFields(s).get(c.name)!] : []));
+            if (!fields.length) {
+                // M028 reports a field the aggregate does not have at all
+                if (to.length && statesOf(agg).some((s) => stateFields(s).has(c.name)))
+                    rules.error(
+                        'M021',
+                        `'changes ${c.name} = …': no target state of the outcome (${to.map((s) => `'${s.name}'`).join(', ')}) has field '${c.name}'.`,
+                        c.at,
+                    );
+                continue;
+            }
+            if (t.k === 'error') continue;
+            const reported = new Set<string>();
+            for (const f of fields) {
+                if (assignable(memberType(f), t)) continue;
                 const overflow = scaleOverflow(memberType(f), t);
                 const show = overflow ? showScaled : showType;
-                rules.error(
-                    overflow ? 'M009' : 'M021',
-                    `'${c.name}' is a '${show(memberType(f))}', but '${c.value.text}' is a '${show(t)}'.`,
-                    c.value.at,
-                    overflow && roundHint(c.value, overflow),
-                );
+                const message = `'${c.name}' is a '${show(memberType(f))}', but '${c.value.text}' is a '${show(t)}'.`;
+                if (reported.has(message)) continue;
+                reported.add(message);
+                rules.error(overflow ? 'M009' : 'M021', message, c.value.at, overflow && roundHint(c.value, overflow));
             }
         }
         if (!ensures) return;

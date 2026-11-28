@@ -2093,7 +2093,7 @@ export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrd
 The postconditions of a command (ADR 0043) are checked on its success value, outcome by outcome (the key of `value`,
 from each source state): first each `changes x = e`, then the **frame** — a field the outcome does not list in
 `changes` is the input's (`after.x == before.x`), and an optional field it makes exist without listing it is absent
-(`after.x == null`) — then each `&&`-conjunct of `ensures`. A bare `changes x` leaves the value open. Values compare
+(`after.x == null`), and an aggregate with kinds keeps its kind (checked first) — then each `&&`-conjunct of `ensures`. A bare `changes x` leaves the value open. Values compare
 as `==` does: Decimals by value (`1.5` equals `1.50`), lists element by element, value objects, owned entities and
 unions by their fields, references and IDs by ID, dates and times by their canonical text. Almost every command has a
 postcondition (a carried field), so almost every command has the check; one with none (a create whose `changes` are
@@ -3684,7 +3684,7 @@ storming](#diagnostics-of-a-storming).
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
 | M019 | a parameter of a command with `requires` is not named like a field its requirements see |
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
-| M021 | `changes` names fields the command can change: fields of the aggregate other than its identity (not paths into them), a state-specific one carried over by an outcome; none on a `create command` |
+| M021 | outcome contracts: an outcome lists in `changes` every non-optional field it makes exist (a create every field, `id` included; a transition the fields new in its target, a field of another type there counting as new); `changes x = e` gives a value of `x`'s type in every target that has `x`, and some target has it; `ensures` is a Bool, an equality that determines a field alone is written `changes x = e`, and `before` / `after` name no lambda parameter or binding |
 | M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
 | M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
