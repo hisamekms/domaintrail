@@ -362,6 +362,8 @@ export type Expr = ExprBase &
               leftAt: Site;
               rightAt: Site;
           }
+        | { k: 'list'; items: { spread: boolean; value: Expr }[] }
+        | { k: 'listMethod'; method: 'map' | 'filter' | 'sum'; collection: Expr; param?: string; body?: Expr; collectionAt: Site; bodyAt?: Site }
         | { k: 'conditional'; test: Expr; ifTrue: Expr; ifFalse: Expr; testAt: Site; ifTrueAt: Site; ifFalseAt: Site }
         | { k: 'range'; operand: Expr; lower: Expr; upper: Expr }
         | { k: 'count'; collection: Expr; collectionAt: Site }

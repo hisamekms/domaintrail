@@ -198,10 +198,33 @@ export type BinaryOp = 'implies' | 'or' | 'and' | 'eq' | 'ne' | 'lt' | 'le' | 'g
 export type Quantifier = 'all' | 'any';
 
 /**
+ * The list methods with a lambda: `.map(x => e)`, `.filter(x => p)`, `.sum(x => e)` (`.sum()` of numbers).
+ * @see contexts/modeling/model/expressions.dt:8
+ */
+export type ListMethod = 'map' | 'filter' | 'sum';
+
+/**
+ * An element of a list literal: a value, or `...xs` (`spread`).
+ * @see contexts/modeling/model/expressions.dt:11
+ */
+export interface ListItem {
+    readonly spread: boolean;
+    readonly value: ExprModel;
+}
+
+/**
+ * Whether two ListItem values are equal: by all their fields (ADR 0016).
+ * @see contexts/modeling/model/expressions.dt:11
+ */
+export function equalListItem(a: ListItem, b: ListItem): boolean {
+    return a.spread === b.spread && equalExprModel(a.value, b.value);
+}
+
+/**
  * An invariant or requirement expression as a tree (syntax only: names are resolved by whoever reads it, in the
  * scope of the invariant or requirement). Numbers keep their sign; `pattern` is the regular expression exactly as
  * written.
- * @see contexts/modeling/model/expressions.dt:11
+ * @see contexts/modeling/model/expressions.dt:19
  */
 export type ExprModel =
     | {
@@ -241,6 +264,19 @@ export type ExprModel =
           readonly op: BinaryOp;
           readonly left: ExprModel;
           readonly right: ExprModel;
+      }
+    /** `[a, b, ...xs]`. */
+    | {
+          readonly k: 'list';
+          readonly items: readonly ListItem[];
+      }
+    /** `collection.map(param => body)`, `.filter(…)`, `.sum(…)`; `.sum()` has no `param` and `body`. */
+    | {
+          readonly k: 'listMethod';
+          readonly method: ListMethod;
+          readonly collection: ExprModel;
+          readonly param?: string;
+          readonly body?: ExprModel;
       }
     /** `test ? then : else`. */
     | {
@@ -295,7 +331,7 @@ export type ExprModel =
 
 /**
  * Whether two ExprModel values are equal: by `k` and the fields of the variant (ADR 0016).
- * @see contexts/modeling/model/expressions.dt:11
+ * @see contexts/modeling/model/expressions.dt:19
  */
 export function equalExprModel(a: ExprModel, b: ExprModel): boolean {
     if (a.k !== b.k) return false;
@@ -331,6 +367,14 @@ export function equalExprModel(a: ExprModel, b: ExprModel): boolean {
         const y = b as Extract<ExprModel, { readonly k: 'binary' }>;
         return a.op === y.op && equalExprModel(a.left, y.left) && equalExprModel(a.right, y.right);
     }
+    if (a.k === 'list') {
+        const y = b as Extract<ExprModel, { readonly k: 'list' }>;
+        return sameList(a.items, y.items, equalListItem);
+    }
+    if (a.k === 'listMethod') {
+        const y = b as Extract<ExprModel, { readonly k: 'listMethod' }>;
+        return a.method === y.method && equalExprModel(a.collection, y.collection) && sameOptional(a.param, y.param, ($10: string, $11: string) => $10 === $11) && sameOptional(a.body, y.body, equalExprModel);
+    }
     if (a.k === 'conditional') {
         const y = b as Extract<ExprModel, { readonly k: 'conditional' }>;
         return equalExprModel(a.test, y.test) && equalExprModel(a.ifTrue, y.ifTrue) && equalExprModel(a.ifFalse, y.ifFalse);
@@ -357,7 +401,7 @@ export function equalExprModel(a: ExprModel, b: ExprModel): boolean {
     }
     if (a.k === 'unique') {
         const y = b as Extract<ExprModel, { readonly k: 'unique' }>;
-        return equalExprModel(a.collection, y.collection) && sameOptional(a.param, y.param, ($10: string, $11: string) => $10 === $11) && sameList(a.keys, y.keys, equalExprModel);
+        return equalExprModel(a.collection, y.collection) && sameOptional(a.param, y.param, ($12: string, $13: string) => $12 === $13) && sameList(a.keys, y.keys, equalExprModel);
     }
     if (a.k === 'contains') {
         const y = b as Extract<ExprModel, { readonly k: 'contains' }>;
@@ -405,7 +449,7 @@ export interface ContextModel extends Described {
  * @see contexts/modeling/model/model.dt:10
  */
 export function equalContextModel(a: ContextModel, b: ContextModel): boolean {
-    return sameOptional(a.label, b.label, ($12: string, $13: string) => $12 === $13) && sameOptional(a.doc, b.doc, ($14: string, $15: string) => $14 === $15) && a.name === b.name && a.shared === b.shared && sameList(a.terms, b.terms, equalTermModel);
+    return sameOptional(a.label, b.label, ($14: string, $15: string) => $14 === $15) && sameOptional(a.doc, b.doc, ($16: string, $17: string) => $16 === $17) && a.name === b.name && a.shared === b.shared && sameList(a.terms, b.terms, equalTermModel);
 }
 
 /**
@@ -423,7 +467,7 @@ export interface TermModel {
  * @see contexts/modeling/model/model.dt:19
  */
 export function equalTermModel(a: TermModel, b: TermModel): boolean {
-    return a.name === b.name && a.label === b.label && sameOptional(a.doc, b.doc, ($16: string, $17: string) => $16 === $17);
+    return a.name === b.name && a.label === b.label && sameOptional(a.doc, b.doc, ($18: string, $19: string) => $18 === $19);
 }
 
 /**
@@ -606,51 +650,51 @@ export function equalElementModel(a: ElementModel, b: ElementModel): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'id') {
         const y = b as Extract<ElementModel, { readonly kind: 'id' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($18: string, $19: string) => $18 === $19) && sameOptional(a.doc, y.doc, ($20: string, $21: string) => $20 === $21) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameOptional(a.scale, y.scale, ($22: number, $23: number) => $22 === $23) && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($20: string, $21: string) => $20 === $21) && sameOptional(a.doc, y.doc, ($22: string, $23: string) => $22 === $23) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameOptional(a.scale, y.scale, ($24: number, $25: number) => $24 === $25) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'primitive') {
         const y = b as Extract<ElementModel, { readonly kind: 'primitive' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($24: string, $25: string) => $24 === $25) && sameOptional(a.doc, y.doc, ($26: string, $27: string) => $26 === $27) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameOptional(a.scale, y.scale, ($28: number, $29: number) => $28 === $29) && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($26: string, $27: string) => $26 === $27) && sameOptional(a.doc, y.doc, ($28: string, $29: string) => $28 === $29) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameOptional(a.scale, y.scale, ($30: number, $31: number) => $30 === $31) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'verified') {
         const y = b as Extract<ElementModel, { readonly kind: 'verified' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($30: string, $31: string) => $30 === $31) && sameOptional(a.doc, y.doc, ($32: string, $33: string) => $32 === $33) && Kernel.equalLocation(a.location, y.location) && equalVerifiedModel(a.verified, y.verified);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($32: string, $33: string) => $32 === $33) && sameOptional(a.doc, y.doc, ($34: string, $35: string) => $34 === $35) && Kernel.equalLocation(a.location, y.location) && equalVerifiedModel(a.verified, y.verified);
     }
     if (a.kind === 'enum') {
         const y = b as Extract<ElementModel, { readonly kind: 'enum' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($34: string, $35: string) => $34 === $35) && sameOptional(a.doc, y.doc, ($36: string, $37: string) => $36 === $37) && Kernel.equalLocation(a.location, y.location) && sameList(a.values, y.values, equalEnumValueModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($36: string, $37: string) => $36 === $37) && sameOptional(a.doc, y.doc, ($38: string, $39: string) => $38 === $39) && Kernel.equalLocation(a.location, y.location) && sameList(a.values, y.values, equalEnumValueModel);
     }
     if (a.kind === 'valueObject') {
         const y = b as Extract<ElementModel, { readonly kind: 'valueObject' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($38: string, $39: string) => $38 === $39) && sameOptional(a.doc, y.doc, ($40: string, $41: string) => $40 === $41) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($42: QualifiedName, $43: QualifiedName) => $42 === $43) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($40: string, $41: string) => $40 === $41) && sameOptional(a.doc, y.doc, ($42: string, $43: string) => $42 === $43) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($44: QualifiedName, $45: QualifiedName) => $44 === $45) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'union') {
         const y = b as Extract<ElementModel, { readonly kind: 'union' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($44: string, $45: string) => $44 === $45) && sameOptional(a.doc, y.doc, ($46: string, $47: string) => $46 === $47) && Kernel.equalLocation(a.location, y.location) && a.discriminator === y.discriminator && sameOptional(a.tagType, y.tagType, ($48: QualifiedName, $49: QualifiedName) => $48 === $49) && sameList(a.variants, y.variants, equalVariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($46: string, $47: string) => $46 === $47) && sameOptional(a.doc, y.doc, ($48: string, $49: string) => $48 === $49) && Kernel.equalLocation(a.location, y.location) && a.discriminator === y.discriminator && sameOptional(a.tagType, y.tagType, ($50: QualifiedName, $51: QualifiedName) => $50 === $51) && sameList(a.variants, y.variants, equalVariantModel);
     }
     if (a.kind === 'entity') {
         const y = b as Extract<ElementModel, { readonly kind: 'entity' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($50: string, $51: string) => $50 === $51) && sameOptional(a.doc, y.doc, ($52: string, $53: string) => $52 === $53) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($54: QualifiedName, $55: QualifiedName) => $54 === $55) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($52: string, $53: string) => $52 === $53) && sameOptional(a.doc, y.doc, ($54: string, $55: string) => $54 === $55) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($56: QualifiedName, $57: QualifiedName) => $56 === $57) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'aggregate') {
         const y = b as Extract<ElementModel, { readonly kind: 'aggregate' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($56: string, $57: string) => $56 === $57) && sameOptional(a.doc, y.doc, ($58: string, $59: string) => $58 === $59) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($60: QualifiedName, $61: QualifiedName) => $60 === $61) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel) && sameList(a.states, y.states, equalStateModel) && sameList(a.commands, y.commands, equalCommandModel) && sameList(a.initials, y.initials, equalInitialModel) && sameList(a.kinds, y.kinds, equalKindModel) && sameList(a.validStates, y.validStates, equalValidKindStatesModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($58: string, $59: string) => $58 === $59) && sameOptional(a.doc, y.doc, ($60: string, $61: string) => $60 === $61) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($62: QualifiedName, $63: QualifiedName) => $62 === $63) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel) && sameList(a.states, y.states, equalStateModel) && sameList(a.commands, y.commands, equalCommandModel) && sameList(a.initials, y.initials, equalInitialModel) && sameList(a.kinds, y.kinds, equalKindModel) && sameList(a.validStates, y.validStates, equalValidKindStatesModel);
     }
     if (a.kind === 'event') {
         const y = b as Extract<ElementModel, { readonly kind: 'event' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($62: string, $63: string) => $62 === $63) && sameOptional(a.doc, y.doc, ($64: string, $65: string) => $64 === $65) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($66: QualifiedName, $67: QualifiedName) => $66 === $67) && sameList(a.fields, y.fields, equalFieldModel) && a.persistent === y.persistent;
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($64: string, $65: string) => $64 === $65) && sameOptional(a.doc, y.doc, ($66: string, $67: string) => $66 === $67) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($68: QualifiedName, $69: QualifiedName) => $68 === $69) && sameList(a.fields, y.fields, equalFieldModel) && a.persistent === y.persistent;
     }
     if (a.kind === 'error') {
         const y = b as Extract<ElementModel, { readonly kind: 'error' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($68: string, $69: string) => $68 === $69) && sameOptional(a.doc, y.doc, ($70: string, $71: string) => $70 === $71) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($72: QualifiedName, $73: QualifiedName) => $72 === $73) && sameList(a.fields, y.fields, equalFieldModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($70: string, $71: string) => $70 === $71) && sameOptional(a.doc, y.doc, ($72: string, $73: string) => $72 === $73) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($74: QualifiedName, $75: QualifiedName) => $74 === $75) && sameList(a.fields, y.fields, equalFieldModel);
     }
     if (a.kind === 'fieldSet') {
         const y = b as Extract<ElementModel, { readonly kind: 'fieldSet' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($74: string, $75: string) => $74 === $75) && sameOptional(a.doc, y.doc, ($76: string, $77: string) => $76 === $77) && Kernel.equalLocation(a.location, y.location) && sameList(a.fields, y.fields, equalFieldModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($76: string, $77: string) => $76 === $77) && sameOptional(a.doc, y.doc, ($78: string, $79: string) => $78 === $79) && Kernel.equalLocation(a.location, y.location) && sameList(a.fields, y.fields, equalFieldModel);
     }
     if (a.kind === 'policy') {
         const y = b as Extract<ElementModel, { readonly kind: 'policy' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($78: string, $79: string) => $78 === $79) && sameOptional(a.doc, y.doc, ($80: string, $81: string) => $80 === $81) && Kernel.equalLocation(a.location, y.location) && equalPolicyModel(a.policy, y.policy);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($80: string, $81: string) => $80 === $81) && sameOptional(a.doc, y.doc, ($82: string, $83: string) => $82 === $83) && Kernel.equalLocation(a.location, y.location) && equalPolicyModel(a.policy, y.policy);
     }
     return true;
 }
@@ -669,7 +713,7 @@ export interface EnumValueModel {
  * @see contexts/modeling/model/model.dt:178
  */
 export function equalEnumValueModel(a: EnumValueModel, b: EnumValueModel): boolean {
-    return a.name === b.name && sameOptional(a.label, b.label, ($82: string, $83: string) => $82 === $83);
+    return a.name === b.name && sameOptional(a.label, b.label, ($84: string, $85: string) => $84 === $85);
 }
 
 /**
@@ -702,11 +746,11 @@ export function equalTypeExpr(a: TypeExpr, b: TypeExpr): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'primitive') {
         const y = b as Extract<TypeExpr, { readonly kind: 'primitive' }>;
-        return a.name === y.name && sameOptional(a.scale, y.scale, ($84: number, $85: number) => $84 === $85);
+        return a.name === y.name && sameOptional(a.scale, y.scale, ($86: number, $87: number) => $86 === $87);
     }
     if (a.kind === 'ref') {
         const y = b as Extract<TypeExpr, { readonly kind: 'ref' }>;
-        return a.ref === y.ref && a.text === y.text && sameOptional(a.target, y.target, ($86: string, $87: string) => $86 === $87);
+        return a.ref === y.ref && a.text === y.text && sameOptional(a.target, y.target, ($88: string, $89: string) => $88 === $89);
     }
     return true;
 }
@@ -753,7 +797,7 @@ export interface FieldModel extends Described {
  * @see contexts/modeling/model/model.dt:209
  */
 export function equalFieldModel(a: FieldModel, b: FieldModel): boolean {
-    return sameOptional(a.label, b.label, ($88: string, $89: string) => $88 === $89) && sameOptional(a.doc, b.doc, ($90: string, $91: string) => $90 === $91) && a.name === b.name && a.kind === b.kind && equalTypeExpr(a.type, b.type) && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && sameOptional(a.target, b.target, ($92: QualifiedName, $93: QualifiedName) => $92 === $93) && sameOptional(a.labelSource, b.labelSource, ($94: string, $95: string) => $94 === $95) && sameOptional(a.fieldSet, b.fieldSet, ($96: QualifiedName, $97: QualifiedName) => $96 === $97) && sameOptional(a.readonly, b.readonly, ($98: boolean, $99: boolean) => $98 === $99);
+    return sameOptional(a.label, b.label, ($90: string, $91: string) => $90 === $91) && sameOptional(a.doc, b.doc, ($92: string, $93: string) => $92 === $93) && a.name === b.name && a.kind === b.kind && equalTypeExpr(a.type, b.type) && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && sameOptional(a.target, b.target, ($94: QualifiedName, $95: QualifiedName) => $94 === $95) && sameOptional(a.labelSource, b.labelSource, ($96: string, $97: string) => $96 === $97) && sameOptional(a.fieldSet, b.fieldSet, ($98: QualifiedName, $99: QualifiedName) => $98 === $99) && sameOptional(a.readonly, b.readonly, ($100: boolean, $101: boolean) => $100 === $101);
 }
 
 /**
@@ -774,7 +818,7 @@ export interface InvariantModel extends Described {
  * @see contexts/modeling/model/model.dt:225
  */
 export function equalInvariantModel(a: InvariantModel, b: InvariantModel): boolean {
-    return sameOptional(a.label, b.label, ($100: string, $101: string) => $100 === $101) && sameOptional(a.doc, b.doc, ($102: string, $103: string) => $102 === $103) && a.name === b.name && sameOptional(a.source, b.source, ($104: string, $105: string) => $104 === $105) && sameOptional(a.expr, b.expr, equalExprModel) && sameOptional(a.externalReason, b.externalReason, ($106: string, $107: string) => $106 === $107);
+    return sameOptional(a.label, b.label, ($102: string, $103: string) => $102 === $103) && sameOptional(a.doc, b.doc, ($104: string, $105: string) => $104 === $105) && a.name === b.name && sameOptional(a.source, b.source, ($106: string, $107: string) => $106 === $107) && sameOptional(a.expr, b.expr, equalExprModel) && sameOptional(a.externalReason, b.externalReason, ($108: string, $109: string) => $108 === $109);
 }
 
 /**
@@ -794,7 +838,7 @@ export interface StateModel extends Described {
  * @see contexts/modeling/model/model.dt:235
  */
 export function equalStateModel(a: StateModel, b: StateModel): boolean {
-    return sameOptional(a.label, b.label, ($108: string, $109: string) => $108 === $109) && sameOptional(a.doc, b.doc, ($110: string, $111: string) => $110 === $111) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($110: string, $111: string) => $110 === $111) && sameOptional(a.doc, b.doc, ($112: string, $113: string) => $112 === $113) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && Kernel.equalLocation(a.location, b.location);
 }
 
 /**
@@ -812,7 +856,7 @@ export interface VariantModel extends Described {
  * @see contexts/modeling/model/model.dt:244
  */
 export function equalVariantModel(a: VariantModel, b: VariantModel): boolean {
-    return sameOptional(a.label, b.label, ($112: string, $113: string) => $112 === $113) && sameOptional(a.doc, b.doc, ($114: string, $115: string) => $114 === $115) && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel);
+    return sameOptional(a.label, b.label, ($114: string, $115: string) => $114 === $115) && sameOptional(a.doc, b.doc, ($116: string, $117: string) => $116 === $117) && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel);
 }
 
 /**
@@ -835,7 +879,7 @@ export interface RequirementModel extends Described {
  * @see contexts/modeling/model/model.dt:251
  */
 export function equalRequirementModel(a: RequirementModel, b: RequirementModel): boolean {
-    return sameOptional(a.label, b.label, ($116: string, $117: string) => $116 === $117) && sameOptional(a.doc, b.doc, ($118: string, $119: string) => $118 === $119) && a.name === b.name && sameOptional(a.source, b.source, ($120: string, $121: string) => $120 === $121) && sameOptional(a.expr, b.expr, equalExprModel) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($122: string, $123: string) => $122 === $123);
+    return sameOptional(a.label, b.label, ($118: string, $119: string) => $118 === $119) && sameOptional(a.doc, b.doc, ($120: string, $121: string) => $120 === $121) && a.name === b.name && sameOptional(a.source, b.source, ($122: string, $123: string) => $122 === $123) && sameOptional(a.expr, b.expr, equalExprModel) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($124: string, $125: string) => $124 === $125);
 }
 
 /** @see contexts/modeling/model/model.dt:262 */
@@ -850,7 +894,7 @@ export interface InitialModel {
  * @see contexts/modeling/model/model.dt:262
  */
 export function equalInitialModel(a: InitialModel, b: InitialModel): boolean {
-    return a.state === b.state && sameList(a.kinds, b.kinds, ($124: string, $125: string) => $124 === $125);
+    return a.state === b.state && sameList(a.kinds, b.kinds, ($126: string, $127: string) => $126 === $127);
 }
 
 /** @see contexts/modeling/model/model.dt:268 */
@@ -864,7 +908,7 @@ export interface ValidKindStatesModel {
  * @see contexts/modeling/model/model.dt:268
  */
 export function equalValidKindStatesModel(a: ValidKindStatesModel, b: ValidKindStatesModel): boolean {
-    return a.kind === b.kind && sameList(a.states, b.states, ($126: string, $127: string) => $126 === $127);
+    return a.kind === b.kind && sameList(a.states, b.states, ($128: string, $129: string) => $128 === $129);
 }
 
 /**
@@ -886,7 +930,7 @@ export interface KindModel extends Described {
  * @see contexts/modeling/model/model.dt:275
  */
 export function equalKindModel(a: KindModel, b: KindModel): boolean {
-    return sameOptional(a.label, b.label, ($128: string, $129: string) => $128 === $129) && sameOptional(a.doc, b.doc, ($130: string, $131: string) => $130 === $131) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && sameList(a.cases, b.cases, equalCommandCaseModel) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($130: string, $131: string) => $130 === $131) && sameOptional(a.doc, b.doc, ($132: string, $133: string) => $132 === $133) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && sameList(a.cases, b.cases, equalCommandCaseModel) && Kernel.equalLocation(a.location, b.location);
 }
 
 /** @see contexts/modeling/model/model.dt:284 */
@@ -919,7 +963,7 @@ export interface OutcomeModel {
  * @see contexts/modeling/model/model.dt:290
  */
 export function equalOutcomeModel(a: OutcomeModel, b: OutcomeModel): boolean {
-    return a.name === b.name && sameList(a.from, b.from, ($132: string, $133: string) => $132 === $133) && a.to === b.to && sameList(a.changes, b.changes, ($134: string, $135: string) => $134 === $135) && sameList(a.emits, b.emits, equalEmitModel) && sameOptional(a.select, b.select, equalChoiceRuleModel);
+    return a.name === b.name && sameList(a.from, b.from, ($134: string, $135: string) => $134 === $135) && a.to === b.to && sameList(a.changes, b.changes, ($136: string, $137: string) => $136 === $137) && sameList(a.emits, b.emits, equalEmitModel) && sameOptional(a.select, b.select, equalChoiceRuleModel);
 }
 
 /** @see contexts/modeling/model/model.dt:299 */
@@ -974,7 +1018,7 @@ export interface TransitionModel {
  * @see contexts/modeling/model/model.dt:314
  */
 export function equalTransitionModel(a: TransitionModel, b: TransitionModel): boolean {
-    return sameList(a.from, b.from, ($136: string, $137: string) => $136 === $137) && sameList(a.to, b.to, ($138: string, $139: string) => $138 === $139);
+    return sameList(a.from, b.from, ($138: string, $139: string) => $138 === $139) && sameList(a.to, b.to, ($140: string, $141: string) => $140 === $141);
 }
 
 /**
@@ -992,7 +1036,7 @@ export interface OutcomePatternModel {
  * @see contexts/modeling/model/model.dt:321
  */
 export function equalOutcomePatternModel(a: OutcomePatternModel, b: OutcomePatternModel): boolean {
-    return sameList(a.from, b.from, ($140: string, $141: string) => $140 === $141) && sameList(a.to, b.to, ($142: string, $143: string) => $142 === $143);
+    return sameList(a.from, b.from, ($142: string, $143: string) => $142 === $143) && sameList(a.to, b.to, ($144: string, $145: string) => $144 === $145);
 }
 
 /**
@@ -1018,7 +1062,7 @@ export interface EmitModel {
  * @see contexts/modeling/model/model.dt:328
  */
 export function equalEmitModel(a: EmitModel, b: EmitModel): boolean {
-    return a.event === b.event && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && a.lower === b.lower && sameOptional(a.upper, b.upper, ($144: number, $145: number) => $144 === $145) && sameOptional(a.when, b.when, equalOutcomePatternModel);
+    return a.event === b.event && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && a.lower === b.lower && sameOptional(a.upper, b.upper, ($146: number, $147: number) => $146 === $147) && sameOptional(a.when, b.when, equalOutcomePatternModel);
 }
 
 /**
@@ -1054,7 +1098,7 @@ export interface CommandModel extends Described {
  * @see contexts/modeling/model/model.dt:342
  */
 export function equalCommandModel(a: CommandModel, b: CommandModel): boolean {
-    return sameOptional(a.label, b.label, ($146: string, $147: string) => $146 === $147) && sameOptional(a.doc, b.doc, ($148: string, $149: string) => $148 === $149) && a.id === b.id && a.name === b.name && a.factory === b.factory && sameList(a.params, b.params, equalFieldModel) && sameList(a.transitions, b.transitions, equalTransitionModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel) && a.legacy === b.legacy && sameOptional(a.kind, b.kind, ($150: string, $151: string) => $150 === $151) && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.changes, b.changes, ($152: string, $153: string) => $152 === $153) && sameList(a.emits, b.emits, equalEmitModel) && sameList(a.errors, b.errors, ($154: QualifiedName, $155: QualifiedName) => $154 === $155) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($148: string, $149: string) => $148 === $149) && sameOptional(a.doc, b.doc, ($150: string, $151: string) => $150 === $151) && a.id === b.id && a.name === b.name && a.factory === b.factory && sameList(a.params, b.params, equalFieldModel) && sameList(a.transitions, b.transitions, equalTransitionModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel) && a.legacy === b.legacy && sameOptional(a.kind, b.kind, ($152: string, $153: string) => $152 === $153) && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.changes, b.changes, ($154: string, $155: string) => $154 === $155) && sameList(a.emits, b.emits, equalEmitModel) && sameList(a.errors, b.errors, ($156: QualifiedName, $157: QualifiedName) => $156 === $157) && Kernel.equalLocation(a.location, b.location);
 }
 
 /**
@@ -1097,7 +1141,7 @@ export interface VerifiedModel {
  * @see contexts/modeling/model/model.dt:381
  */
 export function equalVerifiedModel(a: VerifiedModel, b: VerifiedModel): boolean {
-    return equalTypeExpr(a.of, b.of) && sameOptional(a.for, b.for, equalVerifiedFor) && sameList(a.errors, b.errors, ($156: QualifiedName, $157: QualifiedName) => $156 === $157);
+    return equalTypeExpr(a.of, b.of) && sameOptional(a.for, b.for, equalVerifiedFor) && sameList(a.errors, b.errors, ($158: QualifiedName, $159: QualifiedName) => $158 === $159);
 }
 
 /**
@@ -1172,7 +1216,7 @@ export interface SemanticType {
  * @see contexts/modeling/model/semantic.dt:53
  */
 export function equalSemanticType(a: SemanticType, b: SemanticType): boolean {
-    return a.name === b.name && a.cardinality === b.cardinality && a.tag === b.tag && sameOptional(a.scale, b.scale, ($158: number, $159: number) => $158 === $159);
+    return a.name === b.name && a.cardinality === b.cardinality && a.tag === b.tag && sameOptional(a.scale, b.scale, ($160: number, $161: number) => $160 === $161);
 }
 
 /** @see contexts/modeling/model/semantic.dt:61 */
@@ -1213,7 +1257,7 @@ export interface SemanticExpression {
  * @see contexts/modeling/model/semantic.dt:68
  */
 export function equalSemanticExpression(a: SemanticExpression, b: SemanticExpression): boolean {
-    return a.id === b.id && a.owner === b.owner && a.root === b.root && a.path === b.path && equalSemanticSpan(a.site, b.site) && a.syntaxKind === b.syntaxKind && a.source === b.source && sameOptional(a.symbol, b.symbol, equalSemanticSymbol) && sameOptional(a.type, b.type, equalSemanticType) && sameList(a.children, b.children, equalSemanticExpression) && sameOptional(a.comparison, b.comparison, ($160: string, $161: string) => $160 === $161);
+    return a.id === b.id && a.owner === b.owner && a.root === b.root && a.path === b.path && equalSemanticSpan(a.site, b.site) && a.syntaxKind === b.syntaxKind && a.source === b.source && sameOptional(a.symbol, b.symbol, equalSemanticSymbol) && sameOptional(a.type, b.type, equalSemanticType) && sameList(a.children, b.children, equalSemanticExpression) && sameOptional(a.comparison, b.comparison, ($162: string, $163: string) => $162 === $163);
 }
 
 /** @see contexts/modeling/model/semantic.dt:82 */
@@ -1250,7 +1294,7 @@ export interface SemanticScopeFact {
  * @see contexts/modeling/model/semantic.dt:87
  */
 export function equalSemanticScopeFact(a: SemanticScopeFact, b: SemanticScopeFact): boolean {
-    return a.expression === b.expression && equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($162: string, $163: string) => $162 === $163) && sameOptional(a.onCase, b.onCase, ($164: string, $165: string) => $164 === $165) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($166: string, $167: string) => $166 === $167) && sameOptional(a.targetOutcome, b.targetOutcome, ($168: string, $169: string) => $168 === $169) && sameOptional(a.kind, b.kind, ($170: string, $171: string) => $170 === $171);
+    return a.expression === b.expression && equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($164: string, $165: string) => $164 === $165) && sameOptional(a.onCase, b.onCase, ($166: string, $167: string) => $166 === $167) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($168: string, $169: string) => $168 === $169) && sameOptional(a.targetOutcome, b.targetOutcome, ($170: string, $171: string) => $170 === $171) && sameOptional(a.kind, b.kind, ($172: string, $173: string) => $172 === $173);
 }
 
 /** @see contexts/modeling/model/semantic.dt:102 */
@@ -1294,7 +1338,7 @@ export interface SemanticValueCycle {
  * @see contexts/modeling/model/semantic.dt:114
  */
 export function equalSemanticValueCycle(a: SemanticValueCycle, b: SemanticValueCycle): boolean {
-    return sameList(a.members, b.members, ($172: string, $173: string) => $172 === $173) && sameList(a.ending, b.ending, equalSemanticValueCycleEnding);
+    return sameList(a.members, b.members, ($174: string, $175: string) => $174 === $175) && sameList(a.ending, b.ending, equalSemanticValueCycleEnding);
 }
 
 /** @see contexts/modeling/model/semantic.dt:119 */
@@ -1327,7 +1371,7 @@ export interface SemanticUnspecified {
  * @see contexts/modeling/model/semantic.dt:126
  */
 export function equalSemanticUnspecified(a: SemanticUnspecified, b: SemanticUnspecified): boolean {
-    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($174: string, $175: string) => $174 === $175) && sameOptional(a.source, b.source, ($176: string, $177: string) => $176 === $177) && equalSemanticSpan(a.site, b.site);
+    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($176: string, $177: string) => $176 === $177) && sameOptional(a.source, b.source, ($178: string, $179: string) => $178 === $179) && equalSemanticSpan(a.site, b.site);
 }
 
 /** @see contexts/modeling/model/semantic.dt:134 */
@@ -1344,7 +1388,7 @@ export interface SemanticProvenance {
  * @see contexts/modeling/model/semantic.dt:134
  */
 export function equalSemanticProvenance(a: SemanticProvenance, b: SemanticProvenance): boolean {
-    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($178: string, $179: string) => $178 === $179) && sameOptional(a.source, b.source, ($180: string, $181: string) => $180 === $181) && equalSemanticSpan(a.site, b.site);
+    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($180: string, $181: string) => $180 === $181) && sameOptional(a.source, b.source, ($182: string, $183: string) => $182 === $183) && equalSemanticSpan(a.site, b.site);
 }
 
 /** @see contexts/modeling/model/semantic.dt:142 */
@@ -1369,7 +1413,7 @@ export interface SemanticOutcome {
  * @see contexts/modeling/model/semantic.dt:142
  */
 export function equalSemanticOutcome(a: SemanticOutcome, b: SemanticOutcome): boolean {
-    return a.id === b.id && a.command === b.command && sameOptional(a.kind, b.kind, ($182: string, $183: string) => $182 === $183) && a.name === b.name && sameList(a.from, b.from, ($184: string, $185: string) => $184 === $185) && sameOptional(a.to, b.to, ($186: string, $187: string) => $186 === $187) && a.selectKind === b.selectKind && sameOptional(a.select, b.select, equalSemanticExpression) && sameList(a.changes, b.changes, ($188: string, $189: string) => $188 === $189) && sameList(a.set, b.set, ($190: string, $191: string) => $190 === $191) && sameList(a.carried, b.carried, ($192: string, $193: string) => $192 === $193) && sameList(a.dropped, b.dropped, ($194: string, $195: string) => $194 === $195) && equalSemanticSpan(a.site, b.site);
+    return a.id === b.id && a.command === b.command && sameOptional(a.kind, b.kind, ($184: string, $185: string) => $184 === $185) && a.name === b.name && sameList(a.from, b.from, ($186: string, $187: string) => $186 === $187) && sameOptional(a.to, b.to, ($188: string, $189: string) => $188 === $189) && a.selectKind === b.selectKind && sameOptional(a.select, b.select, equalSemanticExpression) && sameList(a.changes, b.changes, ($190: string, $191: string) => $190 === $191) && sameList(a.set, b.set, ($192: string, $193: string) => $192 === $193) && sameList(a.carried, b.carried, ($194: string, $195: string) => $194 === $195) && sameList(a.dropped, b.dropped, ($196: string, $197: string) => $196 === $197) && equalSemanticSpan(a.site, b.site);
 }
 
 /** @see contexts/modeling/model/semantic.dt:158 */
@@ -1384,7 +1428,7 @@ export interface SemanticChoice {
  * @see contexts/modeling/model/semantic.dt:158
  */
 export function equalSemanticChoice(a: SemanticChoice, b: SemanticChoice): boolean {
-    return a.kind === b.kind && sameOptional(a.source, b.source, ($196: string, $197: string) => $196 === $197) && sameList(a.outcomes, b.outcomes, ($198: string, $199: string) => $198 === $199);
+    return a.kind === b.kind && sameOptional(a.source, b.source, ($198: string, $199: string) => $198 === $199) && sameList(a.outcomes, b.outcomes, ($200: string, $201: string) => $200 === $201);
 }
 
 /** @see contexts/modeling/model/semantic.dt:164 */
@@ -1400,7 +1444,7 @@ export interface SemanticKindLifecycle {
  * @see contexts/modeling/model/semantic.dt:164
  */
 export function equalSemanticKindLifecycle(a: SemanticKindLifecycle, b: SemanticKindLifecycle): boolean {
-    return a.kind === b.kind && sameList(a.initialStates, b.initialStates, ($200: string, $201: string) => $200 === $201) && sameList(a.validStates, b.validStates, ($202: string, $203: string) => $202 === $203) && sameList(a.onCases, b.onCases, equalSemanticOutcome);
+    return a.kind === b.kind && sameList(a.initialStates, b.initialStates, ($202: string, $203: string) => $202 === $203) && sameList(a.validStates, b.validStates, ($204: string, $205: string) => $204 === $205) && sameList(a.onCases, b.onCases, equalSemanticOutcome);
 }
 
 /** @see contexts/modeling/model/semantic.dt:171 */
@@ -1418,7 +1462,7 @@ export interface SemanticRequirement {
  * @see contexts/modeling/model/semantic.dt:171
  */
 export function equalSemanticRequirement(a: SemanticRequirement, b: SemanticRequirement): boolean {
-    return a.id === b.id && a.name === b.name && sameOptional(a.expression, b.expression, equalSemanticExpression) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($204: string, $205: string) => $204 === $205) && equalSemanticSpan(a.site, b.site);
+    return a.id === b.id && a.name === b.name && sameOptional(a.expression, b.expression, equalSemanticExpression) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($206: string, $207: string) => $206 === $207) && equalSemanticSpan(a.site, b.site);
 }
 
 /** @see contexts/modeling/model/semantic.dt:180 */
@@ -1437,7 +1481,7 @@ export interface SemanticAggregate {
  * @see contexts/modeling/model/semantic.dt:180
  */
 export function equalSemanticAggregate(a: SemanticAggregate, b: SemanticAggregate): boolean {
-    return a.id === b.id && sameList(a.initialStates, b.initialStates, ($206: string, $207: string) => $206 === $207) && sameList(a.validStates, b.validStates, ($208: string, $209: string) => $208 === $209) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
+    return a.id === b.id && sameList(a.initialStates, b.initialStates, ($208: string, $209: string) => $208 === $209) && sameList(a.validStates, b.validStates, ($210: string, $211: string) => $210 === $211) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
 }
 
 /**

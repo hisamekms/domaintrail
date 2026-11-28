@@ -12,6 +12,7 @@ import {
     isBoolLiteral,
     isCommand,
     isConditionalExpr,
+    isListLiteral,
     isContainsExpr,
     isCountExpr,
     isDecimalLiteral,
@@ -139,6 +140,16 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 };
             if (m.k === 'matches')
                 return { ...base, k: 'matches', operand: receiver, pattern: patternSource(m.pattern), operandAt: receiverAt, patternAt: site(e, 'args', 0) };
+            if (m.k === 'listMethod')
+                return {
+                    ...base,
+                    k: 'listMethod',
+                    method: m.method,
+                    collection: receiver,
+                    ...(m.param !== undefined && { param: m.param }),
+                    ...(m.body && { body: expr(m.body), bodyAt: site(e, 'args', 0) }),
+                    collectionAt: receiverAt,
+                };
             // a call that is no method form is reported as such (parse.ts); it checks as nothing more
             if (m.k === 'invalid') return { ...base, k: 'bool', value: false };
             return { ...base, k: 'member', receiver, member: e.member, memberAt: site(e, 'member'), ...(e.optional && { optional: true }) };
@@ -160,6 +171,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 leftAt: site(e, 'left'),
                 rightAt: site(e, 'right'),
             };
+        if (isListLiteral(e)) return { ...base, k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: expr(i.value) })) };
         if (isConditionalExpr(e))
             return {
                 ...base,

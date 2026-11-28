@@ -128,6 +128,16 @@ function toExprModel(e: Expr): ExprModel {
             return { k: 'not', operand: toExprModel(e.operand) };
         case 'binary':
             return { k: 'binary', op: OPS[e.op], left: toExprModel(e.left), right: toExprModel(e.right) };
+        case 'list':
+            return { k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: toExprModel(i.value) })) };
+        case 'listMethod':
+            return {
+                k: 'listMethod',
+                method: e.method,
+                collection: toExprModel(e.collection),
+                ...(e.param !== undefined && { param: e.param }),
+                ...(e.body && { body: toExprModel(e.body) }),
+            };
         case 'conditional':
             return { k: 'conditional', test: toExprModel(e.test), ifTrue: toExprModel(e.ifTrue), ifFalse: toExprModel(e.ifFalse) };
         case 'range':

@@ -84,6 +84,10 @@ const expressionChildren = (expr: Expr): Expr[] => {
             return [expr.left, expr.right];
         case 'conditional':
             return [expr.test, expr.ifTrue, expr.ifFalse];
+        case 'list':
+            return expr.items.map((i) => i.value);
+        case 'listMethod':
+            return expr.body ? [expr.collection, expr.body] : [expr.collection];
         case 'range':
             return [expr.operand, expr.lower, expr.upper];
         case 'unique':
@@ -808,6 +812,10 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
                 return [expr.left, expr.right];
             case 'conditional':
                 return [expr.test, expr.ifTrue, expr.ifFalse];
+            case 'list':
+                return expr.items.map((i) => i.value);
+            case 'listMethod':
+                return expr.body ? [expr.collection, expr.body] : [expr.collection];
             case 'range':
                 return [expr.operand, expr.lower, expr.upper];
             case 'count':

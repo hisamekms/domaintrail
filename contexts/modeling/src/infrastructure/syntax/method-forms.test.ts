@@ -60,7 +60,7 @@ describe('method forms', () => {
         );
         expect(errors.sort()).toEqual(
             [
-                "M001 'count' is not a method: the methods are every, some, includes, unique and matches.",
+                "M001 'count' is not a method: the methods are every, some, includes, unique, matches, map, filter and sum.",
                 "M001 '.every(…)' is written xs.every(x => condition).",
                 `M001 '.matches(…)' is written text.matches("pattern").`,
                 "M009 '.length' is the size of a list or a string, not of 'Int'.",

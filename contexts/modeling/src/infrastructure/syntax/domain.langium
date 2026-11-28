@@ -234,12 +234,16 @@ Primary infers Expression:
     | {infer UniqueExpr} 'unique' '(' collection=Expression (',' param=LambdaParam '=>' keys+=Expression (',' keys+=Expression)*)? ')'
     | {infer ContainsExpr} 'contains' '(' collection=Expression ',' element=Expression ')'
     | {infer QuantifierExpr} quantifier=('all' | 'any') '(' collection=Expression ',' param=LambdaParam '=>' body=Expression ')'
+    | {infer ListLiteral} '[' (items+=ListElement (',' items+=ListElement)*)? ']'
     | {infer NullLiteral} null?='null'
     | {infer BoolLiteral} value=('true' | 'false')
     | {infer DecimalLiteral} negative?='-'? value=DECIMAL
     | {infer IntLiteral} negative?='-'? value=INT
     | {infer StringLiteral} value=STRING
     | {infer NameRef} name=FeatureName;
+
+ListElement:
+    spread?='...'? value=Expression;
 
 LambdaParam:
     name=FeatureName;
