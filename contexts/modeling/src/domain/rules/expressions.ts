@@ -749,6 +749,10 @@ class ExprChecker {
                     );
                     return ERROR;
                 }
+                if (e.scale.value > MAX_ROUND_SCALE) {
+                    this.rules.error('M009', `'.round(n)' rounds to at most ${MAX_ROUND_SCALE} digits after the point, but got '${e.scale.text}'.`, e.scaleAt);
+                    return ERROR;
+                }
                 this.check(e.scale, scope);
                 return { k: 'prim', name: 'Decimal', computed: true, scale: e.scale.value };
             }
@@ -802,7 +806,8 @@ class ExprChecker {
                     }
                     const t = this.check(c.body, { ...scope, lambdas });
                     if (t.k === 'error') continue;
-                    if (result && !assignable(result.k === 'opt' ? result : result, t) && !assignable(t, result)) {
+                    // the cases agree by type, their scales aside: the join takes the larger, and scale fit checks it where it is placed
+                    if (result && !assignable(result, t, false) && !assignable(t, result, false)) {
                         this.rules.error(
                             'M009',
                             `The cases of 'match' give '${showType(result)}' and '${showType(t)}': every case must have the same type.`,
@@ -810,9 +815,11 @@ class ExprChecker {
                         );
                         continue;
                     }
-                    result = result && result.k !== 'opt' && t.k === 'opt' ? t : (result ?? t);
-                    if (result !== t)
-                        result = result.k === 'opt' ? { k: 'opt', inner: joinScale(result.inner, t.k === 'opt' ? t.inner : t) } : joinScale(result, t);
+                    if (!result) result = t;
+                    else {
+                        const inner = joinScale(result.k === 'opt' ? result.inner : result, t.k === 'opt' ? t.inner : t);
+                        result = result.k === 'opt' || t.k === 'opt' ? { k: 'opt', inner } : inner;
+                    }
                 }
                 const missing = u.variants.filter((v) => !seen.has(v.name)).map((v) => v.name);
                 if (missing.length) {
@@ -1441,15 +1448,21 @@ function comparable(l: Ty, r: Ty, check: (a: Ty, b: Ty) => boolean): boolean {
 
 const baseOf = (t: Ty): Ty => ({ k: 'prim', name: basePrimitive(t)! });
 
+/** The most digits after the point `x.round(n)` rounds to. */
+const MAX_ROUND_SCALE = 30;
+
 /**
  * `==`, `!=`, `unique` and `contains` compare by this rule: value objects by all their fields, entities by `id`,
  * unions by discriminator and fields. Lists and optionals cannot be compared.
  */
-/** Whether a value of type `got` can be passed where `want` is declared (an argument, a function's result). */
-function assignable(want: Ty, got: Ty): boolean {
-    if (scaleOverflow(want, got)) return false;
-    if (want.k === 'list') return got.k === 'list' && (got.elem.k === 'error' || assignable(want.elem, got.elem));
-    if (want.k === 'opt') return assignable(want.inner, got.k === 'opt' ? got.inner : got);
+/**
+ * Whether a value of type `got` can be passed where `want` is declared (an argument, a function's result); `scaled`
+ * false leaves scale fit out (the cases of `match`, which agree by type and join their scales).
+ */
+function assignable(want: Ty, got: Ty, scaled = true): boolean {
+    if (scaled && scaleOverflow(want, got)) return false;
+    if (want.k === 'list') return got.k === 'list' && (got.elem.k === 'error' || assignable(want.elem, got.elem, scaled));
+    if (want.k === 'opt') return assignable(want.inner, got.k === 'opt' ? got.inner : got, scaled);
     return got.k !== 'list' && got.k !== 'opt' && equatable(want, got);
 }
 
@@ -1486,13 +1499,28 @@ function showScaled(t: Ty): string {
 
 /**
  * The type of a value that is one of two of one type (the branches of `? :`, the sides of `??`, the elements of a
- * list, the cases of `match`): `a`, with the larger scale of two Decimals of known scale, so that it fits where both
- * fit; a Decimal of unknown scale makes it unknown.
+ * list, the cases of `match`), so that it fits where both fit. Two numbers, one of them a Decimal (a domain primitive
+ * over one included; an Int has scale 0), have the larger scale: `a` or else `b` when it has it (a literal aside), else
+ * a computed Decimal of that scale; a Decimal of unknown scale makes it unknown. Other types are `a`.
  */
 function joinScale(a: Ty, b: Ty): Ty {
-    if (a.k !== 'prim' || a.name !== 'Decimal' || b.k !== 'prim' || b.name !== 'Decimal' || a.scale === b.scale) return a;
-    const scale = a.scale === undefined || b.scale === undefined ? undefined : Math.max(a.scale, b.scale);
-    return { k: 'prim', name: 'Decimal', ...(a.literal && { literal: true }), ...(a.computed && { computed: true }), ...(scale !== undefined && { scale }) };
+    const [x, y] = [basePrimitive(a), basePrimitive(b)];
+    if (a.k === 'id' || b.k === 'id' || (x !== 'Decimal' && y !== 'Decimal') || !isNumeric(baseOf(a)) || !isNumeric(baseOf(b))) return a;
+    const [sa, sb] = [scaleOf(a), scaleOf(b)];
+    const scale = sa === undefined || sb === undefined ? undefined : Math.max(sa, sb);
+    if (a.k === 'prim' && b.k === 'prim' && x === 'Decimal' && y === 'Decimal') {
+        // two plain Decimals: `a`, with the joined scale
+        if (sa === scale) return a;
+        return {
+            k: 'prim',
+            name: 'Decimal',
+            ...(a.literal && { literal: true }),
+            ...(a.computed && { computed: true }),
+            ...(scale !== undefined && { scale }),
+        };
+    }
+    for (const t of [a, b]) if (basePrimitive(t) === 'Decimal' && scaleOf(t) === scale && !(t.k === 'prim' && t.literal)) return t;
+    return { k: 'prim', name: 'Decimal', computed: true, ...(scale !== undefined && { scale }) };
 }
 
 function equatable(l: Ty, r: Ty): boolean {

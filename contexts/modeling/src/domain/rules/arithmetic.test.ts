@@ -50,7 +50,8 @@ describe('arithmetic', () => {
     invariant c { exact.round(n) > 0 }
     invariant d { exact.round(-1) > 0 }
     invariant e { exact.round(1.5) > 0 }
-    invariant f { maybe.round(0) > 0 }`),
+    invariant f { maybe.round(0) > 0 }
+    invariant g { exact.round(31) > 0 && exact.round(30) > 0 }`),
         ).toEqual([
             "M009 '.round(n)' rounds a Decimal, but 'n' is a 'Int'. An Int needs no rounding.",
             "M009 '.round(n)' rounds a Decimal, but 'note' is a 'String'.",
@@ -58,6 +59,7 @@ describe('arithmetic', () => {
             "M009 '.round(n)' takes the digits after the point as an Int literal of 0 or more, but got '-1'.",
             "M009 '.round(n)' takes the digits after the point as an Int literal of 0 or more, but got '1.5'.",
             "M009 '.round(n)' rounds a Decimal, but 'maybe' is a 'Int?'.",
+            "M009 '.round(n)' rounds to at most 30 digits after the point, but got '31'.",
         ]);
     });
 
@@ -147,6 +149,60 @@ ${functions}
             "M009 Function 'els' returns 'Decimal(2)[0..*]', but its body has type 'Decimal(3)[0..*]'. (round each element: '[s, 1.234].map(x => x.round(2))')",
             "M009 Function 'm' returns 'Money', but its body has type 'Decimal(4)'. (round it: '(h * r).round(2)')",
             "M009 Argument 'x' of 'money' is a 'Money', but 'b.round(3)' is a 'Decimal(3)'. (round it: 'b.round(3).round(2)')",
+        ]);
+    });
+
+    /** `? :`, `??`, list literals and `match` take the larger scale of their values; scale fit checks it where it is placed. */
+    const joined = async (functions: string) => {
+        const a = await analyzeDomain([
+            {
+                path: 'a.dt',
+                text: `context A {
+  primitive Money: Decimal(2)
+  union U {
+    A { x: Decimal(4) }
+    B { y: Decimal(2)? }
+  }
+  union W {
+    I { i: Int }
+    D { d: Decimal(3) }
+  }
+${functions}
+}`,
+            },
+        ]);
+        return a.diagnostics.filter((d) => d.severity === 'error').map((d) => `${d.code} ${d.message}`);
+    };
+
+    test('joined scales: cases and branches agree by type with their scales aside, and the join fits where both fit', async () => {
+        expect(
+            await joined(`  function f(u: U): Decimal(4)? { match (u) { A { x } => x, B { y } => y } }
+  function g(u: U): Decimal(4)? { match (u) { B { y } => y, A { x } => x } }
+  function h(c: Bool, m: Money, s: Decimal(1)): Money { c ? m : s.round(1) }
+  function k(c: Bool, m: Money?): Money { c ? m ?? 1.5 : 0 }
+  function l(m: Money): Money[0..*] { [m, 1.5, 0] }
+  function n(c: Bool, x: Decimal(4)?, s: Decimal(1)): Decimal(4) { c ? x ?? s : 0 }
+  function w(v: W): Decimal(3) { match (v) { I { i } => i, D { d } => d } }`),
+        ).toEqual([]);
+    });
+
+    test('joined scales: a domain primitive or an Int joined with a larger scale does not fit the smaller one', async () => {
+        expect(
+            await joined(`  function f(u: U): Decimal(2)? { match (u) { B { y } => y, A { x } => x } }
+  function g(c: Bool, m: Money): Money { c ? m : 1.234 }
+  function h(m: Money?): Money { m ?? 1.234 }
+  function k(m: Money): Money[0..*] { [m, 1.234] }
+  function l(c: Bool): Decimal(2) { c ? 0 : 1.234 }
+  function n(): Decimal(2)[0..*] { [0, 1.234] }
+  function w(v: W): Decimal(2) { match (v) { I { i } => i, D { d } => d } }`),
+        ).toEqual([
+            "M009 Function 'f' returns 'Decimal(2)?', but its body has type 'Decimal(4)?'.",
+            "M009 Function 'g' returns 'Money', but its body has type 'Decimal(3)'.",
+            "M009 Function 'h' returns 'Money', but its body has type 'Decimal(3)'.",
+            "M009 Function 'k' returns 'Money[0..*]', but its body has type 'Decimal(3)[0..*]'.",
+            "M009 Function 'l' returns 'Decimal(2)', but its body has type 'Decimal(3)'.",
+            "M009 Function 'n' returns 'Decimal(2)[0..*]', but its body has type 'Decimal(3)[0..*]'.",
+            "M009 Function 'w' returns 'Decimal(2)', but its body has type 'Decimal(3)'.",
         ]);
     });
 
