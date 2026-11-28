@@ -1127,7 +1127,7 @@ class ContextEmitter {
         /** The source states of a command for a kind, in the order the states are declared (none for a kind without it). */
         const sources = (c: CommandModel, kind: string): string[] => {
             if (!commandKinds(agg, c).includes(kind)) return [];
-            const from = c.legacy ? c.transitions.flatMap((t) => t.from) : applicableOutcomes(agg, c, kind).flatMap((o) => o.from);
+            const from = c.legacy ? outcomesOfCommand(c, true).flatMap((o) => o.from) : applicableOutcomes(agg, c, kind).flatMap((o) => o.from);
             return states.filter((s) => from.includes(s) && valid(kind).includes(s));
         };
         /** The type of the aggregate of a kind in a state (`'*'` without kinds; `undefined` without states). */
@@ -1554,7 +1554,7 @@ class ContextEmitter {
         // (`A -> A, B -> B`, or `emits X when A ->`): a function generic over the input state, whose result is that of
         // its state, looked up in an object keyed by the source states.
         const generic = stateful && outputsVary(c.factory, transitions, c.emits);
-        const input = stateUnion(transitions.flatMap((t) => t.from));
+        const input = stateUnion(outcomesOfCommand(c, true).flatMap((o) => o.from));
         const self = aggregateParamName(agg);
         // the parameters as one object (`params: CancelOrderParams`), and none without parameters
         const params = c.params.length ? [`${paramsArgName(agg)}: ${paramsTypeName(agg, c)}`] : [];
@@ -1653,7 +1653,9 @@ class ContextEmitter {
     private requiresCheck(agg: AggregateModel, c: CommandModel): string[] {
         const states = agg.states;
         const sources = unique(
-            c.legacy ? c.transitions.flatMap((t) => t.from) : commandKinds(agg, c).flatMap((k) => applicableOutcomes(agg, c, k).flatMap((o) => o.from)),
+            c.legacy
+                ? outcomesOfCommand(c, true).flatMap((o) => o.from)
+                : commandKinds(agg, c).flatMap((k) => applicableOutcomes(agg, c, k).flatMap((o) => o.from)),
         );
         const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') || 'never' : c.kind ? kindTypeName(agg, c.kind) : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };

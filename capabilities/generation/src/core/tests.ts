@@ -11,6 +11,8 @@ import type {
     SemanticIR,
 } from '@domaintrail/modeling';
 import {
+    exprModelIndex,
+    fieldBounds,
     applicableOutcomes,
     BINARY_OP_TEXT,
     commandKinds,
@@ -18,7 +20,9 @@ import {
     elementOf,
     elementsIn,
     invariantsOf,
+    hasExternalCheck,
     kindCase,
+    outcomesOfCommand,
     validStatesFor,
 } from '@domaintrail/modeling';
 import type { DomainPrimitive } from './checks.js';
@@ -170,6 +174,7 @@ export function testsWarnings(model: DomainModel, ir: SemanticIR, types: TypeTes
  * `from`.
  */
 export function generateTests(model: DomainModel, ir: SemanticIR, header: string, opts: TestsOptions, moduleOf: (from: string, ctx: string) => string): File[] {
+    const irIndex = exprModelIndex(ir, model);
     const cycles = recursiveCycles(model, ir, opts.maxRecursionDepth, opts.types);
     const dirOf = (ctx: string): string => posix.normalize(opts.dirs?.[ctx] ?? opts.dir);
     // the tests of another context: next to these, from its package (`<module>/tests`), or by relative path
@@ -187,6 +192,7 @@ export function generateTests(model: DomainModel, ir: SemanticIR, header: string
                 path: posix.join(dir, `${ctx}.ts`),
                 content: new TestsEmitter(
                     model,
+                    irIndex,
                     ctx,
                     header,
                     (c) => moduleOf(dir, c),
@@ -210,10 +216,10 @@ export function generateTests(model: DomainModel, ir: SemanticIR, header: string
 }
 
 /** Bounds read from the invariants of a domain primitive (`value in 1..999`, `length(value) <= 8`, `matches`). */
-export function hintsOf(invs: readonly InvariantModel[]): Record<string, number | string> {
+export function hintsOf(invs: readonly InvariantModel[], irIndex: ReturnType<typeof exprModelIndex>): Record<string, number | string> {
     const h: Record<string, number | string> = {};
     const num = (e: ExprModel): number | undefined => (e.k === 'int' ? e.value : e.k === 'decimal' ? Number(e.value) : undefined);
-    const isValue = (e: ExprModel): boolean => e.k === 'name' && e.name === 'value';
+    const isValue = (e: ExprModel): boolean => irIndex.get(e)?.symbol?.kind === 'value';
     const isLength = (e: ExprModel): boolean => e.k === 'length' && isValue(e.operand);
     const set = (key: string, v: number | undefined, keep: (a: number, b: number) => number): void => {
         if (v === undefined) return;
@@ -275,12 +281,6 @@ const literal = (h: Record<string, number | string>): string =>
         .join(', ')} }`.replace('{  }', '{}');
 
 /** `lower` and `upper` of a field's multiplicity (`upper` absent: unbounded). */
-function bounds(f: FieldModel): { lower: number; upper?: number } {
-    const m = /^\[(\d+)\.\.(\d+|\*)\]$/.exec(f.multiplicity);
-    if (m) return { lower: Number(m[1]), ...(m[2] !== '*' && { upper: Number(m[2]) }) };
-    return f.cardinality === 'nonEmpty' ? { lower: 1 } : { lower: 0 };
-}
-
 /** How often an `emits` entry emits its event, when the types do not express it (other than `?`, `[0..*]`, `[1..*]`). */
 const counted = (e: { lower: number; upper?: number }): boolean =>
     !((e.lower === 1 && e.upper === 1) || (e.lower === 0 && e.upper === 1) || (e.lower <= 1 && e.upper === undefined));
@@ -296,6 +296,7 @@ class TestsEmitter {
 
     constructor(
         private readonly model: DomainModel,
+        private readonly irIndex: ReturnType<typeof exprModelIndex>,
         private readonly ctx: string,
         private readonly header: string,
         private readonly moduleOf: (ctx: string) => string,
@@ -368,7 +369,7 @@ class TestsEmitter {
         if (f.cardinality === 'one') return b;
         if (this.optionalAt(f)) return `testing.optionalAt(depth, ${b})`;
         if (f.cardinality === 'optional') return b;
-        const { lower, upper } = bounds(f);
+        const { lower, upper } = fieldBounds(f);
         if (lower === 0 && this.onCycle(f)) return `testing.manyAt(depth, ${b}${upper !== undefined ? `, ${upper}` : ''})`;
         return `testing.many(${b}, ${lower}${upper !== undefined ? `, ${upper}` : ''})`;
     }
@@ -448,7 +449,7 @@ class TestsEmitter {
             switch (el.kind) {
                 case 'id':
                 case 'primitive': {
-                    const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base}', ${literal(hintsOf(el.invariants))})), seed)`;
+                    const raw = `testing.collide(testing.cast<${this.type(el.name)}>(testing.base('${el.base}', ${literal(hintsOf(el.invariants, this.irIndex))})), seed)`;
                     const invs = primitiveInvariants(el);
                     add(el.name, valid(el.name, raw, invs.length ? this.holds(el.name, el.name, invs) : undefined));
                     break;
@@ -600,7 +601,7 @@ class TestsEmitter {
             `...(impl.make.${p.name} ? testing.primitiveCases({`,
             `    type: '${this.ctx}.${p.name}',`,
             `    base: '${p.base}',`,
-            `    hints: ${literal(hintsOf(p.invariants))},`,
+            `    hints: ${literal(hintsOf(p.invariants, this.irIndex))},`,
             `    invariants: [${invs.map((i) => `'${i.name}'`).join(', ')}],`,
             `    declared: [${declared.join(', ')}],`,
             `    check: ${check},`,
@@ -613,7 +614,7 @@ class TestsEmitter {
     private commandCase(agg: AggregateModel, c: CommandModel): string {
         if (!c.legacy) return this.namedCommandCase(agg, c);
         const states = agg.states;
-        const sources = [...new Set(c.transitions.flatMap((t) => t.from))];
+        const sources = [...new Set(outcomesOfCommand(c, true).flatMap((o) => o.from))];
         const subject = c.factory
             ? []
             : [
@@ -726,7 +727,7 @@ class TestsEmitter {
             `    counted: [${counts.join(', ')}],`,
             `    outcomes: [${outcomes.join(', ')}],`,
             ...(hasKinds ? [`    kindField: '${KIND_TAG}',`, `    validStates: ${JSON.stringify(agg.validStates)},`] : []),
-            `    choices: ${this.ctx}.${choiceCheckName(agg, c)}(${all.some((o) => o.select?.kind === 'external') ? `options.external.${agg.name}.${c.name}` : '{}'}),`,
+            `    choices: ${this.ctx}.${choiceCheckName(agg, c)}(${all.some(hasExternalCheck) ? `options.external.${agg.name}.${c.name}` : '{}'}),`,
             `}, options),`,
         ].join('\n');
     }
@@ -770,7 +771,7 @@ class TestsEmitter {
 
     /** A field of the input of a policy's command (or of a value in it), for `testing.policyCases`. */
     private inputField(f: FieldModel, outer: ReadonlySet<string> = new Set()): string {
-        const { lower, upper } = bounds(f);
+        const { lower, upper } = fieldBounds(f);
         const many = f.cardinality === 'many' || f.cardinality === 'nonEmpty';
         return `{ name: '${f.name}', optional: ${f.cardinality === 'optional'}, many: ${many}${many ? `, lower: ${lower}${upper !== undefined ? `, upper: ${upper}` : ''}` : ''}, valid: ${this.validOf(f, outer)} }`;
     }
@@ -849,22 +850,20 @@ class TestsEmitter {
                         !c.legacy &&
                         commandKinds(agg, c)
                             .flatMap((k) => applicableOutcomes(agg, c, k))
-                            .some((o) => o.select?.kind === 'external'),
+                            .some(hasExternalCheck),
                 )
                 .map((c) => ({ agg, c })),
         );
         const externalDeclared = this.els.flatMap((el) => {
             const invs =
                 el.kind === 'aggregate' ? aggregateInvariants(el) : el.kind === 'union' ? unionInvariants(el) : 'invariants' in el ? el.invariants : [];
-            const names = invs.filter((i) => !i.expr && i.externalReason).map((i) => i.name);
+            const names = invs.filter(hasExternalCheck).map((i) => i.name);
             const entries = names.length ? [{ key: el.name, type: `${ctx}.${declaredChecksName(el.name)}`, names }] : [];
             if (el.kind === 'aggregate')
                 for (const c of el.commands) {
                     const required = [
-                        ...c.requires.filter((r) => !r.expr && r.externalReason).map((r) => r.name),
-                        ...el.kinds.flatMap((k) =>
-                            (kindCase(el, k.name, c.name)?.requires ?? []).filter((r) => !r.expr && r.externalReason).map((r) => `${k.name}_${r.name}`),
-                        ),
+                        ...c.requires.filter(hasExternalCheck).map((r) => r.name),
+                        ...el.kinds.flatMap((k) => (kindCase(el, k.name, c.name)?.requires ?? []).filter(hasExternalCheck).map((r) => `${k.name}_${r.name}`)),
                     ];
                     if (required.length)
                         entries.push({ key: commandTypeName(el, c), type: `${ctx}.${declaredRequiresName(commandTypeName(el, c))}`, names: required });

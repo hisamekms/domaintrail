@@ -169,9 +169,16 @@ Migration steps and regressions:
    kinds call the element's equality function; the others compare scalars).
    Progress (step 3e, done): the checker runs once. `analyzeDomain` keeps the expression facts it recorded, and
    `semanticIROf(analysis)` builds the IR from them without checking again.
-   Remaining: applicability.
+   Applicability (step 3, closed): the generator keeps the shared Modeling helpers (`applicableOutcomes`,
+   `validStatesFor`, `kindCase`), which the IR builder also uses, so there is one computation; the TLA+ generator reads
+   the IR's `choices`. Step 3 is complete.
 4. Port contract-test generation to IR dependencies and recursion facts. Regression: all generated test files match the
    captured baseline and the checker contract remains unchanged.
+   Progress (step 4, done): recursion comes from the IR's `cycles` (step 3); test-data hints read the primitive's own
+   value from its IR `value` symbol; field bounds come from one Modeling helper (`fieldBounds`; adding them to the
+   Typed Model would change the Live View hashes); external checks from `hasExternalCheck`; legacy transitions' sources
+   from `outcomesOfCommand`. The contract-test generator needs no dependency order of its own (`testing.lazy` with
+   the IR's cycles). Phase 1 is complete.
 5. Add the TLA+ capability and adapters, trace metadata, and architecture-map entry (Phase 4; Phase 1 ends at step 4).
    Regression: deterministic module/config snapshots, source-to-trace mapping fixtures, and spike classification
    fixtures for constrained probes, per-action attribution, existential witnesses, and terminal deadlock.
