@@ -24,6 +24,8 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   longer syntax, and `null` is valid only in such a comparison.
 - `x?.f` reads a field of an optional value (absent when the value is), and `a ?? b` gives `a` when it is present, else
   `b` of the same type. Both compile to TypeScript's own `?.` and `??`.
+- `test ? a : b` is a value or a condition by case: `days <= (express ? 2 : limit)`. Its branches see what the
+  test shows: `note != null ? note.length > 0 : true`.
 
 ## Added
 

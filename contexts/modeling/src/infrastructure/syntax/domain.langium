@@ -184,7 +184,11 @@ Invariant:
 // ---- Invariant expressions ----
 
 Expression:
-    Coalesce;
+    Conditional;
+
+// `test ? then : else`, the loosest of all, right to left; a range bound holds one only in parentheses
+Conditional infers Expression:
+    Coalesce ({infer ConditionalExpr.test=current} '?' ifTrue=Conditional ':' ifFalse=Conditional)?;
 
 // `a ?? b`: `b` when the optional `a` is absent (the loosest operator, as in TypeScript, where it does not mix with
 // `&&` and `||` without parentheses either)

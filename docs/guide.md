@@ -857,7 +857,8 @@ the valid states and named outcomes per kind; restored data and migrations remai
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
-- Operators, loosest first: `??`, `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
+- Operators, loosest first: `test ? a : b` (a value or a condition by case; a range bound holds one only in
+  parentheses), `??`, `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
   `!(A) || B`.
 - Optional values: `x != null` (it is present) and `x == null`. `x != null` narrows `x` on the right of `&&`, and
   `x == null` narrows it on the right of `||`: `note == null || note.length > 0`.

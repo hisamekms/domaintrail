@@ -13,6 +13,7 @@
 // @ts-check
 
 const PREC = {
+  conditional: 0,
   coalesce: 1,
   or: 2,
   and: 3,
@@ -344,6 +345,7 @@ module.exports = grammar({
     // ---- Expressions ----
 
     _expression: ($) => choice(
+      $.conditional_expression,
       $.binary_expression,
       $.range_expression,
       $.not_expression,
@@ -367,6 +369,14 @@ module.exports = grammar({
         field('right', $._expression),
       )),
     ),
+
+    conditional_expression: ($) => prec.right(PREC.conditional, seq(
+      field('test', $._expression),
+      '?',
+      field('then', $._expression),
+      ':',
+      field('else', $._expression),
+    )),
 
     range_expression: ($) => prec.left(PREC.comparison, seq(
       field('operand', $._expression),

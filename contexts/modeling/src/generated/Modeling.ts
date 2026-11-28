@@ -242,6 +242,13 @@ export type ExprModel =
           readonly left: ExprModel;
           readonly right: ExprModel;
       }
+    /** `test ? then : else`. */
+    | {
+          readonly k: 'conditional';
+          readonly test: ExprModel;
+          readonly ifTrue: ExprModel;
+          readonly ifFalse: ExprModel;
+      }
     /** `operand in lower..upper`. */
     | {
           readonly k: 'range';
@@ -323,6 +330,10 @@ export function equalExprModel(a: ExprModel, b: ExprModel): boolean {
     if (a.k === 'binary') {
         const y = b as Extract<ExprModel, { readonly k: 'binary' }>;
         return a.op === y.op && equalExprModel(a.left, y.left) && equalExprModel(a.right, y.right);
+    }
+    if (a.k === 'conditional') {
+        const y = b as Extract<ExprModel, { readonly k: 'conditional' }>;
+        return equalExprModel(a.test, y.test) && equalExprModel(a.ifTrue, y.ifTrue) && equalExprModel(a.ifFalse, y.ifFalse);
     }
     if (a.k === 'range') {
         const y = b as Extract<ExprModel, { readonly k: 'range' }>;

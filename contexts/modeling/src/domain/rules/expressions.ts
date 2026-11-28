@@ -542,6 +542,26 @@ class ExprChecker {
                 }
                 return BOOL;
             }
+            case 'conditional': {
+                // `test ? then : else`: `then` is evaluated when `test` holds, `else` when it does not
+                const test = this.check(e.test, scope);
+                if (test.k !== 'error' && !isBool(test))
+                    this.rules.error('M009', `The condition of '? :' must be Bool, but has type '${showType(test)}'.`, e.testAt);
+                const branch = (x: Expr, holds: boolean): Ty => {
+                    const paths = guards(e.test, holds);
+                    if (paths.length) this.sink?.({ expression: x, paths });
+                    return this.check(x, { ...scope, present: new Set([...scope.present, ...paths]) });
+                };
+                const a = branch(e.ifTrue, true);
+                const b = branch(e.ifFalse, false);
+                if (a.k === 'error' || b.k === 'error') return ERROR;
+                const base = (t: Ty): Ty => (t.k === 'opt' ? t.inner : t);
+                if (!equatable(base(a), base(b))) {
+                    this.rules.error('M009', `'? :' gives '${showType(a)}' or '${showType(b)}': both branches must have the same type.`, e.at);
+                    return ERROR;
+                }
+                return a.k === 'opt' || b.k === 'opt' ? { k: 'opt', inner: base(a) } : a;
+            }
             case 'range': {
                 const v = this.check(e.operand, scope);
                 const lo = this.check(e.lower, scope);

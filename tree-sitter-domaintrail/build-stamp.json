@@ -1,5 +1,5 @@
 {
-  "grammar.js": "960f73c721b58ab8a55a16158a53c6d549481fbab47f367cf5e0b201d6d2548b",
-  "src/parser.c": "31877d986fd3a1c28ea155bd4e3af1f93dc2d98e6dcfb7bc3efd31debb260941",
-  "tree-sitter-domaintrail.wasm": "bd2b4ef361acf6d2a0a154cd074bbbac87e91fdbd4b3fe1425993b8701f16ff2"
+  "grammar.js": "ee05989e2827599ef48ccd52f9a109cca71a14114cf7ab1c384db67afefbed45",
+  "src/parser.c": "98331e8126c51868259e8a6b034296b4cc4b2fc2f7c5bdc32ba1cff400e8f6fb",
+  "tree-sitter-domaintrail.wasm": "1f90bf845eb01d27dc655cd97972589e2810d791e4e75b7277f2625430690224"
 }
