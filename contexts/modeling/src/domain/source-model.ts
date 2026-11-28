@@ -396,6 +396,7 @@ export type Expr = ExprBase &
         | { k: 'length'; operand: Expr; operandAt: Site }
         /** `pattern` is the regular expression exactly as written (see `ExprModel`). */
         | { k: 'matches'; operand: Expr; pattern: string; operandAt: Site; patternAt: Site }
+        | { k: 'round'; operand: Expr; scale: Expr; operandAt: Site; scaleAt: Site }
         | { k: 'unique'; collection: Expr; param?: string; keys: Expr[]; collectionAt: Site; keysAt: Site[] }
         | { k: 'contains'; collection: Expr; element: Expr; collectionAt: Site; elementAt: Site }
         /** `method`: the name as written (`every`, `some`; a trial arm's `forall`, `exists`), for the diagnostics. */

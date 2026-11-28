@@ -339,6 +339,11 @@ export type ExprModel =
           readonly operand: ExprModel;
           readonly pattern: string;
       }
+    | {
+          readonly k: 'round';
+          readonly operand: ExprModel;
+          readonly scale: ExprModel;
+      }
     /** `unique(collection)`, or `unique(collection, x => key, …)`. */
     | {
           readonly k: 'unique';
@@ -436,6 +441,10 @@ export function equalExprModel(a: ExprModel, b: ExprModel): boolean {
     if (a.k === 'matches') {
         const y = b as Extract<ExprModel, { readonly k: 'matches' }>;
         return equalExprModel(a.operand, y.operand) && a.pattern === y.pattern;
+    }
+    if (a.k === 'round') {
+        const y = b as Extract<ExprModel, { readonly k: 'round' }>;
+        return equalExprModel(a.operand, y.operand) && equalExprModel(a.scale, y.scale);
     }
     if (a.k === 'unique') {
         const y = b as Extract<ExprModel, { readonly k: 'unique' }>;

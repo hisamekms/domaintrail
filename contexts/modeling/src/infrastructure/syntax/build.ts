@@ -361,6 +361,7 @@ function exprModel(e: Expression): ExprModel {
         if (m.k === 'unique')
             return { k: 'unique', collection: exprModel(e.receiver), ...(m.param !== undefined && { param: m.param }), keys: m.keys.map(exprModel) };
         if (m.k === 'matches') return { k: 'matches', operand: exprModel(e.receiver), pattern: patternSource(m.pattern) };
+        if (m.k === 'round') return { k: 'round', operand: exprModel(e.receiver), scale: exprModel(m.scale) };
         if (m.k === 'listMethod')
             return {
                 k: 'listMethod',

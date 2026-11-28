@@ -94,6 +94,8 @@ const expressionChildren = (expr: Expr): Expr[] => {
         case 'length':
         case 'matches':
             return [expr.operand];
+        case 'round':
+            return [expr.operand, expr.scale];
         case 'count':
             return [expr.collection];
         case 'binary':
@@ -873,6 +875,8 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
             case 'length':
             case 'matches':
                 return [expr.operand];
+            case 'round':
+                return [expr.operand, expr.scale];
             case 'binary':
                 return [expr.left, expr.right];
             case 'conditional':

@@ -161,6 +161,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 };
             if (m.k === 'matches')
                 return { ...base, k: 'matches', operand: receiver, pattern: patternSource(m.pattern), operandAt: receiverAt, patternAt: site(e, 'args', 0) };
+            if (m.k === 'round') return { ...base, k: 'round', operand: receiver, scale: expr(m.scale), operandAt: receiverAt, scaleAt: site(e, 'args', 0) };
             if (m.k === 'listMethod')
                 return {
                     ...base,

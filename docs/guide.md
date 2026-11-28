@@ -895,9 +895,17 @@ the valid states and named outcomes per kind; restored data and migrations remai
   `c.sum(x => number)` and `c.sum()` (an Int, or a Decimal of the values' scale): `total == lines.sum(l => l.price *
   l.quantity)`, `[Status.Open, Status.Held].includes(status)`.
 - Arithmetic: Int `+ - *`; Decimal `+ - * /`; an Int with a Decimal is a Decimal, and a domain primitive gives its
-  base type. `/` rounds half-even to the larger declared scale of its operands (`Decimal(2)`: two digits after the
-  point; a literal has the digits written), so `/` needs `Decimal(n)` operands, and its divisor must be shown
+  base type. `+ -` keep the larger scale of their operands and `*` adds them (`Decimal(2) * Decimal(2)` has four
+  digits after the point). `/` rounds half-even to the larger declared scale of its operands (`Decimal(2)`: two digits
+  after the point; a literal has the digits written), so `/` needs `Decimal(n)` operands, and its divisor must be shown
   non-zero where it is divided by (`days != 0 && total / days <= 10.00`). Int has no `/`.
+- Rounding: `x.round(n)` rounds a Decimal half-even to `n` digits after the point (`n` an Int literal from 0 to 30):
+  `(hours * rate).round(2)`, `0.125.round(2) == 0.12`. A Decimal of more digits than a declared `Decimal(n)` holds
+  (a field in `changes x = …`, a function's result or argument, an element of a list; a domain primitive over
+  `Decimal(n)` holds as many) is an error (M009) until it is rounded; fewer digits widen, and comparisons across
+  scales need no rounding. A literal has the digits written: `1.50` does not fit a `Decimal(1)`. `? :`, `??`, a list
+  literal and the cases of `match` have the larger scale of their values (an Int has none): `c ? 0 : 1.234` is a
+  three-digit Decimal.
 - Operators, loosest first: `test ? a : b` (a value or a condition by case; a range bound holds one only in
   parentheses), `??`, `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `+ -`, `* /`, `!`. An implication "if A then B" is
   `!(A) || B`.
@@ -907,7 +915,8 @@ the valid states and named outcomes per kind; restored data and migrations remai
   when it is present, else `b` (of the same type): `(note ?? "").length`. `address?.city != null` narrows both
   `address` and `address.city`.
 - Methods: on a list `c`: `c.length`, `c.every(x => …)`, `c.some(x => …)`, `c.unique()`,
-  `c.unique(x => key, …)`, `c.includes(x)`; on a string `s`: `s.length` (in code points), `s.matches("regex")`.
+  `c.unique(x => key, …)`, `c.includes(x)`; on a string `s`: `s.length` (in code points), `s.matches("regex")`; on a
+  Decimal `x`: `x.round(n)`.
 - `c.unique()`: the elements of a collection are distinct. With keys, `lines.unique(l => l.sku)` means no two
   elements have the same key, and `confirmations.unique(c => c.scenario, c.reviewer)` that no two have the same
   combination of keys. A key cannot be optional (M009); to include an optional field, group the keys into a value
@@ -3598,7 +3607,7 @@ storming](#diagnostics-of-a-storming).
 | M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
-| M009 | operators and operands have compatible types; a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length` |
+| M009 | operators and operands have compatible types; a Decimal of known scale fits the `Decimal(n)` it is placed in (`x.round(n)` rounds it: a Decimal `x`, an Int literal `n` from 0 to 30); a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length` |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them; a kind's fields only inside its kind |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
