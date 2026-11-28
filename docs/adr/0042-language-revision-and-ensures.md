@@ -55,6 +55,14 @@ runtime enforcement is specified in
 explicit input. Do not support old/new syntax coexistence. `dt migrate domain` is idempotent, supports `--dry-run`,
 exits 0/1/2, preserves comments and layout, and reports manual work.
 
+Amended (2026-11-29): exhaustive `match` over states is `match (before) { State { fields } => e, … }` and
+`match (after) { … }` in `changes x = …` and `ensures` (cases: the outcome's source / target states), and
+`match (this) { … }` in `requires`, choice rules and the aggregate's own invariants (cases: the command's source
+states, or all states). `this` is only a `match` subject and is not in scope in `changes`, `ensures`, a create
+command's rules or the invariants of one state or kind, and is reserved as a name. With kinds (ADR 0037) the cases
+may name kinds instead, never both in one `match`; the cases follow the (kind, state) pairs the aggregate can be in,
+and `before` and `after` narrow together as one transition. See [Supervisor decisions (2026-11-29)](../plans/formal-verification/language-revision.md#supervisor-decisions-2026-11-29-match-over-the-aggregate).
+
 ## Rejected alternatives
 
 - Freeze syntax before the AI trial, which would preempt evidence on the still-open `match` form and quantifier names.

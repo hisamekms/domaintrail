@@ -7,7 +7,7 @@ context Modeling {
   /// The list methods with a lambda: `.map(x => e)`, `.filter(x => p)`, `.sum(x => e)` (`.sum()` of numbers).
   enum ListMethod { map filter sum }
 
-  /// A case of `match`: the variant, the fields it binds by name, and its value.
+  /// A case of `match`: the variant (or the aggregate's state or kind), the fields it binds by name, and its value.
   value MatchCaseModel {
     variant: String
     bindings: String[0..*]
@@ -54,7 +54,8 @@ context Modeling {
       left: ExprModel
       right: ExprModel
     }
-    /// `match (subject) { Variant { fields } => body, … }`: one case per variant of a union, each once.
+    /// `match (subject) { Variant { fields } => body, … }`: one case per variant of a union, each once; over the
+    /// aggregate (`this`, `before`, `after`), one case per state or per kind it can be in there.
     match {
       subject: ExprModel
       cases: MatchCaseModel[0..*]

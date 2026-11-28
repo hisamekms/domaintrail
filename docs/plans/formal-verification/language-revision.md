@@ -71,6 +71,55 @@ is checked under what the left shows when it does not hold (`!exists(x) || x.f >
 [release-notes.md](release-notes.md) until the release, since the changelogs list released versions only. The AI trial
 starts once A0 `match` and quantifiers are in.
 
+## Supervisor decisions (2026-11-29): `match` over the aggregate
+
+`match` extends from unions to the aggregate's states and kinds (state match A), with the A0 case form:
+
+- **Subjects.** `match (before) { … }` in `changes x = e` and `ensures` has one case for each source state of the
+  outcome (of the command in the shorthand form); `match (after) { … }` in `ensures` one for each target state.
+  `this` is the aggregate itself in `requires`, choice rules (`select { … }`) and the aggregate's own (common)
+  invariants: one case for each source state of the command (of the outcome, for a choice rule), or for each state of
+  the aggregate in an invariant. `this` is only a `match` subject; fields stay bare, and `this.x` is M001 with the hint
+  `write 'x'`; `this` alone is M009.
+- **Where `this` is not in scope** (M001, each hint naming what is in scope there): `changes` (write `before`; a
+  create's is over its parameters) and `ensures` (write `before` or `after`; a create has only `after`), where it would
+  be ambiguous; the rules of a `create command`, which has no aggregate yet; and the
+  invariants of one state **or one kind**, which hold in that one state or kind and read its fields by name. The kind
+  case is decided like the state case for consistency.
+- **Cases.** Exhaustive over exactly the states (or kinds) the subject can be in there: a missing case, a case naming
+  a state that is not among them, an unknown name (with a suggestion) and a case named twice are M009, as for unions,
+  and so are cases of different types (joined by scale as union cases are). A single case is allowed (`match (after)`
+  of a named outcome, which has one target), for uniformity.
+- **Bindings.** A case reads the fields it names, like a union case: those of its state (or kind) and the common ones
+  (with the fixed kind's, in a kind's rules). Unbound state fields stay out of scope as before (M010). A binding named
+  like a parameter of the command, which it would hide, is M019 (the hint for `before` / `after`: read the field as
+  `before.x` without binding it).
+- **Pairs.** The aggregate is modelled as the set of (kind, state) pairs it can be in where the expression is, not as
+  states × kinds: in `requires` of a common command, for each kind the source states of its `on` case (or of the
+  common outcomes); in a choice rule, the outcome's sources for each kind it applies to; in the aggregate's
+  invariants, each kind in its valid states. A state case keeps the pairs in that state, a kind case those of that
+  kind; the cases of a `match` are the states (or kinds) of the pairs left. `before` and `after` share the outcome's
+  (kind, from, to) transitions: a case of one narrows the other (in the shorthand `Draft -> Draft, Confirmed ->
+  Confirmed`, `before` in a `Confirmed` case of `after` has only `Confirmed`), and `before.x` reads the fields of the
+  pairs left.
+- **Kinds (ADR 0037).** Cases may name kinds instead of states: one for each kind of the pairs (the fixed kind in a
+  kind's command or `on` case). A `match` naming both states and kinds is M009; to choose by both, nest one `match`
+  inside a case of the other. A name that is both a state and a kind is already M030 and M011; `match` reads it as the
+  state.
+- **`this` is reserved.** A field of an aggregate (common, of a state, of a kind, or from a field set) or a parameter
+  of its commands named `this` is M030 (beside the field `kind`); a lambda parameter or a `match` binding named `this`
+  is M021, as `before` / `after` are in contracts. The frame is looked up before fields.
+- **Diagnostics.** No new code: M001 (scope of `this`), M009 (`match`), M019 (bindings), M021 and M030 (`this`
+  reserved). The M010 hint for a field of some source states only in `requires` says to bind it in a case of
+  `match (this)`.
+- **TypeScript.** Conditionals on `state` / `kind` (`STATE_TAG` / `KIND_TAG`), which TypeScript narrows, over the cases
+  the aggregate's type can be in (its pairs) where the expression is: in a postcondition branch (one source state and
+  kind, one target) the case of `before` / `after` is chosen at generation and only its body is emitted, so no comparison is
+  ever one TypeScript rejects as unintentional. The check of the common invariants takes the aggregate (`Order`)
+  instead of `OrderCommon` when one of them matches on `this`; the per-state checks pass their state's type to it as
+  before.
+- **Semantic IR.** `this` has the `frame` symbol (`name: 'this'`), like `before` and `after`; no new IR shape.
+
 ## 1. Current language and command contract
 
 ### Expressions
@@ -159,7 +208,7 @@ The maintainer decided the surface policy in “Maintainer decisions (2026-11-27
 | Conditional | `test ? a : b` | Decided TS-like form |
 | Arithmetic | Int `+ - *`; Decimal `+ - * /`; mixed Int/Decimal promotes Int to Decimal | Decided; see maintainer decisions |
 | Old/new state | `before.x`, `after.x` | Decided |
-| Match | `match (x) { variant { fields } => e, … }` | Adopted as A0; trial arms M2 TC39, M3 ts-pattern |
+| Match | `match (x) { variant { fields } => e, … }`; over the aggregate `match (this \| before \| after) { State { fields } => e, … }` | Adopted as A0; trial arms M2 TC39, M3 ts-pattern; aggregate states and kinds decided 2026-11-29 |
 | Lists | `[]`, `[a, b]`, `[...xs, x]`, `.map`, `.filter`, `.sum` | Decided |
 | User functions | Typed expression-bodied predicates/functions | Decided; no recursion/cycles |
 

@@ -1,4 +1,5 @@
 import type { RuleSink } from '../diagnostics.js';
+import type { ModelingRuleId } from '../rule-ids.js';
 import { didYouMean, suggestFrom, type Candidate } from '@domaintrail/kernel';
 import {
     commandsOf,
@@ -24,6 +25,7 @@ import {
     type FunctionDecl,
     type InvariantDecl,
     type KindDecl,
+    type OutcomeDecl,
     type ParamDecl,
     type RequirementDecl,
     type SourceModel,
@@ -32,7 +34,23 @@ import {
 } from '../source-model.js';
 import { canonicalTemporal, isOrderedTemporal, isTemporal, TEMPORAL_EXAMPLE, TEMPORAL_FORM } from '../temporal.js';
 import { fieldId } from '../ids.js';
-import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, scaleOf, showType, type Ty } from '../types.js';
+import { lifecyclesOf } from '../lifecycle.js';
+import {
+    BOOL,
+    COMPUTED_INT,
+    ERROR,
+    basePrimitive,
+    isBool,
+    isDomainPrimitive,
+    isNumeric,
+    memberType,
+    sameType,
+    scaleOf,
+    showType,
+    type AggregateFrame,
+    type AggregatePair,
+    type Ty,
+} from '../types.js';
 
 export interface ExpressionFact {
     expression: Expr;
@@ -52,7 +70,10 @@ export interface ExpressionFact {
             | 'discriminator'
             | 'context'
             | 'function'
-            /** `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome. */
+            /**
+             * `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome; `this` in
+             * `requires`, choice rules and the aggregate's invariants: the aggregate itself (a `match` subject).
+             */
             | 'frame';
         name: string;
         declaration?: object;
@@ -85,14 +106,77 @@ interface Scope {
     implicitValueId?: string;
     /** Paths proven present by an enclosing `exists(...)` guard. */
     present: Set<string>;
-    /** `before` / `after` where an outcome's contract is checked (`changes x = …`, `ensures`). */
+    /**
+     * `before` / `after` where an outcome's contract is checked (`changes x = …`, `ensures`); `this` where the rule is
+     * about the aggregate as it is (`requires`, choice rules, the aggregate's own invariants).
+     */
     frames?: ReadonlyMap<string, Ty>;
 }
 
 interface Hidden {
     message: string;
     hint: string;
+    /** The code of the diagnostic: M010 (a field not in scope) unless given. */
+    code?: ModelingRuleId;
+    /** For `this.x` where `this` is not in scope: what to write instead. */
+    memberHint?: (member: string) => string;
 }
+
+/** The fields every one of `list` has, with one type (none for an empty list). */
+function fieldsInEvery(list: readonly ReadonlyMap<string, FieldDecl | ParamDecl>[]): Map<string, FieldDecl | ParamDecl> {
+    if (!list.length) return new Map();
+    const [first, ...rest] = list;
+    return new Map([...first!].filter(([n, f]) => rest.every((r) => r.has(n) && sameType(memberType(r.get(n)!), memberType(f)))));
+}
+
+/** The fields of a kind and a state beyond the common ones. */
+const pairFields = (kind: KindDecl | undefined, state: StateDecl | undefined): Map<string, FieldDecl | ParamDecl> =>
+    new Map([...(kind ? kindFields(kind) : []), ...(state ? fieldsOf(state.members) : [])].map((f) => [f.name, f]));
+
+/** The states (on the frame's side) and the kinds of a frame's pairs, each once, in order. */
+const frameStates = (a: AggregateFrame): StateDecl[] => [...new Set(a.pairs.flatMap((p) => p[a.side] ?? []))];
+const frameKinds = (a: AggregateFrame): KindDecl[] => [...new Set(a.pairs.flatMap((p) => p.kind ?? []))];
+
+/**
+ * The aggregate as a `before`, `after` or `this` frame: the common fields and those it has in every one of its pairs
+ * (`before.x`), and what `match` on it chooses among.
+ */
+function aggregateFrameTy(name: 'before' | 'after' | 'this', aggregate: AggregateFrame): Ty {
+    const own = fieldsInEvery(aggregate.pairs.map((p) => pairFields(p.kind, p[aggregate.side])));
+    return { k: 'frame', name, fields: new Map([...aggregate.common, ...own]), aggregate };
+}
+
+/**
+ * Where `this` is not in scope: in `changes x = …` and `ensures`, which have `before` and `after` (`after` only in
+ * `ensures`, `before` only after a command that takes the aggregate), each hint naming those in scope there.
+ */
+const THIS_IN_CONTRACT = (where: 'changes' | 'ensures', factory: boolean): Hidden => {
+    const message = `'this' is not in scope in 'changes x = …' and 'ensures', where it would be ambiguous: 'before' is the aggregate before the outcome, 'after' the aggregate after it (in 'ensures').`;
+    if (where === 'ensures' && factory)
+        return { code: 'M001', message, hint: `write 'after' (a create has no 'before'), e.g. 'match (after) { … }'`, memberHint: (m) => `write 'after.${m}'` };
+    if (where === 'ensures')
+        return {
+            code: 'M001',
+            message,
+            hint: `write 'before' or 'after', e.g. 'match (before) { … }'`,
+            memberHint: (m) => `write 'before.${m}' or 'after.${m}'`,
+        };
+    if (factory)
+        return {
+            code: 'M001',
+            message,
+            hint: `a create's 'changes x = …' is over its parameters; relate the aggregate made in 'ensures' with 'after'`,
+            memberHint: (m) => `give the value by the parameters, or state it in 'ensures' with 'after.${m}'`,
+        };
+    return { code: 'M001', message, hint: `write 'before', e.g. 'match (before) { … }'`, memberHint: (m) => `write 'before.${m}'` };
+};
+
+/** In a create command's requirements and choice rules: no aggregate yet. */
+const THIS_IN_FACTORY = (cmd: string): Hidden => ({
+    code: 'M001',
+    message: `'this' is not in scope in the rules of 'create command ${cmd}': there is no aggregate before it is made.`,
+    hint: `decide by the parameters of '${cmd}'`,
+});
 
 /** Type-checks every invariant and command requirement in the workspace (M001 for names, M008, M009, M010, M018, M019). */
 export function checkInvariants(model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
@@ -296,21 +380,79 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         k ? new Map([...common, ...kindFields(k).map((f): [string, FieldDecl] => [f.name, f])]) : common;
     const kindNamed = (name: string | undefined): KindDecl | undefined => kinds.find((k) => k.name === name);
 
-    // Aggregate-level invariants: common fields only, applied to every state.
-    for (const inv of invariantsOf(agg.members)) {
-        checkInvariant(inv, { ctx, fields: common, hidden: new Map([...stateOnly(), ...kindOnly()]), lambdas: [], present: new Set() }, model, rules, sink, {
-            owner: agg,
-            fields: [...common.values()],
-            parameters: [],
-            lambdas: [],
+    // `this`, `before` and `after` as `match` subjects: the (kind, state) pairs the aggregate can be in there
+    const validStates = new Map<string, ReadonlySet<string>>(
+        kinds.length && states.length ? lifecyclesOf(agg, true).map((l) => [l.kind, new Set(l.validStates ?? [])]) : [],
+    );
+    const frame = (name: 'before' | 'after' | 'this', pairs: readonly AggregatePair[], group: object, statesWhat: string, kindsWhat: string): Ty =>
+        aggregateFrameTy(name, {
+            agg,
+            common,
+            pairs,
+            side: name === 'after' ? 'to' : 'from',
+            group,
+            statesWhat,
+            kindsWhat: `the kinds of ${kindsWhat}`,
         });
+    /** The kinds a rule of a command is for: its own kind, or every kind (none: `[undefined]`). */
+    const kindsFor = (own: KindDecl | undefined): readonly (KindDecl | undefined)[] => (own ? [own] : kinds.length ? kinds : [undefined]);
+    /** The pairs of the aggregate before a rule of `kind`, in one of `sources` (any, without states). */
+    const sourcePairs = (kind: KindDecl | undefined, sources: readonly StateDecl[]): AggregatePair[] =>
+        states.length ? [...new Set(sources)].map((from) => ({ ...(kind && { kind }), from })) : [{ ...(kind && { kind }) }];
+    /** The sources of a command for a kind: its transitions', its outcomes' and those of the kind's `on` case. */
+    const sourcesFor = (cmd: CommandDecl, kind: KindDecl | undefined): StateDecl[] =>
+        [
+            ...cmd.transitions.flatMap((t) => t.from),
+            ...cmd.outcomes.flatMap((o) => o.from),
+            ...(kind?.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes.flatMap((o) => o.from)) ?? []),
+        ].flatMap((r) => (r.target ? [r.target] : []));
+    /** `this` in the rules of one state or kind: the aggregate in that one state or kind, whose fields are read by name. */
+    const thisIn = (what: 'state' | 'kind', name: string): Hidden => ({
+        code: 'M001',
+        message: `'this' is not in scope in an invariant of ${what} '${name}', which holds in that one ${what}: its fields are read by name.`,
+        hint: `read the fields by name, or write the rule as an invariant of '${agg.name}' with 'match (this) { ${name} { … } => …, … }'`,
+        memberHint: (m) => `write '${m}'`,
+    });
+
+    // Aggregate-level invariants: common fields only, applied to every state.
+    const anyPairs: AggregatePair[] = kinds.length
+        ? kinds.flatMap((kind) => (states.length ? states.filter((s) => validStates.get(kind.name)?.has(s.name)).map((from) => ({ kind, from })) : [{ kind }]))
+        : states.map((from) => ({ from }));
+    const self = frame('this', anyPairs, {}, `the states of '${agg.name}'`, `'${agg.name}'`);
+    for (const inv of invariantsOf(agg.members)) {
+        checkInvariant(
+            inv,
+            {
+                ctx,
+                fields: common,
+                hidden: new Map([...stateOnly(), ...kindOnly()]),
+                lambdas: [],
+                present: new Set(),
+                frames: new Map([['this', self]]),
+            },
+            model,
+            rules,
+            sink,
+            {
+                owner: agg,
+                fields: [...common.values()],
+                parameters: [],
+                lambdas: [],
+            },
+        );
     }
     // Kind-level invariants: common + that kind's own fields, applied to every state of the kind.
     for (const k of kinds)
         for (const inv of invariantsOf(k.members))
             checkInvariant(
                 inv,
-                { ctx, fields: withKind(k), hidden: new Map([...stateOnly(), ...kindOnly(k.name)]), lambdas: [], present: new Set() },
+                {
+                    ctx,
+                    fields: withKind(k),
+                    hidden: new Map([...stateOnly(), ...kindOnly(k.name), ['this', thisIn('kind', k.name)]]),
+                    lambdas: [],
+                    present: new Set(),
+                },
                 model,
                 rules,
                 sink,
@@ -320,7 +462,7 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
     for (const s of states) {
         const fields = new Map(common);
         for (const f of fieldsOf(s.members)) fields.set(f.name, f);
-        const hidden = new Map([...stateOnly(s.name), ...kindOnly()]);
+        const hidden = new Map([...stateOnly(s.name), ...kindOnly(), ['this', thisIn('state', s.name)]]);
         for (const name of fields.keys()) hidden.delete(name);
         for (const inv of invariantsOf(s.members)) {
             checkInvariant(inv, { ctx, fields, hidden, lambdas: [], present: new Set() }, model, rules, sink, {
@@ -333,25 +475,40 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         }
     }
     const stateFields = (s: StateDecl): Map<string, FieldDecl | ParamDecl> => new Map(fieldsOf(s.members).map((f) => [f.name, f]));
-    /** The fields every one of `states` has, with one type (all of them: none listed). */
-    const inEvery = (list: readonly StateDecl[]): Map<string, FieldDecl | ParamDecl> => {
-        if (!list.length) return new Map();
-        const [first, ...rest] = list.map(stateFields);
-        return new Map([...first!].filter(([n, f]) => rest.every((r) => r.has(n) && sameType(memberType(r.get(n)!), memberType(f)))));
-    };
     const contract = (
         cmd: CommandDecl,
-        base: ReadonlyMap<string, FieldDecl | ParamDecl>,
+        own: KindDecl | undefined,
         from: readonly StateDecl[],
         to: readonly StateDecl[],
         changes: CommandDecl['changes'],
         ensures: Expr | undefined,
+        /** The outcome, or the command of the shorthand form: `outcome 'paused'`. */
+        label: string,
+        /** The (source, target) pairs of the outcome, or of the shorthand form's transitions. */
+        transitions: readonly [StateDecl | undefined, StateDecl | undefined][],
     ): void => {
         if (!changes.some((c) => c.value) && !ensures) return;
+        const base = withKind(own);
         const params = new Map<string, FieldDecl | ParamDecl>(cmd.params.map((p) => [p.name, p]));
-        const before: Ty | undefined = cmd.factory ? undefined : { k: 'frame', name: 'before', fields: new Map([...base, ...inEvery(from)]) };
-        const after: Ty = { k: 'frame', name: 'after', fields: new Map([...base, ...inEvery(to)]) };
-        const scope = (frames: [string, Ty][]): Scope => ({ ctx, fields: params, hidden: new Map(), lambdas: [], present: new Set(), frames: new Map(frames) });
+        // before and after are of one transition of one kind: a case of either narrows both
+        const pairs = kindsFor(own).flatMap((kind) =>
+            (transitions.length ? transitions : [[undefined, undefined] as const]).map(([f, t]): AggregatePair => ({
+                ...(kind && { kind }),
+                ...(f && { from: f }),
+                ...(t && { to: t }),
+            })),
+        );
+        const group = {};
+        const before: Ty | undefined = cmd.factory ? undefined : frame('before', pairs, group, `the source states of ${label}`, label);
+        const after: Ty = frame('after', pairs, group, `the target states of ${label}`, label);
+        const scope = (frames: [string, Ty][], where: 'changes' | 'ensures'): Scope => ({
+            ctx,
+            fields: params,
+            hidden: new Map([['this', THIS_IN_CONTRACT(where, cmd.factory)]]),
+            lambdas: [],
+            present: new Set(),
+            frames: new Map(frames),
+        });
         // `before` / `after` are the frames here: a lambda of that name would read as one and be another
         const shadowing = (x: Expr): void => {
             const names =
@@ -370,7 +527,7 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
         if (ensures) shadowing(ensures);
         for (const c of changes) {
             if (!c.value) continue;
-            const t = new ExprChecker(model, rules, sink).check(c.value, scope(before ? [['before', before]] : []));
+            const t = new ExprChecker(model, rules, sink).check(c.value, scope(before ? [['before', before]] : [], 'changes'));
             // the field in each target that has it (the shorthand form may have several targets): each takes the value
             const common = base.get(c.name);
             const fields = common ? [common] : to.flatMap((s) => (stateFields(s).has(c.name) ? [stateFields(s).get(c.name)!] : []));
@@ -397,7 +554,10 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
             }
         }
         if (!ensures) return;
-        const t = new ExprChecker(model, rules, sink).check(ensures, scope([...(before ? [['before', before] as [string, Ty]] : []), ['after', after]]));
+        const t = new ExprChecker(model, rules, sink).check(
+            ensures,
+            scope([...(before ? [['before', before] as [string, Ty]] : []), ['after', after]], 'ensures'),
+        );
         if (t.k !== 'error' && !isBool(t)) rules.error('M021', `'ensures' must be a Bool expression, but has type '${showType(t)}'.`, ensures.at);
         // an equality that determines a field of `after` alone belongs in `changes x = …`
         const conjuncts = (x: Expr): Expr[] => (x.k === 'binary' && x.op === 'and' ? [...conjuncts(x.left), ...conjuncts(x.right)] : [x]);
@@ -417,40 +577,107 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
     for (const cmd of commandsOf(agg)) {
         // a kind's command sees its kind's fields; a common command the common ones
         const own = kindNamed(cmd.ofKind);
-        const base = withKind(own);
         const targets = (o: { to: { target?: StateDecl } }): StateDecl[] => (o.to.target ? [o.to.target] : []);
         const sources = (o: { from: { target?: StateDecl }[] }): StateDecl[] => o.from.flatMap((r) => (r.target ? [r.target] : []));
-        for (const o of cmd.outcomes) contract(cmd, base, sources(o), targets(o), o.changes, o.ensures);
+        /** The (source, target) pairs of an outcome. */
+        const steps = (o: OutcomeDecl): [StateDecl | undefined, StateDecl | undefined][] =>
+            (sources(o).length ? sources(o) : [undefined]).map((f) => [f, o.to.target]);
+        for (const o of cmd.outcomes) contract(cmd, own, sources(o), targets(o), o.changes, o.ensures, `outcome '${o.name}'`, steps(o));
         for (const k of kinds)
             for (const c of k.cases.filter((x) => x.command.text === cmd.name))
-                for (const o of c.outcomes) contract(cmd, withKind(k), sources(o), targets(o), o.changes, o.ensures);
+                for (const o of c.outcomes) contract(cmd, k, sources(o), targets(o), o.changes, o.ensures, `outcome '${o.name}'`, steps(o));
         if (!cmd.outcomes.length)
             contract(
                 cmd,
-                base,
+                own,
                 cmd.transitions.flatMap((tr) => tr.from.flatMap((r) => (r.target ? [r.target] : []))),
                 cmd.transitions.flatMap((tr) => tr.to.flatMap((r) => (r.target ? [r.target] : []))),
                 cmd.changes,
                 cmd.ensures,
+                `command '${cmd.name}'`,
+                cmd.transitions.flatMap((tr) =>
+                    (tr.from.length ? tr.from.map((r) => r.target) : [undefined]).flatMap((f) =>
+                        tr.to.map((r): [StateDecl | undefined, StateDecl | undefined] => [f, r.target]),
+                    ),
+                ),
             );
-        if (cmd.requirements.length) checkRequirements(agg, cmd, withKind(own), kindOnly(own?.name), ctx, model, rules, sink);
+        // `this` in a decision rule: the aggregate before the command, of one of its kinds in one of that kind's sources
+        const selfBefore = (pairs: readonly AggregatePair[], label: string): Ty => frame('this', pairs, {}, `the source states of ${label}`, label);
+        if (cmd.requirements.length)
+            checkRequirements(
+                agg,
+                cmd,
+                withKind(own),
+                kindOnly(own?.name),
+                ctx,
+                model,
+                rules,
+                sink,
+                selfBefore(
+                    kindsFor(own).flatMap((k) => sourcePairs(k, sourcesFor(cmd, k))),
+                    `command '${cmd.name}'`,
+                ),
+            );
         for (const outcome of cmd.outcomes)
-            checkChoice(outcome, cmd, withKind(own), ctx, model, rules, sink, { owner: agg, command: cmd, targetOutcome: outcome, kind: own });
+            checkChoice(
+                outcome,
+                cmd,
+                withKind(own),
+                ctx,
+                model,
+                rules,
+                sink,
+                { owner: agg, command: cmd, targetOutcome: outcome, kind: own },
+                selfBefore(
+                    kindsFor(own).flatMap((k) => sourcePairs(k, sources(outcome))),
+                    `outcome '${outcome.name}'`,
+                ),
+            );
         for (const k of kinds) {
             for (const c of k.cases.filter((c) => c.command.text === cmd.name)) {
                 const sources = c.outcomes.flatMap((o) => o.from.map((r) => r.target)).filter((s): s is StateDecl => !!s);
                 for (const r of c.requirements) {
                     checkDeclared(r, rules);
-                    checkDecisionExpr(r.expr, `Requirement '${r.name}'`, r.exprAt, cmd, withKind(k), ctx, model, rules, sources, kindOnly(k.name), sink, {
-                        owner: k,
-                        command: cmd,
-                        onCase: c,
-                        sourceStates: sources,
-                        kind: k,
-                    });
+                    checkDecisionExpr(
+                        r.expr,
+                        `Requirement '${r.name}'`,
+                        r.exprAt,
+                        cmd,
+                        withKind(k),
+                        ctx,
+                        model,
+                        rules,
+                        sources,
+                        kindOnly(k.name),
+                        sink,
+                        {
+                            owner: k,
+                            command: cmd,
+                            onCase: c,
+                            sourceStates: sources,
+                            kind: k,
+                        },
+                        selfBefore(sourcePairs(k, sources), `'on ${cmd.name}' of kind '${k.name}'`),
+                    );
                 }
                 for (const outcome of c.outcomes)
-                    checkChoice(outcome, cmd, withKind(k), ctx, model, rules, sink, { owner: k, command: cmd, onCase: c, targetOutcome: outcome, kind: k });
+                    checkChoice(
+                        outcome,
+                        cmd,
+                        withKind(k),
+                        ctx,
+                        model,
+                        rules,
+                        sink,
+                        { owner: k, command: cmd, onCase: c, targetOutcome: outcome, kind: k },
+                        selfBefore(
+                            sourcePairs(
+                                k,
+                                outcome.from.flatMap((r) => (r.target ? [r.target] : [])),
+                            ),
+                            `outcome '${outcome.name}'`,
+                        ),
+                    );
             }
         }
     }
@@ -465,6 +692,7 @@ function checkChoice(
     rules: RuleSink,
     sink: ExpressionFactsSink | undefined,
     scopeInfo: Pick<NonNullable<ExpressionFact['scope']>, 'owner' | 'command' | 'onCase' | 'targetOutcome' | 'kind' | 'sourceStates'>,
+    self: Ty,
 ): void {
     checkDecisionExpr(
         outcome.select?.expr,
@@ -479,6 +707,7 @@ function checkChoice(
         new Map(),
         sink,
         { ...scopeInfo, sourceStates: outcome.from.map((r) => r.target).filter((s): s is StateDecl => !!s) },
+        self,
     );
 }
 
@@ -495,6 +724,8 @@ function checkDecisionExpr(
     hidden: Map<string, Hidden> = new Map(),
     sink?: ExpressionFactsSink,
     scopeInfo?: Pick<NonNullable<ExpressionFact['scope']>, 'owner' | 'command' | 'onCase' | 'targetOutcome' | 'kind' | 'sourceStates'>,
+    /** `this`: the aggregate before the command (none for a create command). */
+    self?: Ty,
 ): void {
     if (!expr) return;
     const fields = new Map(cmd.factory ? [] : common);
@@ -517,9 +748,10 @@ function checkDecisionExpr(
     const t = new ExprChecker(model, rules, sink, rootFact ? (name, binding) => rootFact.lambdas.push({ name, binding }) : undefined).check(expr, {
         ctx,
         fields,
-        hidden,
+        hidden: new Map([...hidden, ...(cmd.factory ? [['this', THIS_IN_FACTORY(cmd.name)] as const] : [])]),
         lambdas: [],
         present: new Set(),
+        ...(!cmd.factory && self && { frames: new Map([['this', self]]) }),
     });
     if (t.k !== 'error' && !isBool(t)) rules.error('M008', `${label} must be a Bool expression, but has type '${showType(t)}'.`, at);
 }
@@ -552,7 +784,9 @@ function checkRequirements(
     ctx: string,
     model: SourceModel,
     rules: RuleSink,
-    sink?: ExpressionFactsSink,
+    sink: ExpressionFactsSink | undefined,
+    /** `this`: the aggregate before the command, of one of its kinds in one of that kind's source states. */
+    self: Ty,
 ): void {
     const states = statesOf(agg);
     const grouped = kindsOf(agg).flatMap((k) => k.cases.filter((c) => c.command.text === cmd.name).flatMap((c) => c.outcomes));
@@ -563,7 +797,7 @@ function checkRequirements(
         ]),
     ].filter((s): s is StateDecl => !!s);
     const fields = new Map<string, FieldDecl | ParamDecl>();
-    const hidden = new Map<string, Hidden>(cmd.factory ? [] : kindHidden);
+    const hidden = new Map<string, Hidden>(cmd.factory ? [['this', THIS_IN_FACTORY(cmd.name)]] : kindHidden);
     if (cmd.factory) {
         const all = [...common.keys(), ...statesHaving(states, common).keys()];
         for (const name of all) {
@@ -586,7 +820,7 @@ function checkRequirements(
             if (fields.has(name)) continue;
             hidden.set(name, {
                 message: `Field '${name}' is in state ${quoted(where)} only; the requirements of command '${cmd.name}' see the fields that every source state has (with the same type).`,
-                hint: `declare '${name}' with the same type in every source state of '${cmd.name}' (or among the common fields), or split the command by source state`,
+                hint: `bind it in a case of 'match (this)': 'match (this) { ${where[0]} { ${name} } => … }'; or declare '${name}' with the same type in every source state of '${cmd.name}' (or among the common fields)`,
             });
         }
     }
@@ -620,6 +854,7 @@ function checkRequirements(
             hidden,
             lambdas: [],
             present: new Set(),
+            ...(!cmd.factory && { frames: new Map([['this', self]]) }),
         });
         if (t.k !== 'error' && !isBool(t)) {
             rules.error('M008', `Requirement '${req.name}' of command '${cmd.name}' must be a Bool expression, but has type '${showType(t)}'.`, req.exprAt);
@@ -667,6 +902,8 @@ type ExprOf<K extends Expr['k']> = Extract<Expr, { k: K }>;
 class ExprChecker {
     private readonly symbols = new WeakMap<Expr, NonNullable<ExpressionFact['symbol']>>();
     private readonly comparisons = new WeakMap<Expr, NonNullable<ExpressionFact['comparison']>>();
+    /** The subjects of `match`, where `this` may stand. */
+    private readonly matchSubjects = new WeakSet<Expr>();
     constructor(
         private readonly model: SourceModel,
         private readonly rules: RuleSink,
@@ -789,10 +1026,16 @@ class ExprChecker {
             }
             case 'match': {
                 // `match (u) { V { f } => e, … }`: every variant of the union once, each body of one type
+                this.matchSubjects.add(e.subject);
                 const subject = this.check(e.subject, scope);
                 if (subject.k === 'error') return ERROR;
+                if (subject.k === 'frame' && subject.aggregate) return this.matchAggregate(e, subject.aggregate, scope);
                 if (subject.k !== 'union') {
-                    this.rules.error('M009', `'match' takes a union value, but '${e.subject.text}' is a '${showType(subject)}'.`, e.subjectAt);
+                    this.rules.error(
+                        'M009',
+                        `'match' takes a union value or the aggregate ('this', 'before', 'after'), but '${e.subject.text}' is a '${showType(subject)}'.`,
+                        e.subjectAt,
+                    );
                     return ERROR;
                 }
                 const u = subject.decl;
@@ -831,26 +1074,23 @@ class ExprChecker {
                     const fields = new Map(fieldsOf(variant.members).map((f) => [f.name, f]));
                     const lambdas = [...scope.lambdas];
                     for (const name of c.bindings) {
+                        this.reserved(name, c.at);
                         const f = fields.get(name);
                         if (!f) this.rules.error('M009', `Variant '${c.variant}' has no field '${name}'.`, c.at, didYouMean(name, [...fields.keys()]));
                         lambdas.push([name, f ? memberType(f) : ERROR, c.body]);
                     }
                     const t = this.check(c.body, { ...scope, lambdas });
                     if (t.k === 'error') continue;
-                    // the cases agree by type, their scales aside: the join takes the larger, and scale fit checks it where it is placed
-                    if (result && !assignable(result, t, false) && !assignable(t, result, false)) {
+                    const joined = joinCase(result, t);
+                    if (!joined) {
                         this.rules.error(
                             'M009',
-                            `The cases of 'match' give '${showType(result)}' and '${showType(t)}': every case must have the same type.`,
+                            `The cases of 'match' give '${showType(result!)}' and '${showType(t)}': every case must have the same type.`,
                             c.at,
                         );
                         continue;
                     }
-                    if (!result) result = t;
-                    else {
-                        const inner = joinScale(result.k === 'opt' ? result.inner : result, t.k === 'opt' ? t.inner : t);
-                        result = result.k === 'opt' || t.k === 'opt' ? { k: 'opt', inner } : inner;
-                    }
+                    result = joined;
                 }
                 const missing = u.variants.filter((v) => !seen.has(v.name)).map((v) => v.name);
                 if (missing.length) {
@@ -921,6 +1161,7 @@ class ExprChecker {
                 let value: Ty = coll.elem;
                 if (e.param !== undefined && e.body) {
                     this.recordLambda?.(e.param, e);
+                    this.reserved(e.param, e.at);
                     value = this.check(e.body, { ...scope, lambdas: [...scope.lambdas, [e.param, coll.elem, e]] });
                     if (value.k === 'error') return ERROR;
                 }
@@ -978,6 +1219,7 @@ class ExprChecker {
             }
             case 'quantifier': {
                 this.recordLambda?.(e.param, e);
+                this.reserved(e.param, e.at);
                 const coll = this.check(e.collection, scope);
                 let elem: Ty = ERROR;
                 if (coll.k === 'list') elem = coll.elem;
@@ -1019,6 +1261,7 @@ class ExprChecker {
                     return BOOL;
                 }
                 this.recordLambda?.(e.param, e);
+                this.reserved(e.param, e.at);
                 const inner: Scope = { ...scope, lambdas: [...scope.lambdas, [e.param, elem, e]] };
                 e.keys.forEach((key, i) => {
                     const t = this.check(key, inner);
@@ -1057,6 +1300,139 @@ class ExprChecker {
             case 'binary':
                 return this.binary(e, scope);
         }
+    }
+
+    /** M021: `this` is the aggregate in `match (this)`, and names no lambda parameter or binding (as `before` / `after` in contracts). */
+    private reserved(name: string, at: import('../source-model.js').Site): void {
+        if (name === 'this')
+            this.rules.error('M021', `'this' is the aggregate in 'match (this)': it cannot name a lambda parameter or a binding.`, at, `give it another name`);
+    }
+
+    /**
+     * `match (this) { State { f } => e, … }` (and over `before`, `after`): one case for each state the aggregate can be
+     * in there, or for each kind (ADR 0037), never both; a case reads the fields it names (common ones, its state's or
+     * its kind's), and in it the subject is in that state or kind, for a `match` inside it.
+     */
+    private matchAggregate(e: ExprOf<'match'>, frame: AggregateFrame, scope: Scope): Ty {
+        const { agg } = frame;
+        const subject = e.subject.text;
+        const states = statesOf(agg);
+        const kinds = kindsOf(agg);
+        if (!states.length && !kinds.length) {
+            this.rules.error(
+                'M009',
+                `'match (${subject})' chooses by the state or the kind of '${agg.name}', which has neither.`,
+                e.subjectAt,
+                `read the fields of '${agg.name}' by name`,
+            );
+            return ERROR;
+        }
+        // a name of a state and of a kind is reported by M011 (the generated types); it is the state's here
+        const sort = (name: string): 'state' | 'kind' | undefined =>
+            states.some((s) => s.name === name) ? 'state' : kinds.some((k) => k.name === name) ? 'kind' : undefined;
+        const sorts = new Set(e.cases.map((c) => sort(c.variant)).filter((x) => x !== undefined));
+        if (sorts.size > 1) {
+            const named = (which: 'state' | 'kind'): string => quoted(e.cases.filter((c) => sort(c.variant) === which).map((c) => c.variant));
+            this.rules.error(
+                'M009',
+                `'match (${subject})' names states (${named('state')}) and kinds (${named('kind')}): one 'match' chooses by the state or by the kind, not both.`,
+                e.at,
+                `match on one of them, and write a 'match (${subject})' over the other inside a case`,
+            );
+            return ERROR;
+        }
+        const by: 'state' | 'kind' = [...sorts][0] ?? (states.length ? 'state' : 'kind');
+        const among: readonly { name: string }[] = by === 'state' ? frameStates(frame) : frameKinds(frame);
+        const what = by === 'state' ? frame.statesWhat : frame.kindsWhat;
+        const Which = by === 'state' ? 'State' : 'Kind';
+        const seen = new Set<string>();
+        let result: Ty | undefined;
+        for (const c of e.cases) {
+            const which = sort(c.variant);
+            if (!which) {
+                const names = [...states, ...kinds].map((x) => x.name);
+                const noun = !kinds.length ? 'state' : !states.length ? 'kind' : 'state or kind';
+                this.rules.error('M009', `'${agg.name}' has no ${noun} '${c.variant}'.`, c.variantAt, didYouMean(c.variant, names));
+                continue;
+            }
+            if (!among.some((x) => x.name === c.variant)) {
+                this.rules.error(
+                    'M009',
+                    `${Which} '${c.variant}' is not among ${what} (${quoted(among.map((x) => x.name)) || 'none'}): 'match (${subject})' has a case for each of them, and only for them.`,
+                    c.variantAt,
+                    `remove the case '${c.variant}'`,
+                );
+                continue;
+            }
+            if (seen.has(c.variant)) this.rules.error('M009', `${Which} '${c.variant}' has two cases.`, c.variantAt);
+            seen.add(c.variant);
+            // in the case: the pairs of that state or kind, for the subject and the frames that narrow with it
+            const keep = (p: AggregatePair): boolean => (by === 'state' ? p[frame.side]?.name === c.variant : p.kind?.name === c.variant);
+            const pairs = frame.pairs.filter(keep);
+            const subjectName = e.subject.k === 'name' && (e.subject.name === 'before' || e.subject.name === 'after') ? e.subject.name : 'this';
+            const where = `where '${subjectName}' is ${by === 'state' ? 'in' : 'of'} ${by} '${c.variant}'`;
+            const narrow = (name: 'before' | 'after' | 'this', a: AggregateFrame, own: boolean): Ty =>
+                aggregateFrameTy(name, {
+                    ...a,
+                    pairs,
+                    statesWhat: own && by === 'state' ? `the states of the case '${c.variant}'` : `${a.statesWhat} ${where}`,
+                    kindsWhat: own && by === 'kind' ? `the kinds of the case '${c.variant}'` : `${a.kindsWhat} ${where}`,
+                });
+            const inner = narrow(subjectName, frame, true);
+            const fields = inner.k === 'frame' ? inner.fields : new Map<string, FieldDecl | ParamDecl>();
+            const lambdas = [...scope.lambdas];
+            for (const name of c.bindings) {
+                this.reserved(name, c.at);
+                const f = fields.get(name);
+                if (!f)
+                    this.rules.error(
+                        'M009',
+                        `${Which} '${c.variant}' of '${agg.name}' has no field '${name}'${by === 'state' ? '' : ' that every state it can be in here has'}.`,
+                        c.at,
+                        didYouMean(name, [...fields.keys()]),
+                    );
+                const shadowed = scope.fields.get(name);
+                if (f && shadowed?.kind === 'param')
+                    this.rules.error(
+                        'M019',
+                        `The binding '${name}' in the case '${c.variant}' of 'match (${subject})' has the name of a parameter, which it would hide.`,
+                        c.at,
+                        e.subject.k === 'name' && e.subject.name !== 'this'
+                            ? `read the field as '${e.subject.name}.${name}' without binding it, or rename the parameter`
+                            : `rename the parameter (e.g. 'new${name[0]!.toUpperCase()}${name.slice(1)}'), so that '${name}' in the case means the field`,
+                    );
+                lambdas.push([name, f ? memberType(f) : ERROR, c.body]);
+            }
+            const frames = scope.frames
+                ? new Map(
+                      [...scope.frames].map(([name, ty]): [string, Ty] =>
+                          name === subjectName
+                              ? [name, inner]
+                              : ty.k === 'frame' && ty.aggregate?.group === frame.group
+                                ? [name, narrow(ty.name, ty.aggregate, false)]
+                                : [name, ty],
+                      ),
+                  )
+                : undefined;
+            const t = this.check(c.body, { ...scope, lambdas, ...(frames && { frames }) });
+            if (t.k === 'error') continue;
+            const joined = joinCase(result, t);
+            if (!joined) {
+                this.rules.error('M009', `The cases of 'match' give '${showType(result!)}' and '${showType(t)}': every case must have the same type.`, c.at);
+                continue;
+            }
+            result = joined;
+        }
+        const missing = among.filter((x) => !seen.has(x.name)).map((x) => x.name);
+        if (missing.length) {
+            this.rules.error(
+                'M009',
+                `'match (${subject})' has no case for ${quoted(missing)}: it has one case for each of ${what} (${quoted(among.map((x) => x.name))}).`,
+                e.at,
+            );
+            return ERROR;
+        }
+        return result ?? ERROR;
     }
 
     private binary(e: ExprOf<'binary'>, scope: Scope): Ty {
@@ -1199,8 +1575,20 @@ class ExprChecker {
     }
 
     private name(name: string, node: Expr, scope: Scope): Ty {
-        const frame = scope.frames?.get(name);
+        // a lambda parameter or binding named `this` is reported where it is declared (M021): read it as that
+        // (and a field or parameter named `this` where it is declared, M030), outside a `match` subject
+        const declaredThis = name === 'this' && (scope.lambdas.some(([n]) => n === 'this') || (scope.fields.has('this') && !this.matchSubjects.has(node)));
+        const frame = declaredThis ? undefined : scope.frames?.get(name);
         if (frame) {
+            if (name === 'this' && !this.matchSubjects.has(node)) {
+                this.rules.error(
+                    'M009',
+                    `'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }'.`,
+                    node.at,
+                    `read the fields by name, or choose by its state or kind with 'match (this) { … }'`,
+                );
+                return ERROR;
+            }
             this.symbols.set(node, { kind: 'frame', name, id: name });
             return frame;
         }
@@ -1244,7 +1632,7 @@ class ExprChecker {
         }
         const hidden = scope.hidden.get(name);
         if (hidden) {
-            this.rules.error('M010', hidden.message, node.at, hidden.hint);
+            this.rules.error(hidden.code ?? 'M010', hidden.message, node.at, hidden.hint);
             return ERROR;
         }
         this.rules.error('M001', `Cannot resolve name '${name}'.`, node.at, didYouMean(name, this.namesIn(scope)));
@@ -1267,6 +1655,19 @@ class ExprChecker {
     }
 
     private member(e: ExprOf<'member'>, scope: Scope): Ty {
+        // `this.x`: the fields of the aggregate are read by name
+        const r = e.receiver;
+        if (r.k === 'name' && r.name === 'this' && !scope.lambdas.some(([n]) => n === 'this') && !scope.fields.has('this')) {
+            const hidden = scope.hidden.get('this');
+            if (scope.frames?.has('this')) {
+                this.rules.error('M001', `'this.${e.member}': the fields of the aggregate are read by name here.`, e.at, `write '${e.member}'`);
+                return ERROR;
+            }
+            if (hidden?.memberHint) {
+                this.rules.error(hidden.code ?? 'M010', hidden.message, r.at, hidden.memberHint(e.member));
+                return ERROR;
+            }
+        }
         if (!e.optional) return this.memberOf(e, this.infer(e.receiver, scope), scope);
         // `x?.f`: the field of an optional value, absent when the value is
         const recv = this.infer(e.receiver, scope);
@@ -1398,6 +1799,17 @@ class ExprChecker {
                 return ERROR;
         }
     }
+}
+
+/**
+ * The type of the cases of a `match` so far (`result`) with one more case of type `t`: they agree by type, their scales
+ * aside (the join takes the larger, and scale fit checks it where it is placed); `undefined` when they do not agree.
+ */
+function joinCase(result: Ty | undefined, t: Ty): Ty | undefined {
+    if (!result) return t;
+    if (!assignable(result, t, false) && !assignable(t, result, false)) return undefined;
+    const inner = joinScale(result.k === 'opt' ? result.inner : result, t.k === 'opt' ? t.inner : t);
+    return result.k === 'opt' || t.k === 'opt' ? { k: 'opt', inner } : inner;
 }
 
 function comparisonKind(l: Ty, r: Ty, ordering: boolean): NonNullable<ExpressionFact['comparison']> {
