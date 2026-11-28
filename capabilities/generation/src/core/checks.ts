@@ -411,7 +411,7 @@ export class ExprCompiler {
             case 'count':
             case 'length': {
                 const value = this.compile(e.k === 'count' ? e.collection : e.operand, scope);
-                return { js: e.k === 'length' ? `Array.from(${value.js}).length` : `${value.js}.length` };
+                return { js: e.k === 'length' && primOf(strip(value.ty)) === 'String' ? `Array.from(${value.js}).length` : `${value.js}.length` };
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);

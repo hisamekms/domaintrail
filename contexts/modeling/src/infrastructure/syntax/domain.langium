@@ -205,7 +205,8 @@ Unary infers Expression:
     {infer NotExpr} ('not' | '!') operand=Unary | Postfix;
 
 Postfix infers Expression:
-    Primary ({infer MemberAccess.receiver=current} '.' member=ValueName)*;
+    Primary ({infer MemberAccess.receiver=current} '.' member=ValueName
+        (call?='(' (param=LambdaParam '=>')? (args+=Expression (',' args+=Expression)*)? ')')?)*;
 
 Primary infers Expression:
     '(' Expression ')'

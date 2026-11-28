@@ -522,8 +522,8 @@ class ExprChecker {
             }
             case 'length': {
                 const t = this.check(e.operand, scope);
-                if (t.k !== 'error' && !isTextual(t)) {
-                    this.rules.error('M009', `length() requires a String value, but got '${showType(t)}'.`, e.operandAt);
+                if (t.k !== 'error' && !isTextual(t) && t.k !== 'list') {
+                    this.rules.error('M009', `'.length' is the size of a list or a string, not of '${showType(t)}'.`, e.operandAt);
                 }
                 return COMPUTED_INT;
             }

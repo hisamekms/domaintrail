@@ -54,7 +54,7 @@ describe('domain primitive declarations', () => {
   primitive D: Int { other > 0 }
   primitive E: Decimal { value in 0..1.5 }`);
         expect(a.diagnostics.map((d) => `${d.code} ${d.message}`)).toEqual([
-            "M009 length() requires a String value, but got 'Int'.",
+            "M009 '.length' is the size of a list or a string, not of 'Int'.",
             "M009 Operator '>' cannot be applied to 'String' and 'Int'.",
             "M008 The constraint of 'C' must be a Bool expression, but has type 'Int'.",
             "M001 Cannot resolve name 'other'.",
