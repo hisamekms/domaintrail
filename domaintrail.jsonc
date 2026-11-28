@@ -1,5 +1,6 @@
 {
   "$schema": "./schema/domaintrail.schema.json",
+  "language": 1,
   // The model of DomainTrail itself, one configuration for all its contexts (ADR 0028, decision 9): the kernel, Modeling,
   // Collaboration and Knowledge, each generated into its package (committed) and imported from the others by the package's
   // module. test/self-contracts.test.ts fails when the model does not check clean, is not formatted, or generating it

@@ -1282,7 +1282,7 @@ export type SemanticSymbolKind = 'field' | 'parameter' | 'lambda' | 'value' | 's
 export type SemanticCardinality = 'one' | 'optional' | 'many' | 'nonEmpty';
 
 /** @see contexts/modeling/model/semantic.dt:43 */
-export type SemanticComparisonKind = 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
+export type SemanticComparisonKind = 'primitive' | 'domainPrimitive' | 'entityStructural' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
 
 /** @see contexts/modeling/model/semantic.dt:53 */
 export type SemanticObligationKind = 'externalCheck' | 'naturalLanguage';

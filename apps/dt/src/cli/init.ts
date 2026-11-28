@@ -2,6 +2,7 @@ import { readdir, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import type { ResolvedConfig } from '../config/config.js';
 import type { CliDeps } from './ports.js';
+import { DOMAIN_LANGUAGE } from '@domaintrail/modeling';
 
 const CONFIG = 'domaintrail.jsonc';
 const SOURCES = ['model/**/*.dt', 'stormings/**/*.dtes'];
@@ -129,6 +130,8 @@ export async function initPlan(root: string, config: ResolvedConfig, deps: Pick<
         const content = `${JSON.stringify(
             {
                 $schema: './node_modules/domaintrail/schema/domaintrail.schema.json',
+                // a new model is written in the current language: `dt migrate domain` has no step to run on it
+                language: DOMAIN_LANGUAGE,
                 sources: SOURCES,
                 generate: { ts: { out: 'generated/domain' } },
                 knowledge: { store: 'files' },

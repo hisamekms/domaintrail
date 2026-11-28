@@ -37,7 +37,7 @@ import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, is
 export interface ExpressionFact {
     expression: Expr;
     type?: Ty;
-    comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
+    comparison?: 'primitive' | 'domainPrimitive' | 'entityStructural' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: {
         kind:
             | 'field'
@@ -1369,7 +1369,7 @@ class ExprChecker {
 function comparisonKind(l: Ty, r: Ty, ordering: boolean): NonNullable<ExpressionFact['comparison']> {
     if (ordering) return 'ordered';
     if (l.k === 'tag' && r.k === 'tag') return 'enumValue';
-    if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityId' : 'valueObjectStructural';
+    if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityStructural' : 'valueObjectStructural';
     if (l.k === 'union' && r.k === 'union' && l.decl === r.decl) return 'unionStructural';
     if (l.k === 'enum' && r.k === 'enum') return 'enumValue';
     if (isDomainPrimitive(l) || isDomainPrimitive(r)) return 'domainPrimitive';
@@ -1452,8 +1452,8 @@ const baseOf = (t: Ty): Ty => ({ k: 'prim', name: basePrimitive(t)! });
 const MAX_ROUND_SCALE = 30;
 
 /**
- * `==`, `!=`, `unique` and `contains` compare by this rule: value objects by all their fields, entities by `id`,
- * unions by discriminator and fields. Lists and optionals cannot be compared.
+ * `==`, `!=`, `unique` and `contains` compare by this rule: value objects and owned entities by all their fields
+ * (ADR 0042), unions by discriminator and fields. Lists and optionals cannot be compared.
  */
 /**
  * Whether a value of type `got` can be passed where `want` is declared (an argument, a function's result); `scaled`

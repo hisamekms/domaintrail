@@ -43,7 +43,7 @@ context Modeling {
   enum SemanticComparisonKind {
     primitive
     domainPrimitive
-    entityId
+    entityStructural
     valueObjectStructural
     unionStructural
     ordered

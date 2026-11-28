@@ -6,12 +6,14 @@ import { Command, InvalidArgumentError, Option } from 'commander';
 import {
     analyzeDomain,
     completeChanges,
+    DOMAIN_LANGUAGE,
     semanticIROf,
     contextNames,
     formatDomain,
     generationGateDiagnostics,
     hasExternalObligations,
     migrateDomain,
+    migrateEntityComparisons,
 } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
@@ -19,7 +21,7 @@ import { type Analysis, analyze } from '@domaintrail/analysis';
 import { compareDiagnostics, formatDiagnostic, jsonDiagnostic, type JsonDiagnostic } from '@domaintrail/kernel';
 import { JOURNEY_FILE, journeyDiagnostics, journeyNames } from '@domaintrail/collaboration';
 import { KNOWLEDGE_DIR, knowledgeDiagnostics, readKnowledgeFiles } from '@domaintrail/knowledge';
-import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig } from '../config/config.js';
+import { checkTestsTypes, checkTsContexts, ConfigError, type ResolvedConfig, withLanguage } from '../config/config.js';
 import { guideTopic, parseGuide, practiceOf, quickReference } from './guide.js';
 import {
     AGENT_ROLES,
@@ -243,7 +245,7 @@ Examples:
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
-  dt migrate domain             rewrite .dt files to the TS-like expression syntax (and → &&, p implies q → !(p) || q)
+  dt migrate domain             rewrite .dt files to the current language (and → &&, entity a == b → a.id == b.id once)
   dt migrate dtes               rewrite .dtes files of earlier versions (v0.1's \`actor\`/\`target\`, a policy's command's \`reads\`) to the current grammar
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
@@ -626,7 +628,9 @@ Examples:
 
     migrating
         .command('domain')
-        .description('Rewrite .dt files to the TS-like expression syntax in place: `and`/`or`/`not` → `&&`/`||`/`!`, `p implies q` → `!(p) || q`.')
+        .description(
+            'Rewrite .dt files to the current DomainTrail language in place, keeping what they mean: the TS-like syntax, and each versioned step once.',
+        )
         .argument('[files...]', 'files to migrate, relative to the current directory (default: the .dt sources of the workspace)')
         .option('--dry-run', 'write nothing; list what would be rewritten')
         .addHelpText(
@@ -635,8 +639,17 @@ Examples:
 The expression syntax of DomainTrail is moving to a TS-like one (docs/plans/formal-verification/language-revision.md).
 This rewrites the constructs that have a new spelling with the same meaning, and nothing else: comments and layout
 stay, parentheses are added only where the meaning needs them (\`p implies q\` becomes \`!(p) || q\`), and a second
-run changes nothing. A file that does not parse is listed and left as it is.
-Exits 0 when every file was migrated, 1 when a file does not parse or no .dt file is found, 2 on an invalid config.
+run changes nothing. It also completes \`changes\` with the fields an outcome makes exist.
+
+Steps that change what a model means are versioned: the workspace records its language version (\`"language"\` in
+domaintrail.jsonc; none: 0, the oldest, and \`dt init\` writes the current one). A run does the steps newer than it,
+once, and records the version reached (not with --dry-run or files given, nor while a file does not parse):
+  1  owned entities compare by all their fields (ADR 0042): each comparison of owned entities is rewritten to the
+     \`id\` it compared, \`a == b\` → \`a.id == b.id\`, \`xs.unique()\` → \`xs.unique(x => x.id)\`, and
+     \`xs.includes(e)\` → \`xs.some(x => x.id == e.id)\`. Later runs leave \`a == b\` as written.
+A file that does not parse is listed and left as it is; so is a comparison it cannot rewrite, to rewrite by hand.
+Exits 0 when every file was migrated, 1 when a file does not parse, a comparison is left to rewrite by hand or no .dt
+file is found, 2 on an invalid config.
 
 Examples:
   dt migrate domain
@@ -651,46 +664,76 @@ Examples:
                 : all.filter((e) => !isStormingFile(e.path));
             if (!entries.length) throw new CliError(noSourcesMessage(cfg));
             let rewritten = 0;
-            let changed = 0;
             let unparsed = 0;
+            let left = 0;
+            /** The texts as read, and as migrated so far, by absolute path: written once, at the end. */
+            const original = new Map<string, string>();
             const migrated = new Map<string, string>();
+            const dtFiles = [...new Set([...all.filter((e) => !isStormingFile(e.path)).map((e) => e.file), ...entries.map((e) => e.file)])];
+            for (const file of dtFiles) original.set(file, await readFile(file, 'utf8'));
+            const textOf = (file: string): string => migrated.get(file) ?? original.get(file)!;
             for (const e of entries) {
-                const m = migrateDomain(await readFile(e.file, 'utf8'));
-                if (m.parsed) migrated.set(e.file, m.text);
+                const m = migrateDomain(textOf(e.file));
                 if (!m.parsed) {
                     unparsed++;
                     io.err(`${e.path} - not migrated: it does not parse (\`dt check\` shows why)`);
                     continue;
                 }
                 for (const r of m.rewrites) io.out(`${e.path}:${r.line} - ${r.from} → ${r.to}`);
-                if (!m.rewrites.length) continue;
                 rewritten += m.rewrites.length;
-                changed++;
-                if (!opts.dryRun) await writeFile(e.file, m.text);
+                migrated.set(e.file, m.text);
             }
-            // design D: every outcome lists the non-optional fields it makes exist, read with the rest of the workspace
-            const dtFiles = [...new Set([...all.filter((e) => !isStormingFile(e.path)).map((e) => e.file), ...entries.map((e) => e.file)])];
-            const sources = await Promise.all(
-                dtFiles.map(async (file) => ({ path: path.relative(cfg.root, file), text: migrated.get(file) ?? (await readFile(file, 'utf8')) })),
-            );
+            const sources = (): { path: string; text: string }[] => dtFiles.map((file) => ({ path: path.relative(cfg.root, file), text: textOf(file) }));
             const chosen = new Set(entries.map((e) => e.path));
+            // design D: every outcome lists the non-optional fields it makes exist, read with the rest of the workspace
             let listed = 0;
-            for (const done of completeChanges(await analyzeDomain(sources))) {
+            for (const done of completeChanges(await analyzeDomain(sources()))) {
                 if (!chosen.has(done.path)) continue;
                 for (const a of done.added) io.out(`${done.path}:${a.line} - outcome ${a.outcome}: changes ${a.changes}`);
                 listed += done.added.length;
-                if (
-                    !migrated.has(path.join(cfg.root, done.path)) ||
-                    migrated.get(path.join(cfg.root, done.path)) === (await readFile(path.join(cfg.root, done.path), 'utf8'))
-                )
-                    changed++;
-                if (!opts.dryRun) await writeFile(path.join(cfg.root, done.path), done.text);
+                migrated.set(path.join(cfg.root, done.path), done.text);
             }
+            // the versioned steps (DOMAIN_LANGUAGE), each once: those newer than the version the workspace records
+            const from = cfg.language ?? 0;
+            let analyzed = true;
+            if (from < 1) {
+                // 1, ADR 0042: owned entities compare by all their fields; the comparisons written for `id` say so
+                const analysis = await analyzeDomain(sources());
+                analyzed = analysis.syntaxOk;
+                for (const done of migrateEntityComparisons(analysis)) {
+                    if (!chosen.has(done.path)) continue;
+                    for (const r of done.rewrites) io.out(`${done.path}:${r.line} - ${r.from} → ${r.to}`);
+                    for (const r of done.skipped)
+                        io.err(
+                            `${done.path}:${r.line} - not rewritten: ${r.from} over owned entities now compares them by all their fields; write ${r.to} by hand where the id was meant`,
+                        );
+                    rewritten += done.rewrites.length;
+                    left += done.skipped.length;
+                    migrated.set(path.join(cfg.root, done.path), done.text);
+                }
+            }
+            const changed = [...migrated].filter(([file, text]) => text !== original.get(file));
+            if (!opts.dryRun) for (const [file, text] of changed) await writeFile(file, text);
             io.out(
-                `${entries.length} file(s): ${rewritten} construct(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'}, ${listed} outcome(s) ${opts.dryRun ? 'to complete' : 'completed'} in 'changes', in ${changed} file(s), ${unparsed} not parsed.`,
+                `${entries.length} file(s): ${rewritten} construct(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'}, ${listed} outcome(s) ${opts.dryRun ? 'to complete' : 'completed'} in 'changes', in ${changed.length} file(s), ${unparsed} not parsed.`,
             );
             if (listed) io.out("A bare 'changes f' leaves the field's value open: write 'changes f = …' where the model decides it.");
-            exitCode = unparsed ? 1 : 0;
+            if (from < DOMAIN_LANGUAGE) {
+                // recorded for the whole workspace only, once every file was read: a later run skips the steps done
+                const configFile = cfg.file ?? path.join(cfg.root, 'domaintrail.jsonc');
+                const name = path.relative(cfg.root, configFile);
+                if (files.length || unparsed || !analyzed)
+                    io.err(
+                        `Language version not recorded (${from}, current ${DOMAIN_LANGUAGE}): ${files.length ? 'run `dt migrate domain` without files to migrate the whole workspace' : 'fix the files that do not parse and run `dt migrate domain` again'}.`,
+                    );
+                else if (opts.dryRun) io.out(`Language version ${from} → ${DOMAIN_LANGUAGE}, to record in ${name}.`);
+                else {
+                    const text = cfg.file ? await readFile(cfg.file, 'utf8') : '{}\n';
+                    await writeFile(configFile, withLanguage(text, DOMAIN_LANGUAGE));
+                    io.out(`Language version ${from} → ${DOMAIN_LANGUAGE}, recorded in ${name}: a later run does not repeat these steps.`);
+                }
+            }
+            exitCode = unparsed || left ? 1 : 0;
         });
 
     const exporting = program.command('export').description('Export the model: its sources as one ZIP archive, or a diagram as an SVG file.');

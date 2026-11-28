@@ -7,6 +7,11 @@
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
+    "language": {
+      "description": "The DomainTrail language version of the model in this workspace. dt migrate domain runs the steps newer than it, once, and records the version it reached; dt init writes the current one. Absent: 0, the oldest (every step runs). 1: owned entities compare by all their fields (ADR 0042).",
+      "type": "integer",
+      "minimum": 0
+    },
     "sources": {
       "description": "Globs of .dt and .dtes files, inside the directory of this file. Patterns starting with '!' exclude. node_modules, .git and .domaintrail are never scanned, nor (see respectGitignore) what .gitignore ignores.",
       "type": "array",

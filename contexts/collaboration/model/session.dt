@@ -30,7 +30,7 @@ context Collaboration {
     /// ないときは、道のりのファイルのいちばん新しい進行中の道のり。前のセッションにはない。
     currentJourney: GuideJourneyKey? "いまの道のり"
 
-    invariant distinctParticipants "参加者は1人1回" { participants.unique() }
+    invariant distinctParticipants "参加者は1人1回" { participants.unique(p => p.id) }
     invariant facilitatorListed "ファシリテーターは参加者の1人" {
       participants.some(p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
     }

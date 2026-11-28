@@ -58,6 +58,10 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   state. The value stays optional: `changes f` says the field is set without saying to what, `changes f = expr` gives
   it. An optional field not listed starts as null. `changes` on a create command is no longer an error, and a field
   of the target state may be listed on a transition into it. `dt check` reports a missing field (M021).
+- `==` and `!=` compare owned entities by all their fields, as value objects (ADR 0042); before, they compared only
+  `id`. `xs.unique()` and `xs.includes(e)` over entities follow the same equality, and so does the generated
+  `equal<Entity>`: two entities with the same `id` and another field are no longer equal. The Semantic IR's
+  comparison kind for entities is `entityStructural` (was `entityId`). Compare IDs to compare identity: `a.id == b.id`.
 
 ## Added
 
@@ -69,6 +73,15 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - `dt migrate domain` also completes `changes`: it adds each field an outcome makes exist and does not list, as
   `f = f` when the command has a parameter of that name and as `f` (value left open) otherwise, and prints each
   outcome it completed. Review the bare entries: write `f = …` where the model decides the value.
+- `dt migrate domain` also rewrites each comparison of owned entities to the `id` it compared, so that a model keeps
+  its meaning: `a == b` → `a.id == b.id` (and `!=`), `xs.unique()` → `xs.unique(x => x.id)`, an entity key of
+  `xs.unique(x => key)` → `key.id`, and `xs.includes(e)` → `xs.some(x => x.id == e.id)`. Value objects, unions and
+  IDs are left as they are. A comparison it cannot rewrite is listed as "not rewritten", to rewrite by hand.
+- `"language"` in `domaintrail.jsonc`: the DomainTrail language version of the workspace's model (absent: 0).
+  `dt migrate domain` runs each step that changes what a model means once, for the versions newer than the recorded
+  one, then records the version reached (not with `--dry-run`, with files given, or while a file does not parse).
+  Version 1 is the entity comparison rewrite above. `dt init` writes the current version, so a new model has no step
+  to run.
 
 ## Upgrading
 
@@ -76,4 +89,7 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   names. Regenerate TypeScript and update handwritten references to command function types to add the `Command` suffix.
   Rename the requirement keys in `declared` of contract tests the same way (`FinishOrder` → `FinishOrderCommand`).
 - Run `dt migrate domain` in each workspace, then `dt check`, then `dt generate ts`. The generated checks keep their
-  behaviour; their JSDoc shows the new spelling.
+  behaviour; their JSDoc shows the new spelling. Run it on the whole workspace (no files given): it rewrites the
+  comparisons of owned entities to `id` and records `"language": 1` in `domaintrail.jsonc` (it creates the file when
+  the workspace has none). Commit that change with the sources: later runs then leave a structural `a == b` as
+  written. A workspace without the key is taken as version 0, and its entity comparisons are rewritten.

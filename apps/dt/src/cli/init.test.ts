@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { cliDeps } from '../main.js';
 import { runCli } from './main.js';
+import { DOMAIN_LANGUAGE } from '@domaintrail/modeling';
 
 const roots: string[] = [];
 const workspace = async (): Promise<string> => {
@@ -40,6 +41,8 @@ describe('AI-first init', () => {
         expect(applied.plan.applied).toBe(true);
         const config = await readFile(path.join(root, 'domaintrail.jsonc'), 'utf8');
         expect(JSON.parse(config)).toMatchObject({
+            // the current language: `dt migrate domain` has no versioned step to run on a new model
+            language: DOMAIN_LANGUAGE,
             sources: ['model/**/*.dt', 'stormings/**/*.dtes'],
             generate: { ts: { out: 'generated/domain' } },
             knowledge: { store: 'files' },

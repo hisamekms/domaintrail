@@ -24,7 +24,9 @@ import {
     type ResolvedCollabConfig,
     type ResolvedConfig,
     type ResolvedKnowledgeConfig,
+    withLanguage,
 } from './config.js';
+import { DOMAIN_LANGUAGE } from '@domaintrail/modeling';
 
 const ROOT = path.resolve('/work/project');
 const FILE = path.join(ROOT, 'domaintrail.json');
@@ -462,5 +464,28 @@ describe('schema/domaintrail.schema.json', () => {
                     .sort(([a], [b]) => a.localeCompare(b)),
             );
         expect(sorted(CONFIG_KEYS)).toEqual(sorted(schemaKeys(schema)));
+    });
+});
+
+describe('language: the DomainTrail language version the workspace records', () => {
+    test('a whole number up to the current one; absent from the resolved config when the file has none', () => {
+        expect(resolveConfig('{}', FILE).language).toBeUndefined();
+        expect(resolveConfig('{ "language": 0 }', FILE).language).toBe(0);
+        expect(resolveConfig(`{ "language": ${DOMAIN_LANGUAGE} }`, FILE).language).toBe(DOMAIN_LANGUAGE);
+        expect(() => resolveConfig('{ "language": 1.5 }', FILE)).toThrow("'language' must be a whole number from 0");
+        expect(() => resolveConfig('{ "language": "1" }', FILE)).toThrow("'language' must be a whole number from 0");
+        expect(() => resolveConfig(`{ "language": ${DOMAIN_LANGUAGE + 1} }`, FILE)).toThrow('newer than this dt');
+    });
+
+    test('withLanguage sets the top-level key, keeping comments and layout; nested keys of that name are not it', () => {
+        const text = '{\n  // the model\n  "sources": ["a"],\n  "agent": { "language": 9 },\n}\n';
+        expect(withLanguage(text, 1)).toBe('{\n  "language": 1,\n  // the model\n  "sources": ["a"],\n  "agent": { "language": 9 },\n}\n');
+        expect(withLanguage(withLanguage(text, 0), 1)).toBe(withLanguage(text, 1));
+        expect(withLanguage('{\n  "language" : 0\n}\n', 1)).toBe('{\n  "language" : 1\n}\n');
+        expect(withLanguage('{\n    "$schema": "./s.json",\n    "sources": []\n}\n', 1)).toBe(
+            '{\n    "$schema": "./s.json",\n    "language": 1,\n    "sources": []\n}\n',
+        );
+        // an empty object (a .json file has no trailing commas)
+        expect(JSON.parse(withLanguage('{}\n', 1))).toEqual({ language: 1 });
     });
 });

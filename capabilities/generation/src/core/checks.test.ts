@@ -211,9 +211,12 @@ describe('generated checks', () => {
         expect(Sales.checkTags({ names: ['a', 'b', 'a'] })).toEqual(['distinctNames']);
     });
 
-    test('entities are equal by id, value objects by all fields, Decimals by number', () => {
-        expect(Sales.equalLine(line('1', 'ABC-0001'), line('1', 'XYZ-0002'))).toBe(true);
+    test('owned entities and value objects are equal by all fields, Decimals by number', () => {
+        // the same id with another field is another value (ADR 0042)
+        expect(Sales.equalLine(line('1', 'ABC-0001'), line('1', 'XYZ-0002'))).toBe(false);
+        expect(Sales.equalLine(line('1', 'ABC-0001'), { ...line('1', 'ABC-0001'), quantity: 2 })).toBe(false);
         expect(Sales.equalLine(line('1', 'ABC-0001'), line('2', 'ABC-0001'))).toBe(false);
+        expect(Sales.equalLine(line('1', 'ABC-0001', '1.50'), line('1', 'ABC-0001', '1.5'))).toBe(true);
         expect(Common.equalMoney(yen('1.50'), yen('1.5'))).toBe(true);
         expect(Common.equalMoney(yen('1'), { amount: '1', currency: 'USD' })).toBe(false);
         const epoch = new Date(0).toISOString();
@@ -229,13 +232,15 @@ describe('generated checks', () => {
         expect(Sales.checkPayment({ kind: 'Cash' })).toEqual([]);
     });
 
-    test('unique with keys and without (entities by id); aggregate and state invariants together', () => {
+    test('unique with keys and without (entities by all fields, as ==); aggregate and state invariants together', () => {
         const checks = { audited: () => true };
         const draft = (lines: unknown[]) => ({ state: 'Draft', id: 'o', lines, prices: [] });
         const check = Sales.checkDraftOrderWith(checks);
         expect(check(draft([line('1', 'ABC-0001'), line('2', 'ABC-0002')]))).toEqual([]);
         expect(check(draft([line('1', 'ABC-0001'), line('2', 'ABC-0001')]))).toEqual(['distinctSkus']);
-        expect(check(draft([line('1', 'ABC-0001'), line('1', 'ABC-0002')]))).toEqual(['distinctLines']);
+        // the same id with another field: distinct values (`lines.unique(l => l.id)` is the old meaning)
+        expect(check(draft([line('1', 'ABC-0001'), line('1', 'ABC-0002')]))).toEqual([]);
+        expect(check(draft([line('1', 'ABC-0001'), line('1', 'ABC-0001', '100.0')]))).toEqual(['distinctSkus', 'distinctLines']);
         const cancelled = { state: 'Cancelled', id: 'o', lines: [], prices: [], reason: 'Other' };
         expect(Sales.checkOrderWith(checks)(cancelled)).toEqual(['otherNeedsNote']);
         expect(Sales.checkOrderWith({ audited: () => false })({ ...cancelled, note: 'n' })).toEqual(['audited']);

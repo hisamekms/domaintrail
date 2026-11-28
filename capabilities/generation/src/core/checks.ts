@@ -551,15 +551,15 @@ export class ExprCompiler {
     }
 
     /**
-     * `l == r` by the IR's comparison fact (ADR 0016): structural and entity comparisons call the element's equality
-     * function, the others compare scalars. Optionality is stripped as before: M009 rejects an unguarded optional, and
-     * the IR types a guarded one as present. Lists keep `equal()`'s `sameList` form.
+     * `l == r` by the IR's comparison fact (ADR 0016): structural comparisons (value objects, owned entities, unions)
+     * call the element's equality function, the others compare scalars. Optionality is stripped as before: M009 rejects
+     * an unguarded optional, and the IR types a guarded one as present. Lists keep `equal()`'s `sameList` form.
      */
     private comparisonEqual(e: Extract<ExprModel, { k: 'binary' }>, l: TypedBinding, r: TypedBinding): string {
         const comparison = this.irNode(e)?.comparison;
         if (!comparison || comparison === 'notComparable') throw new Error(`'${this.irNode(e)?.source ?? '=='}' has no comparable IR fact`);
         const [t, u] = [strip(l.ty), strip(r.ty)];
-        const structural = comparison === 'valueObjectStructural' || comparison === 'unionStructural' || comparison === 'entityId';
+        const structural = comparison === 'valueObjectStructural' || comparison === 'unionStructural' || comparison === 'entityStructural';
         if (structural && t.k !== 'list') {
             const s = t.k === 'struct' || t.k === 'union' ? t : u.k === 'struct' || u.k === 'union' ? u : undefined;
             if (!s) throw new Error(`'${this.irNode(e)?.source}' is a ${comparison} comparison without an element type`);
@@ -999,18 +999,15 @@ export class CheckWriter {
         return out;
     }
 
-    /** The equality of a value object (all fields), an entity (`id`) or a union (discriminator and fields). */
+    /** The equality of a value object or an owned entity (all fields) or of a union (discriminator and fields). */
     equality(el: Struct | UnionModel): string[] {
         const type = el.name;
         const c = this.compiler;
         let doc: string;
         let body: string[];
-        if (el.kind === 'entity') {
-            const id = el.fields.find((f) => f.name === 'id')!;
-            doc = `Whether two ${type} are the same entity: by \`id\` (ADR 0016).`;
-            body = [`return ${c.equal(fieldTy(this.env.model, id), 'a.id', 'b.id')};`];
-        } else if (el.kind === 'valueObject') {
-            doc = `Whether two ${type} values are equal: by all their fields (ADR 0016).`;
+        if (el.kind === 'entity' || el.kind === 'valueObject') {
+            // an owned entity compares by all its fields, `id` included, as a value object does (ADR 0042)
+            doc = `Whether two ${type} values are equal: by all their fields (ADR ${el.kind === 'entity' ? '0042' : '0016'}).`;
             const parts = el.fields.map((f) => c.equal(fieldTy(this.env.model, f), `a.${f.name}`, `b.${f.name}`));
             body = [`return ${parts.length ? parts.join(' && ') : 'true'};`];
         } else {
