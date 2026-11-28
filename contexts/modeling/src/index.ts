@@ -67,6 +67,7 @@ export {
     type ExprModel,
     type FieldKind,
     type FieldModel,
+    type FunctionModel,
     type FieldsElement,
     type InvariantModel,
     type InitialModel,

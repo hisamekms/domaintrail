@@ -36,6 +36,9 @@ export const kindId = (aggregateId: string, kind: string): ElementId => as<Eleme
 export type DeclarationId = string & { readonly __declarationId: unique symbol };
 export const fieldId = (ownerId: string, field: string): DeclarationId => as<DeclarationId>(`${ownerId}.${field}`);
 export const parameterId = (command: string, parameter: string): DeclarationId => as<DeclarationId>(`${command}(${parameter})`);
+/** A function of a context: `Sales.discounted`. */
+export const functionId = (context: string, name: string): DeclarationId => as<DeclarationId>(`${context}.${name}`);
+
 export const invariantId = (ownerId: string, invariant: string): DeclarationId => as<DeclarationId>(`${ownerId}.invariant.${invariant}`);
 export const requirementId = (command: string, requirement: string): DeclarationId => as<DeclarationId>(`${command}.requires.${requirement}`);
 export const outcomeId = (command: string, outcome: string): DeclarationId => as<DeclarationId>(`${command}->${outcome}`);

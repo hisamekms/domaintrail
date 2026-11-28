@@ -32,6 +32,9 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   `decimalAdd`, `decimalSub`, `decimalMul` and `decimalDiv`.
 - Lists: `[a, b]`, `[...xs, x]`, `xs.map(x => e)`, `xs.filter(x => p)`, `xs.sum(x => e)` and `xs.sum()`. A Decimal
   sum is exact.
+- Functions: `function name(p: T, …): R { expr }` in a context is a pure, typed function of its parameters (a
+  predicate when it returns Bool), called as `name(args)` from its context and, from a shared context, from every
+  context. No recursion or call cycles (M032). Each becomes an exported TypeScript function.
 
 ## Added
 

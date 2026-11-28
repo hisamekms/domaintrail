@@ -47,6 +47,11 @@ context Modeling {
       left: ExprModel
       right: ExprModel
     }
+    /// `name(args)`: a call of a function of the context or of a shared context.
+    call {
+      name: String
+      args: ExprModel[0..*]
+    }
     /// `[a, b, ...xs]`.
     list {
       items: ListItem[0..*]

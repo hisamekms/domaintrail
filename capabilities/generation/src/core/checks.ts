@@ -6,6 +6,7 @@ import type {
     EnumModel,
     ExprModel,
     FieldModel,
+    FunctionModel,
     InvariantModel,
     PrimitiveName,
     SemanticIR,
@@ -415,6 +416,13 @@ export class ExprCompiler {
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
+            case 'call': {
+                // a function of this context by its name, of a shared context through that context
+                const id = this.irNode(e)?.symbol?.id ?? e.name;
+                const dot = id.lastIndexOf('.');
+                const fn = dot >= 0 && id.slice(0, dot) !== this.env.ctx ? this.env.valueRef(id, e.name) : e.name;
+                return { js: `${fn}(${e.args.map((a) => this.compile(a, scope).js).join(', ')})` };
+            }
             case 'list':
                 return { js: `[${e.items.map((i) => `${i.spread ? '...' : ''}${this.compile(i.value, scope).js}`).join(', ')}]` };
             case 'listMethod': {
@@ -1013,6 +1021,23 @@ export class CheckWriter {
     }
 
     /** The check of a value object or entity. */
+    /** `function name(params): R { expr }` as a TypeScript function of its parameters. */
+    fn(f: FunctionModel): string[] {
+        const scope: Scope = new Map(f.params.map((p) => [p.name, { js: p.name }]));
+        const type = (x: { type: FieldModel['type']; cardinality: FieldModel['cardinality']; name: string }): string => {
+            const t = this.env.fieldType({ ...x, kind: 'field', multiplicity: '' } as FieldModel);
+            return x.cardinality === 'optional' ? `${t} | undefined` : t;
+        };
+        const params = f.params.map((p) => `${p.name}: ${type(p)}`).join(', ');
+        const returns = type({ name: f.name, type: f.returns, cardinality: f.cardinality });
+        return [
+            ...this.env.jsdoc([...(f.label ? [f.label] : []), ...(f.doc ? f.doc.split('\n') : []), `@returns ${f.source}`], f.location),
+            `export function ${f.name}(${params}): ${returns} {`,
+            `    return ${this.compiler.compile(f.expr, scope).js};`,
+            '}',
+        ];
+    }
+
     struct(el: Struct): string[] {
         if (!el.invariants.length) return [];
         const subject = subjectName(el.name);

@@ -330,3 +330,79 @@ context A {
           (identifier)
           (qualified_name
             (identifier)))))))
+
+================================================================================
+Functions and calls
+================================================================================
+
+context A {
+  function isBulk(items: Item[0..*]): Bool { items.length > 50 }
+  function total(items: Item[0..*]): Decimal(2) { items.sum(i => i.price) }
+  value V { items: Item[0..*]  invariant small { !(isBulk(items)) || total(items) > 0.00 } }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (function_declaration
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (qualified_name
+            (identifier))
+          (multiplicity
+            (integer))))
+      (primitive_type)
+      (binary_expression
+        (member_expression
+          (identifier)
+          (identifier))
+        (number
+          (integer))))
+    (function_declaration
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (qualified_name
+            (identifier))
+          (multiplicity
+            (integer))))
+      (primitive_type)
+      (scale
+        (integer))
+      (method_call
+        (identifier)
+        (function_name
+          (identifier))
+        (lambda
+          (identifier)
+          (member_expression
+            (identifier)
+            (identifier)))))
+    (value_declaration
+      (identifier)
+      (member_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier))
+          (multiplicity
+            (integer)))
+        (invariant
+          (identifier)
+          (binary_expression
+            (not_expression
+              (parenthesized_expression
+                (call_expression
+                  (function_name)
+                  (identifier))))
+            (binary_expression
+              (call_expression
+                (function_name)
+                (identifier))
+              (number
+                (decimal)))))))))

@@ -24,6 +24,7 @@ export type {
     ExprModel,
     FieldKind,
     FieldModel,
+    FunctionModel,
     InvariantModel,
     InitialModel,
     KindModel,

@@ -19,7 +19,20 @@ import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldMode
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
 import { lifecyclesOf } from './lifecycle.js';
 import type { ExpressionFact } from './rules/expressions.js';
-import { enumValueId, fieldId, invariantId, kindId, onCaseId, outcomeId, shorthandOutcomeId, parameterId, requirementId, stateId, variantId } from './ids.js';
+import {
+    enumValueId,
+    fieldId,
+    functionId,
+    invariantId,
+    kindId,
+    onCaseId,
+    outcomeId,
+    shorthandOutcomeId,
+    parameterId,
+    requirementId,
+    stateId,
+    variantId,
+} from './ids.js';
 import {
     commandsOf,
     fieldsOf,
@@ -65,6 +78,7 @@ const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNul
         case 'discriminator':
         case 'context':
         case 'type':
+        case 'function':
             return kind;
     }
 };
@@ -84,6 +98,8 @@ const expressionChildren = (expr: Expr): Expr[] => {
             return [expr.left, expr.right];
         case 'conditional':
             return [expr.test, expr.ifTrue, expr.ifFalse];
+        case 'call':
+            return expr.args;
         case 'list':
             return expr.items.map((i) => i.value);
         case 'listMethod':
@@ -482,6 +498,7 @@ const expressionRoots = (model: SourceModel): { expr: Expr; id: string }[] => {
         }
         if (el.kind === 'union') for (const v of el.variants) addInvs(variantId(el.id, v.name), v.members);
     }
+    for (const f of model.fragments.flatMap((c) => c.functions)) roots.push({ expr: f.expr, id: functionId(f.context, f.name) });
     return roots;
 };
 
@@ -799,6 +816,7 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
             outcomes(command.id, command.outcomes);
         }
     }
+    for (const context of model.contexts) for (const f of context.functions) roots.push({ id: functionId(context.name, f.name), expr: f.expr });
     const children = (expr: ExprModel): ExprModel[] => {
         switch (expr.k) {
             case 'member':
@@ -812,6 +830,8 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
                 return [expr.left, expr.right];
             case 'conditional':
                 return [expr.test, expr.ifTrue, expr.ifFalse];
+            case 'call':
+                return [...expr.args];
             case 'list':
                 return expr.items.map((i) => i.value);
             case 'listMethod':

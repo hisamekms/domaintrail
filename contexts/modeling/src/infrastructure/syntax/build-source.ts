@@ -11,6 +11,7 @@ import {
     isBinaryExpr,
     isBoolLiteral,
     isCommand,
+    isCallExpr,
     isConditionalExpr,
     isListLiteral,
     isContainsExpr,
@@ -170,6 +171,15 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 right: expr(e.right),
                 leftAt: site(e, 'left'),
                 rightAt: site(e, 'right'),
+            };
+        if (isCallExpr(e))
+            return {
+                ...base,
+                k: 'call',
+                name: e.function,
+                args: e.args.map(expr),
+                nameAt: site(e, 'function'),
+                argsAt: e.args.map((_, i) => site(e, 'args', i)),
             };
         if (isListLiteral(e)) return { ...base, k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: expr(i.value) })) };
         if (isConditionalExpr(e))
@@ -414,6 +424,17 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
             ...(c.label !== undefined && { label: c.label }),
             ...(doc && { doc: doc.text, docAt: rangeSiteOf(c, fileOf, doc.range) }),
             terms: c.terms.flatMap((block) => block.entries.map(term)),
+            functions: c.functions.map((f) => ({
+                ...declared(f),
+                kind: 'function' as const,
+                id: `${c.name}.${f.name}`,
+                context: c.name,
+                params: f.params.map(param),
+                ...(typeRef(f.returns) && { returns: typeRef(f.returns) }),
+                ...(f.multiplicity && { multiplicity: multiplicity(f.multiplicity) }),
+                returnsAt: site(f, 'returns'),
+                expr: expr(f.body),
+            })),
             at: site(c),
             nameAt: site(c, 'name'),
             labelAt: site(c, 'label'),

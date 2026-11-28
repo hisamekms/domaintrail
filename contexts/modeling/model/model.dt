@@ -13,6 +13,19 @@ context Modeling {
     shared: Bool
     /// Glossary of field and parameter names.
     terms: TermModel[0..*]
+    /// The functions of the context, in declaration order.
+    functions: FunctionModel[0..*]
+  }
+
+  /// `function name(params): returns { expr }`: a pure function of its parameters.
+  value FunctionModel with Described {
+    name: String
+    params: FieldModel[0..*]
+    returns: TypeExpr
+    cardinality: Cardinality
+    expr: ExprModel
+    source: String
+    location: Location
   }
 
   /// An entry of `terms`: the Japanese name of a field or parameter name in its context.

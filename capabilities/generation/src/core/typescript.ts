@@ -854,6 +854,8 @@ class ContextEmitter {
             }
             this.out.push('');
         }
+        // the functions of the context (pure, expression-bodied; M032)
+        for (const f of this.model.contexts.find((c) => c.name === this.ctx)?.functions ?? []) this.push(this.checks.fn(f));
         this.persistentEvents();
         this.unions();
         this.policyHandlers();

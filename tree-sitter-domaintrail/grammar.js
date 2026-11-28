@@ -30,7 +30,7 @@ const FEATURE_KEYWORDS = [
   'context', 'shared', 'terms', 'primitive', 'enum', 'union', 'entity', 'aggregate', 'state', 'owns', 'references', 'create',
   'command', 'emits', 'errors', 'event', 'error', 'invariant',
   'readonly', 'initial', 'kind', 'on', 'outcome', 'select',
-  'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains',
+  'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains', 'function',
 ];
 
 /** The other keywords that may name enum values, union variants and members after `.` (ValueName). */
@@ -63,11 +63,25 @@ module.exports = grammar({
       field('name', $.identifier),
       optional(field('label', $.string)),
       '{',
-      repeat(choice($._context_element, $.terms)),
+      repeat(choice($._context_element, $.terms, $.function_declaration)),
       '}',
     ),
 
     terms: ($) => seq('terms', '{', repeat($.term_entry), '}'),
+
+    // `function name(p: T): R { expr }`
+    function_declaration: ($) => seq(
+      'function',
+      field('name', $.identifier),
+      optional(field('label', $.string)),
+      $.parameters,
+      ':',
+      field('returns', $._type),
+      optional(field('multiplicity', $.multiplicity)),
+      '{',
+      field('body', $._expression),
+      '}',
+    ),
 
     term_entry: ($) => seq(field('name', $._feature_name), ':', field('label', $.string)),
 
@@ -358,6 +372,7 @@ module.exports = grammar({
       $.member_expression,
       $.parenthesized_expression,
       $.method_call,
+      $.call_expression,
       $.list,
       $.boolean,
       $.null,
@@ -416,6 +431,9 @@ module.exports = grammar({
     )),
 
     lambda: ($) => seq(field('parameter', $._feature_name), '=>', field('body', $._expression)),
+
+    // `name(args)`: a call of a function of the context
+    call_expression: ($) => prec(PREC.member, seq(field('function', alias($.identifier, $.function_name)), '(', optional(seq($._expression, repeat(seq(',', $._expression)))), ')')),
 
     // `[a, b, ...xs]`
     list: ($) => seq('[', optional(seq($._list_item, repeat(seq(',', $._list_item)))), ']'),
