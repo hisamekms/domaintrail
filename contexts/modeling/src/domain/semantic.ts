@@ -81,6 +81,7 @@ const symbolKind = (kind: NonNullable<ExpressionFact['symbol']>['kind']): NonNul
         case 'context':
         case 'type':
         case 'function':
+        case 'frame':
             return kind;
     }
 };
@@ -139,6 +140,10 @@ const semanticTypeName = (ty: NonNullable<ExpressionFact['type']>, declarationId
         case 'unionType':
         case 'ctx':
         case 'error':
+            return undefined;
+        case 'frame':
+            // the aggregate before / after an outcome has no one declared type (its state is the outcome's): the
+            // expression's `frame` symbol says which, and a member of it is typed as the field it reads
             return undefined;
     }
 };

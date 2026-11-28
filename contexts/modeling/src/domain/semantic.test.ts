@@ -443,6 +443,43 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         expect(lambda?.type).toEqual({ name: 'Sales.OrderItem', cardinality: 'one', tag: false });
     });
 
+    test('projects before and after of changes and ensures as frame symbols, and their members as fields', async () => {
+        const analysis = await analyzeDomain([
+            {
+                path: 'frames.dt',
+                text: `context R {
+                  id RotaId: UUID
+                  aggregate Rota {
+                    id: RotaId
+                    revision: Int
+                    initial Draft
+                    state Draft
+                    state Published { publishedAt: Timestamp }
+                    command publish(at: Timestamp) {
+                      outcome published: Draft -> Published
+                        changes publishedAt = at, revision = before.revision + 1
+                        ensures { after.revision > before.revision }
+                    }
+                  }
+                }`,
+            },
+        ]);
+        expect(analysis.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        const ir = semanticIROf(analysis);
+        const flatten = (nodes: readonly import('../generated/Modeling.js').SemanticExpression[]): import('../generated/Modeling.js').SemanticExpression[] =>
+            nodes.flatMap((node) => [node, ...flatten(node.children)]);
+        const nodes = flatten(ir.expressions);
+        for (const name of ['before', 'after'] as const) {
+            const frame = nodes.find((node) => node.source === name);
+            expect(frame?.symbol).toEqual({ id: name, kind: 'frame', name });
+            // the aggregate before / after the outcome has no one declared type
+            expect(frame?.type).toBeUndefined();
+        }
+        expect(nodes.find((node) => node.source === 'before.revision')?.symbol).toEqual({ id: 'R.Rota.revision', kind: 'field', name: 'revision' });
+        expect(nodes.find((node) => node.source === 'after.revision')?.type).toEqual({ name: 'Int', cardinality: 'one', tag: false });
+        expect(ir.expressions.find((e) => e.root === 'R.Rota:publish->published.ensures')?.source).toBe('after.revision > before.revision');
+    });
+
     test('projects union tags, context qualifiers, and field set fields under the using element ID', async () => {
         const analysis = await analyzeDomain([
             {

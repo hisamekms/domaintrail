@@ -30,6 +30,9 @@ export const RUNTIME_NAMES = [
     'decideNamed',
     'Decide',
     'ChoiceVerifier',
+    'Verify',
+    'Postcondition',
+    'SuccessOf',
     'Shape',
     'NoChanges',
     'outcome',
@@ -91,6 +94,8 @@ export const commandsInterfaceName = (agg: Named): string => `${agg.name}Command
 export const decisionTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Decision`;
 export const choiceChecksTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}ChoiceChecks`;
 export const choiceCheckName = (agg: Named, cmd: Named): string => `check${commandStem(agg, cmd)}Choice`;
+/** The check of the postconditions of a command, from its stem: `checkConfirmOrderEnsures` (ADR 0043). */
+export const ensuresName = (stem: string): string => `check${stem}Ensures`;
 /** The parameters of a command as one object, e.g. `CancelOrderParams`; a command without parameters has none. */
 export const paramsTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Params`;
 /** The fields of an aggregate as data for `decide`, e.g. `OrderShape`. */
@@ -286,6 +291,9 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
                 out.push({ name: choiceChecksTypeName(el, c), origin: `choice checks of '${el.name}.${c.name}'`, at: cat });
                 out.push({ name: choiceCheckName(el, c), origin: `choice checker of '${el.name}.${c.name}'`, at: cat });
             }
+            // generated whenever the command has a postcondition, which almost every command has (a carried field
+            // stays unchanged): kept for every command, so that adding one never makes a name collide
+            out.push({ name: ensuresName(commandStem(el, c)), origin: `the check of the postconditions of '${el.name}.${c.name}'`, at: cat });
             const requirements = [...c.requirements, ...groupCases.flatMap((x) => x.requirements)];
             if (!requirements.length) continue;
             const t = commandStem(el, c);

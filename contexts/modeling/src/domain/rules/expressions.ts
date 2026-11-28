@@ -51,7 +51,9 @@ export interface ExpressionFact {
             | 'unionTag'
             | 'discriminator'
             | 'context'
-            | 'function';
+            | 'function'
+            /** `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome. */
+            | 'frame';
         name: string;
         declaration?: object;
         id?: string;
@@ -1169,7 +1171,10 @@ class ExprChecker {
 
     private name(name: string, node: Expr, scope: Scope): Ty {
         const frame = scope.frames?.get(name);
-        if (frame) return frame;
+        if (frame) {
+            this.symbols.set(node, { kind: 'frame', name, id: name });
+            return frame;
+        }
         for (let i = scope.lambdas.length - 1; i >= 0; i--) {
             if (scope.lambdas[i][0] === name) {
                 this.symbols.set(node, {

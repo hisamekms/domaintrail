@@ -890,7 +890,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
   non-optional field it makes exist (all of them on create, those new in its target state on a transition), with or
   without a value (M021). `ensures { … }` after
   `changes`/`emits` states a relation the result satisfies, over the parameters, `before.x` and `after.x`; an
-  equality that determines a field alone belongs in `changes x = …` (M021). A create has no `before`.
+  equality that determines a field alone belongs in `changes x = …` (M021). A create has no `before`. The
+  generated `check<Command>Ensures` checks a result against them, and the fields left unchanged
+  ([Generated checks](#generated-checks)).
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure function of its parameters, called as
   `name(args)` from the expressions of its context and, when the context is shared, of every context. A function
   cannot call itself, directly or through others (M032).
@@ -1851,6 +1853,27 @@ The contract can still be implemented directly, returning the aggregate itself; 
 changing a field it does not list, and a generic contract needs a type assertion on its result (TypeScript does not
 narrow `S` inside the implementation).
 
+**Postconditions.** The types keep a decision from setting a field it does not list, but not from setting a listed one
+to another value than `changes x = e` gives, or from breaking `ensures`. Pass the generated
+`check<Command>Ensures` (see [Generated checks](#generated-checks)) as `ensures` in the last argument of `decide`,
+`decideNamed` or `decideByKind` (a `Verify` of the runtime; `ChoiceVerifier` is its other name), and the command
+checks every success value it makes:
+
+```ts
+export const confirm: Sales.OrderCommands['confirm'] = decide<Sales.ConfirmOrderDecision>(
+    Sales.OrderShape,
+    { Draft: (order, { at }) => ok({ Confirmed: { set: { confirmedAt: at }, events: { 'Sales.OrderConfirmed': { type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at } } } }) },
+    {},
+    { ensures: Sales.checkConfirmOrderEnsures },
+);
+// decideNamed: (shape, targets, decision, { availability, command }, { ensures }); a create: (shape, targets, decision, undefined, { ensures })
+```
+
+A violated postcondition throws, as a bug of the decision rather than a domain error (it is in no error type):
+`DomainTrail postcondition violated: Sales.Order:confirm.changes.confirmedAt: confirmedAt = at`, with the
+`Postcondition` as the error's `cause`. Without `ensures`, nothing is checked. The postconditions are documented on the
+command and decision types, one `@ensures` line per `ensures` (named after its outcome in the block form).
+
 Code that handles any command — saving the aggregate, publishing the events — uses `outcome` and `eventList` from the
 runtime. `outcome(value)` gives `{ to, aggregate, events }` (`to` is the key: the target state). `eventList(events)`
 gives the events as one list: arrays flattened, absent optional events skipped, sorted by event type (an order of
@@ -2056,6 +2079,7 @@ the string's `length`, Decimals (carried as strings) and Ints compared as number
 | `check<State><Aggregate>(x)`, `check<Aggregate>(x)` | an aggregate with invariants | per state, the aggregate's and the state's violated invariants; `check<Aggregate>` for any state |
 | `check<Aggregate>Common(x)` | every aggregate with states, also without invariants | the aggregate's own violated invariants, once (the check of each state reports them first) |
 | `check<Command>Requires(aggregate, params)` | a command with requirements (a factory: `(params)`) | the name of the first requirement that does not hold, or `undefined`; it takes the command's parameters object as it is |
+| `check<Command>Ensures(aggregate, params, value)` | a command with a postcondition (a factory: `(params, value)`; without parameters, no `params`) | the first `Postcondition` its success value `value` violates, or `undefined` (see below) |
 | `equal<Name>(a, b)` | every value object, entity and union | the equality of `==`, `unique` and `contains` |
 
 ```ts
@@ -2065,6 +2089,40 @@ export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrd
     return undefined;
 }
 ```
+
+The postconditions of a command (ADR 0043) are checked on its success value, outcome by outcome (the key of `value`,
+from each source state): first each `changes x = e`, then the **frame** — a field the outcome does not list in
+`changes` is the input's (`after.x == before.x`), and an optional field it makes exist without listing it is absent
+(`after.x == null`) — then each `&&`-conjunct of `ensures`. A bare `changes x` leaves the value open. Values compare
+as `==` does: Decimals by value (`1.5` equals `1.50`), lists element by element, value objects, owned entities and
+unions by their fields, references and IDs by ID, dates and times by their canonical text. Almost every command has a
+postcondition (a carried field), so almost every command has the check; one with none (a create whose `changes` are
+all bare, with no optional field left out) has no function. The result says which one, as data:
+
+```ts
+/** A postcondition a success value violates (runtime). */
+export interface Postcondition<Id extends string = string> {
+    readonly id: Id; // 'Sales.Order:confirm.changes.confirmedAt', '…->Confirmed.unchanged.note', '…->confirmed.ensures'
+    readonly outcome: string; // the key of the success value: 'Confirmed'
+    readonly kind: 'changes' | 'unchanged' | 'ensures';
+    readonly field?: string; // of `changes` and `unchanged`
+    readonly source: string; // 'confirmedAt = at', 'after.note == before.note', a conjunct of `ensures`
+}
+
+// generated (Sales.ts), for `command confirm(at: Timestamp) Draft -> Confirmed changes confirmedAt = at`
+export function checkConfirmOrderEnsures(order: DraftOrder, params: ConfirmOrderParams, value: SuccessOf<ConfirmOrderCommand>): Postcondition<…> | undefined {
+    if ('Confirmed' in value && value.Confirmed !== undefined && order.state === 'Draft') {
+        if (value.Confirmed.aggregate.confirmedAt !== params.at) return { id: 'Sales.Order:confirm.changes.confirmedAt', outcome: 'Confirmed', kind: 'changes', field: 'confirmedAt', source: 'confirmedAt = at' };
+        if (value.Confirmed.aggregate.id !== order.id) return { id: 'Sales.Order:confirm->Confirmed.unchanged.id', outcome: 'Confirmed', kind: 'unchanged', field: 'id', source: 'after.id == before.id' };
+        // … the other fields it carries over
+    }
+    return undefined;
+}
+```
+
+`SuccessOf<C>` (runtime) is the success value of command type `C`. An outcome that `value` does not hold is not
+checked, and neither is the choice of the outcome. Pass the check to `decide` (see
+[Decisions and `decide`](#decisions-and-decide)), or call it on the result of a command written by hand.
 
 The translation reads like the `.dt` it comes from: a violated `!(A) || B` is tested as `A && !B`
 (`if (order.reason === 'Other' && !(order.note !== undefined))`), lambda variables keep their names
