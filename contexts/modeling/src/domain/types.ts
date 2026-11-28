@@ -23,7 +23,7 @@ export type Ty =
      * `literal` marks values written in the source (`0`, `"x"`), `computed` the numbers `count(…)` and `length(…)`
      * compute; both have no concept of their own and may be compared with domain primitives.
      */
-    | { k: 'prim'; name: PrimitiveName; literal?: boolean; computed?: boolean }
+    | { k: 'prim'; name: PrimitiveName; literal?: boolean; computed?: boolean; scale?: number }
     | { k: 'id'; decl: IdDecl }
     /** A domain primitive declared with `primitive`. */
     | { k: 'dp'; decl: PrimitiveDecl }
@@ -74,7 +74,7 @@ export function cardinality(m: Multiplicity | undefined): Cardinality {
  */
 export function baseType(ref: TypeRef | undefined, seen = new Set<VerifiedDecl>()): Ty {
     if (!ref) return ERROR;
-    if (ref.primitive) return { k: 'prim', name: ref.primitive };
+    if (ref.primitive) return { k: 'prim', name: ref.primitive, ...(ref.scale !== undefined && { scale: ref.scale }) };
     const decl = ref.decl?.target;
     if (!decl) return ERROR;
     switch (decl.kind) {
@@ -145,6 +145,16 @@ export const isNumeric = (t: Ty): boolean => t.k === 'prim' && (t.name === 'Int'
 export function basePrimitive(t: Ty): PrimitiveName | undefined {
     if (t.k === 'prim') return t.name;
     if (t.k === 'id' || t.k === 'dp') return t.decl.base;
+    return undefined;
+}
+
+/**
+ * The digits after the point of a number type: a `Decimal(n)` its declared `n`, a decimal literal the digits written
+ * (`computed` from the text by the caller), an Int 0; `undefined` for a Decimal of undeclared scale.
+ */
+export function scaleOf(t: Ty): number | undefined {
+    if (t.k === 'prim') return t.name === 'Int' ? 0 : t.name === 'Decimal' ? t.scale : undefined;
+    if (t.k === 'id' || t.k === 'dp') return t.decl.base === 'Int' ? 0 : t.decl.base === 'Decimal' ? t.decl.scale : undefined;
     return undefined;
 }
 

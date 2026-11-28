@@ -31,7 +31,7 @@ import {
 } from '../source-model.js';
 import { canonicalTemporal, isOrderedTemporal, isTemporal, TEMPORAL_EXAMPLE, TEMPORAL_FORM } from '../temporal.js';
 import { fieldId } from '../ids.js';
-import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, showType, type Ty } from '../types.js';
+import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, isNumeric, memberType, sameType, scaleOf, showType, type Ty } from '../types.js';
 
 export interface ExpressionFact {
     expression: Expr;
@@ -489,7 +489,7 @@ class ExprChecker {
             case 'int':
                 return { k: 'prim', name: 'Int', literal: true };
             case 'decimal':
-                return { k: 'prim', name: 'Decimal', literal: true };
+                return { k: 'prim', name: 'Decimal', literal: true, scale: e.value.split('.')[1]?.length ?? 0 };
             case 'string':
                 return { k: 'prim', name: 'String', literal: true };
             case 'bool':
@@ -679,6 +679,7 @@ class ExprChecker {
             }
             return BOOL;
         }
+        if (op === '+' || op === '-' || op === '*' || op === '/') return this.arithmetic(e, scope);
         if (op === '??') {
             // `a ?? b`: the value of the optional `a`, else `b`, of the same type
             const l = this.check(e.left, scope);
@@ -721,6 +722,59 @@ class ExprChecker {
             this.rules.error('M009', `Operator '${op}' cannot be applied to '${showType(l)}' and '${showType(r)}'.${hint}`, e.at);
         }
         return BOOL;
+    }
+
+    /**
+     * `a + b`, `a - b`, `a * b` over Int and Decimal (a domain primitive gives its base type), and `a / b` over Decimal:
+     * an Int with a Decimal is a Decimal. `+ -` keep the larger scale, `*` adds the scales, `/` rounds half-even to the
+     * larger declared scale, so both scales must be known, and its divisor must be shown non-zero.
+     */
+    private arithmetic(e: ExprOf<'binary'>, scope: Scope): Ty {
+        const l = this.check(e.left, scope);
+        const r = this.check(e.right, scope);
+        if (l.k === 'error' || r.k === 'error') return ERROR;
+        const op = e.op;
+        for (const [t, at] of [
+            [l, e.leftAt],
+            [r, e.rightAt],
+        ] as const) {
+            const base = basePrimitive(t);
+            if (t.k === 'id' || (base !== 'Int' && base !== 'Decimal')) {
+                this.rules.error(
+                    'M009',
+                    `Operator '${op}' requires Int or Decimal operands, but got '${showType(t)}'.${t.k === 'opt' ? ' Optional values must be compared with null first (x != null && …).' : ''}`,
+                    at,
+                );
+                return ERROR;
+            }
+        }
+        const decimal = basePrimitive(l) === 'Decimal' || basePrimitive(r) === 'Decimal';
+        if (op === '/' && !decimal) {
+            this.rules.error('M009', `Int has no '/': divide Decimal values, e.g. declare the field 'Decimal(2)'.`, e.at);
+            return ERROR;
+        }
+        const [ls, rs] = [scaleOf(l), scaleOf(r)];
+        if (op === '/') {
+            if (ls === undefined || rs === undefined) {
+                const which = ls === undefined ? e.left : e.right;
+                this.rules.error(
+                    'M009',
+                    `'/' rounds to a declared scale, but '${which.text}' is a Decimal of no declared scale: declare it 'Decimal(n)'.`,
+                    which.at,
+                );
+                return ERROR;
+            }
+            if ((e.right.k === 'int' || e.right.k === 'decimal') && Number(e.right.value) === 0) this.rules.error('M009', `Division by zero.`, e.rightAt);
+            else if (e.right.k !== 'int' && e.right.k !== 'decimal' && !scope.present.has(nonZeroKey(e.right)))
+                this.rules.error(
+                    'M009',
+                    `'${e.right.text}' may be zero: show that it is not where it is divided by (e.g. '${e.right.text} != 0 && …').`,
+                    e.rightAt,
+                );
+        }
+        if (!decimal) return COMPUTED_INT;
+        const scale = ls === undefined || rs === undefined ? undefined : op === '*' ? ls + rs : Math.max(ls, rs);
+        return { k: 'prim', name: 'Decimal', computed: true, ...(scale !== undefined && { scale }) };
     }
 
     /**
@@ -946,6 +1000,9 @@ function pathOf(e: Expr): string | undefined {
 }
 
 /** Paths guaranteed present when `e` evaluates to true (exists() conjuncts). */
+/** The key of the fact that an expression is not zero, among the paths of `Scope.present`. */
+const nonZeroKey = (e: Expr): string => `≠0 ${e.text}`;
+
 /** How a logical operator is written (Phase 2): `implies` only in models not yet migrated. */
 const LOGICAL_SPELLING: Readonly<Record<'and' | 'or' | 'implies', string>> = { and: '&&', or: '||', implies: 'implies' };
 
@@ -965,6 +1022,13 @@ function guards(e: Expr, holds = true): string[] {
             if (r) receivers.push(r);
         }
         return [...receivers.reverse(), p];
+    }
+    // `d != 0` holding (or `d == 0` not holding), `d > 0` / `d < 0` holding: `d` is not zero where it holds
+    if (e.k === 'binary' && (e.op === '!=' || e.op === '==' || e.op === '>' || e.op === '<')) {
+        const zero = (x: Expr): boolean => (x.k === 'int' || x.k === 'decimal') && Number(x.value) === 0;
+        const other = zero(e.right) ? e.left : zero(e.left) ? e.right : undefined;
+        if (other && (e.op === '==' ? !holds : holds)) return [nonZeroKey(other)];
+        return [];
     }
     if (e.k === 'not') return guards(e.operand, !holds);
     if (e.k === 'binary' && e.op === 'and' && holds) return [...guards(e.left, true), ...guards(e.right, true)];

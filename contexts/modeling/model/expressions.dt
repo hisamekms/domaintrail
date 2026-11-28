@@ -1,6 +1,6 @@
 context Modeling {
   /// The binary operators of expressions: `implies`, `or`, `and`, `==`, `!=`, `<`, `<=`, `>`, `>=`.
-  enum BinaryOp { implies or and eq ne lt le gt ge coalesce }
+  enum BinaryOp { implies or and eq ne lt le gt ge coalesce add sub mul div }
 
   /// `all(collection, x => body)` and `any(collection, x => body)`.
   enum Quantifier { all any }
