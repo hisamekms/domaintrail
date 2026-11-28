@@ -474,6 +474,16 @@ export class ExprCompiler {
                         return wrapped(compare(l, r, BINARY_OP_TEXT[e.op]));
                     case 'coalesce':
                         return wrapped(`${l.js} ?? ${r.js}`);
+                    case 'add':
+                    case 'sub':
+                    case 'mul':
+                    case 'div': {
+                        // Int arithmetic is JavaScript's; a Decimal is a string, computed exactly by the runtime
+                        if (!isDecimal(l) && !isDecimal(r)) return wrapped(`${l.js} ${BINARY_OP_TEXT[e.op]} ${r.js}`, e.op !== 'mul');
+                        const fn = { add: 'decimalAdd', sub: 'decimalSub', mul: 'decimalMul', div: 'decimalDiv' }[e.op];
+                        const scale = e.op === 'div' ? `, ${this.irNode(e)?.type?.scale ?? 0}` : '';
+                        return { js: `${fn}(String(${l.js}), String(${r.js})${scale})` };
+                    }
                 }
             }
         }

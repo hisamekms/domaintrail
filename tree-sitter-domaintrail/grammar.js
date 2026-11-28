@@ -18,8 +18,10 @@ const PREC = {
   or: 2,
   and: 3,
   comparison: 4,
-  not: 5,
-  member: 6,
+  additive: 5,
+  multiplicative: 6,
+  not: 7,
+  member: 8,
 };
 
 /** Keywords that may also name fields, parameters, terms, commands and lambda parameters (FeatureName). */
@@ -95,6 +97,7 @@ module.exports = grammar({
       optional(field('label', $.string)),
       ':',
       field('base', $.primitive_type),
+      optional($.scale),
       optional(field('body', $.primitive_body)),
     ),
 
@@ -221,7 +224,10 @@ module.exports = grammar({
       optional(field('multiplicity', $.multiplicity)),
     ),
 
-    _type: ($) => choice($.primitive_type, $.qualified_name),
+    _type: ($) => choice(seq($.primitive_type, optional($.scale)), $.qualified_name),
+
+    /** `Decimal(2)`: the digits after the point. */
+    scale: ($) => seq('(', $.integer, ')'),
 
     primitive_type: (_) => choice('String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth', 'DateTime', 'ZonedDateTime', 'TimeZone'),
 
@@ -363,6 +369,8 @@ module.exports = grammar({
       prec.left(PREC.coalesce, seq(field('left', $._expression), field('operator', '??'), field('right', $._expression))),
       prec.left(PREC.or, seq(field('left', $._expression), field('operator', '||'), field('right', $._expression))),
       prec.left(PREC.and, seq(field('left', $._expression), field('operator', '&&'), field('right', $._expression))),
+      prec.left(PREC.additive, seq(field('left', $._expression), field('operator', choice('+', '-')), field('right', $._expression))),
+      prec.left(PREC.multiplicative, seq(field('left', $._expression), field('operator', choice('*', '/')), field('right', $._expression))),
       prec.left(PREC.comparison, seq(
         field('left', $._expression),
         field('operator', choice('==', '!=', '<=', '>=', '<', '>')),

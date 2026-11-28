@@ -232,6 +232,10 @@ export const BINARY_OP_TEXT: Readonly<Record<M.BinaryOp, string>> = {
     gt: '>',
     ge: '>=',
     coalesce: '??',
+    add: '+',
+    sub: '-',
+    mul: '*',
+    div: '/',
 };
 
 /** `when` of an `emits` entry as written, e.g. `Confirmed ->` (empty without one). */

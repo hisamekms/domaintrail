@@ -468,6 +468,68 @@ export function decimalCompare(a: string, b: string): -1 | 0 | 1 {
     return (x.negative ? -magnitude : magnitude) as -1 | 0 | 1;
 }
 
+/** Exact decimal addition, preserving the larger operand scale. */
+export function decimalAdd(a: string, b: string): Decimal {
+    return decimalAddSub(a, b, false);
+}
+
+/** Exact decimal subtraction, preserving the larger operand scale. */
+export function decimalSub(a: string, b: string): Decimal {
+    return decimalAddSub(a, b, true);
+}
+
+function decimalParts(value: string): { coefficient: bigint; scale: number } {
+    const negative = value.startsWith('-');
+    const [whole, fraction = ''] = (negative ? value.slice(1) : value).split('.');
+    const coefficient = BigInt(whole + fraction) * (negative ? -1n : 1n);
+    return { coefficient, scale: fraction.length };
+}
+
+function decimalText(coefficient: bigint, scale: number): Decimal {
+    if (coefficient === 0n) return (scale === 0 ? '0' : '0.' + '0'.repeat(scale)) as Decimal;
+    const negative = coefficient < 0n;
+    let digits = (negative ? -coefficient : coefficient).toString();
+    if (scale > 0) {
+        digits = digits.padStart(scale + 1, '0');
+        digits = digits.slice(0, -scale) + '.' + digits.slice(-scale);
+    }
+    return (negative ? '-' : '') + digits as Decimal;
+}
+
+function decimalAddSub(a: string, b: string, subtract: boolean): Decimal {
+    const x = decimalParts(a), y = decimalParts(b), scale = Math.max(x.scale, y.scale);
+    const left = x.coefficient * 10n ** BigInt(scale - x.scale);
+    const right = y.coefficient * 10n ** BigInt(scale - y.scale);
+    return decimalText(left + (subtract ? -right : right), scale);
+}
+
+/** Exact decimal multiplication, keeping the sum of the operand scales. */
+export function decimalMul(a: string, b: string): Decimal {
+    const x = decimalParts(a), y = decimalParts(b);
+    return decimalText(x.coefficient * y.coefficient, x.scale + y.scale);
+}
+
+/** Decimal division rounded half-even to the requested number of fractional digits. */
+export function decimalDiv(a: string, b: string, scale: number): Decimal {
+    const y = decimalParts(b);
+    if (y.coefficient === 0n) {
+        throw new RangeError('division by zero');
+    }
+    if (!Number.isSafeInteger(scale) || scale < 0) throw new RangeError('scale must be a non-negative integer');
+    const x = decimalParts(a);
+    let numerator = x.coefficient < 0n ? -x.coefficient : x.coefficient;
+    let denominator = y.coefficient < 0n ? -y.coefficient : y.coefficient;
+    const shift = scale + y.scale - x.scale;
+    if (shift >= 0) numerator *= 10n ** BigInt(shift);
+    else denominator *= 10n ** BigInt(-shift);
+    let quotient = numerator / denominator;
+    const remainder = numerator % denominator;
+    const twiceRemainder = remainder * 2n;
+    if (twiceRemainder > denominator || (twiceRemainder === denominator && quotient % 2n !== 0n)) quotient++;
+    if ((x.coefficient < 0n) !== (y.coefficient < 0n)) quotient = -quotient;
+    return decimalText(quotient, scale);
+}
+
 // ---- dates and times (ADR 0038) --------------------------------------------------------------------------------
 // A value of a date or time type is its canonical text, branded: it crosses JSON and structuredClone as it is, and
 // its text orders as its values do. Make one with its parser, never with \`as\`. The parsers read the text of Temporal
@@ -823,7 +885,11 @@ class ContextEmitter {
         ].filter(uses);
         const values = [
             'availableCommands',
+            'decimalAdd',
             'decimalCompare',
+            'decimalDiv',
+            'decimalMul',
+            'decimalSub',
             'distinct',
             'err',
             'fromAnyState',

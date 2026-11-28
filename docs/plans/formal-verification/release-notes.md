@@ -26,6 +26,10 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   `b` of the same type. Both compile to TypeScript's own `?.` and `??`.
 - `test ? a : b` is a value or a condition by case: `days <= (express ? 2 : limit)`. Its branches see what the
   test shows: `note != null ? note.length > 0 : true`.
+- Arithmetic: Int `+ - *` and Decimal `+ - * /` (exact; `/` rounds half-even to the larger declared scale). A
+  Decimal declares its scale with `Decimal(n)` on fields, parameters and primitives, and `/` needs it. A divisor
+  must be shown non-zero where it is divided by. The generated checks compute Decimals exactly with the runtime's
+  `decimalAdd`, `decimalSub`, `decimalMul` and `decimalDiv`.
 
 ## Added
 

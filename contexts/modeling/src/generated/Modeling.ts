@@ -189,7 +189,7 @@ export interface Described {
  * The binary operators of expressions: `implies`, `or`, `and`, `==`, `!=`, `<`, `<=`, `>`, `>=`.
  * @see contexts/modeling/model/expressions.dt:3
  */
-export type BinaryOp = 'implies' | 'or' | 'and' | 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge' | 'coalesce';
+export type BinaryOp = 'implies' | 'or' | 'and' | 'eq' | 'ne' | 'lt' | 'le' | 'gt' | 'ge' | 'coalesce' | 'add' | 'sub' | 'mul' | 'div';
 
 /**
  * `all(collection, x => body)` and `any(collection, x => body)`.
@@ -455,6 +455,7 @@ export type ElementModel =
           readonly doc?: string;
           readonly location: Kernel.Location;
           readonly base: PrimitiveName;
+          readonly scale?: number;
           readonly invariants: readonly InvariantModel[];
       }
     /** `primitive X: T { … }`: a single value wrapping a primitive type, with invariants on `value`. */
@@ -467,6 +468,7 @@ export type ElementModel =
           readonly doc?: string;
           readonly location: Kernel.Location;
           readonly base: PrimitiveName;
+          readonly scale?: number;
           readonly invariants: readonly InvariantModel[];
       }
     /** `verified X of T for C? errors E` (ADR 0023). */
@@ -604,58 +606,58 @@ export function equalElementModel(a: ElementModel, b: ElementModel): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'id') {
         const y = b as Extract<ElementModel, { readonly kind: 'id' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($18: string, $19: string) => $18 === $19) && sameOptional(a.doc, y.doc, ($20: string, $21: string) => $20 === $21) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($18: string, $19: string) => $18 === $19) && sameOptional(a.doc, y.doc, ($20: string, $21: string) => $20 === $21) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameOptional(a.scale, y.scale, ($22: number, $23: number) => $22 === $23) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'primitive') {
         const y = b as Extract<ElementModel, { readonly kind: 'primitive' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($22: string, $23: string) => $22 === $23) && sameOptional(a.doc, y.doc, ($24: string, $25: string) => $24 === $25) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($24: string, $25: string) => $24 === $25) && sameOptional(a.doc, y.doc, ($26: string, $27: string) => $26 === $27) && Kernel.equalLocation(a.location, y.location) && a.base === y.base && sameOptional(a.scale, y.scale, ($28: number, $29: number) => $28 === $29) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'verified') {
         const y = b as Extract<ElementModel, { readonly kind: 'verified' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($26: string, $27: string) => $26 === $27) && sameOptional(a.doc, y.doc, ($28: string, $29: string) => $28 === $29) && Kernel.equalLocation(a.location, y.location) && equalVerifiedModel(a.verified, y.verified);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($30: string, $31: string) => $30 === $31) && sameOptional(a.doc, y.doc, ($32: string, $33: string) => $32 === $33) && Kernel.equalLocation(a.location, y.location) && equalVerifiedModel(a.verified, y.verified);
     }
     if (a.kind === 'enum') {
         const y = b as Extract<ElementModel, { readonly kind: 'enum' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($30: string, $31: string) => $30 === $31) && sameOptional(a.doc, y.doc, ($32: string, $33: string) => $32 === $33) && Kernel.equalLocation(a.location, y.location) && sameList(a.values, y.values, equalEnumValueModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($34: string, $35: string) => $34 === $35) && sameOptional(a.doc, y.doc, ($36: string, $37: string) => $36 === $37) && Kernel.equalLocation(a.location, y.location) && sameList(a.values, y.values, equalEnumValueModel);
     }
     if (a.kind === 'valueObject') {
         const y = b as Extract<ElementModel, { readonly kind: 'valueObject' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($34: string, $35: string) => $34 === $35) && sameOptional(a.doc, y.doc, ($36: string, $37: string) => $36 === $37) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($38: QualifiedName, $39: QualifiedName) => $38 === $39) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($38: string, $39: string) => $38 === $39) && sameOptional(a.doc, y.doc, ($40: string, $41: string) => $40 === $41) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($42: QualifiedName, $43: QualifiedName) => $42 === $43) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'union') {
         const y = b as Extract<ElementModel, { readonly kind: 'union' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($40: string, $41: string) => $40 === $41) && sameOptional(a.doc, y.doc, ($42: string, $43: string) => $42 === $43) && Kernel.equalLocation(a.location, y.location) && a.discriminator === y.discriminator && sameOptional(a.tagType, y.tagType, ($44: QualifiedName, $45: QualifiedName) => $44 === $45) && sameList(a.variants, y.variants, equalVariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($44: string, $45: string) => $44 === $45) && sameOptional(a.doc, y.doc, ($46: string, $47: string) => $46 === $47) && Kernel.equalLocation(a.location, y.location) && a.discriminator === y.discriminator && sameOptional(a.tagType, y.tagType, ($48: QualifiedName, $49: QualifiedName) => $48 === $49) && sameList(a.variants, y.variants, equalVariantModel);
     }
     if (a.kind === 'entity') {
         const y = b as Extract<ElementModel, { readonly kind: 'entity' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($46: string, $47: string) => $46 === $47) && sameOptional(a.doc, y.doc, ($48: string, $49: string) => $48 === $49) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($50: QualifiedName, $51: QualifiedName) => $50 === $51) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($50: string, $51: string) => $50 === $51) && sameOptional(a.doc, y.doc, ($52: string, $53: string) => $52 === $53) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($54: QualifiedName, $55: QualifiedName) => $54 === $55) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel);
     }
     if (a.kind === 'aggregate') {
         const y = b as Extract<ElementModel, { readonly kind: 'aggregate' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($52: string, $53: string) => $52 === $53) && sameOptional(a.doc, y.doc, ($54: string, $55: string) => $54 === $55) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($56: QualifiedName, $57: QualifiedName) => $56 === $57) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel) && sameList(a.states, y.states, equalStateModel) && sameList(a.commands, y.commands, equalCommandModel) && sameList(a.initials, y.initials, equalInitialModel) && sameList(a.kinds, y.kinds, equalKindModel) && sameList(a.validStates, y.validStates, equalValidKindStatesModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($56: string, $57: string) => $56 === $57) && sameOptional(a.doc, y.doc, ($58: string, $59: string) => $58 === $59) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($60: QualifiedName, $61: QualifiedName) => $60 === $61) && sameList(a.fields, y.fields, equalFieldModel) && sameList(a.invariants, y.invariants, equalInvariantModel) && sameList(a.states, y.states, equalStateModel) && sameList(a.commands, y.commands, equalCommandModel) && sameList(a.initials, y.initials, equalInitialModel) && sameList(a.kinds, y.kinds, equalKindModel) && sameList(a.validStates, y.validStates, equalValidKindStatesModel);
     }
     if (a.kind === 'event') {
         const y = b as Extract<ElementModel, { readonly kind: 'event' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($58: string, $59: string) => $58 === $59) && sameOptional(a.doc, y.doc, ($60: string, $61: string) => $60 === $61) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($62: QualifiedName, $63: QualifiedName) => $62 === $63) && sameList(a.fields, y.fields, equalFieldModel) && a.persistent === y.persistent;
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($62: string, $63: string) => $62 === $63) && sameOptional(a.doc, y.doc, ($64: string, $65: string) => $64 === $65) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($66: QualifiedName, $67: QualifiedName) => $66 === $67) && sameList(a.fields, y.fields, equalFieldModel) && a.persistent === y.persistent;
     }
     if (a.kind === 'error') {
         const y = b as Extract<ElementModel, { readonly kind: 'error' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($64: string, $65: string) => $64 === $65) && sameOptional(a.doc, y.doc, ($66: string, $67: string) => $66 === $67) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($68: QualifiedName, $69: QualifiedName) => $68 === $69) && sameList(a.fields, y.fields, equalFieldModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($68: string, $69: string) => $68 === $69) && sameOptional(a.doc, y.doc, ($70: string, $71: string) => $70 === $71) && Kernel.equalLocation(a.location, y.location) && sameList(a.fieldSets, y.fieldSets, ($72: QualifiedName, $73: QualifiedName) => $72 === $73) && sameList(a.fields, y.fields, equalFieldModel);
     }
     if (a.kind === 'fieldSet') {
         const y = b as Extract<ElementModel, { readonly kind: 'fieldSet' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($70: string, $71: string) => $70 === $71) && sameOptional(a.doc, y.doc, ($72: string, $73: string) => $72 === $73) && Kernel.equalLocation(a.location, y.location) && sameList(a.fields, y.fields, equalFieldModel);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($74: string, $75: string) => $74 === $75) && sameOptional(a.doc, y.doc, ($76: string, $77: string) => $76 === $77) && Kernel.equalLocation(a.location, y.location) && sameList(a.fields, y.fields, equalFieldModel);
     }
     if (a.kind === 'policy') {
         const y = b as Extract<ElementModel, { readonly kind: 'policy' }>;
-        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($74: string, $75: string) => $74 === $75) && sameOptional(a.doc, y.doc, ($76: string, $77: string) => $76 === $77) && Kernel.equalLocation(a.location, y.location) && equalPolicyModel(a.policy, y.policy);
+        return a.id === y.id && a.context === y.context && a.name === y.name && sameOptional(a.label, y.label, ($78: string, $79: string) => $78 === $79) && sameOptional(a.doc, y.doc, ($80: string, $81: string) => $80 === $81) && Kernel.equalLocation(a.location, y.location) && equalPolicyModel(a.policy, y.policy);
     }
     return true;
 }
 
 /**
  * A value of an enum, with its Japanese name.
- * @see contexts/modeling/model/model.dt:176
+ * @see contexts/modeling/model/model.dt:178
  */
 export interface EnumValueModel {
     readonly name: string;
@@ -664,20 +666,22 @@ export interface EnumValueModel {
 
 /**
  * Whether two EnumValueModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:176
+ * @see contexts/modeling/model/model.dt:178
  */
 export function equalEnumValueModel(a: EnumValueModel, b: EnumValueModel): boolean {
-    return a.name === b.name && sameOptional(a.label, b.label, ($78: string, $79: string) => $78 === $79);
+    return a.name === b.name && sameOptional(a.label, b.label, ($82: string, $83: string) => $82 === $83);
 }
 
 /**
  * The type of a field, a parameter or a verified type.
- * @see contexts/modeling/model/model.dt:182
+ * @see contexts/modeling/model/model.dt:184
  */
 export type TypeExpr =
+    /** `scale`: the digits after the point of a `Decimal(n)`, absent when not declared. */
     | {
           readonly kind: 'primitive';
           readonly name: PrimitiveName;
+          readonly scale?: number;
       }
     /**
      * `ref` is the qualified name of the target (as written when it does not resolve); `target` its kind, absent when
@@ -692,42 +696,42 @@ export type TypeExpr =
 
 /**
  * Whether two TypeExpr values are equal: by `kind` and the fields of the variant (ADR 0016).
- * @see contexts/modeling/model/model.dt:182
+ * @see contexts/modeling/model/model.dt:184
  */
 export function equalTypeExpr(a: TypeExpr, b: TypeExpr): boolean {
     if (a.kind !== b.kind) return false;
     if (a.kind === 'primitive') {
         const y = b as Extract<TypeExpr, { readonly kind: 'primitive' }>;
-        return a.name === y.name;
+        return a.name === y.name && sameOptional(a.scale, y.scale, ($84: number, $85: number) => $84 === $85);
     }
     if (a.kind === 'ref') {
         const y = b as Extract<TypeExpr, { readonly kind: 'ref' }>;
-        return a.ref === y.ref && a.text === y.text && sameOptional(a.target, y.target, ($80: string, $81: string) => $80 === $81);
+        return a.ref === y.ref && a.text === y.text && sameOptional(a.target, y.target, ($86: string, $87: string) => $86 === $87);
     }
     return true;
 }
 
 /**
  * How many values a field holds: exactly one, at most one (`?`), any number (`[0..*]`, `[0..n]`), at least one.
- * @see contexts/modeling/model/model.dt:196
+ * @see contexts/modeling/model/model.dt:200
  */
 export type Cardinality = 'one' | 'optional' | 'many' | 'nonEmpty';
 
 /**
  * What a field is: a plain field, `owns`, `references`, or a command's parameter.
- * @see contexts/modeling/model/model.dt:199
+ * @see contexts/modeling/model/model.dt:203
  */
 export type FieldKind = 'field' | 'owns' | 'references' | 'param';
 
 /**
  * Where the Japanese name of a field comes from: written on it, its term, its type.
- * @see contexts/modeling/model/model.dt:202
+ * @see contexts/modeling/model/model.dt:206
  */
 export type LabelSource = 'inline' | 'term' | 'type';
 
 /**
  * A field of an element, state or variant, or a parameter of a command.
- * @see contexts/modeling/model/model.dt:205
+ * @see contexts/modeling/model/model.dt:209
  */
 export interface FieldModel extends Described {
     readonly name: string;
@@ -746,15 +750,15 @@ export interface FieldModel extends Described {
 
 /**
  * Whether two FieldModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:205
+ * @see contexts/modeling/model/model.dt:209
  */
 export function equalFieldModel(a: FieldModel, b: FieldModel): boolean {
-    return sameOptional(a.label, b.label, ($82: string, $83: string) => $82 === $83) && sameOptional(a.doc, b.doc, ($84: string, $85: string) => $84 === $85) && a.name === b.name && a.kind === b.kind && equalTypeExpr(a.type, b.type) && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && sameOptional(a.target, b.target, ($86: QualifiedName, $87: QualifiedName) => $86 === $87) && sameOptional(a.labelSource, b.labelSource, ($88: string, $89: string) => $88 === $89) && sameOptional(a.fieldSet, b.fieldSet, ($90: QualifiedName, $91: QualifiedName) => $90 === $91) && sameOptional(a.readonly, b.readonly, ($92: boolean, $93: boolean) => $92 === $93);
+    return sameOptional(a.label, b.label, ($88: string, $89: string) => $88 === $89) && sameOptional(a.doc, b.doc, ($90: string, $91: string) => $90 === $91) && a.name === b.name && a.kind === b.kind && equalTypeExpr(a.type, b.type) && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && sameOptional(a.target, b.target, ($92: QualifiedName, $93: QualifiedName) => $92 === $93) && sameOptional(a.labelSource, b.labelSource, ($94: string, $95: string) => $94 === $95) && sameOptional(a.fieldSet, b.fieldSet, ($96: QualifiedName, $97: QualifiedName) => $96 === $97) && sameOptional(a.readonly, b.readonly, ($98: boolean, $99: boolean) => $98 === $99);
 }
 
 /**
  * `invariant name "label" { expr }`.
- * @see contexts/modeling/model/model.dt:221
+ * @see contexts/modeling/model/model.dt:225
  */
 export interface InvariantModel extends Described {
     readonly name: string;
@@ -767,15 +771,15 @@ export interface InvariantModel extends Described {
 
 /**
  * Whether two InvariantModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:221
+ * @see contexts/modeling/model/model.dt:225
  */
 export function equalInvariantModel(a: InvariantModel, b: InvariantModel): boolean {
-    return sameOptional(a.label, b.label, ($94: string, $95: string) => $94 === $95) && sameOptional(a.doc, b.doc, ($96: string, $97: string) => $96 === $97) && a.name === b.name && sameOptional(a.source, b.source, ($98: string, $99: string) => $98 === $99) && sameOptional(a.expr, b.expr, equalExprModel) && sameOptional(a.externalReason, b.externalReason, ($100: string, $101: string) => $100 === $101);
+    return sameOptional(a.label, b.label, ($100: string, $101: string) => $100 === $101) && sameOptional(a.doc, b.doc, ($102: string, $103: string) => $102 === $103) && a.name === b.name && sameOptional(a.source, b.source, ($104: string, $105: string) => $104 === $105) && sameOptional(a.expr, b.expr, equalExprModel) && sameOptional(a.externalReason, b.externalReason, ($106: string, $107: string) => $106 === $107);
 }
 
 /**
  * A state of an aggregate, with its own fields and invariants.
- * @see contexts/modeling/model/model.dt:231
+ * @see contexts/modeling/model/model.dt:235
  */
 export interface StateModel extends Described {
     readonly id: ElementId;
@@ -787,15 +791,15 @@ export interface StateModel extends Described {
 
 /**
  * Whether two StateModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:231
+ * @see contexts/modeling/model/model.dt:235
  */
 export function equalStateModel(a: StateModel, b: StateModel): boolean {
-    return sameOptional(a.label, b.label, ($102: string, $103: string) => $102 === $103) && sameOptional(a.doc, b.doc, ($104: string, $105: string) => $104 === $105) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($108: string, $109: string) => $108 === $109) && sameOptional(a.doc, b.doc, ($110: string, $111: string) => $110 === $111) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && Kernel.equalLocation(a.location, b.location);
 }
 
 /**
  * A variant of a union: its name is the discriminator value.
- * @see contexts/modeling/model/model.dt:240
+ * @see contexts/modeling/model/model.dt:244
  */
 export interface VariantModel extends Described {
     readonly name: string;
@@ -805,15 +809,15 @@ export interface VariantModel extends Described {
 
 /**
  * Whether two VariantModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:240
+ * @see contexts/modeling/model/model.dt:244
  */
 export function equalVariantModel(a: VariantModel, b: VariantModel): boolean {
-    return sameOptional(a.label, b.label, ($106: string, $107: string) => $106 === $107) && sameOptional(a.doc, b.doc, ($108: string, $109: string) => $108 === $109) && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel);
+    return sameOptional(a.label, b.label, ($112: string, $113: string) => $112 === $113) && sameOptional(a.doc, b.doc, ($114: string, $115: string) => $114 === $115) && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel);
 }
 
 /**
  * `requires name "label" { expr } else Error`: the command is accepted only if the requirement holds.
- * @see contexts/modeling/model/model.dt:247
+ * @see contexts/modeling/model/model.dt:251
  */
 export interface RequirementModel extends Described {
     readonly name: string;
@@ -828,13 +832,13 @@ export interface RequirementModel extends Described {
 
 /**
  * Whether two RequirementModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:247
+ * @see contexts/modeling/model/model.dt:251
  */
 export function equalRequirementModel(a: RequirementModel, b: RequirementModel): boolean {
-    return sameOptional(a.label, b.label, ($110: string, $111: string) => $110 === $111) && sameOptional(a.doc, b.doc, ($112: string, $113: string) => $112 === $113) && a.name === b.name && sameOptional(a.source, b.source, ($114: string, $115: string) => $114 === $115) && sameOptional(a.expr, b.expr, equalExprModel) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($116: string, $117: string) => $116 === $117);
+    return sameOptional(a.label, b.label, ($116: string, $117: string) => $116 === $117) && sameOptional(a.doc, b.doc, ($118: string, $119: string) => $118 === $119) && a.name === b.name && sameOptional(a.source, b.source, ($120: string, $121: string) => $120 === $121) && sameOptional(a.expr, b.expr, equalExprModel) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($122: string, $123: string) => $122 === $123);
 }
 
-/** @see contexts/modeling/model/model.dt:258 */
+/** @see contexts/modeling/model/model.dt:262 */
 export interface InitialModel {
     readonly state: string;
     /** Empty means all kinds. */
@@ -843,13 +847,13 @@ export interface InitialModel {
 
 /**
  * Whether two InitialModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:258
+ * @see contexts/modeling/model/model.dt:262
  */
 export function equalInitialModel(a: InitialModel, b: InitialModel): boolean {
-    return a.state === b.state && sameList(a.kinds, b.kinds, ($118: string, $119: string) => $118 === $119);
+    return a.state === b.state && sameList(a.kinds, b.kinds, ($124: string, $125: string) => $124 === $125);
 }
 
-/** @see contexts/modeling/model/model.dt:264 */
+/** @see contexts/modeling/model/model.dt:268 */
 export interface ValidKindStatesModel {
     readonly kind: string;
     readonly states: readonly string[];
@@ -857,16 +861,16 @@ export interface ValidKindStatesModel {
 
 /**
  * Whether two ValidKindStatesModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:264
+ * @see contexts/modeling/model/model.dt:268
  */
 export function equalValidKindStatesModel(a: ValidKindStatesModel, b: ValidKindStatesModel): boolean {
-    return a.kind === b.kind && sameList(a.states, b.states, ($120: string, $121: string) => $120 === $121);
+    return a.kind === b.kind && sameList(a.states, b.states, ($126: string, $127: string) => $126 === $127);
 }
 
 /**
  * A kind of an aggregate: its own fields and invariants (added to the common ones) and the outcomes it gives the
  * common commands that have none (`on command { … }`). Its own commands are the aggregate's commands with its name.
- * @see contexts/modeling/model/model.dt:271
+ * @see contexts/modeling/model/model.dt:275
  */
 export interface KindModel extends Described {
     readonly id: ElementId;
@@ -879,13 +883,13 @@ export interface KindModel extends Described {
 
 /**
  * Whether two KindModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:271
+ * @see contexts/modeling/model/model.dt:275
  */
 export function equalKindModel(a: KindModel, b: KindModel): boolean {
-    return sameOptional(a.label, b.label, ($122: string, $123: string) => $122 === $123) && sameOptional(a.doc, b.doc, ($124: string, $125: string) => $124 === $125) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && sameList(a.cases, b.cases, equalCommandCaseModel) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($128: string, $129: string) => $128 === $129) && sameOptional(a.doc, b.doc, ($130: string, $131: string) => $130 === $131) && a.id === b.id && a.name === b.name && sameList(a.fields, b.fields, equalFieldModel) && sameList(a.invariants, b.invariants, equalInvariantModel) && sameList(a.cases, b.cases, equalCommandCaseModel) && Kernel.equalLocation(a.location, b.location);
 }
 
-/** @see contexts/modeling/model/model.dt:280 */
+/** @see contexts/modeling/model/model.dt:284 */
 export interface CommandCaseModel {
     readonly command: string;
     readonly requires: readonly RequirementModel[];
@@ -894,13 +898,13 @@ export interface CommandCaseModel {
 
 /**
  * Whether two CommandCaseModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:280
+ * @see contexts/modeling/model/model.dt:284
  */
 export function equalCommandCaseModel(a: CommandCaseModel, b: CommandCaseModel): boolean {
     return a.command === b.command && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel);
 }
 
-/** @see contexts/modeling/model/model.dt:286 */
+/** @see contexts/modeling/model/model.dt:290 */
 export interface OutcomeModel {
     readonly name: string;
     readonly from: readonly string[];
@@ -912,13 +916,13 @@ export interface OutcomeModel {
 
 /**
  * Whether two OutcomeModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:286
+ * @see contexts/modeling/model/model.dt:290
  */
 export function equalOutcomeModel(a: OutcomeModel, b: OutcomeModel): boolean {
-    return a.name === b.name && sameList(a.from, b.from, ($126: string, $127: string) => $126 === $127) && a.to === b.to && sameList(a.changes, b.changes, ($128: string, $129: string) => $128 === $129) && sameList(a.emits, b.emits, equalEmitModel) && sameOptional(a.select, b.select, equalChoiceRuleModel);
+    return a.name === b.name && sameList(a.from, b.from, ($132: string, $133: string) => $132 === $133) && a.to === b.to && sameList(a.changes, b.changes, ($134: string, $135: string) => $134 === $135) && sameList(a.emits, b.emits, equalEmitModel) && sameOptional(a.select, b.select, equalChoiceRuleModel);
 }
 
-/** @see contexts/modeling/model/model.dt:295 */
+/** @see contexts/modeling/model/model.dt:299 */
 export type ChoiceRuleModel =
     | {
           readonly kind: 'expression';
@@ -937,7 +941,7 @@ export type ChoiceRuleModel =
 
 /**
  * Whether two ChoiceRuleModel values are equal: by `kind` and the fields of the variant (ADR 0016).
- * @see contexts/modeling/model/model.dt:295
+ * @see contexts/modeling/model/model.dt:299
  */
 export function equalChoiceRuleModel(a: ChoiceRuleModel, b: ChoiceRuleModel): boolean {
     if (a.kind !== b.kind) return false;
@@ -958,7 +962,7 @@ export function equalChoiceRuleModel(a: ChoiceRuleModel, b: ChoiceRuleModel): bo
 
 /**
  * `A | B -> C | D`: state names within the owning aggregate. `from` is empty for a factory.
- * @see contexts/modeling/model/model.dt:310
+ * @see contexts/modeling/model/model.dt:314
  */
 export interface TransitionModel {
     readonly from: readonly string[];
@@ -967,16 +971,16 @@ export interface TransitionModel {
 
 /**
  * Whether two TransitionModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:310
+ * @see contexts/modeling/model/model.dt:314
  */
 export function equalTransitionModel(a: TransitionModel, b: TransitionModel): boolean {
-    return sameList(a.from, b.from, ($130: string, $131: string) => $130 === $131) && sameList(a.to, b.to, ($132: string, $133: string) => $132 === $133);
+    return sameList(a.from, b.from, ($136: string, $137: string) => $136 === $137) && sameList(a.to, b.to, ($138: string, $139: string) => $138 === $139);
 }
 
 /**
  * `when A | B -> C`: the outcomes an `emits` entry applies to. An empty side matches any state (a factory has no
  * source).
- * @see contexts/modeling/model/model.dt:317
+ * @see contexts/modeling/model/model.dt:321
  */
 export interface OutcomePatternModel {
     readonly from: readonly string[];
@@ -985,16 +989,16 @@ export interface OutcomePatternModel {
 
 /**
  * Whether two OutcomePatternModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:317
+ * @see contexts/modeling/model/model.dt:321
  */
 export function equalOutcomePatternModel(a: OutcomePatternModel, b: OutcomePatternModel): boolean {
-    return sameList(a.from, b.from, ($134: string, $135: string) => $134 === $135) && sameList(a.to, b.to, ($136: string, $137: string) => $136 === $137);
+    return sameList(a.from, b.from, ($140: string, $141: string) => $140 === $141) && sameList(a.to, b.to, ($142: string, $143: string) => $142 === $143);
 }
 
 /**
  * An entry of `emits`: the command emits `event` as often as its multiplicity says (once without one), for the
  * outcomes that match `when` (every outcome without it). On failure it emits nothing.
- * @see contexts/modeling/model/model.dt:324
+ * @see contexts/modeling/model/model.dt:328
  */
 export interface EmitModel {
     /** Qualified event name. */
@@ -1011,15 +1015,15 @@ export interface EmitModel {
 
 /**
  * Whether two EmitModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:324
+ * @see contexts/modeling/model/model.dt:328
  */
 export function equalEmitModel(a: EmitModel, b: EmitModel): boolean {
-    return a.event === b.event && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && a.lower === b.lower && sameOptional(a.upper, b.upper, ($138: number, $139: number) => $138 === $139) && sameOptional(a.when, b.when, equalOutcomePatternModel);
+    return a.event === b.event && a.cardinality === b.cardinality && a.multiplicity === b.multiplicity && a.lower === b.lower && sameOptional(a.upper, b.upper, ($144: number, $145: number) => $144 === $145) && sameOptional(a.when, b.when, equalOutcomePatternModel);
 }
 
 /**
  * A command of an aggregate.
- * @see contexts/modeling/model/model.dt:338
+ * @see contexts/modeling/model/model.dt:342
  */
 export interface CommandModel extends Described {
     readonly id: ElementId;
@@ -1047,16 +1051,16 @@ export interface CommandModel extends Described {
 
 /**
  * Whether two CommandModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:338
+ * @see contexts/modeling/model/model.dt:342
  */
 export function equalCommandModel(a: CommandModel, b: CommandModel): boolean {
-    return sameOptional(a.label, b.label, ($140: string, $141: string) => $140 === $141) && sameOptional(a.doc, b.doc, ($142: string, $143: string) => $142 === $143) && a.id === b.id && a.name === b.name && a.factory === b.factory && sameList(a.params, b.params, equalFieldModel) && sameList(a.transitions, b.transitions, equalTransitionModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel) && a.legacy === b.legacy && sameOptional(a.kind, b.kind, ($144: string, $145: string) => $144 === $145) && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.changes, b.changes, ($146: string, $147: string) => $146 === $147) && sameList(a.emits, b.emits, equalEmitModel) && sameList(a.errors, b.errors, ($148: QualifiedName, $149: QualifiedName) => $148 === $149) && Kernel.equalLocation(a.location, b.location);
+    return sameOptional(a.label, b.label, ($146: string, $147: string) => $146 === $147) && sameOptional(a.doc, b.doc, ($148: string, $149: string) => $148 === $149) && a.id === b.id && a.name === b.name && a.factory === b.factory && sameList(a.params, b.params, equalFieldModel) && sameList(a.transitions, b.transitions, equalTransitionModel) && sameList(a.outcomes, b.outcomes, equalOutcomeModel) && a.legacy === b.legacy && sameOptional(a.kind, b.kind, ($150: string, $151: string) => $150 === $151) && sameList(a.requires, b.requires, equalRequirementModel) && sameList(a.changes, b.changes, ($152: string, $153: string) => $152 === $153) && sameList(a.emits, b.emits, equalEmitModel) && sameList(a.errors, b.errors, ($154: QualifiedName, $155: QualifiedName) => $154 === $155) && Kernel.equalLocation(a.location, b.location);
 }
 
 /**
  * `policy Name when Event -> Aggregate.command`: when the event happens, the command is eventually run, by whatever
  * mechanism (the same use case, an event bus, a batch). The aggregate belongs to the policy's context.
- * @see contexts/modeling/model/model.dt:366
+ * @see contexts/modeling/model/model.dt:370
  */
 export interface PolicyModel {
     /** Qualified event name (as written when unresolved). */
@@ -1069,7 +1073,7 @@ export interface PolicyModel {
 
 /**
  * Whether two PolicyModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:366
+ * @see contexts/modeling/model/model.dt:370
  */
 export function equalPolicyModel(a: PolicyModel, b: PolicyModel): boolean {
     return a.event === b.event && a.aggregate === b.aggregate && a.command === b.command;
@@ -1078,7 +1082,7 @@ export function equalPolicyModel(a: PolicyModel, b: PolicyModel): boolean {
 /**
  * `verified X of T for C? errors E`: evidence that a check outside the aggregate was made — a value of `of` that
  * only its factory makes, from the value and the context of `for`, failing with one of `errors`.
- * @see contexts/modeling/model/model.dt:377
+ * @see contexts/modeling/model/model.dt:381
  */
 export interface VerifiedModel {
     readonly of: TypeExpr;
@@ -1090,15 +1094,15 @@ export interface VerifiedModel {
 
 /**
  * Whether two VerifiedModel values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:377
+ * @see contexts/modeling/model/model.dt:381
  */
 export function equalVerifiedModel(a: VerifiedModel, b: VerifiedModel): boolean {
-    return equalTypeExpr(a.of, b.of) && sameOptional(a.for, b.for, equalVerifiedFor) && sameList(a.errors, b.errors, ($150: QualifiedName, $151: QualifiedName) => $150 === $151);
+    return equalTypeExpr(a.of, b.of) && sameOptional(a.for, b.for, equalVerifiedFor) && sameList(a.errors, b.errors, ($156: QualifiedName, $157: QualifiedName) => $156 === $157);
 }
 
 /**
  * `for C?` of a verified type.
- * @see contexts/modeling/model/model.dt:386
+ * @see contexts/modeling/model/model.dt:390
  */
 export interface VerifiedFor {
     readonly type: TypeExpr;
@@ -1107,7 +1111,7 @@ export interface VerifiedFor {
 
 /**
  * Whether two VerifiedFor values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/model.dt:386
+ * @see contexts/modeling/model/model.dt:390
  */
 export function equalVerifiedFor(a: VerifiedFor, b: VerifiedFor): boolean {
     return equalTypeExpr(a.type, b.type) && a.optional === b.optional;
@@ -1159,6 +1163,8 @@ export interface SemanticType {
     readonly name: string;
     readonly cardinality: SemanticCardinality;
     readonly tag: boolean;
+    /** The digits after the point of a Decimal value, when known (a `Decimal(n)`, a literal, a computed result). */
+    readonly scale?: number;
 }
 
 /**
@@ -1166,10 +1172,10 @@ export interface SemanticType {
  * @see contexts/modeling/model/semantic.dt:53
  */
 export function equalSemanticType(a: SemanticType, b: SemanticType): boolean {
-    return a.name === b.name && a.cardinality === b.cardinality && a.tag === b.tag;
+    return a.name === b.name && a.cardinality === b.cardinality && a.tag === b.tag && sameOptional(a.scale, b.scale, ($158: number, $159: number) => $158 === $159);
 }
 
-/** @see contexts/modeling/model/semantic.dt:59 */
+/** @see contexts/modeling/model/semantic.dt:61 */
 export interface SemanticSymbol {
     readonly id: string;
     readonly kind: SemanticSymbolKind;
@@ -1178,7 +1184,7 @@ export interface SemanticSymbol {
 
 /**
  * Whether two SemanticSymbol values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:59
+ * @see contexts/modeling/model/semantic.dt:61
  */
 export function equalSemanticSymbol(a: SemanticSymbol, b: SemanticSymbol): boolean {
     return a.id === b.id && a.kind === b.kind && a.name === b.name;
@@ -1186,7 +1192,7 @@ export function equalSemanticSymbol(a: SemanticSymbol, b: SemanticSymbol): boole
 
 /**
  * A syntax expression node augmented with source identity, resolved symbol and checked static type when available.
- * @see contexts/modeling/model/semantic.dt:66
+ * @see contexts/modeling/model/semantic.dt:68
  */
 export interface SemanticExpression {
     readonly id: string;
@@ -1204,13 +1210,13 @@ export interface SemanticExpression {
 
 /**
  * Whether two SemanticExpression values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:66
+ * @see contexts/modeling/model/semantic.dt:68
  */
 export function equalSemanticExpression(a: SemanticExpression, b: SemanticExpression): boolean {
-    return a.id === b.id && a.owner === b.owner && a.root === b.root && a.path === b.path && equalSemanticSpan(a.site, b.site) && a.syntaxKind === b.syntaxKind && a.source === b.source && sameOptional(a.symbol, b.symbol, equalSemanticSymbol) && sameOptional(a.type, b.type, equalSemanticType) && sameList(a.children, b.children, equalSemanticExpression) && sameOptional(a.comparison, b.comparison, ($152: string, $153: string) => $152 === $153);
+    return a.id === b.id && a.owner === b.owner && a.root === b.root && a.path === b.path && equalSemanticSpan(a.site, b.site) && a.syntaxKind === b.syntaxKind && a.source === b.source && sameOptional(a.symbol, b.symbol, equalSemanticSymbol) && sameOptional(a.type, b.type, equalSemanticType) && sameList(a.children, b.children, equalSemanticExpression) && sameOptional(a.comparison, b.comparison, ($160: string, $161: string) => $160 === $161);
 }
 
-/** @see contexts/modeling/model/semantic.dt:80 */
+/** @see contexts/modeling/model/semantic.dt:82 */
 export interface SemanticPresenceFact {
     readonly expression: string;
     readonly path: string;
@@ -1218,13 +1224,13 @@ export interface SemanticPresenceFact {
 
 /**
  * Whether two SemanticPresenceFact values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:80
+ * @see contexts/modeling/model/semantic.dt:82
  */
 export function equalSemanticPresenceFact(a: SemanticPresenceFact, b: SemanticPresenceFact): boolean {
     return a.expression === b.expression && a.path === b.path;
 }
 
-/** @see contexts/modeling/model/semantic.dt:85 */
+/** @see contexts/modeling/model/semantic.dt:87 */
 export interface SemanticScopeFact {
     readonly expression: string;
     readonly site: SemanticSpan;
@@ -1241,13 +1247,13 @@ export interface SemanticScopeFact {
 
 /**
  * Whether two SemanticScopeFact values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:85
+ * @see contexts/modeling/model/semantic.dt:87
  */
 export function equalSemanticScopeFact(a: SemanticScopeFact, b: SemanticScopeFact): boolean {
-    return a.expression === b.expression && equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($154: string, $155: string) => $154 === $155) && sameOptional(a.onCase, b.onCase, ($156: string, $157: string) => $156 === $157) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($158: string, $159: string) => $158 === $159) && sameOptional(a.targetOutcome, b.targetOutcome, ($160: string, $161: string) => $160 === $161) && sameOptional(a.kind, b.kind, ($162: string, $163: string) => $162 === $163);
+    return a.expression === b.expression && equalSemanticSpan(a.site, b.site) && a.owner === b.owner && sameOptional(a.command, b.command, ($162: string, $163: string) => $162 === $163) && sameOptional(a.onCase, b.onCase, ($164: string, $165: string) => $164 === $165) && sameList(a.fields, b.fields, equalSemanticSymbol) && sameList(a.parameters, b.parameters, equalSemanticSymbol) && sameList(a.lambdas, b.lambdas, equalSemanticSymbol) && sameList(a.sourceStates, b.sourceStates, ($166: string, $167: string) => $166 === $167) && sameOptional(a.targetOutcome, b.targetOutcome, ($168: string, $169: string) => $168 === $169) && sameOptional(a.kind, b.kind, ($170: string, $171: string) => $170 === $171);
 }
 
-/** @see contexts/modeling/model/semantic.dt:100 */
+/** @see contexts/modeling/model/semantic.dt:102 */
 export interface SemanticDeclaration {
     readonly id: string;
     readonly kind: SemanticDeclarationKind;
@@ -1257,13 +1263,13 @@ export interface SemanticDeclaration {
 
 /**
  * Whether two SemanticDeclaration values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:100
+ * @see contexts/modeling/model/semantic.dt:102
  */
 export function equalSemanticDeclaration(a: SemanticDeclaration, b: SemanticDeclaration): boolean {
     return a.id === b.id && a.kind === b.kind && a.name === b.name && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:107 */
+/** @see contexts/modeling/model/semantic.dt:109 */
 export interface SemanticValueCycleEnding {
     readonly union: string;
     readonly variant: string;
@@ -1271,13 +1277,13 @@ export interface SemanticValueCycleEnding {
 
 /**
  * Whether two SemanticValueCycleEnding values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:107
+ * @see contexts/modeling/model/semantic.dt:109
  */
 export function equalSemanticValueCycleEnding(a: SemanticValueCycleEnding, b: SemanticValueCycleEnding): boolean {
     return a.union === b.union && a.variant === b.variant;
 }
 
-/** @see contexts/modeling/model/semantic.dt:112 */
+/** @see contexts/modeling/model/semantic.dt:114 */
 export interface SemanticValueCycle {
     readonly members: readonly [string, ...string[]];
     readonly ending: readonly SemanticValueCycleEnding[];
@@ -1285,13 +1291,13 @@ export interface SemanticValueCycle {
 
 /**
  * Whether two SemanticValueCycle values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:112
+ * @see contexts/modeling/model/semantic.dt:114
  */
 export function equalSemanticValueCycle(a: SemanticValueCycle, b: SemanticValueCycle): boolean {
-    return sameList(a.members, b.members, ($164: string, $165: string) => $164 === $165) && sameList(a.ending, b.ending, equalSemanticValueCycleEnding);
+    return sameList(a.members, b.members, ($172: string, $173: string) => $172 === $173) && sameList(a.ending, b.ending, equalSemanticValueCycleEnding);
 }
 
-/** @see contexts/modeling/model/semantic.dt:117 */
+/** @see contexts/modeling/model/semantic.dt:119 */
 export interface SemanticObligation {
     readonly kind: SemanticObligationKind;
     readonly declaration: string;
@@ -1301,13 +1307,13 @@ export interface SemanticObligation {
 
 /**
  * Whether two SemanticObligation values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:117
+ * @see contexts/modeling/model/semantic.dt:119
  */
 export function equalSemanticObligation(a: SemanticObligation, b: SemanticObligation): boolean {
     return a.kind === b.kind && a.declaration === b.declaration && a.reason === b.reason && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:124 */
+/** @see contexts/modeling/model/semantic.dt:126 */
 export interface SemanticUnspecified {
     readonly kind: SemanticUnspecifiedKind;
     readonly declaration: string;
@@ -1318,13 +1324,13 @@ export interface SemanticUnspecified {
 
 /**
  * Whether two SemanticUnspecified values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:124
+ * @see contexts/modeling/model/semantic.dt:126
  */
 export function equalSemanticUnspecified(a: SemanticUnspecified, b: SemanticUnspecified): boolean {
-    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($166: string, $167: string) => $166 === $167) && sameOptional(a.source, b.source, ($168: string, $169: string) => $168 === $169) && equalSemanticSpan(a.site, b.site);
+    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($174: string, $175: string) => $174 === $175) && sameOptional(a.source, b.source, ($176: string, $177: string) => $176 === $177) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:132 */
+/** @see contexts/modeling/model/semantic.dt:134 */
 export interface SemanticProvenance {
     readonly kind: SemanticProvenanceKind;
     readonly declaration: string;
@@ -1335,13 +1341,13 @@ export interface SemanticProvenance {
 
 /**
  * Whether two SemanticProvenance values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:132
+ * @see contexts/modeling/model/semantic.dt:134
  */
 export function equalSemanticProvenance(a: SemanticProvenance, b: SemanticProvenance): boolean {
-    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($170: string, $171: string) => $170 === $171) && sameOptional(a.source, b.source, ($172: string, $173: string) => $172 === $173) && equalSemanticSpan(a.site, b.site);
+    return a.kind === b.kind && a.declaration === b.declaration && sameOptional(a.field, b.field, ($178: string, $179: string) => $178 === $179) && sameOptional(a.source, b.source, ($180: string, $181: string) => $180 === $181) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:140 */
+/** @see contexts/modeling/model/semantic.dt:142 */
 export interface SemanticOutcome {
     readonly id: string;
     readonly command: string;
@@ -1360,13 +1366,13 @@ export interface SemanticOutcome {
 
 /**
  * Whether two SemanticOutcome values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:140
+ * @see contexts/modeling/model/semantic.dt:142
  */
 export function equalSemanticOutcome(a: SemanticOutcome, b: SemanticOutcome): boolean {
-    return a.id === b.id && a.command === b.command && sameOptional(a.kind, b.kind, ($174: string, $175: string) => $174 === $175) && a.name === b.name && sameList(a.from, b.from, ($176: string, $177: string) => $176 === $177) && sameOptional(a.to, b.to, ($178: string, $179: string) => $178 === $179) && a.selectKind === b.selectKind && sameOptional(a.select, b.select, equalSemanticExpression) && sameList(a.changes, b.changes, ($180: string, $181: string) => $180 === $181) && sameList(a.set, b.set, ($182: string, $183: string) => $182 === $183) && sameList(a.carried, b.carried, ($184: string, $185: string) => $184 === $185) && sameList(a.dropped, b.dropped, ($186: string, $187: string) => $186 === $187) && equalSemanticSpan(a.site, b.site);
+    return a.id === b.id && a.command === b.command && sameOptional(a.kind, b.kind, ($182: string, $183: string) => $182 === $183) && a.name === b.name && sameList(a.from, b.from, ($184: string, $185: string) => $184 === $185) && sameOptional(a.to, b.to, ($186: string, $187: string) => $186 === $187) && a.selectKind === b.selectKind && sameOptional(a.select, b.select, equalSemanticExpression) && sameList(a.changes, b.changes, ($188: string, $189: string) => $188 === $189) && sameList(a.set, b.set, ($190: string, $191: string) => $190 === $191) && sameList(a.carried, b.carried, ($192: string, $193: string) => $192 === $193) && sameList(a.dropped, b.dropped, ($194: string, $195: string) => $194 === $195) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:156 */
+/** @see contexts/modeling/model/semantic.dt:158 */
 export interface SemanticChoice {
     readonly kind: string;
     readonly source?: string;
@@ -1375,13 +1381,13 @@ export interface SemanticChoice {
 
 /**
  * Whether two SemanticChoice values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:156
+ * @see contexts/modeling/model/semantic.dt:158
  */
 export function equalSemanticChoice(a: SemanticChoice, b: SemanticChoice): boolean {
-    return a.kind === b.kind && sameOptional(a.source, b.source, ($188: string, $189: string) => $188 === $189) && sameList(a.outcomes, b.outcomes, ($190: string, $191: string) => $190 === $191);
+    return a.kind === b.kind && sameOptional(a.source, b.source, ($196: string, $197: string) => $196 === $197) && sameList(a.outcomes, b.outcomes, ($198: string, $199: string) => $198 === $199);
 }
 
-/** @see contexts/modeling/model/semantic.dt:162 */
+/** @see contexts/modeling/model/semantic.dt:164 */
 export interface SemanticKindLifecycle {
     readonly kind: string;
     readonly initialStates: readonly string[];
@@ -1391,13 +1397,13 @@ export interface SemanticKindLifecycle {
 
 /**
  * Whether two SemanticKindLifecycle values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:162
+ * @see contexts/modeling/model/semantic.dt:164
  */
 export function equalSemanticKindLifecycle(a: SemanticKindLifecycle, b: SemanticKindLifecycle): boolean {
-    return a.kind === b.kind && sameList(a.initialStates, b.initialStates, ($192: string, $193: string) => $192 === $193) && sameList(a.validStates, b.validStates, ($194: string, $195: string) => $194 === $195) && sameList(a.onCases, b.onCases, equalSemanticOutcome);
+    return a.kind === b.kind && sameList(a.initialStates, b.initialStates, ($200: string, $201: string) => $200 === $201) && sameList(a.validStates, b.validStates, ($202: string, $203: string) => $202 === $203) && sameList(a.onCases, b.onCases, equalSemanticOutcome);
 }
 
-/** @see contexts/modeling/model/semantic.dt:169 */
+/** @see contexts/modeling/model/semantic.dt:171 */
 export interface SemanticRequirement {
     readonly id: string;
     readonly name: string;
@@ -1409,13 +1415,13 @@ export interface SemanticRequirement {
 
 /**
  * Whether two SemanticRequirement values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:169
+ * @see contexts/modeling/model/semantic.dt:171
  */
 export function equalSemanticRequirement(a: SemanticRequirement, b: SemanticRequirement): boolean {
-    return a.id === b.id && a.name === b.name && sameOptional(a.expression, b.expression, equalSemanticExpression) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($196: string, $197: string) => $196 === $197) && equalSemanticSpan(a.site, b.site);
+    return a.id === b.id && a.name === b.name && sameOptional(a.expression, b.expression, equalSemanticExpression) && a.error === b.error && sameOptional(a.externalReason, b.externalReason, ($204: string, $205: string) => $204 === $205) && equalSemanticSpan(a.site, b.site);
 }
 
-/** @see contexts/modeling/model/semantic.dt:178 */
+/** @see contexts/modeling/model/semantic.dt:180 */
 export interface SemanticAggregate {
     readonly id: string;
     readonly initialStates: readonly string[];
@@ -1428,15 +1434,15 @@ export interface SemanticAggregate {
 
 /**
  * Whether two SemanticAggregate values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:178
+ * @see contexts/modeling/model/semantic.dt:180
  */
 export function equalSemanticAggregate(a: SemanticAggregate, b: SemanticAggregate): boolean {
-    return a.id === b.id && sameList(a.initialStates, b.initialStates, ($198: string, $199: string) => $198 === $199) && sameList(a.validStates, b.validStates, ($200: string, $201: string) => $200 === $201) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
+    return a.id === b.id && sameList(a.initialStates, b.initialStates, ($206: string, $207: string) => $206 === $207) && sameList(a.validStates, b.validStates, ($208: string, $209: string) => $208 === $209) && sameList(a.kinds, b.kinds, equalSemanticKindLifecycle) && sameList(a.outcomes, b.outcomes, equalSemanticOutcome) && sameList(a.choices, b.choices, equalSemanticChoice) && sameList(a.requirements, b.requirements, equalSemanticRequirement);
 }
 
 /**
  * @internal Beta Semantic IR; its shape has no compatibility promise before 1.0.
- * @see contexts/modeling/model/semantic.dt:189
+ * @see contexts/modeling/model/semantic.dt:191
  */
 export interface SemanticIR {
     /** The beta Semantic IR. Versioned independently of the Typed Model; it retains source sites and resolved facts for formal verification and does not change the Live View payload. */
@@ -1454,7 +1460,7 @@ export interface SemanticIR {
 
 /**
  * Whether two SemanticIR values are equal: by all their fields (ADR 0016).
- * @see contexts/modeling/model/semantic.dt:189
+ * @see contexts/modeling/model/semantic.dt:191
  */
 export function equalSemanticIR(a: SemanticIR, b: SemanticIR): boolean {
     return a.version === b.version && sameList(a.declarations, b.declarations, equalSemanticDeclaration) && sameList(a.expressions, b.expressions, equalSemanticExpression) && sameList(a.scopes, b.scopes, equalSemanticScopeFact) && sameList(a.presence, b.presence, equalSemanticPresenceFact) && sameList(a.aggregates, b.aggregates, equalSemanticAggregate) && sameList(a.obligations, b.obligations, equalSemanticObligation) && sameList(a.unspecified, b.unspecified, equalSemanticUnspecified) && sameList(a.provenance, b.provenance, equalSemanticProvenance) && sameList(a.cycles, b.cycles, equalSemanticValueCycle);

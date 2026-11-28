@@ -81,7 +81,22 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
         expect(found, `${root} at ${path || '<root>'}`).toBeDefined();
         expect(found!.syntaxKind).toBe(expr.k);
         if (expr.k === 'binary') {
-            const operator = { eq: '==', ne: '!=', lt: '<', le: '<=', gt: '>', ge: '>=', implies: 'implies', and: '&&', or: '||', coalesce: '??' }[expr.op];
+            const operator = {
+                eq: '==',
+                ne: '!=',
+                lt: '<',
+                le: '<=',
+                gt: '>',
+                ge: '>=',
+                implies: 'implies',
+                and: '&&',
+                or: '||',
+                coalesce: '??',
+                add: '+',
+                sub: '-',
+                mul: '*',
+                div: '/',
+            }[expr.op];
             expect(found!.source).toContain(operator);
         }
         if (expr.k === 'name') expect(found!.source).toBe(expr.name);

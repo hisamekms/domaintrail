@@ -125,7 +125,14 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
                     ...optional('label', i.label),
                     ...optional('doc', i.node === i.expr ? undefined : docComment(i.node)),
                 }));
-                return { ...head, kind: isIdType(el) ? 'id' : 'primitive', ...common, base: el.base, invariants };
+                return {
+                    ...head,
+                    kind: isIdType(el) ? 'id' : 'primitive',
+                    ...common,
+                    base: el.base,
+                    ...(el.scale !== undefined && { scale: el.scale }),
+                    invariants,
+                };
             }
             if (isVerifiedDecl(el)) {
                 const verified = {
@@ -239,7 +246,7 @@ function kindOf(el: ContextElement): ElementKind {
 }
 
 function typeExpr(ref: TypeRef | undefined): TypeExpr {
-    if (ref?.primitive) return { kind: 'primitive', name: ref.primitive };
+    if (ref?.primitive) return { kind: 'primitive', name: ref.primitive, ...(ref.scale !== undefined && { scale: ref.scale }) };
     const target = ref?.decl?.ref;
     const text = ref?.decl?.$refText ?? '';
     if (!target) return { kind: 'ref', ref: qualifiedName(text), text };
@@ -306,6 +313,10 @@ const BINARY_OPS: Readonly<Record<string, BinaryOp>> = {
     '>': 'gt',
     '>=': 'ge',
     '??': 'coalesce',
+    '+': 'add',
+    '-': 'sub',
+    '*': 'mul',
+    '/': 'div',
 };
 
 /** The tree of an expression (syntax only; the model has no errors when it is read for generated checks). */

@@ -280,3 +280,59 @@ context A {
                   (number
                     (integer)))
                 (boolean)))))))))
+
+================================================================================
+Arithmetic and Decimal scales
+================================================================================
+
+context A {
+  primitive Money: Decimal(2)
+  aggregate X {
+    total: Decimal(2)
+    invariant a { total == quantity * price + 1 && days != 0 && total / days - 0.5 <= 10.00 }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (primitive_declaration
+      (identifier)
+      (primitive_type)
+      (scale
+        (integer)))
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (field
+          (identifier)
+          (primitive_type)
+          (scale
+            (integer)))
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (identifier)
+                (binary_expression
+                  (binary_expression
+                    (identifier)
+                    (identifier))
+                  (number
+                    (integer))))
+              (binary_expression
+                (identifier)
+                (number
+                  (integer))))
+            (binary_expression
+              (binary_expression
+                (binary_expression
+                  (identifier)
+                  (identifier))
+                (number
+                  (decimal)))
+              (number
+                (decimal)))))))))

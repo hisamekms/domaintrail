@@ -13,6 +13,7 @@ import type {
     SemanticScopeFact,
     SemanticUnspecified,
 } from '../generated/Modeling.js';
+import { basePrimitive, scaleOf } from './types.js';
 import { valueCycles } from './cycles.js';
 import type { AggregateModel, CommandModel, DomainModel, OutcomeModel, FieldModel, ExprModel } from './model.js';
 import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand } from './model.js';
@@ -157,6 +158,10 @@ function expression(
             ? {
                   name: typeName,
                   tag: fact.type.k === 'tag',
+                  ...(scaleOf(fact.type.k === 'opt' ? fact.type.inner : fact.type) !== undefined &&
+                      basePrimitive(fact.type.k === 'opt' ? fact.type.inner : fact.type) === 'Decimal' && {
+                          scale: scaleOf(fact.type.k === 'opt' ? fact.type.inner : fact.type),
+                      }),
                   cardinality: isNonEmpty
                       ? ('nonEmpty' as const)
                       : fact.type.k === 'opt'

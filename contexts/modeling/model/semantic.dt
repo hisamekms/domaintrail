@@ -54,6 +54,8 @@ context Modeling {
     name: String
     cardinality: SemanticCardinality
     tag: Bool
+    /// The digits after the point of a Decimal value, when known (a `Decimal(n)`, a literal, a computed result).
+    scale: Int?
   }
 
   value SemanticSymbol {

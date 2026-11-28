@@ -94,7 +94,22 @@ const fileOf = (a: DomainAnalysis, node: AstNode): string => a.resolveFile(AstUt
 
 /** What the Typed Model writes for an expression: the tree without its sites. */
 /** The operators as written, as the Typed Model names them. */
-const OPS = { implies: 'implies', or: 'or', and: 'and', '==': 'eq', '!=': 'ne', '<': 'lt', '<=': 'le', '>': 'gt', '>=': 'ge', '??': 'coalesce' } as const;
+const OPS = {
+    implies: 'implies',
+    or: 'or',
+    and: 'and',
+    '==': 'eq',
+    '!=': 'ne',
+    '<': 'lt',
+    '<=': 'le',
+    '>': 'gt',
+    '>=': 'ge',
+    '??': 'coalesce',
+    '+': 'add',
+    '-': 'sub',
+    '*': 'mul',
+    '/': 'div',
+} as const;
 
 function toExprModel(e: Expr): ExprModel {
     switch (e.k) {

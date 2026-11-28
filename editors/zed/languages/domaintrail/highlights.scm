@@ -120,6 +120,8 @@
 ; Operators and punctuation
 
 [
+  "+"
+  "/"
   "&&"
   "||"
   "!"

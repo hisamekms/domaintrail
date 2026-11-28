@@ -55,6 +55,8 @@ export interface Multiplicity {
 /** The type of a field or parameter as written: a built-in type, or a reference to a declared one. */
 export interface TypeRef {
     primitive?: PrimitiveName;
+    /** The digits after the point of a `Decimal(n)`. */
+    scale?: number;
     decl?: Ref<TypeDecl>;
     at: Site;
 }
@@ -200,6 +202,8 @@ interface ElementBase extends Declared {
 export interface IdDecl extends ElementBase {
     kind: 'id';
     base?: PrimitiveName;
+    /** The digits after the point of a `Decimal(n)` base. */
+    scale?: number;
     invariants: InvariantDecl[];
     constraint?: Expr;
 }
@@ -207,6 +211,8 @@ export interface IdDecl extends ElementBase {
 export interface PrimitiveDecl extends ElementBase {
     kind: 'primitive';
     base?: PrimitiveName;
+    /** The digits after the point of a `Decimal(n)` base. */
+    scale?: number;
     invariants: InvariantDecl[];
     constraint?: Expr;
 }
@@ -350,7 +356,7 @@ export type Expr = ExprBase &
         | { k: 'not'; operand: Expr }
         | {
               k: 'binary';
-              op: 'implies' | 'or' | 'and' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '??';
+              op: 'implies' | 'or' | 'and' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '??' | '+' | '-' | '*' | '/';
               left: Expr;
               right: Expr;
               leftAt: Site;

@@ -23,10 +23,10 @@ type TypeDecl = IdType | PrimitiveDecl | VerifiedDecl | EnumDecl | ValueObject |
 // Domain primitives: a single value wrapping a primitive type, with optional invariants on `value`.
 // An ID is a domain primitive that identifies an aggregate or entity.
 IdType:
-    'id' name=ID label=STRING? ':' base=PrimitiveType PrimitiveBody?;
+    'id' name=ID label=STRING? ':' base=PrimitiveType ('(' scale=INT ')')? PrimitiveBody?;
 
 PrimitiveDecl:
-    'primitive' name=ID label=STRING? ':' base=PrimitiveType PrimitiveBody?;
+    'primitive' name=ID label=STRING? ':' base=PrimitiveType ('(' scale=INT ')')? PrimitiveBody?;
 
 // Evidence that a check outside the aggregate was made (ADR 0023): a value of the base type that only its factory
 // makes. `for` names the context the check needs (optional with `?`); `errors` are those of the factory. Used as the
@@ -169,7 +169,8 @@ ErrorDecl:
     'error' name=ID label=STRING? WithFieldSets? ('{' members+=Field* '}')?;
 
 TypeRef:
-    primitive=PrimitiveType | decl=[TypeDecl:QualifiedName];
+    // `Decimal(2)`: a decimal with 2 digits after the point, which `/` rounds to (half-even)
+    primitive=PrimitiveType ('(' scale=INT ')')? | decl=[TypeDecl:QualifiedName];
 
 PrimitiveType returns string:
     'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID' | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
@@ -205,10 +206,17 @@ And infers Expression:
     Comparison ({infer BinaryExpr.left=current} op=('and' | '&&') right=Comparison)*;
 
 Comparison infers Expression:
-    Unary (
-        {infer BinaryExpr.left=current} op=('=='|'!='|'<='|'>='|'<'|'>') right=Unary
-        | {infer RangeExpr.operand=current} 'in' lower=Unary '..' upper=Unary
+    Additive (
+        {infer BinaryExpr.left=current} op=('=='|'!='|'<='|'>='|'<'|'>') right=Additive
+        | {infer RangeExpr.operand=current} 'in' lower=Additive '..' upper=Additive
     )?;
+
+// Int `+ - *`; Decimal `+ - * /` (`/` rounds half-even to the declared scale); an Int with a Decimal is a Decimal
+Additive infers Expression:
+    Multiplicative ({infer BinaryExpr.left=current} op=('+' | '-') right=Multiplicative)*;
+
+Multiplicative infers Expression:
+    Unary ({infer BinaryExpr.left=current} op=('*' | '/') right=Unary)*;
 
 Unary infers Expression:
     {infer NotExpr} ('not' | '!') operand=Unary | Postfix;

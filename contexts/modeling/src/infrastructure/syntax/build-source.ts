@@ -96,6 +96,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
     const typeRef = (t: TypeRef | undefined): src.TypeRef | undefined =>
         t && {
             ...(t.primitive && { primitive: t.primitive }),
+            ...(t.scale !== undefined && { scale: t.scale }),
             ...(t.decl && { decl: ref<src.TypeDecl>(t, 'decl', t.decl) }),
             at: site(t),
         };
@@ -325,6 +326,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 ...base,
                 kind: isIdType(el) ? 'id' : 'primitive',
                 ...(el.base && { base: el.base }),
+                ...(el.scale !== undefined && { scale: el.scale }),
                 invariants: el.invariants.map(invariant),
                 ...(el.constraint && { constraint: expr(el.constraint) }),
             };
