@@ -51,6 +51,37 @@ afterAll(async () => {
 });
 
 describe('generated TypeScript', () => {
+    test('a draft command can create Draft and coexist with same-named kinds', async () => {
+        const model = await check({
+            'draft.dt': `context Sales { id RotationId: UUID aggregate Rotation { id: RotationId state Draft initial Draft create command draft(id: RotationId) { outcome created: -> Draft changes id = id } } }`,
+        });
+        expect(model.diagnostics).toEqual([]);
+        const target = path.join(dir, 'draft-collision');
+        await mkdir(target);
+        for (const f of generateFromAnalysis(model)) await writeFile(path.join(target, f.path), f.content);
+        const generated = await readFile(path.join(target, 'Sales.ts'), 'utf8');
+        expect(generated).toContain('export interface DraftRotation');
+        expect(generated).toContain('export type DraftRotationCommand =');
+        const result = tscIn(target, 'Sales.ts');
+        expect(result.output).toBe('');
+        expect(result.code).toBe(0);
+        // `pilot` → `PilotRotation` is also the kind type; `draft` → `DraftRotation` the state type
+        const withKinds = await check({
+            'draft-kind.dt': `context Sales { id RotationId: UUID aggregate Rotation { id: RotationId state Draft state Open kind Pilot { create command start(id: RotationId) { outcome started: -> Draft changes id = id } command pilot() { outcome piloted: Draft -> Open } } command draft() { outcome drafted: Open -> Draft } } }`,
+        });
+        expect(withKinds.diagnostics).toEqual([]);
+        const kinds = path.join(dir, 'kind-collision');
+        await mkdir(kinds);
+        for (const f of generateFromAnalysis(withKinds)) await writeFile(path.join(kinds, f.path), f.content);
+        const kindsCode = await readFile(path.join(kinds, 'Sales.ts'), 'utf8');
+        expect(kindsCode).toContain('export type PilotRotation =');
+        expect(kindsCode).toContain('export type PilotRotationCommand =');
+        expect(kindsCode).toContain('export type DraftRotationCommand =');
+        const kindsResult = tscIn(kinds, 'Sales.ts');
+        expect(kindsResult.output).toBe('');
+        expect(kindsResult.code).toBe(0);
+    });
+
     test('same-shaped errors in different contexts have distinct type tags at runtime and narrow by type', async () => {
         const collision = path.join(dir, 'same-error');
         const a = await check({ 'both.dt': 'context Sales { error Conflict } context Billing { error Conflict }' });
@@ -108,7 +139,7 @@ declare const draft: Sales.DraftOrder;
 declare const confirmed: Sales.ConfirmedOrder;
 declare const at: Timestamp;
 
-type ConfirmResult = ReturnType<Sales.ConfirmOrder>;
+type ConfirmResult = ReturnType<Sales.ConfirmOrderCommand>;
 const confirmedEvent = (order: Sales.DraftOrder): Sales.OrderConfirmed => ({ type: 'Sales.OrderConfirmed', orderId: order.id, confirmedAt: at });
 
 export function stateFieldScope(order: Sales.DraftOrder): void {
@@ -271,7 +302,7 @@ if (d.ok) {
 }
 
 // an implementation returning a Draft work as InProgress is rejected
-export const wrong: Tasks.ChangeWork = (work, { title }) =>
+export const wrong: Tasks.ChangeWorkCommand = (work, { title }) =>
     // @ts-expect-error Draft -> InProgress is not a transition of change
     ok({ InProgress: { aggregate: { ...work, title, state: 'InProgress' } as Tasks.InProgressWork, events: { 'Tasks.WorkChanged': { type: 'Tasks.WorkChanged', workId: work.id } } } });
 `,
@@ -319,20 +350,20 @@ if (r.ok) {
     const stays: Tasks.DraftWork = r.value.Draft.aggregate;
 }
 
-export const draftToInProgress: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
+export const draftToInProgress: Tasks.ChangeWorkCommand = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
     // @ts-expect-error the Draft handler decides the Draft outcome
     Draft: (work, { title }) => ok({ InProgress: { set: { title }, events: changed(work) } }),
     InProgress: (work, { title }) => ok({ InProgress: { set: { title }, events: changed(work) } }),
 });
 
 // @ts-expect-error a handler for every source state is required
-export const missing: Tasks.ChangeWork = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
+export const missing: Tasks.ChangeWorkCommand = decide<Tasks.ChangeWorkDecision>(Tasks.WorkShape, {
     Draft: (work, { title }) => ok({ Draft: { set: { title }, events: changed(work) } }),
 });
 
 // the decision of another command does not make this one
 // @ts-expect-error start decides InProgress from Draft, not change
-export const otherDecision: Tasks.ChangeWork = decide<Tasks.StartWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ InProgress: { set: {}, events: {} } }) });
+export const otherDecision: Tasks.ChangeWorkCommand = decide<Tasks.StartWorkDecision>(Tasks.WorkShape, { Draft: () => ok({ InProgress: { set: {}, events: {} } }) });
 
 export const wrongArgs: Tasks.ChangeWorkDecision = {
     Draft: (work, { title }) => ok({ Draft: { set: { title }, events: changed(work) } }),

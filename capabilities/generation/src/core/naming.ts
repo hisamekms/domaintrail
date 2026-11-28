@@ -75,7 +75,10 @@ interface Named {
 
 export const commonTypeName = (agg: Named): string => `${agg.name}Common`;
 export const stateTypeName = (agg: Named, state: Named | string): string => `${typeof state === 'string' ? state : state.name}${agg.name}`;
-export const commandTypeName = (agg: Named, cmd: Named): string => `${pascal(cmd.name)}${agg.name}`;
+/** Stable stem for names derived from a command, e.g. `ConfirmOrder`. */
+export const commandStem = (agg: Named, cmd: Named): string => `${pascal(cmd.name)}${agg.name}`;
+/** The function type implemented by the caller, e.g. `ConfirmOrderCommand`. */
+export const commandTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Command`;
 /** An aggregate of one kind (ADR 0037), in any state: `StorePickupSite`. */
 export const kindTypeName = (agg: Named, kind: Named | string): string => `${typeof kind === 'string' ? kind : kind.name}${agg.name}`;
 /** An aggregate of one kind in one state: `StoreActivePickupSite`. */
@@ -85,24 +88,24 @@ export const pairTypeName = (agg: Named, kind: Named | string, state: Named | st
 export const isKindName = (agg: Named, kind: Named | string): string => `is${kindTypeName(agg, kind)}`;
 export const commandsInterfaceName = (agg: Named): string => `${agg.name}Commands`;
 /** What a command decides, e.g. `ConfirmOrderDecision`: implemented by the user, turned into the command by `decide`. */
-export const decisionTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Decision`;
-export const choiceChecksTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}ChoiceChecks`;
-export const choiceCheckName = (agg: Named, cmd: Named): string => `check${commandTypeName(agg, cmd)}Choice`;
+export const decisionTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Decision`;
+export const choiceChecksTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}ChoiceChecks`;
+export const choiceCheckName = (agg: Named, cmd: Named): string => `check${commandStem(agg, cmd)}Choice`;
 /** The parameters of a command as one object, e.g. `CancelOrderParams`; a command without parameters has none. */
-export const paramsTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Params`;
+export const paramsTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Params`;
 /** The fields of an aggregate as data for `decide`, e.g. `OrderShape`. */
 export const shapeName = (agg: Named): string => `${agg.name}Shape`;
 export const restoreName = (agg: Named): string => `restore${agg.name}`;
 /** Where the commands of an aggregate can be called, as data (`OrderAvailability`). */
 export const availabilityName = (agg: Named): string => `${agg.name}Availability`;
 /** The guard of whether a command can be called on an aggregate in its state (`canCancelOrder`). */
-export const canName = (agg: Named, cmd: Named): string => `can${commandTypeName(agg, cmd)}`;
+export const canName = (agg: Named, cmd: Named): string => `can${commandStem(agg, cmd)}`;
 /** The error of a command called in a state that is not one of its source states (`CancelOrderUnavailable`). */
-export const unavailableTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Unavailable`;
+export const unavailableTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Unavailable`;
 /** The error of a command called on an aggregate of a kind that does not have it (`ChangeClosingTimePickupSiteNotForKind`). */
-export const notForKindTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}NotForKind`;
+export const notForKindTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}NotForKind`;
 /** A command for an aggregate in any state (`CancelOrderFromAnyState`). */
-export const anyStateTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}FromAnyState`;
+export const anyStateTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}FromAnyState`;
 /** The commands of an aggregate for an aggregate in any state (`OrderCommandsFromAnyState`). */
 export const anyStateInterfaceName = (agg: Named): string => `${agg.name}CommandsFromAnyState`;
 /** Makes `OrderCommandsFromAnyState` of the hand-written commands (`anyStateOrderCommands`). */
@@ -130,7 +133,7 @@ export const paramsArgName = (agg: Named): string => (aggregateParamName(agg) ==
 /** The handler of a policy, e.g. `BillConfirmedOrderPolicy`: from the event to the input of its command. */
 export const policyTypeName = (policy: Named): string => `${policy.name}Policy`;
 /** What the application needs to run a command that a policy runs, e.g. `IssueInvoiceInput`. */
-export const inputTypeName = (agg: Named, cmd: Named): string => `${commandTypeName(agg, cmd)}Input`;
+export const inputTypeName = (agg: Named, cmd: Named): string => `${commandStem(agg, cmd)}Input`;
 /** The handlers of every policy of a context, e.g. `BillingPolicyHandlers`; implemented when policies are required. */
 export const policyHandlersName = (ctx: string): string => `${ctx}PolicyHandlers`;
 /** Constructor contract of a domain primitive, e.g. `MakeQuantity`; the factory of a verified type, e.g. `MakeAvailableEmail`. */
@@ -285,7 +288,7 @@ export function generatedNames(model: SourceModel, ctx: string): GeneratedName[]
             }
             const requirements = [...c.requirements, ...groupCases.flatMap((x) => x.requirements)];
             if (!requirements.length) continue;
-            const t = commandTypeName(el, c);
+            const t = commandStem(el, c);
             const origin = `the check of the requirements of '${el.name}.${c.name}'`;
             if (requirements.some((r) => !r.expr)) {
                 out.push({ name: `check${t}RequiresWith`, origin, at: cat }, { name: `${t}DeclaredRequires`, origin, at: cat });

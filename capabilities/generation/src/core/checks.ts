@@ -39,7 +39,7 @@ import {
     pairTypeName,
     stateTypeName,
 } from './naming.js';
-import { aggregateParamName, choiceCheckName, choiceChecksTypeName, commandTypeName, paramsArgName, paramsTypeName } from './naming.js';
+import { aggregateParamName, choiceCheckName, choiceChecksTypeName, commandStem, paramsArgName, paramsTypeName } from './naming.js';
 
 /**
  * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
@@ -820,7 +820,7 @@ export class CheckWriter {
             return x ? [{ kind: k.name, case: x }] : [];
         });
         if (!c.requires.length && !cases.some((g) => g.case.requires.length)) return [];
-        const type = commandTypeName(agg, c);
+        const type = commandStem(agg, c);
         const subject = aggregateParamName(agg);
         const parameters = paramsArgName(agg);
         const args = [

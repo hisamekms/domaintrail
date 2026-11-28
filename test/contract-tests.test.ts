@@ -212,7 +212,7 @@ describe('generated contract tests', () => {
         const declared = {
             Shop: {
                 Code: { reserved: (v: string) => v !== 'AA0' },
-                AddCart: { allowed: (_c: unknown, { line }: { line: { code: string } }) => !forbidden(line.code) },
+                AddCartCommand: { allowed: (_c: unknown, { line }: { line: { code: string } }) => !forbidden(line.code) },
             },
         };
         const r = await run(contract({ make: { Code: makeCode }, Cart: cart() }, { declared }));

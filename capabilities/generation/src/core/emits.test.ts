@@ -132,7 +132,7 @@ describe('emits in the generated TypeScript', () => {
  * @emits WorkCompleted — exactly once when it ends in Completed
  * @see tasks.dt:19
  */
-export type ProgressWork = (
+export type ProgressWorkCommand = (
     work: InProgressWork,
     params: ProgressWorkParams,
 ) => Result<
@@ -167,7 +167,7 @@ export type ProgressWork = (
 
     test('events that depend on the source state make the contract generic, documented per source state', () => {
         expect(code).toContain(
-            ' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:25\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(',
+            ' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:25\n */\nexport type CancelWorkCommand = <S extends DraftWork | InProgressWork>(',
         );
         expect(code).toContain(
             `) => {
@@ -201,7 +201,7 @@ export type ProgressWork = (
     }, never>;`,
         );
         // events that depend on the target only: the input state decides nothing, so a plain function
-        expect(code).toContain('export type ProgressWork = (\n    work: InProgressWork,');
+        expect(code).toContain('export type ProgressWorkCommand = (\n    work: InProgressWork,');
     });
 
     test('outcome and eventList: the key as `to`; events flattened, absent ones skipped, sorted by type', async () => {

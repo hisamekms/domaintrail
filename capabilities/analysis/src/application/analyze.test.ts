@@ -142,9 +142,9 @@ const ORDER = `
 
 describe('sources by language', () => {
     test("the generation's checks run once the .dt sources parse, and are left out while they do not", async () => {
-        const parsed = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrder\n}\n` });
+        const parsed = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrderCommand\n}\n` });
         expect(only(parsed, 'M011').map((d) => `${d.file}:${d.start.line}`)).toEqual(['sales.dt:13']);
-        const a = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrder\n` });
+        const a = await check({ 'sales.dt': `context Sales {\n${ORDER} value FinishOrderCommand\n` });
         expect(a.syntaxOk).toBe(false);
         expect(only(a, 'M011')).toEqual([]);
     });
