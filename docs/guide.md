@@ -271,6 +271,8 @@ context Sales { // a bounded context; may be split across files
     city: String
     street: String
   }
+  // a pure function of its parameters (a predicate when it returns Bool), called in expressions
+  function isBulk(items: OrderItem[0..*]): Bool { items.length > 50 }
 
   aggregate Order {
     id: OrderId // identity field of its own ID type (required)
@@ -857,6 +859,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
+- Functions: `function name(p: T, …): R { expr }` in a context is a pure function of its parameters, called as
+  `name(args)` from the expressions of its context and, when the context is shared, of every context. A function
+  cannot call itself, directly or through others (M032).
 - Lists: `[a, b]` and `[...xs, x]` (values of one type), `c.map(x => value)`, `c.filter(x => condition)`,
   `c.sum(x => number)` and `c.sum()` (an Int, or a Decimal of the values' scale): `total == lines.sum(l => l.price *
   l.quantity)`, `[Status.Open, Status.Held].includes(status)`.
@@ -3571,6 +3576,7 @@ storming](#diagnostics-of-a-storming).
 | M028 | lifecycle declarations: a kind (or, without kinds, the aggregate with named outcomes) has an initial state, outcomes have valid sources and targets and change the fields of their kind, outcome names are unique, and choice and external-check annotations are well formed |
 | M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
 | M030 | the kinds of an aggregate (ADR 0037): a common command has its behaviour in itself or in an `on` case of every kind, never both; an `on` case names a common command that is not a factory; the create commands are the kinds', one per kind; no field is named `kind`; with states, commands name their outcomes |
+| M032 | a function's body has its declared type; a call names a function of its context or of a shared context, with arguments of the parameters' types; no function calls itself, directly or through others |
 | M031 | (warning) kinds that declare nothing (a readonly enum field); `on` cases of a common command that are alike in every kind (a common behaviour); a field every kind declares with the same type (a common field); a state no kind reaches; optional fields an aggregate without kinds requires only for some values of an enum field (the fields of kinds) |
 | G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |

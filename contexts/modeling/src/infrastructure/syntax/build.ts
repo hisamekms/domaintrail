@@ -12,6 +12,7 @@ import {
     isCountExpr,
     isDecimalLiteral,
     isEntity,
+    isCallExpr,
     isConditionalExpr,
     isListLiteral,
     isExistsExpr,
@@ -211,6 +212,20 @@ export function buildModel(index: ModelIndex, fileOf: FileResolver): DomainModel
         ...optional('doc', labels.contextDoc(ctx)),
         shared: index.sharedContexts.includes(ctx),
         terms: [...labels.termsOf(ctx).values()].map((t) => ({ name: t.name, label: t.label, ...optional('doc', docComment(t)) })),
+        functions: index.fragments
+            .filter((c) => c.name === ctx)
+            .flatMap((c) => c.functions)
+            .map((f) => ({
+                name: f.name,
+                ...optional('label', f.label),
+                ...optional('doc', docComment(f)),
+                params: f.params.map(field),
+                returns: typeExpr(f.returns),
+                cardinality: cardinality(f.multiplicity),
+                expr: exprModel(f.body),
+                source: sourceText(f.body),
+                location: loc(f),
+            })),
     }));
     return { contexts, elements: [...elements.values()] };
 }
@@ -354,6 +369,7 @@ function exprModel(e: Expression): ExprModel {
     }
     if (isNullLiteral(e)) return { k: 'bool', value: false }; // `null` alone is reported (parse.ts)
     if (isBinaryExpr(e)) return { k: 'binary', op: BINARY_OPS[e.op], left: exprModel(e.left), right: exprModel(e.right) };
+    if (isCallExpr(e)) return { k: 'call', name: e.function, args: e.args.map(exprModel) };
     if (isListLiteral(e)) return { k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: exprModel(i.value) })) };
     if (isConditionalExpr(e)) return { k: 'conditional', test: exprModel(e.test), ifTrue: exprModel(e.ifTrue), ifFalse: exprModel(e.ifFalse) };
     if (isRangeExpr(e)) return { k: 'range', operand: exprModel(e.operand), lower: exprModel(e.lower), upper: exprModel(e.upper) };

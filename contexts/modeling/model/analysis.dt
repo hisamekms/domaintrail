@@ -54,7 +54,7 @@ context Modeling {
   /// M021 (the fields a command `changes`), M022 (event and error fields named after their source), M023 (policies),
   /// M024 (verified types), M025 (a context's description written once), M026 (a union without fields is an enum),
   /// M027 (an ID kept as a primitive), M028–M029 (lifecycles and their decision rules), M030 (the kinds of an aggregate)
-  /// and M031 (their idioms), L001–L003 (Japanese names). M011 (the generated TypeScript names) is reported
+  /// and M031 (their idioms), M032 (functions), L001–L003 (Japanese names). M011 (the generated TypeScript names) is reported
   /// by the generator's check, which the project analysis runs.
   enum ModelingRuleId {
     SYNTAX
@@ -89,6 +89,7 @@ context Modeling {
     M029
     M030
     M031
+    M032
     L001
     L002
     L003

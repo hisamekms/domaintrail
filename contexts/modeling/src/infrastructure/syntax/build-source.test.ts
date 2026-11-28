@@ -128,6 +128,8 @@ function toExprModel(e: Expr): ExprModel {
             return { k: 'not', operand: toExprModel(e.operand) };
         case 'binary':
             return { k: 'binary', op: OPS[e.op], left: toExprModel(e.left), right: toExprModel(e.right) };
+        case 'call':
+            return { k: 'call', name: e.name, args: e.args.map(toExprModel) };
         case 'list':
             return { k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: toExprModel(i.value) })) };
         case 'listMethod':

@@ -111,6 +111,7 @@
   "event"
   "error"
   "policy"
+  "function"
 ] @keyword
 
 [

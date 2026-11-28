@@ -325,6 +325,18 @@ export interface TermDecl {
 }
 
 /** One `context` block; a context may be split across files. */
+/** `function name(params): returns { expr }` (its `id` is `Context.name`). */
+export interface FunctionDecl extends Declared {
+    kind: 'function';
+    id: string;
+    context: string;
+    params: ParamDecl[];
+    returns?: TypeRef;
+    multiplicity?: Multiplicity;
+    returnsAt: Site;
+    expr: Expr;
+}
+
 export interface ContextFragment {
     name: string;
     shared: boolean;
@@ -334,6 +346,8 @@ export interface ContextFragment {
     docAt?: Site;
     /** The entries of its `terms` blocks, in order. */
     terms: TermDecl[];
+    /** Its functions, in order. */
+    functions: FunctionDecl[];
     at: Site;
     nameAt: Site;
     labelAt: Site;
@@ -362,6 +376,7 @@ export type Expr = ExprBase &
               leftAt: Site;
               rightAt: Site;
           }
+        | { k: 'call'; name: string; args: Expr[]; nameAt: Site; argsAt: Site[] }
         | { k: 'list'; items: { spread: boolean; value: Expr }[] }
         | { k: 'listMethod'; method: 'map' | 'filter' | 'sum'; collection: Expr; param?: string; body?: Expr; collectionAt: Site; bodyAt?: Site }
         | { k: 'conditional'; test: Expr; ifTrue: Expr; ifFalse: Expr; testAt: Site; ifTrueAt: Site; ifFalseAt: Site }

@@ -60,7 +60,15 @@ function inlineSep(a: Token, b: Token): 'none' | 'space' {
     if (['(', '[', '.', '..', '::'].includes(a.text)) return 'none';
     if (a.text === '!' && ast.isNotExpr(a.leaf.astNode)) return 'none'; // `!x`, `!(p)`: the prefix sticks
     if (b.text === '(' && ast.isMemberAccess(b.leaf.astNode) && b.leaf.astNode.call && a.leaf.astNode === b.leaf.astNode) return 'none'; // `xs.every(…)`
-    if (b.text === '(' && a.leaf.astNode === b.leaf.astNode && (ast.isCommand(a.leaf.astNode) || ast.isExternalCheck(a.leaf.astNode) || FUNCTIONS.has(a.text)))
+    if (
+        b.text === '(' &&
+        a.leaf.astNode === b.leaf.astNode &&
+        (ast.isCommand(a.leaf.astNode) ||
+            ast.isExternalCheck(a.leaf.astNode) ||
+            ast.isFunctionDecl(a.leaf.astNode) ||
+            ast.isCallExpr(a.leaf.astNode) ||
+            FUNCTIONS.has(a.text))
+    )
         return 'none';
     if (a.text === '-' && (ast.isIntLiteral(a.leaf.astNode) || ast.isDecimalLiteral(a.leaf.astNode))) return 'none';
     return 'space';
@@ -212,8 +220,8 @@ class Layout {
     model(model: ast.Model): void {
         model.contexts.forEach((ctx, i) => {
             this.set(this.first(ctx), i > 0 ? 'blank' : 'member', 0);
-            this.block(ctx, sorted([...ctx.elements, ...ctx.terms]), 0);
-            for (const m of [...ctx.elements, ...ctx.terms]) this.element(m, INDENT);
+            this.block(ctx, sorted([...ctx.elements, ...ctx.terms, ...ctx.functions]), 0);
+            for (const m of [...ctx.elements, ...ctx.terms, ...ctx.functions]) this.element(m, INDENT);
         });
         this.multiplicities();
     }
@@ -260,7 +268,7 @@ class Layout {
             for (const r of node.requirements) this.expressionBody(r, inner);
             for (const o of node.outcomes) this.element(o, inner);
         } else if (ast.isOutcome(node)) this.outcome(node, indent);
-        else if (ast.isInvariant(node)) this.expressionBody(node, indent);
+        else if (ast.isInvariant(node) || ast.isFunctionDecl(node)) this.expressionBody(node, indent);
         else if (ast.isCommand(node)) this.command(node, indent);
         else if (ast.isPolicy(node)) this.policy(node, indent);
     }
@@ -284,7 +292,7 @@ class Layout {
     }
 
     /** `{ expr }` of an invariant, a requirement or a domain primitive: inline when its line fits, else a block. */
-    private expressionBody(node: ast.Invariant | ast.Requirement | ast.Outcome | ast.IdType | ast.PrimitiveDecl, indent: number): void {
+    private expressionBody(node: ast.Invariant | ast.Requirement | ast.Outcome | ast.IdType | ast.PrimitiveDecl | ast.FunctionDecl, indent: number): void {
         const open = this.keywords(node, '{')[0];
         const close = this.keywords(node, '}')[0];
         if (open === undefined || close === undefined) return;

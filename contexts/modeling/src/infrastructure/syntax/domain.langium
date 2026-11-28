@@ -5,7 +5,13 @@ entry Model:
 
 // A shared context (shared kernel) holds value types usable by name from every context.
 Context:
-    (shared?='shared')? 'context' name=ID label=STRING? '{' (elements+=ContextElement | terms+=Terms)* '}';
+    (shared?='shared')? 'context' name=ID label=STRING? '{' (elements+=ContextElement | terms+=Terms | functions+=FunctionDecl)* '}';
+
+// `function name(p: T, …): R { expr }`: a pure function (a predicate when R is Bool) of its parameters, called in
+// expressions of its context and, from a shared context, of every context. No recursion or call cycles (M032).
+FunctionDecl:
+    'function' name=ID label=STRING? '(' (params+=Parameter (',' params+=Parameter)*)? ')' ':' returns=TypeRef
+        multiplicity=Multiplicity? '{' body=Expression '}';
 
 // Japanese (display) names of fields and parameters, defined once per name in a context.
 Terms:
@@ -240,6 +246,7 @@ Primary infers Expression:
     | {infer DecimalLiteral} negative?='-'? value=DECIMAL
     | {infer IntLiteral} negative?='-'? value=INT
     | {infer StringLiteral} value=STRING
+    | {infer CallExpr} function=ID '(' (args+=Expression (',' args+=Expression)*)? ')'
     | {infer NameRef} name=FeatureName;
 
 ListElement:
@@ -257,7 +264,7 @@ FeatureName returns string:
     | 'context' | 'shared' | 'terms' | 'primitive' | 'enum' | 'union' | 'entity' | 'aggregate' | 'state' | 'owns' | 'references' | 'create'
     | 'command' | 'emits' | 'errors' | 'event' | 'error' | 'invariant'
     | 'readonly' | 'initial' | 'kind' | 'on' | 'outcome' | 'select'
-    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains';
+    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains' | 'function';
 
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never
 // read alone in an expression: it is written after a `.` (`Op.and`).

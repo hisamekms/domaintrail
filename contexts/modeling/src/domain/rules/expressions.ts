@@ -21,6 +21,7 @@ import {
     type EnumDecl,
     type Expr,
     type FieldDecl,
+    type FunctionDecl,
     type InvariantDecl,
     type KindDecl,
     type ParamDecl,
@@ -38,7 +39,19 @@ export interface ExpressionFact {
     type?: Ty;
     comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: {
-        kind: 'field' | 'parameter' | 'lambdaVariable' | 'value' | 'state' | 'kind' | 'enumValue' | 'type' | 'unionTag' | 'discriminator' | 'context';
+        kind:
+            | 'field'
+            | 'parameter'
+            | 'lambdaVariable'
+            | 'value'
+            | 'state'
+            | 'kind'
+            | 'enumValue'
+            | 'type'
+            | 'unionTag'
+            | 'discriminator'
+            | 'context'
+            | 'function';
         name: string;
         declaration?: object;
         id?: string;
@@ -109,6 +122,97 @@ export function checkInvariants(model: SourceModel, rules: RuleSink, sink?: Expr
         } else if (el.kind === 'id' || el.kind === 'primitive') {
             checkPrimitive(el, ctx, model, rules, sink);
         }
+    }
+    checkFunctions(model, rules, sink);
+}
+
+/** The functions an expression of a context can call: its own, then those of the shared contexts. */
+export function functionNamed(model: SourceModel, ctx: string, name: string): FunctionDecl | undefined {
+    const fns = model.fragments.flatMap((f) => f.functions);
+    return fns.find((f) => f.context === ctx && f.name === name) ?? fns.find((f) => model.sharedContexts.includes(f.context) && f.name === name);
+}
+
+/** The type a function returns, as a field of its declared type and multiplicity. */
+const returnType = (f: FunctionDecl): Ty =>
+    memberType({
+        kind: 'param',
+        name: f.name,
+        type: f.returns,
+        multiplicity: f.multiplicity,
+        at: f.at,
+        nameAt: f.nameAt,
+        labelAt: f.labelAt,
+        typeAt: f.returnsAt,
+    } as ParamDecl);
+
+/** M032: a function's body has its type, and no function calls itself directly or through others. */
+function checkFunctions(model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
+    const fns = model.fragments.flatMap((f) => f.functions);
+    for (const f of fns) {
+        const fields = new Map<string, FieldDecl | ParamDecl>(f.params.map((p) => [p.name, p]));
+        const rootFact = { owner: f, fields: [], parameters: f.params, lambdas: [] as { name: string; binding: Expr }[] };
+        sink?.({ expression: f.expr, scope: rootFact });
+        const t = new ExprChecker(model, rules, sink, (name, binding) => rootFact.lambdas.push({ name, binding })).check(f.expr, {
+            ctx: f.context,
+            fields,
+            hidden: new Map(),
+            lambdas: [],
+            present: new Set(),
+        });
+        const declared = returnType(f);
+        if (t.k !== 'error' && declared.k !== 'error' && !assignable(declared, t))
+            rules.error('M032', `Function '${f.name}' returns '${showType(declared)}', but its body has type '${showType(t)}'.`, f.expr.at);
+    }
+    // a call graph without cycles: every function is pure and terminates
+    const calls = (x: Expr): string[] => (x.k === 'call' ? [x.name, ...x.args.flatMap(calls)] : childExprs(x).flatMap(calls));
+    const callees = new Map(fns.map((f) => [f, calls(f.expr).flatMap((n) => functionNamed(model, f.context, n) ?? [])]));
+    const reported = new Set<FunctionDecl>();
+    const visit = (f: FunctionDecl, path: FunctionDecl[]): void => {
+        if (path.includes(f)) {
+            const cycle = path.slice(path.indexOf(f));
+            if (!cycle.some((c) => reported.has(c))) {
+                for (const c of cycle) reported.add(c);
+                rules.error('M032', `Function '${f.name}' calls itself: ${[...cycle, f].map((c) => c.name).join(' -> ')}; functions cannot recurse.`, f.nameAt);
+            }
+            return;
+        }
+        for (const g of callees.get(f) ?? []) visit(g, [...path, f]);
+    };
+    for (const f of fns) visit(f, []);
+}
+
+/** The direct subexpressions of an expression, in order. */
+function childExprs(x: Expr): Expr[] {
+    switch (x.k) {
+        case 'member':
+            return [x.receiver];
+        case 'not':
+        case 'exists':
+        case 'length':
+        case 'matches':
+            return [x.operand];
+        case 'count':
+            return [x.collection];
+        case 'binary':
+            return [x.left, x.right];
+        case 'range':
+            return [x.operand, x.lower, x.upper];
+        case 'unique':
+            return [x.collection, ...x.keys];
+        case 'contains':
+            return [x.collection, x.element];
+        case 'quantifier':
+            return [x.collection, x.body];
+        case 'conditional':
+            return [x.test, x.ifTrue, x.ifFalse];
+        case 'list':
+            return x.items.map((i) => i.value);
+        case 'listMethod':
+            return x.body ? [x.collection, x.body] : [x.collection];
+        case 'call':
+            return x.args;
+        default:
+            return [];
     }
 }
 
@@ -541,6 +645,31 @@ class ExprChecker {
                     this.rules.error('M009', `Invalid regular expression "${pattern}": ${reason}`, e.patternAt);
                 }
                 return BOOL;
+            }
+            case 'call': {
+                // `name(args)`: a function of this context or of a shared context, with arguments of its parameters' types
+                const f = functionNamed(this.model, scope.ctx, e.name);
+                const args = e.args.map((a) => this.check(a, scope));
+                if (!f) {
+                    this.rules.error('M032', `No function '${e.name}' in context '${scope.ctx}' or a shared context.`, e.nameAt);
+                    return ERROR;
+                }
+                this.symbols.set(e, { kind: 'function', name: e.name, declaration: f, id: f.id });
+                if (args.length !== f.params.length) {
+                    this.rules.error('M032', `Function '${f.name}' takes ${f.params.length} argument(s), but ${args.length} are given.`, e.at);
+                    return ERROR;
+                }
+                for (const [i, p] of f.params.entries()) {
+                    const want = memberType(p);
+                    const got = args[i]!;
+                    if (got.k !== 'error' && want.k !== 'error' && !assignable(want, got))
+                        this.rules.error(
+                            'M032',
+                            `Argument '${p.name}' of '${f.name}' is a '${showType(want)}', but '${e.args[i]!.text}' is a '${showType(got)}'.`,
+                            e.argsAt[i]!,
+                        );
+                }
+                return returnType(f);
             }
             case 'list': {
                 // `[a, b, ...xs]`: the elements, of one type
@@ -1118,6 +1247,13 @@ const baseOf = (t: Ty): Ty => ({ k: 'prim', name: basePrimitive(t)! });
  * `==`, `!=`, `unique` and `contains` compare by this rule: value objects by all their fields, entities by `id`,
  * unions by discriminator and fields. Lists and optionals cannot be compared.
  */
+/** Whether a value of type `got` can be passed where `want` is declared (an argument, a function's result). */
+function assignable(want: Ty, got: Ty): boolean {
+    if (want.k === 'list') return got.k === 'list' && (got.elem.k === 'error' || assignable(want.elem, got.elem));
+    if (want.k === 'opt') return assignable(want.inner, got.k === 'opt' ? got.inner : got);
+    return got.k !== 'list' && got.k !== 'opt' && equatable(want, got);
+}
+
 function equatable(l: Ty, r: Ty): boolean {
     if (l.k === 'list' || r.k === 'list' || l.k === 'opt' || r.k === 'opt') return false;
     return comparable(l, r, (a, b) => (isNumeric(a) && isNumeric(b)) || sameType(a, b));
