@@ -20,3 +20,11 @@ test.each([
 ])('%s and %s give the same expression', async (old, next) => {
     expect(await typed(next)).toEqual(await typed(old));
 });
+
+test('`!` is written next to its operand, in the source text and by `dt fmt`', async () => {
+    const { formatDomain } = await import('./format.js');
+    const a = await analyzeDomain([{ path: 'l.dt', text: model('! (a > 0) || ! b == 0') }]);
+    const v = a.model!.elements.find((e) => e.name === 'V')!;
+    expect('invariants' in v ? v.invariants[0].source : '').toBe('!(a > 0) || !b == 0');
+    expect(formatDomain(model('! (a > 0) || ! b == 0'))).toContain('{ !(a > 0) || !b == 0 }');
+});
