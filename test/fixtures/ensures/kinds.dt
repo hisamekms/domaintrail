@@ -1,0 +1,30 @@
+context Corpus {
+  id ItemId: UUID
+  aggregate Item {
+    id: ItemId
+    state Open
+    state Closed
+    initial Open
+    command rename(title: String)
+    kind Book {
+      title: String
+      create command makeBook(id: ItemId, title: String) {
+        outcome made: -> Open changes id = id, title = title
+          ensures { after.title != "" }
+      }
+      on rename {
+        outcome renamed: Open -> Open changes title = title
+          ensures { after.title != "" }
+      }
+    }
+    kind Game {
+      title: String
+      create command makeGame(id: ItemId, title: String) {
+        outcome made: -> Open changes id = id, title = title
+      }
+      on rename {
+        outcome renamed: Open -> Open changes title = title
+      }
+    }
+  }
+}

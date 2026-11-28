@@ -1,0 +1,26 @@
+context Corpus {
+  id ItemId: UUID
+  id LineId: UUID
+  value Note { text: String }
+  value Owner { name: String }
+  value Detail { code: Int }
+  union Mark { Star { points: Int } Dot { size: Int } }
+  entity Line {
+    id: LineId
+    qty: Int
+  }
+  aggregate Item {
+    id: ItemId
+    state Open
+    note: Note
+    owner: Owner
+    details: Detail[0..*]
+    amount: Decimal(2)
+    mark: Mark
+    owns line: Line
+    command copy(note: Note, owner: Owner, details: Detail[0..*], amount: Decimal(2), mark: Mark, line: Line)
+      Open -> Open
+      changes note = note, owner = owner, details = details, amount = amount, mark = mark, line = line
+      ensures { after.amount >= 0.00 }
+  }
+}

@@ -1,0 +1,222 @@
+[
+  {
+    "command": "start",
+    "subject": null,
+    "params": {
+      "id": "i1",
+      "label": "new"
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "label": "new"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "start",
+    "subject": null,
+    "params": {
+      "id": "i1",
+      "label": "new"
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "label": "old"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:start.changes.label",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "label",
+      "source": "label = label"
+    }
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": "kept"
+    },
+    "value": {
+      "kept": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "label": "kept"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": ""
+    },
+    "value": {
+      "kept": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "label": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:finish->kept.ensures",
+      "outcome": "kept",
+      "kind": "ensures",
+      "source": "after.label != \"\""
+    }
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": "kept"
+    },
+    "value": {
+      "kept": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i2",
+          "label": "kept"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:finish->kept.unchanged.id",
+      "outcome": "kept",
+      "kind": "unchanged",
+      "field": "id",
+      "source": "after.id == before.id"
+    }
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": "closed"
+    },
+    "value": {
+      "closed": {
+        "aggregate": {
+          "state": "Closed",
+          "id": "i1",
+          "label": "closed"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": ""
+    },
+    "value": {
+      "closed": {
+        "aggregate": {
+          "state": "Closed",
+          "id": "i1",
+          "label": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:finish->closed.ensures",
+      "outcome": "closed",
+      "kind": "ensures",
+      "source": "after.label != \"\""
+    }
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": "closed"
+    },
+    "value": {
+      "closed": {
+        "aggregate": {
+          "state": "Closed",
+          "id": "i1",
+          "label": "other"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:finish->closed.changes.label",
+      "outcome": "closed",
+      "kind": "changes",
+      "field": "label",
+      "source": "label = label"
+    }
+  },
+  {
+    "command": "finish",
+    "subject": {
+      "state": "Closed",
+      "id": "i1",
+      "label": "old"
+    },
+    "params": {
+      "label": ""
+    },
+    "value": {
+      "kept": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "label": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  }
+]

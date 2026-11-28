@@ -1,0 +1,1029 @@
+[
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.6",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.amount",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "amount",
+      "source": "amount = amount"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "y"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.note",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "note",
+      "source": "note = note"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Grace"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.owner",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "owner",
+      "source": "owner = owner"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 3
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.details",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "details",
+      "source": "details = details"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Dot",
+            "size": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.mark",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "mark",
+      "source": "mark = mark"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 6
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.mark",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "mark",
+      "source": "mark = mark"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 3
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.line",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "line",
+      "source": "line = line"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l2",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.changes.line",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "line",
+      "source": "line = line"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.5",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i2",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "1.50",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy->Open.unchanged.id",
+      "outcome": "Open",
+      "kind": "unchanged",
+      "field": "id",
+      "source": "after.id == before.id"
+    }
+  },
+  {
+    "command": "copy",
+    "subject": {
+      "state": "Open",
+      "id": "i1",
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 1
+      }
+    },
+    "params": {
+      "note": {
+        "text": "x"
+      },
+      "owner": {
+        "name": "Ada"
+      },
+      "details": [
+        {
+          "code": 1
+        },
+        {
+          "code": 2
+        }
+      ],
+      "amount": "-1.00",
+      "mark": {
+        "kind": "Star",
+        "points": 5
+      },
+      "line": {
+        "id": "l1",
+        "qty": 2
+      }
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1",
+          "note": {
+            "text": "x"
+          },
+          "owner": {
+            "name": "Ada"
+          },
+          "details": [
+            {
+              "code": 1
+            },
+            {
+              "code": 2
+            }
+          ],
+          "amount": "-1.00",
+          "mark": {
+            "kind": "Star",
+            "points": 5
+          },
+          "line": {
+            "id": "l1",
+            "qty": 2
+          }
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:copy.ensures",
+      "outcome": "Open",
+      "kind": "ensures",
+      "source": "after.amount >= 0.00"
+    }
+  }
+]

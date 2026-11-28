@@ -1,0 +1,15 @@
+context Corpus {
+  id ItemId: UUID
+  aggregate Item {
+    id: ItemId
+    state Open
+    state Closed
+    label: String
+    initial Open
+    create command start(id: ItemId, label: String) -> Open changes id = id, label = label
+    command finish(label: String) {
+      outcome kept: Open -> Open select { true } changes label = label ensures { after.label != "" }
+      outcome closed: Open -> Closed select { false } changes label = label ensures { after.label != "" }
+    }
+  }
+}

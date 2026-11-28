@@ -1,0 +1,12 @@
+context Corpus {
+  id ItemId: UUID
+  aggregate Item {
+    id: ItemId
+    state Open
+    state Closed
+    initial Open
+    create command start(id: ItemId) -> Open changes id = id
+    command close() Open -> Closed ensures { isOpen(before) && !isOpen(after) }
+  }
+  function isOpen(o: Item): Bool { match (o) { Open => true, Closed => false } }
+}

@@ -1,0 +1,740 @@
+[
+  {
+    "command": "open",
+    "subject": null,
+    "params": {
+      "id": "i1",
+      "total": "1.20",
+      "parts": [],
+      "customer": "c1"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "1.20",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "open",
+    "subject": null,
+    "params": {
+      "id": "i1",
+      "total": "1.20",
+      "parts": [],
+      "customer": "c1"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i2",
+          "total": "1.20",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:open.changes.id",
+      "outcome": "Draft",
+      "kind": "changes",
+      "field": "id",
+      "source": "id = id"
+    }
+  },
+  {
+    "command": "open",
+    "subject": null,
+    "params": {
+      "id": "i1",
+      "total": "1.20",
+      "parts": [],
+      "customer": "c1"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "1.20",
+          "parts": [],
+          "customerId": "c1",
+          "note": "x"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:open->Draft.unchanged.note",
+      "outcome": "Draft",
+      "kind": "unchanged",
+      "field": "note",
+      "source": "after.note == null"
+    }
+  },
+  {
+    "command": "open",
+    "subject": null,
+    "params": {
+      "id": "i1",
+      "total": "-1.00",
+      "parts": [],
+      "customer": "c1"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "-1.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:open.ensures",
+      "outcome": "Draft",
+      "kind": "ensures",
+      "source": "after.total >= 0.00"
+    }
+  },
+  {
+    "command": "revise",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1",
+      "note": "kept"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c1",
+          "note": "kept"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "revise",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "3.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:revise.changes.total",
+      "outcome": "Draft",
+      "kind": "changes",
+      "field": "total",
+      "source": "total = total"
+    }
+  },
+  {
+    "command": "revise",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c2"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:revise->Draft.unchanged.customerId",
+      "outcome": "Draft",
+      "kind": "unchanged",
+      "field": "customerId",
+      "source": "after.customerId == before.customerId"
+    }
+  },
+  {
+    "command": "revise",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c1",
+          "note": "created"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:revise->Draft.unchanged.note",
+      "outcome": "Draft",
+      "kind": "unchanged",
+      "field": "note",
+      "source": "after.note == before.note"
+    }
+  },
+  {
+    "command": "revise",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "3.00",
+          "parts": [],
+          "customerId": "c2"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:revise.changes.total",
+      "outcome": "Draft",
+      "kind": "changes",
+      "field": "total",
+      "source": "total = total"
+    }
+  },
+  {
+    "command": "revise",
+    "subject": {
+      "state": "Ready",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1",
+      "shippedAt": "2026-01-02"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "3.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "3.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:reviseMany.changes.total",
+      "outcome": "Draft",
+      "kind": "changes",
+      "field": "total",
+      "source": "total = total"
+    }
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "-1.00"
+    },
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "-1.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:reviseMany.ensures",
+      "outcome": "Draft",
+      "kind": "ensures",
+      "source": "match (after) { Draft => after.total >= 0.00, Ready => after.total >= 0.00 }"
+    }
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Ready",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1",
+      "shippedAt": "2026-01-02"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-02"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Ready",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1",
+      "shippedAt": "2026-01-02"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-03"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:reviseMany->Ready.unchanged.shippedAt",
+      "outcome": "Ready",
+      "kind": "unchanged",
+      "field": "shippedAt",
+      "source": "after.shippedAt == before.shippedAt"
+    }
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Ready",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1",
+      "shippedAt": "2026-01-02"
+    },
+    "params": {
+      "total": "-1.00"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "-1.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-02"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:reviseMany.ensures",
+      "outcome": "Ready",
+      "kind": "ensures",
+      "source": "match (after) { Draft => after.total >= 0.00, Ready => after.total >= 0.00 }"
+    }
+  },
+  {
+    "command": "reviseMany",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "total": "2.00"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "3.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-02"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "impossible",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {},
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "1.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:impossible.ensures",
+      "outcome": "Draft",
+      "kind": "ensures",
+      "source": "false"
+    }
+  },
+  {
+    "command": "impossible",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {},
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i2",
+          "total": "1.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:impossible->Draft.unchanged.id",
+      "outcome": "Draft",
+      "kind": "unchanged",
+      "field": "id",
+      "source": "after.id == before.id"
+    }
+  },
+  {
+    "command": "vacuous",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {},
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "1.0",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "vacuous",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {},
+    "value": {
+      "Draft": {
+        "aggregate": {
+          "state": "Draft",
+          "id": "i1",
+          "total": "2.00",
+          "parts": [],
+          "customerId": "c1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:vacuous->Draft.unchanged.total",
+      "outcome": "Draft",
+      "kind": "unchanged",
+      "field": "total",
+      "source": "after.total == before.total"
+    }
+  },
+  {
+    "command": "prepare",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "at": "2026-01-02"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "1.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-02"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "prepare",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "at": "2026-01-02"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "1.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-03"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:prepare.changes.shippedAt",
+      "outcome": "Ready",
+      "kind": "changes",
+      "field": "shippedAt",
+      "source": "shippedAt = at"
+    }
+  },
+  {
+    "command": "prepare",
+    "subject": {
+      "state": "Draft",
+      "id": "i1",
+      "total": "-1.00",
+      "parts": [],
+      "customerId": "c1"
+    },
+    "params": {
+      "at": "2026-01-02"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "-1.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-02"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:prepare.ensures",
+      "outcome": "Ready",
+      "kind": "ensures",
+      "source": "match (before) { Draft => before.total >= 0.00 }"
+    }
+  },
+  {
+    "command": "prepare",
+    "subject": {
+      "state": "Ready",
+      "id": "i1",
+      "total": "1.00",
+      "parts": [],
+      "customerId": "c1",
+      "shippedAt": "2026-01-02"
+    },
+    "params": {
+      "at": "2026-01-05"
+    },
+    "value": {
+      "Ready": {
+        "aggregate": {
+          "state": "Ready",
+          "id": "i1",
+          "total": "1.00",
+          "parts": [],
+          "customerId": "c1",
+          "shippedAt": "2026-01-02"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  }
+]

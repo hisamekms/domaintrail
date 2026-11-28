@@ -1,0 +1,330 @@
+[
+  {
+    "command": "makeBook",
+    "subject": null,
+    "params": {
+      "id": "b1",
+      "title": "Dune"
+    },
+    "value": {
+      "made": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Book",
+          "id": "b1",
+          "title": "Dune"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "makeBook",
+    "subject": null,
+    "params": {
+      "id": "b1",
+      "title": "Dune"
+    },
+    "value": {
+      "made": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Book",
+          "id": "b2",
+          "title": "Dune"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:makeBook->made.changes.id",
+      "outcome": "made",
+      "kind": "changes",
+      "field": "id",
+      "source": "id = id"
+    }
+  },
+  {
+    "command": "makeBook",
+    "subject": null,
+    "params": {
+      "id": "b1",
+      "title": "Dune"
+    },
+    "value": {
+      "made": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "b1",
+          "title": "Dune"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:makeBook->made.changes.kind",
+      "outcome": "made",
+      "kind": "changes",
+      "field": "kind",
+      "source": "after.kind == Book"
+    }
+  },
+  {
+    "command": "makeBook",
+    "subject": null,
+    "params": {
+      "id": "b1",
+      "title": ""
+    },
+    "value": {
+      "made": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Book",
+          "id": "b1",
+          "title": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:makeBook->made.ensures",
+      "outcome": "made",
+      "kind": "ensures",
+      "source": "after.title != \"\""
+    }
+  },
+  {
+    "command": "makeGame",
+    "subject": null,
+    "params": {
+      "id": "g1",
+      "title": "Go"
+    },
+    "value": {
+      "made": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "g1",
+          "title": "Go"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "makeGame",
+    "subject": null,
+    "params": {
+      "id": "g1",
+      "title": "Go"
+    },
+    "value": {
+      "made": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "g1",
+          "title": "Chess"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:makeGame->made.changes.title",
+      "outcome": "made",
+      "kind": "changes",
+      "field": "title",
+      "source": "title = title"
+    }
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Open",
+      "kind": "Book",
+      "id": "b1",
+      "title": "Dune"
+    },
+    "params": {
+      "title": "Dune Messiah"
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Book",
+          "id": "b1",
+          "title": "Dune Messiah"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Open",
+      "kind": "Book",
+      "id": "b1",
+      "title": "Dune"
+    },
+    "params": {
+      "title": "Dune Messiah"
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "b1",
+          "title": "Dune Messiah"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item/Book:on:rename->renamed.unchanged.kind",
+      "outcome": "renamed",
+      "kind": "unchanged",
+      "field": "kind",
+      "source": "after.kind == before.kind"
+    }
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Open",
+      "kind": "Book",
+      "id": "b1",
+      "title": "Dune"
+    },
+    "params": {
+      "title": ""
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Book",
+          "id": "b1",
+          "title": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item/Book:on:rename->renamed.ensures",
+      "outcome": "renamed",
+      "kind": "ensures",
+      "source": "after.title != \"\""
+    }
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Open",
+      "kind": "Game",
+      "id": "g1",
+      "title": "Go"
+    },
+    "params": {
+      "title": "Shogi"
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "g1",
+          "title": "Shogi"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Open",
+      "kind": "Game",
+      "id": "g1",
+      "title": "Go"
+    },
+    "params": {
+      "title": "Shogi"
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "g2",
+          "title": "Shogi"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item/Game:on:rename->renamed.unchanged.id",
+      "outcome": "renamed",
+      "kind": "unchanged",
+      "field": "id",
+      "source": "after.id == before.id"
+    }
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Open",
+      "kind": "Game",
+      "id": "g1",
+      "title": "Go"
+    },
+    "params": {
+      "title": ""
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Game",
+          "id": "g1",
+          "title": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "rename",
+    "subject": {
+      "state": "Closed",
+      "kind": "Book",
+      "id": "b1",
+      "title": "Dune"
+    },
+    "params": {
+      "title": ""
+    },
+    "value": {
+      "renamed": {
+        "aggregate": {
+          "state": "Open",
+          "kind": "Book",
+          "id": "b1",
+          "title": ""
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  }
+]
