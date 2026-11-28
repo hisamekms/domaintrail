@@ -6,7 +6,7 @@ context Collaboration {
   /// 与えない。正規化した形で持つ: NFC で、テキスト表示が既定の絵文字には VS16（U+FE0F）を付けた完全修飾の形（❤ と ❤️ は
   /// 同じ反応）。
   primitive Emoji "絵文字": String {
-    invariant bounded "長すぎない" { length(value) >= 1 and length(value) <= 64 }
+    invariant bounded "長すぎない" { length(value) >= 1 && length(value) <= 64 }
     /// 書記素1つの絵文字で、正規化した形（`@domaintrail/modeling/core/emoji`）。
     invariant singleEmoji "正規化した絵文字1つ" @externalCheck("Unicode の絵文字グラフェム判定と正規化をアプリケーションで行う")
   }
@@ -70,7 +70,7 @@ context Collaboration {
 
     /// 票は問いの選択肢と前提の選び方に、反応はメッセージと AI のターンに、済みはガイドの区切りに付ける。
     invariant fitsTarget "印の種類が対象に合う" {
-      (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
+      (!(sign.kind == MarkSign.Vote) || (target.kind == MarkTarget.QuestionOption || target.kind == MarkTarget.AssumptionChoice)) && (!(sign.kind == MarkSign.Reaction) || (target.kind == MarkTarget.Message || target.kind == MarkTarget.Turn)) && ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
     }
 
     state Placed "付いている"
@@ -81,15 +81,15 @@ context Collaboration {
     create command place(id: MarkId, session: ActiveSession, participant: ParticipantId, role: ParticipantRole, target: OpenMarkTarget, sign: MarkSign, placedAt: Timestamp) "印を付ける"
       -> Placed
       requires fitsTarget "印の種類が対象に合う" {
-        (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
+        (!(sign.kind == MarkSign.Vote) || (target.kind == MarkTarget.QuestionOption || target.kind == MarkTarget.AssumptionChoice)) && (!(sign.kind == MarkSign.Reaction) || (target.kind == MarkTarget.Message || target.kind == MarkTarget.Turn)) && ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
       } else MarkNotForTarget
       /// ファシリテーターは票を入れない（回答が決定になる）。
       requires participantsVote "票は参加者だけ" {
-        sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
+        !(sign.kind == MarkSign.Vote) || role == ParticipantRole.Participant
       } else FacilitatorDoesNotVote
       /// ガイドの区切りを済みにするのはファシリテーター（ひとりのセッションではその人）。
       requires facilitatorMarksSteps "区切りを済みにするのはファシリテーター" {
-        sign.kind == MarkSign.Done implies role == ParticipantRole.Facilitator
+        !(sign.kind == MarkSign.Done) || role == ParticipantRole.Facilitator
       } else FacilitatorOnly
       emits MarkPlaced
 

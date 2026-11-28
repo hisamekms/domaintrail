@@ -59,14 +59,14 @@ context Logistics {
     kind Store {
       storeCode: String
       closingTime: Int
-      invariant openHours { closingTime >= 0 and closingTime < 24 }
+      invariant openHours { closingTime >= 0 && closingTime < 24 }
       create command registerStore(id: PickupSiteId, name: String, storeCode: String, closingTime: Int) {
-        requires validHour { closingTime >= 0 and closingTime < 24 } else InvalidHour
+        requires validHour { closingTime >= 0 && closingTime < 24 } else InvalidHour
         outcome registered: -> Active
           emits Registered
       }
       command changeClosingTime(newClosingTime: Int) {
-        requires validNewHour { newClosingTime >= 0 and newClosingTime < 24 } else InvalidHour
+        requires validNewHour { newClosingTime >= 0 && newClosingTime < 24 } else InvalidHour
         outcome changed: Active -> Active
           changes closingTime
       }

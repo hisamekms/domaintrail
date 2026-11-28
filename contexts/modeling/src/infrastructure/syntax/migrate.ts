@@ -43,6 +43,19 @@ const childrenOf = (node: AstNode): AstNode[] => AstUtils.streamContents(node).t
 
 const rangeOf = (node: AstNode): { start: number; end: number } => ({ start: node.$cstNode!.offset, end: node.$cstNode!.end });
 
+/** The spellings the parser still reads only so that `dt migrate domain` can rewrite them, with their replacement. */
+export const LEGACY_SPELLINGS: Readonly<Record<string, string>> = { and: '&&', or: '||', not: '!', implies: '!(p) || q' };
+
+/** The legacy operator tokens of a parsed model, in source order. */
+export function legacyTokens(root: AstNode): LeafCstNode[] {
+    const out: LeafCstNode[] = [];
+    for (const node of AstUtils.streamAst(root)) {
+        const op = ast.isBinaryExpr(node) ? ownToken(node, ['and', 'or', 'implies']) : ast.isNotExpr(node) ? ownToken(node, ['not']) : undefined;
+        if (op) out.push(op);
+    }
+    return out.sort((a, b) => a.offset - b.offset);
+}
+
 /**
  * Rewrites the logical operators: `and` → `&&`, `or` → `||`, `not x` → `!x`, and `p implies q` → `!(p) || q`. The
  * grammar gives `!` the place of `not` and `||` the place of `or`; `implies` is the loosest operator and associates to

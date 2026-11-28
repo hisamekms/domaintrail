@@ -32,7 +32,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
     owns period: Period
     renewals: Int
     note: String? // ? = optional
-    invariant renewalsLimited { renewals >= 0 and renewals <= 2 } // holds in every state
+    invariant renewalsLimited { renewals >= 0 && renewals <= 2 } // holds in every state
     state Lent
     state Overdue
     state Returned {
@@ -238,7 +238,7 @@ context Rental "レンタル" { // a bounded context; "…" is a label (表示�
       emits LeaseStarted
     command close(closedAt: Timestamp)
       Active -> Closed
-      requires settled { not exists(discount) } else DiscountPending
+      requires settled { !exists(discount) } else DiscountPending
       emits LeaseClosed
   }
 
@@ -290,11 +290,11 @@ context Sales { // a bounded context; may be split across files
     state Draft
     state Confirmed {
       confirmedAt: Timestamp // exists only in this state
-      invariant hasItems { count(items) > 0 and count(items) <= 100 } // sees common + Confirmed fields
+      invariant hasItems { count(items) > 0 && count(items) <= 100 } // sees common + Confirmed fields
     }
     state Cancelled {
       reason: CancelReason
-      invariant otherNeedsNote { reason == CancelReason.Other implies exists(note) }
+      invariant otherNeedsNote { !(reason == CancelReason.Other) || exists(note) }
     }
 
     command confirm(at: Timestamp)
@@ -351,10 +351,10 @@ context Sales {
     owns addresses: Address[0..*]
     owns shipping: Address?
 
-    invariant activeHasAddress { active == true implies count(addresses) > 0 }
-    invariant servedArea { active == false or any(addresses, a => a.city == "Tokyo" or not (a.city == "Osaka")) }
+    invariant activeHasAddress { !(active == true) || count(addresses) > 0 }
+    invariant servedArea { active == false || any(addresses, a => a.city == "Tokyo" || !(a.city == "Osaka")) }
     invariant distinctAddresses { unique(addresses, a => a.city, a.street) } // the combination is distinct
-    invariant shippingListed { exists(shipping) implies contains(addresses, shipping) }
+    invariant shippingListed { !(exists(shipping)) || contains(addresses, shipping) }
 
     /// No other customer has the same email address: checked when one is given (AvailableEmail), kept by the store.
     invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体の照会が必要")
@@ -610,7 +610,7 @@ context Expenses "経費" {
     id: ExpenseId
     applicant: StaffId "申請者"
     approver: StaffId? "承認者"
-    invariant notSelfApproved "申請者は承認できない" { exists(approver) implies approver != applicant }
+    invariant notSelfApproved "申請者は承認できない" { !(exists(approver)) || approver != applicant }
 
     create command submit(id: ExpenseId, applicant: StaffId "申請者", performedBy: StaffId "実施者") "申請する" // by proxy, too
       emits ExpenseSubmitted
@@ -818,7 +818,7 @@ The rules (`dt check`; M030 errors, M031 warnings):
 - With kinds and states, commands name their outcomes (`outcome name: A -> B`), not the shorthand `A -> B`.
 - Without states, a kind's commands use the form of an aggregate without states (`changes`, `emits`).
 
-A union of states with optional fields guarded by a classification (`type == SiteType.STORE implies exists(storeCode)`)
+A union of states with optional fields guarded by a classification (`!(type == SiteType.STORE) || exists(storeCode)`)
 is the shape of kinds: M031 says so.
 
 **Generated code.** The aggregate is a union of its kinds (`StorePickupSite | DistributionCenterPickupSite`), each of
@@ -857,8 +857,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
-- Operators, loosest first: `implies`, `or`, `and`, `== != < <= > >=`, `x in 1..9`, `not`.
-- Functions: `exists(x)` (an optional is present; narrows `x` on the right of `and` / `implies`), `count(c)`,
+- Operators, loosest first: `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
+  `!(A) || B`.
+- Functions: `exists(x)` (an optional is present; narrows `x` on the right of `&&`, and of `||` after `!exists(x)`), `count(c)`,
   `all(c, x => …)`, `any(c, x => …)`, `unique(c)`, `unique(c, x => key, …)`, `contains(c, x)`, and in domain
   primitives `length(value)`, `matches(value, "regex")`.
 - `unique(c)`: the elements of a collection are distinct. With keys, `unique(lines, l => l.sku)` means no two
@@ -1031,7 +1032,7 @@ context Purchasing {
 ```
 
 **3. The policy picks a kind of rule**: an enum (or a union, when the kinds carry data) in the aggregate, and one
-invariant or requirement per kind with `implies`.
+invariant or requirement per kind written `!(kind == …) || …`.
 
 ```dt
 // purchasing/contract.dt
@@ -1043,7 +1044,7 @@ context Purchasing {
     id: ContractId
     signOff: SignOff
     signedBy: PersonId[0..*]
-    invariant dualSignOff { signOff == SignOff.Dual implies count(signedBy) >= 2 }
+    invariant dualSignOff { !(signOff == SignOff.Dual) || count(signedBy) >= 2 }
   }
 }
 ```
@@ -1967,7 +1968,7 @@ text for `no-unsafe-type-assertion`, not evaluated — so a rule shared from a p
 
 Every invariant and requirement with an expression becomes a pure function in the context's module, translated 1:1
 with the semantics of [Invariant expressions](#invariant-expressions): equality by value / all fields / `id` / tag and
-fields, `exists` and `implies` as written, regular expressions as JavaScript (`matches` is `RegExp.test`), `length` as
+fields, `exists` and the logical operators as written, regular expressions as JavaScript (`matches` is `RegExp.test`), `length` as
 the string's `length`, Decimals (carried as strings) and Ints compared as numbers, Timestamps by time.
 
 | Generated | For | Returns |
@@ -1988,7 +1989,7 @@ export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrd
 }
 ```
 
-The translation reads like the `.dt` it comes from: a violated `A implies B` is tested as `A && !B`
+The translation reads like the `.dt` it comes from: a violated `!(A) || B` is tested as `A && !B`
 (`if (order.reason === 'Other' && !(order.note !== undefined))`), lambda variables keep their names
 (`(item) => item.quantity > 0`; the second element of `unique(items, item => item.sku)` is `item2`), and strings are in
 single quotes. A parameter of the command is read from the parameters object (`params.reason`). A lambda variable gets

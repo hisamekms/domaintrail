@@ -134,7 +134,7 @@ context Sales { // trailing the brace
   enum Kind { A /* a */ B }
   aggregate Order {
     id: OrderId
-    invariant ok { 1 < /* one */ 2 and
+    invariant ok { 1 < /* one */ 2 &&
       // explained
       2 < 3 }
     command go(
@@ -164,7 +164,7 @@ context Sales { // trailing the brace
   aggregate Order {
     id: OrderId
     invariant ok {
-      1 < /* one */ 2 and
+      1 < /* one */ 2 &&
           // explained
           2 < 3
     }
@@ -196,7 +196,7 @@ context Sales { // trailing the brace
     command a()
       On -> On
     command b(${long}: Int) On -> On
-    invariant c { n > 0 and n < 1000000000 and n != 5 and n != 7 and n != 11 and n != 13 and n != 17 and n != 19 and n != 23 }
+    invariant c { n > 0 && n < 1000000000 && n != 5 && n != 7 && n != 11 && n != 13 && n != 17 && n != 19 && n != 23 && n != 29 && n != 31 }
   }
 }
 `);
@@ -210,7 +210,7 @@ context Sales { // trailing the brace
     command b(${long}: Int)
       On -> On
     invariant c {
-      n > 0 and n < 1000000000 and n != 5 and n != 7 and n != 11 and n != 13 and n != 17 and n != 19 and n != 23
+      n > 0 && n < 1000000000 && n != 5 && n != 7 && n != 11 && n != 13 && n != 17 && n != 19 && n != 23 && n != 29 && n != 31
     }
   }
 }

@@ -46,12 +46,12 @@ shared context Common "共通" {
     owns lines: Line[0..*]
     references customer: CustomerId -> Customer
     note: String? "備考"
-    invariant sane { count(lines) >= 0 and all(lines, l => l.qty > -1) implies not (note == "x") }
+    invariant sane { !(count(lines) >= 0 && all(lines, l => l.qty > -1)) || !(note == "x") }
     create command place(id: OrderId, customer: KnownCustomer) -> Draft emits Placed
     state Draft
-    state Done { at: Timestamp  invariant later { exists(note) or unique(lines, l => l.id) } }
+    state Done { at: Timestamp  invariant later { exists(note) || unique(lines, l => l.id) } }
     command finish(at: Timestamp) Draft -> Done
-      requires hasLines "明細がある" { count(lines) > 0 and contains(lines, lines) and any(lines, l => l.qty in 1..2) } else Missing
+      requires hasLines "明細がある" { count(lines) > 0 && contains(lines, lines) && any(lines, l => l.qty in 1..2) } else Missing
       requires documented else Missing
       changes note, note
       emits Placed[0..*] when Draft -> Done, Unknown
@@ -286,9 +286,9 @@ describe('the fixture as written', () => {
         const sane = order.members.find((x) => x.name === 'sane');
         const e = sane?.kind === 'invariant' ? sane.expr : undefined;
         expect(e?.k).toBe('binary');
-        expect(e?.text).toBe('count(lines) >= 0 and all(lines, l => l.qty > -1) implies not (note == "x")');
+        expect(e?.text).toBe('!(count(lines) >= 0 && all(lines, l => l.qty > -1)) || !(note == "x")');
         if (e?.k !== 'binary') return;
-        expect(e.op).toBe('implies');
+        expect(e.op).toBe('or');
         expect(toExprModel(e.right)).toEqual({
             k: 'not',
             operand: { k: 'binary', op: 'eq', left: { k: 'name', name: 'note' }, right: { k: 'string', value: 'x' } },

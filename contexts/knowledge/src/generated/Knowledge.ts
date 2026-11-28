@@ -144,7 +144,7 @@ export const makeProjectName: MakeProjectName = (value) => {
 /**
  * 見出し
  * ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
- * @invariant valid: length(value) <= 40 and matches(value, "^\S(.*\S)?$")
+ * @invariant valid: length(value) <= 40 && matches(value, "^\S(.*\S)?$")
  * Make it with `makeItemTitle`; never `as ItemTitle` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:20
  */
@@ -190,7 +190,7 @@ export const makeItemTitle: MakeItemTitle = (value) => {
 /**
  * 本文
  * ナレッジの本文（Markdown）。
- * @invariant valid: length(value) >= 1 and length(value) <= 20000
+ * @invariant valid: length(value) >= 1 && length(value) <= 20000
  * Make it with `makeItemText`; never `as ItemText` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:23
  */
@@ -236,7 +236,7 @@ export const makeItemText: MakeItemText = (value) => {
 /**
  * 引用
  * 出典のメッセージの短い引用。セッションのデータベースは1台にしか残らないので、AI の言い換えを読み手が確かめられるのはこれ。
- * @invariant valid: length(value) >= 1 and length(value) <= 500
+ * @invariant valid: length(value) >= 1 && length(value) <= 500
  * Make it with `makeQuote`; never `as Quote` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:26
  */
@@ -282,7 +282,7 @@ export const makeQuote: MakeQuote = (value) => {
 /**
  * 立場
  * 立場（案件担当、営業、外注先など）。役割で書き、人の名前は書かない。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makePerspective`; never `as Perspective` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:29
  */
@@ -328,7 +328,7 @@ export const makePerspective: MakePerspective = (value) => {
 /**
  * 理由
  * 抽出が操作ごとに添える理由。監査のログに残る。
- * @invariant valid: length(value) >= 1 and length(value) <= 2000
+ * @invariant valid: length(value) >= 1 && length(value) <= 2000
  * Make it with `makeReason`; never `as Reason` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:32
  */
@@ -420,7 +420,7 @@ export const makeStickyRef: MakeStickyRef = (value) => {
 /**
  * セッション
  * セッションの ID（コラボレーションのセッション）。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeSessionRef`; never `as SessionRef` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:38
  */
@@ -466,7 +466,7 @@ export const makeSessionRef: MakeSessionRef = (value) => {
 /**
  * メッセージ
  * セッションの中のメッセージの ID（人のメッセージか AI の答え）。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeMessageRef`; never `as MessageRef` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:41
  */
@@ -512,7 +512,7 @@ export const makeMessageRef: MakeMessageRef = (value) => {
 /**
  * ユーザー
  * ユーザー（Access のメールアドレス）。
- * @invariant valid: length(value) >= 1 and length(value) <= 320
+ * @invariant valid: length(value) >= 1 && length(value) <= 320
  * Make it with `makeUserName`; never `as UserName` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:44
  */
@@ -1090,8 +1090,8 @@ export function equalRedaction(a: Redaction, b: Redaction): boolean {
  * Fields shared by every state of ナレッジ (KnowledgeItem).
  * @invariant distinctSources (出典のメッセージは1回): unique(sources, s => s.session, s.message)
  * @invariant distinctConflicts (食い違うナレッジは1回): unique(conflictsWith)
- * @invariant notConflictingItself (自分とは食い違わない): not contains(conflictsWith, id)
- * @invariant conflictsSourced (食い違いには出典がある): count(conflictsWith) == 0 or count(sources) >= 1
+ * @invariant notConflictingItself (自分とは食い違わない): !contains(conflictsWith, id)
+ * @invariant conflictsSourced (食い違いには出典がある): count(conflictsWith) == 0 || count(sources) >= 1
  * @see contexts/knowledge/model/item.dt:5
  */
 export interface KnowledgeItemCommon {
@@ -1352,7 +1352,7 @@ export interface AddSourceKnowledgeItemParams {
  * 出典を足す
  * 同じ発見がまた言われた: 出典を1つ足す。合意（話がそのまま進んだ）なら、発言を合意に上げる（ほかの出どころは変えない）。
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
- * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session or s.message != source.message)
+ * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session || s.message != source.message)
  * @changes content, sources, updatedAt
  * @emits KnowledgeSourceAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:53
@@ -1371,7 +1371,7 @@ export type AddSourceKnowledgeItem = (
  * KnowledgeItem.addSource, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
- * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session or s.message != source.message)
+ * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session || s.message != source.message)
  * @changes content, sources, updatedAt
  * Live -> Live — set: content, sources, updatedAt; carried over: id, version, conflictsWith, createdIn, createdAt, bookmarked, retirement
  * @see contexts/knowledge/model/item.dt:53
@@ -1768,9 +1768,9 @@ export interface RetireKnowledgeItemParams {
  * KnowledgeItem.retire (Live -> Live)
  * 廃止する
  * 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
- * @requires notRetired (廃止していない) else AlreadyRetired: not exists(retirement)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: exists(replacedBy) implies replacedBy != id
+ * @requires notRetired (廃止していない) else AlreadyRetired: !exists(retirement)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: !(exists(replacedBy)) || replacedBy != id
  * @changes retirement, updatedAt
  * @emits KnowledgeItemRetired — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:111
@@ -1788,9 +1788,9 @@ export type RetireKnowledgeItem = (
 /**
  * KnowledgeItem.retire, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires notRetired (廃止していない) else AlreadyRetired: not exists(retirement)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: exists(replacedBy) implies replacedBy != id
+ * @requires notRetired (廃止していない) else AlreadyRetired: !exists(retirement)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: !(exists(replacedBy)) || replacedBy != id
  * @changes retirement, updatedAt
  * Live -> Live — set: updatedAt, retirement; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, bookmarked
  * @see contexts/knowledge/model/item.dt:111
@@ -2704,7 +2704,7 @@ export const makeRetirementProposalId: MakeRetirementProposalId = (value) => {
 /**
  * 見直し
  * 見直しの1回を指す名前。見直しの担当が決める。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeReviewRef`; never `as ReviewRef` (see dt guide lint).
  * @see contexts/knowledge/model/retirement.dt:6
  */
@@ -2750,7 +2750,7 @@ export const makeReviewRef: MakeReviewRef = (value) => {
 /**
  * 根拠の説明
  * 根拠の短い説明（付箋がどう変わったか）。
- * @invariant valid: length(value) >= 1 and length(value) <= 500
+ * @invariant valid: length(value) >= 1 && length(value) <= 500
  * Make it with `makeEvidenceNote`; never `as EvidenceNote` (see dt guide lint).
  * @see contexts/knowledge/model/retirement.dt:9
  */
@@ -2815,7 +2815,7 @@ export type ProposalAction =
 /**
  * 廃止
  * 廃止: 消すのとは別。本文・出典・版はすべて残し、一覧では既定で隠し、AI（回答役・実行役・見直し）には渡さない。
- * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+ * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
  * @see contexts/knowledge/model/retirement.dt:18
  */
 export interface Retirement {
@@ -2948,10 +2948,10 @@ export function equalProposer(a: Proposer, b: Proposer): boolean {
 
 /**
  * Fields shared by every state of 廃止の候補 (RetirementProposal).
- * @invariant retireHasReason (廃止の候補には理由がある): action == ProposalAction.retire implies exists(reason)
- * @invariant unretireHasNoReason (取り消しの候補に理由はない): action == ProposalAction.unretire implies not exists(reason)
- * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
- * @invariant notReplacedByItself (自分には置き換わらない): exists(replacedBy) implies replacedBy != item
+ * @invariant retireHasReason (廃止の候補には理由がある): !(action == ProposalAction.retire) || exists(reason)
+ * @invariant unretireHasNoReason (取り消しの候補に理由はない): !(action == ProposalAction.unretire) || !exists(reason)
+ * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+ * @invariant notReplacedByItself (自分には置き換わらない): !(exists(replacedBy)) || replacedBy != item
  * @invariant distinctEvidence (根拠は1回): unique(evidence)
  * @see contexts/knowledge/model/retirement.dt:63
  */
@@ -3111,10 +3111,10 @@ export interface ProposeRetirementProposalParams {
  * 候補を出す
  * AI（抽出・見直し）が候補を出す。ナレッジに照らした受け付け（同じ候補が未決にある、前に却下した、AS-IS の知見を付箋の
  * 変更だけで廃止しようとしている、など）はストアが決める。
- * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: action == ProposalAction.retire implies exists(reason)
- * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: action == ProposalAction.unretire implies not exists(reason)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: exists(replacedBy) implies replacedBy != item
+ * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: !(action == ProposalAction.retire) || exists(reason)
+ * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || !exists(reason)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: !(exists(replacedBy)) || replacedBy != item
  * @requires distinctEvidence (根拠は1回) else MalformedProposal: unique(evidence)
  * @emits RetirementProposed — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:98
@@ -3131,10 +3131,10 @@ export type ProposeRetirementProposal = (
 /**
  * RetirementProposal.propose, decided by one function; implement it with `decide(RetirementProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: action == ProposalAction.retire implies exists(reason)
- * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: action == ProposalAction.unretire implies not exists(reason)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: exists(replacedBy) implies replacedBy != item
+ * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: !(action == ProposalAction.retire) || exists(reason)
+ * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || !exists(reason)
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: !(exists(replacedBy)) || replacedBy != item
  * @requires distinctEvidence (根拠は1回) else MalformedProposal: unique(evidence)
  * new -> Open — set: every field
  * @emits RetirementProposed — exactly once when the command succeeds

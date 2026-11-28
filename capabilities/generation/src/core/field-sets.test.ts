@@ -93,7 +93,7 @@ describe('field sets: generated TypeScript', () => {
   fields Described { label: String  doc: String? }
   value Term with Described {
     name: String
-    invariant named { length(name) > 0 and length(label) > 0 }
+    invariant named { length(name) > 0 && length(label) > 0 }
   }`);
         expect(v.diagnostics).toEqual([]);
         const sales = ts(v, 'Sales');

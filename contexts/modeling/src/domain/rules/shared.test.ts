@@ -19,7 +19,7 @@ describe('shared contexts', () => {
     email: Email
     balance: Common.Money
     preferred: Currency
-    invariant yen { preferred == Currency.JPY or preferred == Common.Currency.USD }
+    invariant yen { preferred == Currency.JPY || preferred == Common.Currency.USD }
   }
 }`,
         });

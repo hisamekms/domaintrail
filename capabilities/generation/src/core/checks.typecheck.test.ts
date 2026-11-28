@@ -55,14 +55,14 @@ context Sales {
   value Period {
     from: Timestamp
     until: Timestamp?
-    invariant ordered { exists(until) implies from <= until }
+    invariant ordered { !(exists(until)) || from <= until }
   }
   value Tags { names: String[0..*]  invariant distinctNames { unique(names) } }
   value Approval {
     needed: Quantity
     confirmedBy: String[0..*]
     invariant enough { count(confirmedBy) >= needed }
-    invariant exact { needed == count(confirmedBy) or (count(confirmedBy) in 0..needed) }
+    invariant exact { needed == count(confirmedBy) || (count(confirmedBy) in 0..needed) }
   }
   entity Line {
     id: LineId
@@ -85,7 +85,7 @@ context Sales {
     state Cancelled {
       reason: Reason
       note: String?
-      invariant otherNeedsNote { reason == Reason.Other implies exists(note) }
+      invariant otherNeedsNote { !(reason == Reason.Other) || exists(note) }
       invariant audited "監査済み"
     }
     create command place(id: OrderId) -> Draft

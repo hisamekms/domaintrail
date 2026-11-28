@@ -27,7 +27,7 @@ ${extra ? `  ${extra}\n` : ''}
       changes email
     command reach(email: Reachable) changes email
     command spend(spend: CoveredSpend)
-      requires positive { spend.amount > 0 and contact != email } else Unchanged
+      requires positive { spend.amount > 0 && contact != email } else Unchanged
       changes spent
     ${members}
   }

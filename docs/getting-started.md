@@ -206,7 +206,7 @@ context Booking "会議室予約" {
   value Slot "時間帯" {
     start: Timestamp
     hours: Int
-    invariant withinDay "1〜8時間" { hours >= 1 and hours <= 8 }
+    invariant withinDay "1〜8時間" { hours >= 1 && hours <= 8 }
   }
 
   aggregate Reservation "予約" {
@@ -237,7 +237,7 @@ context Booking "会議室予約" {
   value Slot "時間帯" {
     start: Timestamp
     hours: Int
-    invariant withinDay "1〜8時間" { hours >= 1 and hours <= 8 }
+    invariant withinDay "1〜8時間" { hours >= 1 && hours <= 8 }
   }
 
   aggregate Reservation "予約" {
@@ -284,7 +284,7 @@ context Booking "会議室予約" {
   value Slot "時間帯" {
     start: Timestamp
     hours: Int
-    invariant withinDay "1〜8時間" { hours >= 1 and hours <= 8 }
+    invariant withinDay "1〜8時間" { hours >= 1 && hours <= 8 }
   }
 
   aggregate Reservation "予約" {

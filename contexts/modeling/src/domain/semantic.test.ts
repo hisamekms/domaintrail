@@ -81,7 +81,7 @@ function assertExpressionParity(typed: import('./model.js').DomainModel, ir: Ret
         expect(found, `${root} at ${path || '<root>'}`).toBeDefined();
         expect(found!.syntaxKind).toBe(expr.k);
         if (expr.k === 'binary') {
-            const operator = { eq: '==', ne: '!=', lt: '<', le: '<=', gt: '>', ge: '>=', implies: 'implies', and: 'and', or: 'or' }[expr.op];
+            const operator = { eq: '==', ne: '!=', lt: '<', le: '<=', gt: '>', ge: '>=', implies: 'implies', and: '&&', or: '||' }[expr.op];
             expect(found!.source).toContain(operator);
         }
         if (expr.k === 'name') expect(found!.source).toBe(expr.name);
@@ -139,8 +139,8 @@ describe('Semantic IR', () => {
   union TypeExpr { primitive { name: String } ref { ref: String target: String? } }
   value Use {
     context: String event: String? errors: String[0..*] op: BinaryOp type: TypeExpr
-    invariant k { op != BinaryOp.and implies exists(event) }
-    invariant p { type.kind == TypeExpr.primitive or count(errors) > 0 }
+    invariant k { !(op != BinaryOp.and) || exists(event) }
+    invariant p { type.kind == TypeExpr.primitive || count(errors) > 0 }
   }
 }`,
             `context Sales {
@@ -167,13 +167,13 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
   aggregate A with Audit {
     id: AId
     n: Int
-    state Open { o: V invariant oo { o.level > 0 and o.x > 0 and level > 0 } }
+    state Open { o: V invariant oo { o.level > 0 && o.x > 0 && level > 0 } }
     state Done
     kind P {
       w: V
-      invariant pw { w.level > n and w.x > 0 and level > 0 }
+      invariant pw { w.level > n && w.x > 0 && level > 0 }
       create command mkP(id: AId, n: Int, w: V, level: Int, o: V) { outcome made: -> Open }
-      command fin() { outcome f: Open -> Done requires q { w.level > 0 and o.level > 0 } else Bad }
+      command fin() { outcome f: Open -> Done requires q { w.level > 0 && o.level > 0 } else Bad }
     }
     kind Q { create command mkQ(id: AId, n: Int, level: Int, o: V) { outcome made: -> Open } }
   }
@@ -340,8 +340,8 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                     otherChoice: Choice
                     owns people: Person[0..*]
                     invariant comparisons {
-                      first == second and home == office and choice == otherChoice and
-                      home.city < office.city and contains(people, first)
+                      first == second && home == office && choice == otherChoice &&
+                      home.city < office.city && contains(people, first)
                     }
                   }
                 }`,
@@ -360,26 +360,25 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             'entityId',
         ]);
     });
-    test('projects only true-edge optional presence facts and guarded right operands', async () => {
+    test('projects optional presence facts on guarded right operands, on both edges', async () => {
         const analysis = await analyzeDomain([
             {
                 path: 'fixture.dt',
                 text: `context Fixture {
                   aggregate Item {
                     note: String?
-                    invariant conjunction { exists(note) and note.length > 0 }
-                    invariant implication { exists(note) implies note.length > 0 }
-                    invariant disjunction { not exists(note) or note.length > 0 }
+                    invariant conjunction { exists(note) && note.length > 0 }
+                    invariant implication { !(exists(note)) || note.length > 0 }
+                    invariant disjunction { !exists(note) || note.length > 0 }
                   }
                 }`,
             },
         ]);
         const ir = semanticIROf(analysis);
         const facts = ir.presence;
-        expect(facts.filter((fact) => fact.path === 'note')).toHaveLength(2);
+        // `exists(note) && …` holds; `!(exists(note)) || …` and `!exists(note) || …` do not hold on the left
+        expect(facts.filter((fact) => fact.path === 'note')).toHaveLength(3);
         expect(facts.every((fact) => fact.path === 'note')).toBe(true);
-        const disjunction = ir.expressions.filter((root) => root.site.startLine === 6);
-        expect(ir.presence.filter((fact) => disjunction.some((root) => root.id === fact.expression))).toEqual([]);
         for (const scope of ir.scopes) {
             const root = ir.expressions.find((expression) => expression.id === scope.expression);
             expect(root?.site).toEqual(scope.site);
@@ -436,7 +435,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 }
                 context Shop {
                   fields Tenanted { tenant: Int }
-                  value Order with Tenanted { status: Shared.Status invariant valid { status == Shared.Status.Open and tenant > 0 } }
+                  value Order with Tenanted { status: Shared.Status invariant valid { status == Shared.Status.Open && tenant > 0 } }
                   id UserId: UUID
                   id AccessId: UUID
                   enum Process { DELIVERY PRINTING }
@@ -444,7 +443,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                   value DeliverySpec { planned: Int }
                   value PrintingSpec { copies: Int }
                   union Details by type: Process { DELIVERY { details: DeliverySpec } PRINTING { details: PrintingSpec } }
-                  aggregate Access { id: AccessId actor: Actor details: Details invariant internal { actor.kind == Actor.INTERNAL_USER and details.type == Process.DELIVERY } }
+                  aggregate Access { id: AccessId actor: Actor details: Details invariant internal { actor.kind == Actor.INTERNAL_USER && details.type == Process.DELIVERY } }
                 }`,
             },
         ]);
@@ -471,13 +470,13 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 text: `context Types {
                   primitive Quantity: Int
                   enum Status { Open Closed }
-                  entity Item { quantity: Quantity plain: Int invariant positive { quantity > 0 and plain > 0 } }
+                  entity Item { quantity: Quantity plain: Int invariant positive { quantity > 0 && plain > 0 } }
                   aggregate Cart {
                     item: Item?
                     items: Item[0..*]
                     requiredItems: Item[1..*]
                     status: Status
-                    invariant values { exists(item) and items.length >= 0 and requiredItems.length >= 0 and status == Status.Open }
+                    invariant values { exists(item) && items.length >= 0 && requiredItems.length >= 0 && status == Status.Open }
                   }
                 }`,
             },
@@ -505,7 +504,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
               value Address { city: String }
               entity Customer {
                 address: Address?
-                invariant hasCity { exists(address) and address.city != "" }
+                invariant hasCity { exists(address) && address.city != "" }
               }
             }`,
             },
@@ -962,7 +961,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                   aggregate Item {
                     id: ItemId
                     owns items: Details[0..*]
-                    invariant notesPresent { all(items, x => exists(x.note) implies length(x.note) > 0) }
+                    invariant notesPresent { all(items, x => !(exists(x.note)) || length(x.note) > 0) }
                   }
                 }`,
             },

@@ -25,7 +25,7 @@ context A {
     verified: Int
     of: Int
     for: Int
-    invariant k { count(count) > length and all(all, any => any.value) }
+    invariant k { count(count) > length && all(all, any => any.value) }
   }
   aggregate G {
     command when(changes: Int, else: Int)
@@ -170,7 +170,7 @@ context A {
     shared: Bool
     terms: Int
     invariant: Int
-    invariant k { exists(event) implies count(errors) > 0 }
+    invariant k { !(exists(event)) || count(errors) > 0 }
   }
   aggregate G {
     state: Int
@@ -251,9 +251,11 @@ context A {
         (invariant
           (identifier)
           (binary_expression
-            (call_expression
-              (function_name)
-              (identifier))
+            (not_expression
+              (parenthesized_expression
+                (call_expression
+                  (function_name)
+                  (identifier))))
             (binary_expression
               (call_expression
                 (function_name)
@@ -307,7 +309,7 @@ context A {
   }
   value V {
     op: Op
-    invariant k { op == Op.and or op != Op.String }
+    invariant k { op == Op.and || op != Op.String }
   }
 }
 

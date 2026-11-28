@@ -17,8 +17,8 @@ const MODEL = `context Model {
     errors: String[0..*]
     op: BinaryOp
     type: TypeExpr
-    invariant k { op != BinaryOp.and implies exists(event) }
-    invariant p { type.kind == TypeExpr.primitive or count(errors) > 0 }
+    invariant k { !(op != BinaryOp.and) || exists(event) }
+    invariant p { type.kind == TypeExpr.primitive || count(errors) > 0 }
   }
   id GId: UUID
   aggregate G {

@@ -46,14 +46,14 @@ context Sales {
   value Period {
     from: Timestamp
     until: Timestamp?
-    invariant ordered { exists(until) implies from <= until }
+    invariant ordered { !(exists(until)) || from <= until }
   }
   value Tags { names: String[0..*]  invariant distinctNames { unique(names) } }
   value Approval {
     needed: Quantity
     confirmedBy: String[0..*]
     invariant enough { count(confirmedBy) >= needed }
-    invariant exact { needed == count(confirmedBy) or (count(confirmedBy) in 0..needed) }
+    invariant exact { needed == count(confirmedBy) || (count(confirmedBy) in 0..needed) }
   }
   entity Line {
     id: LineId
@@ -76,7 +76,7 @@ context Sales {
     state Cancelled {
       reason: Reason
       note: String?
-      invariant otherNeedsNote { reason == Reason.Other implies exists(note) }
+      invariant otherNeedsNote { !(reason == Reason.Other) || exists(note) }
       invariant audited "監査済み"
     }
     create command place(id: OrderId) -> Draft
@@ -283,16 +283,16 @@ context Names {
     a: Bool
     b: Bool
     c: Bool
-    invariant implied { a implies b }
-    invariant looseLeft { (a or b) implies c }
-    invariant nested { (a implies b) and c }
+    invariant implied { !(a) || b }
+    invariant looseLeft { !(a || b) || c }
+    invariant nested { (!(a) || b) && c }
   }
   aggregate Box {
     id: BoxId
     items: Item[0..*]
     invariant shadow { all(items, box => box.count > 0) }
-    invariant reserved { all(items, enum => all(items, function => enum.name != function.name or enum == function)) }
-    invariant imported { any(items, distinct => distinct.count > 0) implies unique(items, Common => Common.name) }
+    invariant reserved { all(items, enum => all(items, function => enum.name != function.name || enum == function)) }
+    invariant imported { !(any(items, distinct => distinct.count > 0)) || unique(items, Common => Common.name) }
     invariant same { all(items, item => any(items, item => item.count > 0)) }
     invariant pair { unique(items, item => item.name) }
     invariant quoted { all(items, checks => checks.name != "it's \\"q\\"\\\\") }
@@ -300,7 +300,7 @@ context Names {
     create command make(id: BoxId) -> Open
     command add(item: Item, item2: Item?) Open -> Open
       requires fresh { all(items, item => item.name != "x") } else Dup
-      requires counted { exists(item2) implies item2.count > 0 } else Dup
+      requires counted { !(exists(item2)) || item2.count > 0 } else Dup
       changes items
   }
   error Dup

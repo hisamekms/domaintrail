@@ -53,7 +53,7 @@ context Collaboration {
     endLine: LineNumber "終了行"
     endColumn: ColumnNumber "終了列"
 
-    invariant ordered "開始が終了より前" { startLine < endLine or (startLine == endLine and startColumn <= endColumn) }
+    invariant ordered "開始が終了より前" { startLine < endLine || (startLine == endLine && startColumn <= endColumn) }
   }
 
   /// 依頼を作ったときの対象。対象の道筋がもう合わなくなっても付け替えず、古くなったと示す。
@@ -64,7 +64,7 @@ context Collaboration {
     range: SourceRange? "依頼時の範囲"
 
     invariant workspaceHasNoRange "ワークスペース全体には範囲がない" {
-      target.kind == ModelTarget.Workspace implies not exists(range)
+      !(target.kind == ModelTarget.Workspace) || !exists(range)
     }
   }
 }

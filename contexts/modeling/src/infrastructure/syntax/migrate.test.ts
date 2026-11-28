@@ -13,7 +13,8 @@ const migrated = (expr: string): string => {
 
 async function invariantOf(source: string): Promise<ExprModel> {
     const a = await analyzeDomain([{ path: 'l.dt', text: source }]);
-    expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+    // the old spellings are errors of their own (they parse only to be migrated); nothing else may be reported
+    expect(a.diagnostics.filter((d) => d.severity === 'error' && !d.message.includes('no longer DomainTrail syntax'))).toEqual([]);
     const v = a.model!.elements.find((e) => e.name === 'V')!;
     return ('invariants' in v ? v.invariants[0].expr : undefined)!;
 }

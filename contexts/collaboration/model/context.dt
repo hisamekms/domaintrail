@@ -12,7 +12,7 @@ context Collaboration "コラボレーション" {
   }
 
   /// 本文や問いかけのように、人が書く空でない文章。
-  primitive Text "文章": String { length(value) >= 1 and length(value) <= 20000 }
+  primitive Text "文章": String { length(value) >= 1 && length(value) <= 20000 }
 
   /// 1 始まりの行番号。
   primitive LineNumber "行番号": Int { value >= 1 }
@@ -29,7 +29,7 @@ context Collaboration "コラボレーション" {
   /// ワークスペースのルートからの相対パス（`/` 区切り）。絶対パス、`.` と `..` の区間、バックスラッシュを含まない。
   primitive WorkspacePath "ワークスペース内パス": String {
     invariant relative "ルートからの相対パス" { matches(value, "^[^/\\]+(/[^/\\]+)*$") }
-    invariant noDotSegment "`.` と `..` を含まない" { not matches(value, "(^|/)\.\.?(/|$)") }
+    invariant noDotSegment "`.` と `..` を含まない" { !matches(value, "(^|/)\.\.?(/|$)") }
   }
 
   /// ソースの言語。

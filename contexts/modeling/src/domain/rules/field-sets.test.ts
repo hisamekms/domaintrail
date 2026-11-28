@@ -83,7 +83,7 @@ describe('field sets', () => {
   fields Described { label: String  doc: String? }
   value State with Described {
     name: String
-    invariant named { length(name) > 0 and length(label) > 0 }
+    invariant named { length(name) > 0 && length(label) > 0 }
   }
   value Twice with Described { label: String }`);
         expect(only(a, 'M016').map((d) => d.message)).toEqual(["Field 'label' of 'Twice' is already taken from field set 'Described'."]);

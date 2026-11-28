@@ -42,10 +42,10 @@ context Collaboration {
   }
 
   /// 候補の見出し（「支払いが失敗した」など）。上限はコード（`CANDIDATE_LIMITS`）が決める。
-  primitive CandidateLabel "候補の見出し": String { length(value) >= 1 and length(value) <= 100 }
+  primitive CandidateLabel "候補の見出し": String { length(value) >= 1 && length(value) <= 100 }
 
   /// 候補の番号（0 から）。
-  primitive CandidateIndex "候補の番号": Int { value >= 0 and value <= 19 }
+  primitive CandidateIndex "候補の番号": Int { value >= 0 && value <= 19 }
 
   /// AI が挙げた候補1つ: 見出し、対象の要素、どうするかを1行で、理由（あれば）。
   value CommandCandidate "候補" {
@@ -136,7 +136,7 @@ context Collaboration {
     command stop(stoppedBy: ParticipantId, stoppedByRole: ParticipantRole, stoppedAt: Timestamp) "コマンドを中止する"
       Working | Listed -> Stopped
       requires starterOrFacilitatorStops "始めた人かファシリテーターが中止する" {
-        stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+        stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
       } else NotTheStarter
       emits SlashCommandStopped
   }

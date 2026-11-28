@@ -165,7 +165,7 @@ export { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
 
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './infrastructure/syntax/format.js';
-export { migrateDomain, type DomainMigration, type DomainMigrationRewrite } from './infrastructure/syntax/migrate.js';
+export { LEGACY_SPELLINGS, migrateDomain, type DomainMigration, type DomainMigrationRewrite } from './infrastructure/syntax/migrate.js';
 
 // ---- the syntax, for the language server -----------------------------------------------------------------------
 export * as ast from './infrastructure/syntax/generated/ast.js';

@@ -6,10 +6,10 @@ context Collaboration {
   primitive StageName "段階名": String { length(value) >= 1 }
 
   /// カタログの絞り込みの文字列。
-  primitive CatalogQuery "カタログの絞り込み": String { length(value) >= 1 and length(value) <= 200 }
+  primitive CatalogQuery "カタログの絞り込み": String { length(value) >= 1 && length(value) <= 200 }
 
   /// カタログの区分（`aggregates`、`events` など）。
-  primitive CatalogSection "カタログの区分": String { matches(value, "^[A-Za-z]+$") and length(value) <= 40 }
+  primitive CatalogSection "カタログの区分": String { matches(value, "^[A-Za-z]+$") && length(value) <= 40 }
 
   /// 構造図の詳細度。
   enum StructureDetail "構造図の詳細度" { Detail "詳細" Overview "概要" Aggregates "集約だけ" }

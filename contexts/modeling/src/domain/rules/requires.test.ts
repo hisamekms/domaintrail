@@ -75,7 +75,7 @@ describe('requires', () => {
   aggregate Order {
     id: OrderId
     requires: Int
-    command reject(else: Bool) requires positive { requires > 0 and else } else Rejected
+    command reject(else: Bool) requires positive { requires > 0 && else } else Rejected
     command touch()
   }
   error Rejected`);
@@ -115,7 +115,7 @@ describe('scope of requires', () => {
     test('parameters, common fields and fields taken from field sets', async () => {
         const a = await review(`
     command accept(person: PersonId) Reviewing | Escalated | Accepted -> Accepted
-      requires x { contains(policy.approvers, person) and exists(auditedBy) implies auditedBy != person } else NotApprover`);
+      requires x { !(contains(policy.approvers, person) && exists(auditedBy)) || auditedBy != person } else NotApprover`);
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -127,14 +127,14 @@ describe('scope of requires', () => {
     test('a single source state: all of its fields', async () => {
         const a = await review(`
     command accept(person: PersonId) Reviewing -> Accepted
-      requires x { reviewer == person and blockers == 0 and exists(note) } else Blocked`);
+      requires x { reviewer == person && blockers == 0 && exists(note) } else Blocked`);
         expect(a.diagnostics).toEqual([]);
     });
 
     test('M010 a field not in every source state, or with another type in one of them', async () => {
         const a = await review(`
     command accept(person: PersonId) Reviewing | Escalated -> Accepted
-      requires x { exists(note) and reviewer == person and acceptedBy == person } else Blocked`);
+      requires x { exists(note) && reviewer == person && acceptedBy == person } else Blocked`);
         expect(errors(a)).toEqual([
             [
                 'M010',
@@ -155,7 +155,7 @@ describe('scope of requires', () => {
         const a = await review(`
     create command open(person: PersonId, policy: Policy) -> Reviewing
       requires x { contains(policy.approvers, person) } else NotApprover
-      requires y { exists(auditedBy) or blockers > 0 } else Blocked`);
+      requires y { exists(auditedBy) || blockers > 0 } else Blocked`);
         expect(errors(a)).toEqual([
             ['M010', "Field 'auditedBy' of 'Review' is not in scope: the requirements of a 'create command' see only its parameters."],
             ['M010', "Field 'blockers' of 'Review' is not in scope: the requirements of a 'create command' see only its parameters."],
@@ -169,7 +169,7 @@ describe('scope of requires', () => {
     id: CustomerId
     active: Bool
     emails: String[0..*]
-    command addEmail(email: String) requires active { active and not contains(emails, email) } else Inactive
+    command addEmail(email: String) requires active { active && !contains(emails, email) } else Inactive
   }
   error Inactive`);
         expect(a.diagnostics).toEqual([]);

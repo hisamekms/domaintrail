@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 import { DEFAULT_AGENT_TOOLS } from '@domaintrail/agent';
-import { formatDomain } from '@domaintrail/modeling';
+import { formatDomain, LEGACY_SPELLINGS } from '@domaintrail/modeling';
 import { formatStorming } from '@domaintrail/storming';
 import { analyze, sourceSelection } from '@domaintrail/analysis';
 import { resolveConfig } from '@domaintrail/dt';
@@ -54,7 +54,8 @@ describe('dt guide', () => {
 
     test('its DSL examples use every keyword of the grammar', async () => {
         const grammar = await readFile(path.join(ROOT, 'contexts', 'modeling', 'src', 'infrastructure', 'syntax', 'domain.langium'), 'utf8');
-        const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]));
+        // the old expression spellings parse only for `dt migrate domain`; the guide does not teach them
+        const keywords = new Set([...grammar.matchAll(/'([a-zA-Z]+)'/g)].map((m) => m[1]).filter((k) => !(k in LEGACY_SPELLINGS)));
         const examples = blocks('dt')
             .join('\n')
             .replace(/\/\/.*$/gm, '')

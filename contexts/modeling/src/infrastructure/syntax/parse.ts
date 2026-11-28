@@ -2,6 +2,7 @@
 // over their ASTs, and the diagnostics of the syntax and of the links, with what to write instead of a name that does
 // not resolve. Modeling's analysis (application/analyze.ts) builds the models on it and runs the rules on the model as
 // written.
+import { LEGACY_SPELLINGS, legacyTokens } from './migrate.js';
 import * as path from 'node:path';
 import { AstUtils, URI, isCompositeCstNode, type AstNode, type LangiumDocument } from 'langium';
 import { didYouMean, suggestFrom, type Candidate, type Diagnostic, type SourceFile } from '@domaintrail/kernel';
@@ -118,6 +119,19 @@ export async function parseDomain(sources: readonly SourceFile[]): Promise<Parse
             });
         }
     }
+    // the old expression spellings parse only for `dt migrate domain`: each one is an error (Phase 2 language revision)
+    for (const doc of documents)
+        for (const token of legacyTokens(doc.parseResult.value))
+            diagnostics.push({
+                file: resolveFile(doc.uri.toString()),
+                start: { line: token.range.start.line + 1, column: token.range.start.character + 1 },
+                end: { line: token.range.end.line + 1, column: token.range.end.character + 1 },
+                severity: 'error',
+                code: 'SYNTAX',
+                message: `'${token.text}' is no longer DomainTrail syntax: write ${LEGACY_SPELLINGS[token.text]}.`,
+                hint: '`dt migrate domain` rewrites every file',
+                elementId: elementIdOf(token.astNode),
+            });
     return { documents, index, diagnostics, syntaxOk, resolveFile };
 }
 

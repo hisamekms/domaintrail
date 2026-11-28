@@ -179,7 +179,7 @@ export function equalFrozenReplyTarget(a: FrozenReplyTarget, b: FrozenReplyTarge
  * 実行の入力
  * 登録のときに凍結した、実行の入力。束ねた依頼（依頼と実行の多対多）はここにある。
  * @invariant distinctRequests (依頼は1件1回): unique(requests, r => r.request)
- * @invariant proposalsOfRequests (変更案は束ねた依頼のもの): exists(proposals) implies all(proposals.approved, p => any(requests, r => r.request == p.request))
+ * @invariant proposalsOfRequests (変更案は束ねた依頼のもの): !(exists(proposals)) || all(proposals.approved, p => any(requests, r => r.request == p.request))
  * @see contexts/collaboration/model/agent-run.dt:58
  */
 export interface RunInput {
@@ -279,7 +279,7 @@ export type RequestProgress =
 /**
  * 依頼ごとの返答
  * 依頼1件についての返答。
- * @invariant noteExplains (一部と未対応には補足がある): (status == RequestProgress.Partial or status == RequestProgress.Skipped) implies exists(note)
+ * @invariant noteExplains (一部と未対応には補足がある): !((status == RequestProgress.Partial || status == RequestProgress.Skipped)) || exists(note)
  * @see contexts/collaboration/model/agent-run.dt:90
  */
 export interface RequestReply {
@@ -427,7 +427,7 @@ export function checkReplyAssumption(replyAssumption: ReplyAssumption): readonly
  * コードの1か所（`domain/reply.ts`）にある。
  * @invariant distinctRequests (依頼は1件1回): unique(requests, r => r.request)
  * @invariant distinctQuestions (問いのキーは1回): unique(questions, q => q.id)
- * @invariant answeredHasAnswer (問いとして答えた依頼には回答がある): any(requests, r => r.status == RequestProgress.Answered) implies exists(answer)
+ * @invariant answeredHasAnswer (問いとして答えた依頼には回答がある): !(any(requests, r => r.status == RequestProgress.Answered)) || exists(answer)
  * @see contexts/collaboration/model/agent-run.dt:136
  */
 export interface AgentReply {
@@ -468,7 +468,7 @@ export function checkAgentReply(agentReply: AgentReply): readonly ('distinctRequ
 /**
  * 答えた問い
  * ファシリテーターが選んだ、問い1つへの答え。登録のときに問いと選択肢を写し取る。
- * @invariant answered (選択か自由記述がある): count(chosen) >= 1 or exists(freeText)
+ * @invariant answered (選択か自由記述がある): count(chosen) >= 1 || exists(freeText)
  * @invariant distinctChosen (選択肢は1回): unique(chosen, o => o.id)
  * @see contexts/collaboration/model/agent-run.dt:155
  */
@@ -777,10 +777,10 @@ export interface RunningAgentRun extends AgentRunCommon {
 
 /**
  * 完了
- * @invariant succeeded (成功の条件を満たす): report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))
- * @invariant unchangedKeepsBase (変更がなければ結果は基準リビジョン): (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
- * @invariant completedAsksNothing (完了の返答に問いはない): exists(reply) implies count(reply.questions) == 0
- * @invariant completedReplyAboutInput (完了の返答の依頼は実行の依頼): exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @invariant succeeded (成功の条件を満たす): report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))
+ * @invariant unchangedKeepsBase (変更がなければ結果は基準リビジョン): (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
+ * @invariant completedAsksNothing (完了の返答に問いはない): !(exists(reply)) || count(reply.questions) == 0
+ * @invariant completedReplyAboutInput (完了の返答の依頼は実行の依頼): !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @see contexts/collaboration/model/agent-run.dt:275
  */
 export interface CompletedAgentRun extends AgentRunCommon {
@@ -806,8 +806,8 @@ export interface CompletedAgentRun extends AgentRunCommon {
 /**
  * 確認待ち
  * エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
- * @invariant clarificationAsks (確認待ちの返答には問いがある): exists(reply) implies count(reply.questions) >= 1
- * @invariant clarificationReplyAboutInput (確認の返答の依頼は実行の依頼): exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @invariant clarificationAsks (確認待ちの返答には問いがある): !(exists(reply)) || count(reply.questions) >= 1
+ * @invariant clarificationReplyAboutInput (確認の返答の依頼は実行の依頼): !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @see contexts/collaboration/model/agent-run.dt:303
  */
 export interface NeedsClarificationAgentRun extends AgentRunCommon {
@@ -830,7 +830,7 @@ export interface NeedsClarificationAgentRun extends AgentRunCommon {
  * 辞退
  * エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
  * @invariant declinedAsksNothing (辞退の返答に問いはない): count(reply.questions) == 0
- * @invariant declinedReplyAboutInput (辞退の返答の依頼は実行の依頼): (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @invariant declinedReplyAboutInput (辞退の返答の依頼は実行の依頼): (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @see contexts/collaboration/model/agent-run.dt:318
  */
 export interface DeclinedAgentRun extends AgentRunCommon {
@@ -849,7 +849,7 @@ export interface DeclinedAgentRun extends AgentRunCommon {
 
 /**
  * 失敗
- * @invariant ruleNotMetReported (成功の条件を満たさないことが報告にある): reason == FailureReason.RuleNotMet implies (exists(report) and exists(resultRevision) and not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (resultRevision != baseRevision implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))))
+ * @invariant ruleNotMetReported (成功の条件を満たさないことが報告にある): !(reason == FailureReason.RuleNotMet) || (exists(report) && exists(resultRevision) && !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(resultRevision != baseRevision) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))))
  * @see contexts/collaboration/model/agent-run.dt:330
  */
 export interface FailedAgentRun extends AgentRunCommon {
@@ -887,7 +887,7 @@ export interface CancelledAgentRun extends AgentRunCommon {
  * エージェントを使わずに、ある実行の変更を機械的に打ち消した記録。順が来たときのワークスペースに、その実行の基準と
  * 結果の差を逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。打ち消す前のワークスペースが基準
  * リビジョン、打ち消した後が結果リビジョン。その実行の変更がもう残っていなければ、何も書かずに終わる（変更なし）。
- * @invariant revertKeepsBaseUnchanged (打ち消すものがなければ結果は基準リビジョン): (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+ * @invariant revertKeepsBaseUnchanged (打ち消すものがなければ結果は基準リビジョン): (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
  * @invariant revertsRevertRequests (打ち消しの依頼を束ねる): all(input.requests, r => exists(r.reverts))
  * @see contexts/collaboration/model/agent-run.dt:350
  */
@@ -1096,7 +1096,7 @@ export interface QueueAgentRunParams {
  * 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
  * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
- * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+ * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
  * @emits RunQueued — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:382
  */
@@ -1114,7 +1114,7 @@ export type QueueAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
  * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
- * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+ * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
  * new -> Queued — set: every field
  * @emits RunQueued — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:382
@@ -1169,7 +1169,7 @@ export interface RecordEditAgentRunParams {
  * 手直しを記録する
  * 参加者が付箋を直した（誰でも直せる）。待ちに入らず、dt が書いた記録として作る。
  * @requires inputEdits (入力は手直しの記録) else InputMismatch: all(input.requests, r => exists(r.edit))
- * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+ * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
  * @requires editChanges (手直しはファイルを変える) else ChangedMismatch: resultRevision != baseRevision
  * @emits RunEdited — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:394
@@ -1187,7 +1187,7 @@ export type RecordEditAgentRun = (
  * AgentRun.recordEdit, decided by one function; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * @requires inputEdits (入力は手直しの記録) else InputMismatch: all(input.requests, r => exists(r.edit))
- * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+ * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
  * @requires editChanges (手直しはファイルを変える) else ChangedMismatch: resultRevision != baseRevision
  * new -> Edited — set: every field
  * @emits RunEdited — exactly once when the command succeeds
@@ -1334,7 +1334,7 @@ export interface RevertAgentRunParams {
  * 機械的に打ち消す
  * 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
- * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
  * @changes none — the command changes no common field
  * @emits RunReverted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:418
@@ -1353,7 +1353,7 @@ export type RevertAgentRun = (
  * AgentRun.revert, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
- * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
  * @changes none — the command changes no common field
  * Queued -> Reverted — set: baseRevision (new in Reverted), resultRevision (new in Reverted), changed (new in Reverted), finishedAt (new in Reverted); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
  * @see contexts/collaboration/model/agent-run.dt:418
@@ -1501,9 +1501,9 @@ export interface FinishAgentRunParams {
  * 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。成功の条件は変更の有無による（変えなかった実行は
  * dt fmt / dt check を省いてよい）。
  * 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
- * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
- * @requires replyAsksNothing (完了の返答に問いはない) else InvalidReply: exists(reply) implies count(reply.questions) == 0
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
+ * @requires replyAsksNothing (完了の返答に問いはない) else InvalidReply: !(exists(reply)) || count(reply.questions) == 0
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @outcome Completed: Running -> Completed; select expression
  * @outcome Failed: Running -> Failed; select expression
  * @see contexts/collaboration/model/agent-run.dt:441
@@ -1585,8 +1585,8 @@ export interface AskClarificationAgentRunParams {
 /**
  * AgentRun.askClarification (Running -> NeedsClarification)
  * 確認を求める
- * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: exists(reply) implies count(reply.questions) >= 1
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: !(exists(reply)) || count(reply.questions) >= 1
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunNeedsClarification — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:463
@@ -1604,8 +1604,8 @@ export type AskClarificationAgentRun = (
 /**
  * AgentRun.askClarification, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: exists(reply) implies count(reply.questions) >= 1
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: !(exists(reply)) || count(reply.questions) >= 1
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> NeedsClarification — set: question (new in NeedsClarification), reply (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * @see contexts/collaboration/model/agent-run.dt:463
@@ -1647,7 +1647,7 @@ export interface DeclineAgentRunParams {
  * 辞退する
  * エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
  * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: count(reply.questions) == 0
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunDeclined — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:474
@@ -1666,7 +1666,7 @@ export type DeclineAgentRun = (
  * AgentRun.decline, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: count(reply.questions) == 0
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> Declined — set: reply (new in Declined), resultRevision (new in Declined), finishedAt (new in Declined); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * @see contexts/collaboration/model/agent-run.dt:474
@@ -2787,7 +2787,7 @@ export function equalNextAnswer(a: NextAnswer, b: NextAnswer): boolean {
 /**
  * 候補の見出し
  * 候補の見出し（「支払いが失敗した」など）。上限はコード（`CANDIDATE_LIMITS`）が決める。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeCandidateLabel`; never `as CandidateLabel` (see dt guide lint).
  * @see contexts/collaboration/model/command.dt:45
  */
@@ -2833,7 +2833,7 @@ export const makeCandidateLabel: MakeCandidateLabel = (value) => {
 /**
  * 候補の番号
  * 候補の番号（0 から）。
- * @invariant valid: value >= 0 and value <= 19
+ * @invariant valid: value >= 0 && value <= 19
  * Make it with `makeCandidateIndex`; never `as CandidateIndex` (see dt guide lint).
  * @see contexts/collaboration/model/command.dt:48
  */
@@ -3288,7 +3288,7 @@ export interface StopSlashCommandParams {
  * SlashCommand.stop (Working | Listed -> Stopped)
  * コマンドを中止する
  * 始めた人かファシリテーターがコマンドを中止する（考えているあいだか、候補の選択待ち）。
- * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits SlashCommandStopped — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:136
@@ -3306,7 +3306,7 @@ export type StopSlashCommand = (
 /**
  * SlashCommand.stop, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Working -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
  * Listed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide; dropped: candidates, listedAt
@@ -3606,7 +3606,7 @@ export interface CommandAlreadyRunning {
 /**
  * 文章
  * 本文や問いかけのように、人が書く空でない文章。
- * @invariant valid: length(value) >= 1 and length(value) <= 20000
+ * @invariant valid: length(value) >= 1 && length(value) <= 20000
  * Make it with `makeText`; never `as Text` (see dt guide lint).
  * @see contexts/collaboration/model/context.dt:15
  */
@@ -3837,7 +3837,7 @@ export const makeContentHash: MakeContentHash = (value) => {
  * ワークスペース内パス
  * ワークスペースのルートからの相対パス（`/` 区切り）。絶対パス、`.` と `..` の区間、バックスラッシュを含まない。
  * @invariant relative (ルートからの相対パス): matches(value, "^[^/\\]+(/[^/\\]+)*$")
- * @invariant noDotSegment (`.` と `..` を含まない): not matches(value, "(^|/)\.\.?(/|$)")
+ * @invariant noDotSegment (`.` と `..` を含まない): !matches(value, "(^|/)\.\.?(/|$)")
  * Make it with `makeWorkspacePath`; never `as WorkspacePath` (see dt guide lint).
  * @see contexts/collaboration/model/context.dt:30
  */
@@ -3894,7 +3894,7 @@ export type SourceLanguage =
  * ガイドの区切り
  * ガイドの地図の区切り（`brief`、`events`、`bcSplit` など）。どの区切りがあり、どう済んだと決めるかはコード
  * （`domain/guide.ts`）が決める。
- * @invariant valid: matches(value, "^[a-zA-Z]+$") and length(value) <= 40
+ * @invariant valid: matches(value, "^[a-zA-Z]+$") && length(value) <= 40
  * Make it with `makeGuideStepKey`; never `as GuideStepKey` (see dt guide lint).
  * @see contexts/collaboration/model/guide.dt:4
  */
@@ -3941,7 +3941,7 @@ export const makeGuideStepKey: MakeGuideStepKey = (value) => {
  * 道のり
  * ガイドの道のりの名前: ストーミングの ES の道のり（`es:` とストーミングの ID）か、名前の付いたモデリングの道のりの
  * ID（小文字・数字・ハイフンの短い名前）。道のりは道のりのファイル（`domaintrail.journey.json`）にある。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeGuideJourneyKey`; never `as GuideJourneyKey` (see dt guide lint).
  * @see contexts/collaboration/model/guide.dt:8
  */
@@ -4243,7 +4243,7 @@ export type UiLanguage =
  * 要約の行き先
  * 要約の行き先の名前: ストーミングの ID（`/es:start`、DSL の識別子）か、モデリングの道のりの ID（`/model:start`、
  * 小文字・数字・ハイフン）。
- * @invariant valid: matches(value, "^[_a-zA-Z0-9][A-Za-z0-9_-]*$") and length(value) <= 100
+ * @invariant valid: matches(value, "^[_a-zA-Z0-9][A-Za-z0-9_-]*$") && length(value) <= 100
  * Make it with `makeBriefName`; never `as BriefName` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:17
  */
@@ -4289,7 +4289,7 @@ export const makeBriefName: MakeBriefName = (value) => {
 /**
  * 行き先の見出し
  * 新しく作る行き先の見出し（ラベル）。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeBriefLabel`; never `as BriefLabel` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:20
  */
@@ -4336,7 +4336,7 @@ export const makeBriefLabel: MakeBriefLabel = (value) => {
  * 要約の本文
  * 要約の本文: 道のりの「なぜ」を見出しのある行で（「目的: …」）。道のりの項目から作り、編集もこの形で読む。上限は
  * コード（`domain/interviews.ts` の `INTERVIEW_LIMITS`）が決める。
- * @invariant valid: length(value) >= 1 and length(value) <= 1500
+ * @invariant valid: length(value) >= 1 && length(value) <= 1500
  * Make it with `makeBriefText`; never `as BriefText` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:24
  */
@@ -4382,7 +4382,7 @@ export const makeBriefText: MakeBriefText = (value) => {
 /**
  * 要約の項目
  * 要約の項目1つ（目的・範囲・制約）: 短い1行。
- * @invariant valid: length(value) >= 1 and length(value) <= 240
+ * @invariant valid: length(value) >= 1 && length(value) <= 240
  * Make it with `makeBriefField`; never `as BriefField` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:27
  */
@@ -4428,7 +4428,7 @@ export const makeBriefField: MakeBriefField = (value) => {
 /**
  * 参加者の役割
  * 参加者の役割（「窓口担当」）。人の名前は書かない。
- * @invariant valid: length(value) >= 1 and length(value) <= 60
+ * @invariant valid: length(value) >= 1 && length(value) <= 60
  * Make it with `makeRoleName`; never `as RoleName` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:30
  */
@@ -4474,7 +4474,7 @@ export const makeRoleName: MakeRoleName = (value) => {
 /**
  * 道のりの名前
  * モデリングの道のりの名前（「Billing の深掘り」）。
- * @invariant valid: length(value) >= 1 and length(value) <= 100
+ * @invariant valid: length(value) >= 1 && length(value) <= 100
  * Make it with `makeJourneyName`; never `as JourneyName` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:33
  */
@@ -4520,7 +4520,7 @@ export const makeJourneyName: MakeJourneyName = (value) => {
 /**
  * 短い説明
  * 新しいストーミングの短い説明（`///` に書く1行）。
- * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * @invariant valid: length(value) >= 1 && length(value) <= 200
  * Make it with `makeShortDescription`; never `as ShortDescription` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:36
  */
@@ -4649,7 +4649,7 @@ export function equalInterviewBrief(a: InterviewBrief, b: InterviewBrief): boole
  * AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
  * 要素の参照（`@{es:Returns}`）を含むことがあり、画面はそれをラベルで出す。見える長さは 40 字までで、
  * 参照を書いたままの長さは 200 字まで。
- * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * @invariant valid: length(value) >= 1 && length(value) <= 200
  * Make it with `makeAnswerChoice`; never `as AnswerChoice` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:86
  */
@@ -5009,7 +5009,7 @@ export interface AskInterviewParams {
  * Interview.ask (Asking -> Asking)
  * 問う
  * AI が次の問いを返す（AI のメッセージとして、選択肢があればそれも）。答えを待っていたメッセージに答える。
- * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
+ * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) && awaiting == answered
  * @changes awaiting, asked
  * @emits InterviewQuestionAsked — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:168
@@ -5027,7 +5027,7 @@ export type AskInterview = (
 /**
  * Interview.ask, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
+ * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) && awaiting == answered
  * @changes awaiting, asked
  * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
  * @see contexts/collaboration/model/interview.dt:168
@@ -5067,7 +5067,7 @@ export interface SummarizeInterviewParams {
  * Interview.summarize (Asking -> Briefed)
  * 要約を出す
  * AI が要約を出す。ファシリテーターが確定（承認）・編集して確定・却下を選ぶ。始めた人は中止もできる。
- * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
+ * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) && awaiting == answered
  * @changes none — the command changes no common field
  * @emits InterviewBriefed — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:177
@@ -5085,7 +5085,7 @@ export type SummarizeInterview = (
 /**
  * Interview.summarize, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) and awaiting == answered
+ * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: exists(awaiting) && awaiting == answered
  * @changes none — the command changes no common field
  * Asking -> Briefed — set: brief (new in Briefed), answered (new in Briefed), briefedAt (new in Briefed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
  * @see contexts/collaboration/model/interview.dt:177
@@ -5249,7 +5249,7 @@ export interface StopInterviewParams {
  * Interview.stop (Asking | Briefed -> Stopped)
  * 聞き取りを中止する
  * 始めた人かファシリテーターが聞き取りを中止する。
- * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * @emits InterviewStopped — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:203
@@ -5267,7 +5267,7 @@ export type StopInterview = (
 /**
  * Interview.stop, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+ * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
  * @changes none — the command changes no common field
  * Asking -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
  * Briefed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
@@ -5699,7 +5699,7 @@ export const makeMarkId: MakeMarkId = (value) => {
  * 反応に使う絵文字1つ（書記素1つ）。ZWJ でつないだ組・肌の色・国旗・キーキャップも1つと数える。アプリは絵文字に意味を
  * 与えない。正規化した形で持つ: NFC で、テキスト表示が既定の絵文字には VS16（U+FE0F）を付けた完全修飾の形（❤ と ❤️ は
  * 同じ反応）。
- * @invariant bounded (長すぎない): length(value) >= 1 and length(value) <= 64
+ * @invariant bounded (長すぎない): length(value) >= 1 && length(value) <= 64
  * @invariant singleEmoji (正規化した絵文字1つ): not expressed in the DSL
  * Make it with `makeEmojiWith`; never `as Emoji` (see dt guide lint).
  * @see contexts/collaboration/model/mark.dt:8
@@ -5904,7 +5904,7 @@ export type MakeOpenMarkTarget = (value: MarkTarget, context: SessionId) => Prom
 
 /**
  * Fields shared by every state of 印 (Mark).
- * @invariant fitsTarget (印の種類が対象に合う): (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
+ * @invariant fitsTarget (印の種類が対象に合う): (!(sign.kind == MarkSign.Vote) || (target.kind == MarkTarget.QuestionOption || target.kind == MarkTarget.AssumptionChoice)) && (!(sign.kind == MarkSign.Reaction) || (target.kind == MarkTarget.Message || target.kind == MarkTarget.Turn)) && ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
  * @see contexts/collaboration/model/mark.dt:63
  */
 export interface MarkCommon {
@@ -6028,9 +6028,9 @@ export interface PlaceMarkParams {
 /**
  * Mark.place (new -> Placed) — factory
  * 印を付ける
- * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
- * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
- * @requires facilitatorMarksSteps (区切りを済みにするのはファシリテーター) else FacilitatorOnly: sign.kind == MarkSign.Done implies role == ParticipantRole.Facilitator
+ * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (!(sign.kind == MarkSign.Vote) || (target.kind == MarkTarget.QuestionOption || target.kind == MarkTarget.AssumptionChoice)) && (!(sign.kind == MarkSign.Reaction) || (target.kind == MarkTarget.Message || target.kind == MarkTarget.Turn)) && ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
+ * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: !(sign.kind == MarkSign.Vote) || role == ParticipantRole.Participant
+ * @requires facilitatorMarksSteps (区切りを済みにするのはファシリテーター) else FacilitatorOnly: !(sign.kind == MarkSign.Done) || role == ParticipantRole.Facilitator
  * @emits MarkPlaced — exactly once when the command succeeds
  * @see contexts/collaboration/model/mark.dt:81
  */
@@ -6046,9 +6046,9 @@ export type PlaceMark = (
 /**
  * Mark.place, decided by one function; implement it with `decide(MarkShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (sign.kind == MarkSign.Vote implies (target.kind == MarkTarget.QuestionOption or target.kind == MarkTarget.AssumptionChoice)) and (sign.kind == MarkSign.Reaction implies (target.kind == MarkTarget.Message or target.kind == MarkTarget.Turn)) and ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
- * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: sign.kind == MarkSign.Vote implies role == ParticipantRole.Participant
- * @requires facilitatorMarksSteps (区切りを済みにするのはファシリテーター) else FacilitatorOnly: sign.kind == MarkSign.Done implies role == ParticipantRole.Facilitator
+ * @requires fitsTarget (印の種類が対象に合う) else MarkNotForTarget: (!(sign.kind == MarkSign.Vote) || (target.kind == MarkTarget.QuestionOption || target.kind == MarkTarget.AssumptionChoice)) && (!(sign.kind == MarkSign.Reaction) || (target.kind == MarkTarget.Message || target.kind == MarkTarget.Turn)) && ((sign.kind == MarkSign.Done) == (target.kind == MarkTarget.GuideStep))
+ * @requires participantsVote (票は参加者だけ) else FacilitatorDoesNotVote: !(sign.kind == MarkSign.Vote) || role == ParticipantRole.Participant
+ * @requires facilitatorMarksSteps (区切りを済みにするのはファシリテーター) else FacilitatorOnly: !(sign.kind == MarkSign.Done) || role == ParticipantRole.Facilitator
  * new -> Placed — set: every field
  * @emits MarkPlaced — exactly once when the command succeeds
  * @see contexts/collaboration/model/mark.dt:81
@@ -6326,7 +6326,7 @@ export const makeChangeProposalId: MakeChangeProposalId = (value) => {
  * 変更案の文
  * 変更案の文（「どう」）。上限はコード（`domain/proposals.ts` の `PROPOSAL_LIMITS`）が決める: AI の文は短く、
  * ファシリテーターの編集は長くてもよい。前の形（何を・どこを・どう）で保存した変更案は、3つをつないだ文として読む。
- * @invariant valid: length(value) >= 1 and length(value) <= 2000
+ * @invariant valid: length(value) >= 1 && length(value) <= 2000
  * Make it with `makeProposalText`; never `as ProposalText` (see dt guide lint).
  * @see contexts/collaboration/model/proposal.dt:7
  */
@@ -6372,7 +6372,7 @@ export const makeProposalText: MakeProposalText = (value) => {
 /**
  * 選択肢の見出し
  * 変更案の選択肢の見出し（「集約だけ」など）。上限はコードが決める。
- * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * @invariant valid: length(value) >= 1 && length(value) <= 200
  * Make it with `makeProposalLabel`; never `as ProposalLabel` (see dt guide lint).
  * @see contexts/collaboration/model/proposal.dt:10
  */
@@ -6418,7 +6418,7 @@ export const makeProposalLabel: MakeProposalLabel = (value) => {
 /**
  * 選択肢の番号
  * 変更案の選択肢の番号（0 から）。
- * @invariant valid: value >= 0 and value <= 2
+ * @invariant valid: value >= 0 && value <= 2
  * Make it with `makeProposalOptionIndex`; never `as ProposalOptionIndex` (see dt guide lint).
  * @see contexts/collaboration/model/proposal.dt:13
  */
@@ -6489,7 +6489,7 @@ export function equalProposalOption(a: ProposalOption, b: ProposalOption): boole
  * 変更案の中身
  * 変更案の中身: 対象のモデルの要素と、どう変えるかを1〜2行で。AI が迷ったときは選択肢（2つか3つ、勧めは1つ）。
  * ファイル名やパスは持たない。差分の見本はまだない。
- * @invariant choiceOfTwoOrMore (選択肢はないか、2つ以上): count(options) == 0 or count(options) >= 2
+ * @invariant choiceOfTwoOrMore (選択肢はないか、2つ以上): count(options) == 0 || count(options) >= 2
  * @invariant oneRecommended (選択肢があれば、AI の勧めはちょうど1つ): not expressed in the DSL
  * @see contexts/collaboration/model/proposal.dt:27
  */
@@ -6795,7 +6795,7 @@ export interface ApproveChangeProposalParams {
  * ファシリテーターが承認する（選択肢があれば1つ選び、その「どう」を編集してもよい）。実行の登録と同じ取引で、その
  * 実行を記録する。
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
- * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (count(content.options) == 0 implies not exists(option)) and (count(content.options) >= 1 implies exists(option) and option < count(content.options))
+ * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(count(content.options) == 0) || !exists(option)) && (!(count(content.options) >= 1) || exists(option) && option < count(content.options))
  * @changes none — the command changes no common field
  * @emits ProposalApproved — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:97
@@ -6814,7 +6814,7 @@ export type ApproveChangeProposal = (
  * ChangeProposal.approve, decided per source state; implement it with `decide(ChangeProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
- * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (count(content.options) == 0 implies not exists(option)) and (count(content.options) >= 1 implies exists(option) and option < count(content.options))
+ * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(count(content.options) == 0) || !exists(option)) && (!(count(content.options) >= 1) || exists(option) && option < count(content.options))
  * @changes none — the command changes no common field
  * Open -> Approved — set: approvedBy (new in Approved), approvedAt (new in Approved), option (new in Approved), editedHow (new in Approved), run (new in Approved); carried over: id, session, triage, request, requestedBy, content, proposedAt
  * @see contexts/collaboration/model/proposal.dt:97
@@ -7264,7 +7264,7 @@ export const makeJourneyRequestId: MakeJourneyRequestId = (value) => {
 /**
  * 記録の道のりの名前
  * 記録したときの道のりの名前（ES はストーミングのラベル、モデリングは道のりの名前）。あとで名前が変わっても、記録は変わらない。
- * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * @invariant valid: length(value) >= 1 && length(value) <= 200
  * Make it with `makeJourneyLabel`; never `as JourneyLabel` (see dt guide lint).
  * @see contexts/collaboration/model/record.dt:9
  */
@@ -9576,7 +9576,7 @@ export const makeParticipantId: MakeParticipantId = (value) => {
 /**
  * 表示名
  * 他の参加者に見せる名前。メールアドレスは他の参加者に見せない。
- * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * @invariant valid: length(value) >= 1 && length(value) <= 200
  * Make it with `makeDisplayName`; never `as DisplayName` (see dt guide lint).
  * @see contexts/collaboration/model/session.dt:9
  */
@@ -9657,8 +9657,8 @@ export type MakeActiveSession = (value: SessionId) => Promise<Result<ActiveSessi
 /**
  * Fields shared by every state of セッション (Session).
  * @invariant distinctParticipants (参加者は1人1回): unique(participants)
- * @invariant facilitatorListed (ファシリテーターは参加者の1人): any(participants, p => p.id == facilitator and p.role == ParticipantRole.Facilitator)
- * @invariant soleFacilitator (ファシリテーターは1人): all(participants, p => p.role == ParticipantRole.Facilitator implies p.id == facilitator)
+ * @invariant facilitatorListed (ファシリテーターは参加者の1人): any(participants, p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
+ * @invariant soleFacilitator (ファシリテーターは1人): all(participants, p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
  * @see contexts/collaboration/model/session.dt:23
  */
 export interface SessionCommon {
@@ -10713,7 +10713,7 @@ export function equalModelTarget(a: ModelTarget, b: ModelTarget): boolean {
 /**
  * ソースの範囲
  * ソースの範囲（両端を含む）。
- * @invariant ordered (開始が終了より前): startLine < endLine or (startLine == endLine and startColumn <= endColumn)
+ * @invariant ordered (開始が終了より前): startLine < endLine || (startLine == endLine && startColumn <= endColumn)
  * @see contexts/collaboration/model/target.dt:49
  */
 export interface SourceRange {
@@ -10750,7 +10750,7 @@ export function checkSourceRange(sourceRange: SourceRange): readonly 'ordered'[]
 /**
  * 依頼時の対象
  * 依頼を作ったときの対象。対象の道筋がもう合わなくなっても付け替えず、古くなったと示す。
- * @invariant workspaceHasNoRange (ワークスペース全体には範囲がない): target.kind == ModelTarget.Workspace implies not exists(range)
+ * @invariant workspaceHasNoRange (ワークスペース全体には範囲がない): !(target.kind == ModelTarget.Workspace) || !exists(range)
  * @see contexts/collaboration/model/target.dt:60
  */
 export interface TargetSnapshot {
@@ -10831,7 +10831,7 @@ export const makeTriageId: MakeTriageId = (value) => {
 /**
  * 確からしさ
  * 段の答えの確からしさ（0 以上 1 以下）。Clef の確率、軽いモデルの申告。
- * @invariant valid: value >= 0 and value <= 1
+ * @invariant valid: value >= 0 && value <= 1
  * Make it with `makeConfidence`; never `as Confidence` (see dt guide lint).
  * @see contexts/collaboration/model/triage.dt:6
  */
@@ -10959,7 +10959,7 @@ export type TriageVerdict =
 /**
  * 段の記録
  * 段1つの記録。どの段が、何と答え、どのくらい確かで、なぜか（機械的な判定は規則、モデルと訂正はその理由）。
- * @invariant errorIsUnknown (失敗した段の答えはわからない): exists(error) implies verdict == TriageVerdict.Unknown
+ * @invariant errorIsUnknown (失敗した段の答えはわからない): !(exists(error)) || verdict == TriageVerdict.Unknown
  * @see contexts/collaboration/model/triage.dt:39
  */
 export interface TriageStep {
@@ -11127,8 +11127,8 @@ export interface PendingTriage extends TriageCommon {
 /**
  * 仕分け済み
  * @invariant known (結論はわからないでない): kind != TriageVerdict.Unknown
- * @invariant answerIsConsultation (回答は相談の行き先): (exists(outcome) and outcome.kind == TriageOutcome.Answer) implies kind == TriageVerdict.Consultation
- * @invariant notForAiGoesNowhere (AI 宛てでないメッセージに行き先はない): kind == TriageVerdict.NotForAi implies not exists(outcome)
+ * @invariant answerIsConsultation (回答は相談の行き先): !((exists(outcome) && outcome.kind == TriageOutcome.Answer)) || kind == TriageVerdict.Consultation
+ * @invariant notForAiGoesNowhere (AI 宛てでないメッセージに行き先はない): !(kind == TriageVerdict.NotForAi) || !exists(outcome)
  * @see contexts/collaboration/model/triage.dt:92
  */
 export interface DecidedTriage extends TriageCommon {
@@ -11273,8 +11273,8 @@ export interface RecordTriageParams {
  * 段の答えを記録する
  * カスケードの段（機械的な判定・Clef・軽いモデル）の答えを記録する。答えが決まれば仕分け済み、わからなければ仕分け中のまま
  * （軽いモデルのあとは相談として仕分け済み）。
- * @requires cascadeStage (カスケードの段) else InvalidTriageStep: step.stage == TriageStage.Mechanical or step.stage == TriageStage.Clef or step.stage == TriageStage.Model
- * @requires mechanicalDecidesNeither (機械的な判定は AI 宛てでないだけ) else InvalidTriageStep: step.stage == TriageStage.Mechanical implies (step.verdict == TriageVerdict.NotForAi or step.verdict == TriageVerdict.Unknown)
+ * @requires cascadeStage (カスケードの段) else InvalidTriageStep: step.stage == TriageStage.Mechanical || step.stage == TriageStage.Clef || step.stage == TriageStage.Model
+ * @requires mechanicalDecidesNeither (機械的な判定は AI 宛てでないだけ) else InvalidTriageStep: !(step.stage == TriageStage.Mechanical) || (step.verdict == TriageVerdict.NotForAi || step.verdict == TriageVerdict.Unknown)
  * @requires inOrder (段の順) else TriageStepOutOfOrder: not expressed in the DSL
  * @outcome Pending: Pending -> Pending; select expression
  * @outcome Decided: Pending -> Decided; select expression
@@ -11358,7 +11358,7 @@ export interface OverrideTriageParams {
  * Triage.override (Decided -> Decided)
  * 結論を訂正する
  * 回答役（まだ答えていない相談を変更依頼か AI 宛てでないに）や実行役（変更依頼を相談に）が結論を訂正する。
- * @requires overridable (訂正できる結論) else TriageNotOverridable: (step.stage == TriageStage.Answerer and kind == TriageVerdict.Consultation and not exists(outcome) and (step.verdict == TriageVerdict.ChangeRequest or step.verdict == TriageVerdict.NotForAi)) or (step.stage == TriageStage.Runner and kind == TriageVerdict.ChangeRequest and step.verdict == TriageVerdict.Consultation)
+ * @requires overridable (訂正できる結論) else TriageNotOverridable: (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && !exists(outcome) && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
  * @changes steps, kind, decidedBy, decidedAt
  * @emits TriageOverridden — exactly once when the command succeeds
  * @see contexts/collaboration/model/triage.dt:140
@@ -11376,7 +11376,7 @@ export type OverrideTriage = (
 /**
  * Triage.override, decided per source state; implement it with `decide(TriageShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires overridable (訂正できる結論) else TriageNotOverridable: (step.stage == TriageStage.Answerer and kind == TriageVerdict.Consultation and not exists(outcome) and (step.verdict == TriageVerdict.ChangeRequest or step.verdict == TriageVerdict.NotForAi)) or (step.stage == TriageStage.Runner and kind == TriageVerdict.ChangeRequest and step.verdict == TriageVerdict.Consultation)
+ * @requires overridable (訂正できる結論) else TriageNotOverridable: (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && !exists(outcome) && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
  * @changes steps, kind, decidedBy, decidedAt
  * Decided -> Decided — set: steps, kind, decidedBy, decidedAt; carried over: id, session, request, addressedBy, addressedByParticipant, openedAt, outcome
  * @see contexts/collaboration/model/triage.dt:140
@@ -11476,8 +11476,8 @@ export interface ConcludeTriageParams {
  * Triage.conclude (Decided -> Decided)
  * 行き先を記録する
  * 仕分けの行き先（回答・変更案・実行）を記録する。1回だけ。
- * @requires noOutcomeYet (行き先はまだない) else TriageAlreadyConcluded: not exists(outcome)
- * @requires outcomeFits (結論に合う行き先) else TriageNotConcludable: kind != TriageVerdict.NotForAi and (to.kind == TriageOutcome.Answer implies kind == TriageVerdict.Consultation)
+ * @requires noOutcomeYet (行き先はまだない) else TriageAlreadyConcluded: !exists(outcome)
+ * @requires outcomeFits (結論に合う行き先) else TriageNotConcludable: kind != TriageVerdict.NotForAi && (!(to.kind == TriageOutcome.Answer) || kind == TriageVerdict.Consultation)
  * @changes outcome
  * @emits TriageConcluded — exactly once when the command succeeds
  * @see contexts/collaboration/model/triage.dt:160
@@ -11495,8 +11495,8 @@ export type ConcludeTriage = (
 /**
  * Triage.conclude, decided per source state; implement it with `decide(TriageShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires noOutcomeYet (行き先はまだない) else TriageAlreadyConcluded: not exists(outcome)
- * @requires outcomeFits (結論に合う行き先) else TriageNotConcludable: kind != TriageVerdict.NotForAi and (to.kind == TriageOutcome.Answer implies kind == TriageVerdict.Consultation)
+ * @requires noOutcomeYet (行き先はまだない) else TriageAlreadyConcluded: !exists(outcome)
+ * @requires outcomeFits (結論に合う行き先) else TriageNotConcludable: kind != TriageVerdict.NotForAi && (!(to.kind == TriageOutcome.Answer) || kind == TriageVerdict.Consultation)
  * @changes outcome
  * Decided -> Decided — set: outcome; carried over: id, session, request, addressedBy, addressedByParticipant, steps, openedAt, kind, decidedBy, decidedAt
  * @see contexts/collaboration/model/triage.dt:160
@@ -11958,7 +11958,7 @@ export const makeStageName: MakeStageName = (value) => {
 /**
  * カタログの絞り込み
  * カタログの絞り込みの文字列。
- * @invariant valid: length(value) >= 1 and length(value) <= 200
+ * @invariant valid: length(value) >= 1 && length(value) <= 200
  * Make it with `makeCatalogQuery`; never `as CatalogQuery` (see dt guide lint).
  * @see contexts/collaboration/model/view.dt:9
  */
@@ -12004,7 +12004,7 @@ export const makeCatalogQuery: MakeCatalogQuery = (value) => {
 /**
  * カタログの区分
  * カタログの区分（`aggregates`、`events` など）。
- * @invariant valid: matches(value, "^[A-Za-z]+$") and length(value) <= 40
+ * @invariant valid: matches(value, "^[A-Za-z]+$") && length(value) <= 40
  * Make it with `makeCatalogSection`; never `as CatalogSection` (see dt guide lint).
  * @see contexts/collaboration/model/view.dt:12
  */

@@ -108,7 +108,7 @@ describe('keywords as names', () => {
     event: String?
     errors: String[0..*]
     op: Op
-    invariant k { op == Op.and implies exists(event) }
+    invariant k { !(op == Op.and) || exists(event) }
   }
   id GId: UUID
   aggregate G {
