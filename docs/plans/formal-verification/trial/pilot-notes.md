@@ -25,3 +25,31 @@ Findings that change the protocol:
 Packet version 2 carries both changes; the pilot is rerun on it before the main run.
 
 Kept as is: Claude's tools (file tools and `dt guide`) and Codex's shell differ by CLI; comparisons are within family.
+
+## Pilot 2 (build 0f918e3, packet version 2)
+
+48 attempts, all finished: no exhausted repair loop, no failed turn. Reviewer agreement 48/48. The WS-04 and WS-02
+wording fails of pilot 1 are gone; the 3 remaining fails (WS-02) leave the approved total unspecified, a model fault
+with the packet as written. The main run uses this build and packet.
+
+# Main run
+
+`main-2026-11-28-80791eee`: build 0f918e3, packet version 2, seed 20261130, Claude `claude-sonnet-5-5` and Codex
+`gpt-6.2-sol`. 192 attempts, all finished; none exhausted; every final model checks clean. Reviewer agreement 192/192,
+none adjudicated. Per-attempt rows are in `results.csv`, the comparisons and the decision in `main-analysis.md`.
+
+**Decision: no arm meets the decision rule; A0 stays adopted.** M2, M3 and Q2 each improve no packet and regress
+the first type check in some packet (M2 WS-02 and WS-03; M3 WS-01; Q2 WS-01, WS-02 and WS-04). M3 and Q2 also hit
+the semantic veto in WS-02. The mean first type-check difference over packets is −4% (M2), −2% (M3) and −6% (Q2)
+points.
+
+Arm-independent findings for the language and guide (not a reason to change the trial result):
+
+- **First type check.** Nearly all first-check errors are two codes, in every arm. M011 (78 messages): a command
+  named after a state, `draft` beside `Draft`, collides with its generated TypeScript name; it fails Claude's first
+  check in all 24 WS-04 attempts. M028 (99 messages): lifecycle states without an initial state, create outcomes not
+  ending at one, and unreachable source states (WS-01, WS-02, WS-04).
+- **Rounding.** All 13 semantic fails (10 Claude, 3 Codex, all arms) are WS-02 attempts that leave the approved total
+  unspecified, stating that the language cannot round a product to two decimals. It can: `*` adds the scales and
+  `hours * rate / 1.00` rounds half-even to scale 2, which the passing attempts wrote. The guide states the scale of
+  `/` but not of `*`, and has no example of rounding a product.
