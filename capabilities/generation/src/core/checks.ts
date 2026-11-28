@@ -90,9 +90,10 @@ export type Ty =
     | { k: 'ctx'; name: string }
     /**
      * `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome; `this` in
-     * requirements, choice rules and the aggregate's invariants: the aggregate itself (a `match` subject).
+     * requirements, choice rules and the aggregate's invariants: the aggregate itself (a `match` subject or a function's
+     * argument); a function's parameter of an aggregate's type (named by the aggregate): the aggregate in any state.
      */
-    | { k: 'frame'; name: 'before' | 'after' | 'this' };
+    | { k: 'frame'; name: string };
 
 /** What the code of a context module provides to the checks it emits. */
 export interface CheckEnv {
@@ -318,6 +319,10 @@ export function tyFromIr(env: CheckEnv, type: { name: string; cardinality: strin
                 break;
             case 'union':
                 base = { k: 'union', el };
+                break;
+            case 'aggregate':
+                // a function's aggregate parameter (`o: Order`): read as `before` / `after` / `this` are
+                base = { k: 'frame', name: el.name };
                 break;
             case 'verified':
                 return tyFromIr(env, { name: el.verified.of.kind === 'primitive' ? el.verified.of.name : el.verified.of.ref, cardinality: type.cardinality });
@@ -1418,7 +1423,13 @@ export class CheckWriter {
     /** The check of a value object or entity. */
     /** `function name(params): R { expr }` as a TypeScript function of its parameters. */
     fn(f: FunctionModel): string[] {
-        const scope: Scope = new Map(f.params.map((p) => [p.name, { js: p.name }]));
+        // an aggregate parameter is the aggregate in any of its states and kinds, which `match` tests
+        const scope: Scope = new Map(
+            f.params.map((p) => {
+                const agg = p.type.kind === 'ref' ? elementOf(this.env.model, p.type.ref) : undefined;
+                return [p.name, agg?.kind === 'aggregate' ? aggregateBinding(p.name, agg, anyPairs(agg)) : { js: p.name }];
+            }),
+        );
         const type = (x: { type: FieldModel['type']; cardinality: FieldModel['cardinality']; name: string }): string => {
             const t = this.env.fieldType({ ...x, kind: 'field', multiplicity: '' } as FieldModel);
             return x.cardinality === 'optional' ? `${t} | undefined` : t;

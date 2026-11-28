@@ -99,6 +99,10 @@ parameters,
 invariants, requirements, and outcomes by extending `ids.ts`; preserve variants' source identity in the IR as needed,
 with stable IDs to be decided before they become external property identities. This gives every result's `property` a
 stable declaration identity.
+Progress (2026-11-29): the functions of the contexts are declarations of kind `function`, with the element form
+(`Sales.discounted`; M002 keeps a function's name apart from the elements of its context), and their parameters of
+kind `parameter` with the form `Sales.discounted(amount)` (the command form is `Sales.Order:confirm(reason)`); a name
+in a function's body that reads a parameter has that ID as its symbol.
 
 A resolved expression node carries its source site, resolved symbol (field, parameter, lambda variable, state, kind,
 enum value, or type), static type including cardinality and optionality, and checked operation result. Retain original

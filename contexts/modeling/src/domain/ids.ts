@@ -10,6 +10,8 @@
  *   invariant      Sales.Order.invariant.hasItems
  *   on case        Sales.Order/Store:on:finish
  *   parameter      Sales.Order:confirm(reason)
+ *   function       Sales.discounted
+ *   function param Sales.discounted(amount)
  *   requirement    Sales.Order:confirm.requires.authorized
  *   outcome        Sales.Order:confirm->approved
  *   variant        Sales.Payment|card
@@ -18,6 +20,8 @@
  * Names are DSL identifiers and cannot contain the separators used here. M002 makes fields unique among fields and
  * invariants among invariants, but permits a field and invariant to share a name, so invariant IDs carry a category
  * marker. Parameters, requirements and outcomes have separate owner namespaces; their readable forms cannot collide.
+ * A function has the form of an element (both are declared at context level, and M002 keeps their names apart), so
+ * `parseSemanticId` reads it as `element`; its parameters, as a command's, as `parameter`.
  * Renaming an element changes its ID (the layout for it is recomputed). The builders make the Typed Model's names and
  * IDs here, and only here.
  */
@@ -84,6 +88,8 @@ export function parseSemanticId(id: string): { category: SemanticIdCategory; id:
         ['onCase', /^.+\/[^/:]+:on:[^/:]+$/],
         ['outcome', /^.+:[^:]+->[^:]+$/],
         ['parameter', /^.+:[^(]+\([^)]+\)$/],
+        // a function's parameter: `Sales.discounted(amount)`
+        ['parameter', /^[^.:]+\.[^.:()]+\([^)]+\)$/],
         ['enumValue', /^.+=[^=]+$/],
         ['variantField', /^.+\|[^.|]+\.[^.]+$/],
         ['variant', /^.+\|[^.|]+$/],

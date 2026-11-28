@@ -120,6 +120,52 @@ starts once A0 `match` and quantifiers are in.
   before.
 - **Semantic IR.** `this` has the `frame` symbol (`name: 'this'`), like `before` and `after`; no new IR shape.
 
+## Supervisor decisions (2026-11-29): functions of the aggregate
+
+State match B lets a function take the aggregate, so a rule about its states is written once (`isOpen(o)`) and called
+from every rule that has the aggregate. Decided by changeability, user convenience and AI readability:
+
+- **Parameter.** A parameter of a function may name an aggregate of the function's context: `function isOpen(o:
+  Order): Bool { match (o) { Draft => true, Confirmed => true, Cancelled => false } }`. Functions stay declared at
+  context level (they cannot be declared inside an aggregate), so one rule covers them all: the aggregate is taken
+  explicitly, and an aggregate of another context is M032 (its rules could never call the function).
+- **In the function**, the parameter is the aggregate in any of its (kind, state) pairs (each kind in its valid
+  states), as `this` is in the aggregate's own invariants: the function does not know where it is called, so `match
+  (o)` is exhaustive over all states (or all kinds), with the bindings and narrowing of state match A. Unlike `this`,
+  `o` is a normal name: `o.x` reads a field every pair has (the common fields) anywhere, and a field of some states
+  only inside a case of `match (o)` that has it (`o.confirmedAt` in `Confirmed`, like `before.x`); outside, it is M001
+  naming the cases among those `o` can be in there that have it (or, when `o` is in none of them, the case to move it
+  to; when every state has it with different types, that the types differ). An optional field is narrowed by its
+  comparison with null as a value's field is (`o.note != null && o.note.length > 0`); so are `before.x` and `after.x`,
+  which could not be guarded before. `o` may also be passed on to another function. `this` is not in scope in a function
+  (M001, hint: the parameter). A lambda parameter or binding of the same name hides `o`, as it hides any parameter; a
+  `match` binding named like a parameter is M019 (hint: `o.x`).
+- **Call sites.** The argument is the aggregate itself, by its name: `this` (in `requires`, choice rules and the aggregate's own
+  invariants, now also as a function's argument besides a `match` subject), `before` / `after` (in `changes x = …`
+  and `ensures`), or an aggregate parameter of the calling function. A frame narrowed to some states is accepted, as
+  every narrower set of pairs is a subset of the parameter's. An ID (the reference to an aggregate, as in M010's
+  "only what the rule is about"), a value, or another aggregate's `this` is M032. Where `this` is not in scope (the
+  invariants of one state or kind, `changes`, `ensures`, a create's rules) the diagnostics of state match A apply.
+- **Not allowed.** An aggregate parameter is one aggregate: a list (`Order[0..*]`) or an optional (`Order?`) one is
+  M032, since no rule has several aggregates or an absent one to pass. A function does not return an aggregate (M032):
+  it computes a value from it. The aggregate (`this`, `before`, `after`, a parameter) is not a value: no element of a
+  list, case of `match` or branch of `? :` gives it (M009, which also closes `match (after) { Cancelled => before
+  }.total`, a crash of generation before). Recursion stays M032, as for every function.
+- **Diagnostics.** No new code: M001 (`o.x` of some states, `this` in a function), M002 (a function named like
+  another function or an element of its context, a parameter twice), M009 (`match`, the aggregate as a value), M019
+  (bindings), M032 (parameter, return type, argument). `match` on an aggregate without states or kinds hints
+  `a.bal` / `before.bal` for a name other than `this`.
+- **TypeScript.** The parameter has the aggregate's union type (`o: Order`; the aggregate's interface without states
+  or kinds), not a structural type of the fields read: it names the concept, survives a change to the body, and every
+  state type (`DraftOrder`, `DraftOrder | ConfirmedOrder`, the success value's aggregate) is assignable without an
+  assertion. `match (o)` compiles to conditionals on `o.state` / `o.kind`, which TypeScript narrows. The checks pass
+  their subject as it is; an aggregate invariant passing `this` makes `check<Aggregate>Common` take `Order`.
+- **Semantic IR.** Functions and their parameters are declarations (ADR 0040): a function has kind `function` and the
+  element form `S.isOpen` (M002 keeps it apart from the elements), a parameter kind `parameter` and the form
+  `S.isOpen(o)`, which `parseSemanticId` reads as `parameter`. The parameter has the `parameter` symbol and the type of
+  the aggregate (`S.Order`); its fields have `field` symbols. The arguments `this`, `before` and `after` keep the
+  `frame` symbol. The declaration kind `function` is the only addition to the IR's shape.
+
 ## 1. Current language and command contract
 
 ### Expressions

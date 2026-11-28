@@ -142,9 +142,10 @@ const semanticTypeName = (ty: NonNullable<ExpressionFact['type']>, declarationId
         case 'error':
             return undefined;
         case 'frame':
-            // the aggregate before / after an outcome has no one declared type (its state is the outcome's): the
+            // a function's aggregate parameter has the aggregate's type, which it was declared with; the aggregate
+            // before / after an outcome, and `this`, have no one declared type (their states are the rule's): the
             // expression's `frame` symbol says which, and a member of it is typed as the field it reads
-            return undefined;
+            return ty.param && ty.aggregate ? (declarationIds?.get(ty.aggregate.agg) ?? ty.aggregate.agg.id) : undefined;
     }
 };
 
@@ -278,6 +279,11 @@ const declarationsOf = (model: SourceModel): SemanticDeclaration[] => {
         if (el.kind === 'id' || el.kind === 'primitive') {
             if (el.constraint) add(invariantId(el.id, 'valid'), 'invariant', 'valid', el.constraint.at);
         }
+    }
+    // the functions of the contexts, and their parameters as a command's
+    for (const f of model.fragments.flatMap((c) => c.functions)) {
+        add(f.id, 'function', f.name, f.at);
+        for (const p of f.params) add(parameterId(f.id, p.name), 'parameter', p.name, p.at);
     }
     return result;
 };
@@ -704,6 +710,8 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel, facts: R
         children.forEach((child, i) => indexExpressions(child, `${path}.${i}`));
     };
     roots.forEach(({ expr }) => indexExpressions(expr, 'root'));
+    // the parameters of a function, as those of a command: `S.isOpen(o)`
+    for (const f of model.fragments.flatMap((c) => c.functions)) for (const p of f.params) declarationIds.set(p, parameterId(f.id, p.name));
     for (const el of model.elements) {
         declarationIds.set(el, el.id);
         if ('members' in el) for (const field of fieldsOf(el.members)) declarationIds.set(field, fieldId(el.id, field.name));

@@ -25,6 +25,8 @@ export function checkNames(model: SourceModel, rules: RuleSink): void {
         }
     }
 
+    checkFunctionNames(model, rules);
+
     for (const el of model.elements) {
         if (el.kind === 'aggregate') {
             checkAggregate(el, rules);
@@ -48,6 +50,21 @@ export function checkNames(model: SourceModel, rules: RuleSink): void {
             unique(fieldsOf(members), (f) => `Field '${f.name}' is declared more than once in '${el.name}'.`, rules);
             unique(invariantsOf(members), (i) => `Invariant '${i.name}' is declared more than once in '${el.name}'.`, rules);
         }
+    }
+}
+
+/**
+ * A function's name is unique in its context, among its functions and its elements (they share the ID form
+ * `Sales.discounted`, ADR 0040), and its parameters' names among them.
+ */
+function checkFunctionNames(model: SourceModel, rules: RuleSink): void {
+    const seen = new Set<string>();
+    for (const f of model.fragments.flatMap((c) => c.functions)) {
+        if (seen.has(f.id)) rules.error('M002', `Function '${f.name}' is declared more than once in context '${f.context}'.`, f.nameAt);
+        else if (model.byName.has(f.id))
+            rules.error('M002', `Function '${f.name}' has the name of '${f.id}', declared in context '${f.context}'.`, f.nameAt, `rename the function`);
+        seen.add(f.id);
+        unique(f.params, (p) => `Parameter '${p.name}' is declared more than once in function '${f.name}'.`, rules);
     }
 }
 

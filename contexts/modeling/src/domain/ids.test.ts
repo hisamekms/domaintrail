@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { fieldId, invariantId, outcomeId, parameterId, requirementId, variantId, enumValueId, onCaseId, parseSemanticId } from './ids.js';
+import { fieldId, functionId, invariantId, outcomeId, parameterId, requirementId, variantId, enumValueId, onCaseId, parseSemanticId } from './ids.js';
 
 describe('semantic declaration IDs', () => {
     test('uses readable qualified declaration paths', () => {
@@ -41,6 +41,8 @@ describe('semantic declaration IDs', () => {
             ['invariant', invariantId('Sales.Order', 'valid')],
             ['onCase', onCaseId('Sales.Order/Store', 'finish')],
             ['parameter', parameterId('Sales.Order:cancel', 'reason')],
+            ['parameter', parameterId(functionId('Sales', 'discounted'), 'amount')],
+            ['element', functionId('Sales', 'discounted')],
             ['requirement', requirementId('Sales.Order:cancel', 'allowed')],
             ['outcome', outcomeId('Sales.Order:cancel', 'done')],
             ['variant', variantId('Sales.Payment', 'card')],
