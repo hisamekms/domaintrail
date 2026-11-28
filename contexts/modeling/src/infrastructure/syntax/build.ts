@@ -293,7 +293,9 @@ function requirement(r: Requirement): RequirementModel {
 const BINARY_OPS: Readonly<Record<string, BinaryOp>> = {
     implies: 'implies',
     or: 'or',
+    '||': 'or',
     and: 'and',
+    '&&': 'and',
     '==': 'eq',
     '!=': 'ne',
     '<': 'lt',

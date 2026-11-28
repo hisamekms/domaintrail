@@ -190,10 +190,10 @@ Implies infers Expression:
     Or ({infer BinaryExpr.left=current} op='implies' right=Or)*;
 
 Or infers Expression:
-    And ({infer BinaryExpr.left=current} op='or' right=And)*;
+    And ({infer BinaryExpr.left=current} op=('or' | '||') right=And)*;
 
 And infers Expression:
-    Comparison ({infer BinaryExpr.left=current} op='and' right=Comparison)*;
+    Comparison ({infer BinaryExpr.left=current} op=('and' | '&&') right=Comparison)*;
 
 Comparison infers Expression:
     Unary (
@@ -202,7 +202,7 @@ Comparison infers Expression:
     )?;
 
 Unary infers Expression:
-    {infer NotExpr} 'not' operand=Unary | Postfix;
+    {infer NotExpr} ('not' | '!') operand=Unary | Postfix;
 
 Postfix infers Expression:
     Primary ({infer MemberAccess.receiver=current} '.' member=ValueName)*;
