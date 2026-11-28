@@ -43,11 +43,14 @@ describe('keywords as names', () => {
             highlight(src)[0]
                 .filter((t) => t.kind !== 'plain')
                 .map((t) => [t.text, t.kind]);
-        expect(kinds('op == Op.and and kind != Kind.String')).toEqual([
+        expect(kinds('op == Op.in && n in 1..2 && kind != Kind.String')).toEqual([
             ['op', 'name'],
             ['Op', 'type'],
-            ['and', 'name'],
-            ['and', 'keyword'],
+            ['in', 'name'],
+            ['n', 'name'],
+            ['in', 'keyword'],
+            ['1', 'number'],
+            ['2', 'number'],
             ['kind', 'name'],
             ['Kind', 'type'],
             ['String', 'name'],

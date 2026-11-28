@@ -272,18 +272,19 @@ function reachedStates(agg: AggregateDecl, kinds: KindDecl[]): Set<string> {
 
 /**
  * M031 for an aggregate without kinds: invariants that require optional fields only for some values of an enum field
- * (`kind == Kind.STORE implies exists(storeCode)`), for at least two values. The fields of such an aggregate depend on
+ * (`!(kind == Kind.STORE) || exists(storeCode)`), for at least two values. The fields of such an aggregate depend on
  * a classification: kinds say it, and the generated type then has no optional fields to check.
  */
 function checkKindShapedInvariants(agg: AggregateDecl, rules: RuleSink): void {
     const fields = [...includedFields(agg).map((x) => x.field), ...commonFields(agg)];
     const enumField = (name: string): FieldDecl | undefined => fields.find((f) => f.name === name && !f.multiplicity && f.type?.decl?.target?.kind === 'enum');
     const optional = (name: string): boolean => fields.some((f) => f.name === name && !!f.multiplicity?.optional);
-    /** For `F == E.V implies …exists(f)…`: the enum field, the value and the optional fields it requires. */
+    /** For `!(F == E.V) || …exists(f)…`: the enum field, the value and the optional fields it requires. */
     const shapes = invariantsOf(agg.members).flatMap((inv) => {
         const e = inv.expr;
-        if (e?.k !== 'binary' || e.op !== 'implies') return [];
-        const cond = e.left;
+        // an implication: `!(A) || B`, or `A implies B` in a model not yet migrated
+        if (e?.k !== 'binary' || !(e.op === 'implies' || (e.op === 'or' && e.left.k === 'not'))) return [];
+        const cond = e.op === 'implies' ? e.left : e.left.k === 'not' ? e.left.operand : e.left;
         if (cond.k !== 'binary' || cond.op !== '==' || cond.left.k !== 'name' || cond.right.k !== 'member') return [];
         const field = enumField(cond.left.name);
         if (!field) return [];
