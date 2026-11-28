@@ -8,11 +8,23 @@ import type {
     FieldModel,
     FunctionModel,
     InvariantModel,
+    OutcomeModel,
     PrimitiveName,
     SemanticIR,
     UnionModel,
 } from '@domaintrail/modeling';
-import { exprModelIndex } from '@domaintrail/modeling';
+import {
+    changeId,
+    ensuresId,
+    exprModelIndex,
+    kindId,
+    onCaseId,
+    outcomeFields,
+    outcomeId,
+    outcomesOfCommand,
+    shorthandOutcomeId,
+    unchangedId,
+} from '@domaintrail/modeling';
 import {
     BINARY_OP_TEXT,
     applicableOutcomes,
@@ -39,11 +51,20 @@ import {
     pairTypeName,
     stateTypeName,
 } from './naming.js';
-import { aggregateParamName, choiceCheckName, choiceChecksTypeName, commandStem, paramsArgName, paramsTypeName } from './naming.js';
+import {
+    aggregateParamName,
+    choiceCheckName,
+    choiceChecksTypeName,
+    commandStem,
+    commandTypeName,
+    ensuresName,
+    paramsArgName,
+    paramsTypeName,
+} from './naming.js';
 
 /**
- * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, and the equality
- * of ADR 0016 per value object, entity and union. Pure functions over the generated types; an invariant or requirement
+ * Generated checks (ADR 0020): invariant and requirement expressions translated 1:1 into TypeScript, the postconditions
+ * of commands (ADR 0043), and the equality of ADR 0016 per value object, entity and union. Pure functions over the generated types; an invariant or requirement
  * without an expression becomes a slot (`…DeclaredChecks`) that the user's code fills in.
  */
 
@@ -65,7 +86,9 @@ export type Ty =
     | { k: 'opt'; inner: Ty }
     | { k: 'enumType'; el: EnumModel }
     | { k: 'unionType'; el: UnionModel }
-    | { k: 'ctx'; name: string };
+    | { k: 'ctx'; name: string }
+    /** `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome. */
+    | { k: 'frame'; name: 'before' | 'after' };
 
 /** What the code of a context module provides to the checks it emits. */
 export interface CheckEnv {
@@ -325,6 +348,17 @@ export class ExprCompiler {
         return negate(this.compile(e, scope));
     }
 
+    /** `e` compiled in `scope` within a check whose parameters are `params` (which lambda variables do not shadow). */
+    compileIn(e: ExprModel, scope: Scope, params: readonly string[]): TypedBinding {
+        this.params = params;
+        return this.compile(e, scope);
+    }
+
+    /** The source text of an expression, as the IR records it. */
+    sourceOf(e: ExprModel): string | undefined {
+        return this.irNode(e)?.source;
+    }
+
     /**
      * The TypeScript name of a lambda variable: its name in `.dt` (`item`), or with a number (`item2`) when that clashes
      * with a variable in scope, a parameter of the check, a reserved word or a name the module imports.
@@ -354,6 +388,14 @@ export class ExprCompiler {
         return `${a} === ${b}`;
     }
 
+    /** `a != b` by the equality of ADR 0016: the negation of {@link ExprCompiler.equal}. */
+    differs(t: Ty, a: string, b: string, u: Ty = t): string {
+        if (scalarEquality(t, u)) return `${a} !== ${b}`;
+        const same = this.equal(t, a, b, u);
+        // `decimalCompare(…) === 0`; the others are calls
+        return same.endsWith(' === 0') ? `${same.slice(0, -' === 0'.length)} !== 0` : `!${same}`;
+    }
+
     /** A function `(x, y) => boolean` for the equality of type `t`. */
     equalFn(t: Ty): string {
         if (t.k === 'struct' || t.k === 'union') return this.env.valueRef(t.el.id, equalName(t.el));
@@ -378,7 +420,8 @@ export class ExprCompiler {
         const result = this.compileNode(e, scope);
         // the generator's own UUID invariant has no source: `matches(value, …)` is a Bool over the UUID's text
         if (syntheticUuidExpressions.has(e)) return { ...result, ty: { k: 'prim', name: e.k === 'matches' ? 'Bool' : 'UUID' } };
-        const type = this.irTy(e);
+        // `[]` has no element type of its own (the checker types it by what it is placed in or compared with)
+        const type = this.irTy(e) ?? (e.k === 'list' && !e.items.length ? ({ k: 'list', elem: { k: 'enum' } } as const) : undefined);
         if (!type) throw new Error(`expression '${this.irNode(e)?.source ?? e.k}' has no IR type`);
         return { ...result, ty: type };
     }
@@ -536,6 +579,8 @@ export class ExprCompiler {
 
     private irTy(e: ExprModel): Ty | undefined {
         const node = this.irNode(e);
+        // `before` / `after` have no IR type: the frame symbol says which aggregate they are
+        if (node?.symbol?.kind === 'frame') return { k: 'frame', name: node.symbol.name === 'before' ? 'before' : 'after' };
         if (node?.type) {
             if (node.type.tag === true) return { k: 'enum' };
             return tyFromIr(this.env, node.type);
@@ -603,6 +648,10 @@ export class ExprCompiler {
             case 'union':
                 if (symbol?.kind !== 'discriminator') throw new Error(`union member '${m}' has no discriminator symbol`);
                 return { js: `${r.js}${dot}${m}` }; // only the discriminator is accessible (M009)
+            case 'frame':
+                // `before.x` / `after.x`: a field of the aggregate (common, of its kind or of its state)
+                if (symbol?.kind !== 'field') throw new Error(`'${t.name}.${m}' has no field symbol`);
+                return { js: `${r.js}${dot}${m}` };
             case 'struct': {
                 const separator = symbol?.kind === 'field' ? symbol.id.lastIndexOf('.') : -1;
                 const ownerId = separator >= 0 ? symbol!.id.slice(0, separator) : undefined;
@@ -751,6 +800,80 @@ const list = (t: string): string => (/[ |]/.test(t) ? `(${t})` : t);
 /** The union of invariant names a check returns (`never` without any). */
 const namesType = (names: string[]): string => (names.length ? [...new Set(names)].map((n) => `'${n}'`).join(' | ') : 'never');
 
+/**
+ * One outcome of a command from one source state (and for one kind), where its postconditions are checked: `key` is the
+ * key of the success value, `outcomeId` the ID of the outcome (for its frame conditions), `contractId` the owner of
+ * its `changes x = …` and `ensures` in the IR (the command itself for the shorthand form, whose contract every target
+ * shares).
+ */
+interface EnsuresBranch {
+    key: string;
+    from: string | undefined;
+    to: string | undefined;
+    kind: string | undefined;
+    outcome: OutcomeModel;
+    outcomeId: string;
+    contractId: string;
+}
+
+/** The outcomes of a command where its postconditions are checked, per source state (and kind). */
+function ensuresBranches(agg: AggregateModel, c: CommandModel): EnsuresBranch[] {
+    const stateful = agg.states.length > 0;
+    if (c.legacy) {
+        // the shorthand form: one outcome per target, keyed by it (by the aggregate's name without states), for each
+        // kind that has the command (the fields it carries over are the kind's)
+        const kinds: (string | undefined)[] = agg.kinds.length ? commandKinds(agg, c) : [undefined];
+        return kinds.flatMap((kind) =>
+            outcomesOfCommand(c, stateful).map((o) => ({
+                key: o.to || agg.name,
+                from: o.from[0],
+                to: o.to || undefined,
+                kind,
+                outcome: o,
+                outcomeId: shorthandOutcomeId(c.id, o.to || undefined),
+                contractId: c.id,
+            })),
+        );
+    }
+    const kinds = agg.kinds.length ? commandKinds(agg, c) : ['*'];
+    return kinds.flatMap((kind) =>
+        applicableOutcomes(agg, c, kind).flatMap((o) => {
+            const owner = c.outcomes.includes(o) ? c.id : onCaseId(kindId(agg.id, kind), c.name);
+            const id = outcomeId(owner, o.name);
+            return (c.factory || !stateful ? [undefined] : o.from).map((from) => ({
+                key: o.name,
+                from,
+                to: o.to || undefined,
+                kind: agg.kinds.length ? kind : undefined,
+                outcome: o,
+                outcomeId: id,
+                contractId: id,
+            }));
+        }),
+    );
+}
+
+/**
+ * Whether two values of type `t` (and `u`) are equal exactly when they are `===`: scalars other than Decimals (whose
+ * text may differ in trailing zeros), present or absent.
+ */
+const scalarEquality = (t: Ty, u: Ty = t): boolean => {
+    const [a, b] = [strip(t), strip(u)];
+    const scalar = (x: Ty): boolean => x.k !== 'list' && x.k !== 'struct' && x.k !== 'union' && primOf(x) !== 'Decimal';
+    return scalar(a) && scalar(b);
+};
+
+/** The conjuncts of an expression: `a && b && c` as `a`, `b`, `c`. */
+const conjuncts = (e: ExprModel): ExprModel[] => (e.k === 'binary' && e.op === 'and' ? [...conjuncts(e.left), ...conjuncts(e.right)] : [e]);
+
+/** The aggregate a command takes, as its generated checks type it (`never` when it takes none it could be called on). */
+function subjectType(agg: AggregateModel, c: CommandModel): string {
+    if (!c.legacy) return namedSubjectType(agg, c);
+    const sources = [...new Set(outcomesOfCommand(c, true).flatMap((o) => o.from))];
+    if (agg.states.length) return sources.map((n) => stateTypeName(agg, n)).join(' | ') || 'never';
+    return c.kind ? kindTypeName(agg, c.kind) : agg.name;
+}
+
 /** Writes the generated checks of one context module. */
 export class CheckWriter {
     private readonly compiler: ExprCompiler;
@@ -873,6 +996,105 @@ export class CheckWriter {
             lines.push('}');
         }
         return lines;
+    }
+
+    /**
+     * The postconditions of a command (ADR 0043): `check<Command>Ensures(aggregate?, params?, value)`, the first one its
+     * success value violates, or `undefined`. Per outcome (the key of `value`), from each source state: (1) each
+     * `changes x = e`, in order (a bare `changes x` leaves the value open); (2) the frame — a field carried over that
+     * `changes` does not list is the input's, and an optional field the outcome makes exist without listing it is
+     * absent; (3) each conjunct of `ensures`. An outcome that `value` does not hold is not checked. Nothing for a
+     * command without any postcondition.
+     */
+    ensures(agg: AggregateModel, c: CommandModel): string[] {
+        const model = this.env.model;
+        const compiler = this.compiler;
+        const subject = aggregateParamName(agg);
+        const parameters = paramsArgName(agg);
+        const value = subject === 'value' ? 'result' : 'value';
+        const args = [
+            ...(c.factory ? [] : [{ name: subject, type: subjectType(agg, c) }]),
+            ...(c.params.length ? [{ name: parameters, type: paramsTypeName(agg, c) }] : []),
+            { name: value, type: `SuccessOf<${commandTypeName(agg, c)}>` },
+        ];
+        const names = args.map((a) => a.name);
+        const ids = new Set<string>();
+        const body: string[] = [];
+        for (const b of ensuresBranches(agg, c)) {
+            const o = b.outcome;
+            const after = `${value}.${b.key}.aggregate`;
+            const { set, carried } = outcomeFields(agg, c, b.from, b.to, o, b.kind);
+            const scope: Scope = new Map(c.params.map((p): [string, Binding] => [p.name, { js: `${parameters}.${p.name}` }]));
+            if (!c.factory) scope.set('before', { js: subject });
+            scope.set('after', { js: after });
+            const entries: string[] = [];
+            const violation = (id: string, kind: string, source: string, field?: string): string => {
+                ids.add(id);
+                return `return { id: ${quote(id)}, outcome: '${b.key}', kind: '${kind}', ${field ? `field: '${field}', ` : ''}source: ${quote(source)} };`;
+            };
+            // (1) the values the outcome determines
+            for (const a of o.assignments) {
+                // a shorthand command's `changes x = e` applies to the targets that have `x`
+                const f = [...set, ...carried].find((x) => x.name === a.field);
+                if (!f) continue;
+                const e = compiler.compileIn(a.expr, scope, names);
+                const t = fieldTy(model, f);
+                const x = `${after}.${f.name}`;
+                const differs = compiler.differs(t, x, e.js, e.ty);
+                entries.push(`if (${differs}) ${violation(changeId(b.contractId, f.name), 'changes', `${f.name} = ${a.source}`, f.name)}`);
+            }
+            // (2) the frame: what `changes` does not list stays as it was
+            const listed = new Set(o.changes);
+            for (const f of carried) {
+                const [x, y] = [`${after}.${f.name}`, `${subject}.${f.name}`];
+                const t = fieldTy(model, f);
+                // the same value is carried over as it is: `!==` first, the equality of its type only when that differs
+                const differs = scalarEquality(t) ? `${x} !== ${y}` : `${x} !== ${y} && ${compiler.differs(t, x, y)}`;
+                entries.push(`if (${differs}) ${violation(unchangedId(b.outcomeId, f.name), 'unchanged', `after.${f.name} == before.${f.name}`, f.name)}`);
+            }
+            for (const f of set)
+                if (f.cardinality === 'optional' && !listed.has(f.name))
+                    entries.push(
+                        `if (${after}.${f.name} !== undefined) ${violation(unchangedId(b.outcomeId, f.name), 'unchanged', `after.${f.name} == null`, f.name)}`,
+                    );
+            // (3) the relations of `ensures`, one conjunct at a time
+            if (o.ensures)
+                for (const x of conjuncts(o.ensures.expr))
+                    entries.push(
+                        `if (${compiler.violated(x, scope, names)}) ${violation(ensuresId(b.contractId), 'ensures', compiler.sourceOf(x) ?? o.ensures.source)}`,
+                    );
+            // the outcome `value` holds, from this source state (and kind): narrowed for TypeScript without assertions
+            const guards = [
+                `'${b.key}' in ${value}`,
+                `${value}.${b.key} !== undefined`,
+                ...(!c.factory && agg.states.length && b.from ? [`${subject}.${STATE_TAG} === '${b.from}'`] : []),
+                // a create makes the aggregate of a kind; any other outcome keeps the input's (checked first: the
+                // return narrows the aggregate made to the kind, for the entries after it)
+                ...(b.kind !== undefined ? [c.factory ? `${after}.${KIND_TAG} === '${b.kind}'` : `${subject}.${KIND_TAG} === '${b.kind}'`] : []),
+            ];
+            if (b.kind !== undefined && !c.factory)
+                entries.unshift(
+                    `if (${after}.${KIND_TAG} !== '${b.kind}') ${violation(unchangedId(b.outcomeId, KIND_TAG), 'unchanged', `after.${KIND_TAG} == before.${KIND_TAG}`, KIND_TAG)}`,
+                );
+            if (!entries.length) continue;
+            body.push(`if (${guards.join(' && ')}) {`, ...entries.map((l) => `    ${l}`), '}');
+        }
+        if (!body.length) return [];
+        body.push('return undefined;');
+        const text = body.join('\n');
+        const returns = `Postcondition<${[...ids].map(quote).join(' | ')}> | undefined`;
+        return [
+            ...this.env.jsdoc(
+                [
+                    `The first postcondition of ${agg.name}.${c.name} that its success value violates (its \`changes\`, the fields it leaves unchanged, then its \`ensures\`); \`undefined\` when all hold.`,
+                    `Call it with the command's arguments and its result's \`value\`, or pass it to \`decide\` as \`{ ensures: ${ensuresName(commandStem(agg, c))} }\`.`,
+                ],
+                c.location,
+            ),
+            `export function ${ensuresName(commandStem(agg, c))}(${params(args, text)}): ${returns} {`,
+            ...body.map((l) => `    ${l}`),
+            '}',
+        ];
     }
 
     /**

@@ -45,7 +45,9 @@ describe('generated TypeScript', () => {
         );
         // no events -> NoEvents; factory -> no aggregate parameter, the new ID passed in
         expect(sales).toContain('        readonly events: NoEvents;\n    };\n}, DuplicateSku | CurrencyMismatch>;');
-        expect(sales).toContain("import type { Availability, CommandUnavailable, Err, NoEvents, Result, Shape, Timestamp } from './_runtime.js';");
+        expect(sales).toContain(
+            "import type { Availability, CommandUnavailable, Err, NoEvents, Postcondition, Result, Shape, SuccessOf, Timestamp } from './_runtime.js';",
+        );
         expect(sales).toContain('export type PlaceOrderCommand = (\n    params: PlaceOrderParams,\n)');
         // an aggregate without states: keyed by the aggregate's name
         expect(sales).toContain(') => Result<{\n    readonly Customer: {\n        readonly aggregate: Customer;\n');
@@ -246,7 +248,7 @@ describe('contexts generated into different directories', () => {
         expect(index).toContain(`export * as Sales from './Sales.js';`);
         expect(index).not.toContain('Common');
         expect(await read(`${SHARED}/index.ts`)).toContain(`export * as Common from './Common.js';`);
-        expect(await read('generated/domain/Billing.ts')).toContain(`import type * as Common from '../../packages/shared/src/generated/Common.js';`);
+        expect(await read('generated/domain/Billing.ts')).toContain(`import * as Common from '../../packages/shared/src/generated/Common.js';`);
         expect(await read('generated/domain/Billing.ts')).toContain(`import type * as Sales from './Sales.js';`);
     });
 });

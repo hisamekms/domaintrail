@@ -156,7 +156,8 @@ Migration steps and regressions:
    Regression: generated file set and contents match the
    version-masked baseline, and the self-hosted generated output has no diff.
    Progress (step 3a, done): the generator requires the IR and resolves names and members only from IR symbols (kinds
-   `field`, `parameter`, `lambda`, `enumValue`, `type`, `unionTag`, `discriminator`, `context`, `value`; a field
+   `field`, `parameter`, `lambda`, `enumValue`, `type`, `unionTag`, `discriminator`, `context`, `value`, and `frame`
+   for `before` / `after` in `changes x = …` and `ensures`, which has no IR type; a field
    symbol's ID is the field of the element holding it for that access, including field-set fields, which the IR also
    declares under each using element); Typed Model valid states come from `lifecyclesOf`; recursive value cycles are
    computed once (`valueCycles`, in the IR as `cycles`) for M012 and contract-test arbitraries. Two accepted behaviour

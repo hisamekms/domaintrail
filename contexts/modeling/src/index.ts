@@ -102,7 +102,20 @@ export {
 } from './domain/dependencies.js';
 export { commandsWithOutcome, fieldSetUsers, fieldUseText, fieldUses, identityOf, type FieldUse, type Named } from './domain/usages.js';
 export { commandId, contextName, elementId, idOfName, nameOfId, qualifiedName, stateId } from './domain/ids.js';
-export { fieldId, invariantId, kindId, outcomeId, parameterId, requirementId, variantId } from './domain/ids.js';
+export {
+    changeId,
+    ensuresId,
+    fieldId,
+    invariantId,
+    kindId,
+    onCaseId,
+    outcomeId,
+    parameterId,
+    requirementId,
+    shorthandOutcomeId,
+    unchangedId,
+    variantId,
+} from './domain/ids.js';
 export { buildSemanticIR, semanticIROf, exprModelIndex, irExpressionAt, SEMANTIC_IR_VERSION } from './domain/semantic.js';
 export type { SemanticIR } from './generated/Modeling.js';
 export { aggregateDependencies, owningAggregates, soleOwner, type AggregateDependency } from './domain/aggregates.js';

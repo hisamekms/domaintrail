@@ -193,19 +193,54 @@ export type Decide<D, Targets = {}> = D extends (...args: any[]) => unknown
     : <S extends { readonly ${STATE_TAG}: keyof D }>(subject: S, ...args: ArgsAfterFirst<D[keyof D]>) => { [K in keyof D]: DecidedBy<D[K], Targets> }[S['${STATE_TAG}']];
 
 /**
- * Implements a command from its decision (a generated \`<Command><Aggregate>Decision\`): one handler per source state,
- * or one function for a factory and for an aggregate without states. The result calls the handler of the input's
- * \`${STATE_TAG}\` with the same arguments; an error passes through unchanged. Each outcome's aggregate is made from the
- * shape: the fields \`set\` gives, the other fields of the target state from the input (common fields, and the
- * state-specific fields carried over), and the target \`${STATE_TAG}\`. The input's other fields are dropped. Events
- * pass through.
+ * What \`decide\`, \`decideNamed\` and \`decideByKind\` check on a decision's result, after the decision has run: the
+ * choice of its outcome (\`applicable\` and \`choices\`), and the postconditions of the command (\`ensures\`, on the
+ * aggregate made). A violated one throws: the decision has a bug.
  *
- *     confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, { Draft: (order, at) => ok({ Confirmed: { set: …, events: … } }) })
+ *     decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, { Draft: … }, {}, { ensures: Sales.checkConfirmOrderEnsures })
  */
-export interface ChoiceVerifier {
-    readonly applicable: (...args: readonly unknown[]) => readonly string[];
-    readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
+export type Verify = (
+    | {
+          /** The outcomes that apply to the input. */
+          readonly applicable: (...args: readonly unknown[]) => readonly string[];
+          /** Each outcome's choice for the input (a generated \`check<Command>Choice(…)\`). */
+          readonly choices: (...args: readonly unknown[]) => Readonly<Record<string, boolean>>;
+      }
+    // the choice check takes both: neither is given without the other
+    | { readonly applicable?: never; readonly choices?: never }
+) & {
+    /**
+     * The postconditions of the command (a generated \`check<Command>Ensures\`), called with the command's arguments and
+     * its success value: a violated one throws "DomainTrail postcondition violated", as a bug of the decision.
+     */
+    readonly ensures?: (...args: any[]) => Postcondition | undefined;
+};
+/** The former name of \`Verify\`, from when it checked the choice only. */
+export type ChoiceVerifier = Verify;
+
+/**
+ * A postcondition of a command that its success value violates (a generated \`check<Command>Ensures\` returns the first
+ * one): \`id\` is the declaration's ID, \`outcome\` the key of the success value, \`kind\` which part of the contract it
+ * is — \`changes\` (\`changes x = e\`), \`unchanged\` (a field the outcome does not list in \`changes\`: carried over as
+ * it was, or absent when it is optional and new) or \`ensures\` (one conjunct of \`ensures { … }\`) — and \`source\` the
+ * condition as written.
+ */
+export interface Postcondition<Id extends string = string> {
+    readonly id: Id;
+    readonly outcome: string;
+    readonly kind: 'changes' | 'unchanged' | 'ensures';
+    /** The field of a \`changes\` or \`unchanged\` postcondition. */
+    readonly field?: string;
+    readonly source: string;
 }
+
+type OkValue<R> = R extends Ok<infer V> ? V : never;
+/** The success value of a command (\`{ [outcome]: { aggregate, events } }\`), for every input it takes. */
+export type SuccessOf<C> = C extends (...args: any[]) => infer R ? OkValue<R> : never;
+
+/** A postcondition violated by a decision's result: a bug of the decision, not a domain error. */
+const postconditionViolated = (violation: Postcondition): Error =>
+    new Error(\`DomainTrail postcondition violated: \${violation.id}: \${violation.source}\`, { cause: violation });
 
 /** The command's contract takes only the kinds that have it: another kind is a caller's bug, not a domain error. */
 const notForKind = (availability: Availability, command: string, subject: any): Error =>
@@ -220,7 +255,7 @@ const decideWith = <D>(
     decision: D,
     targets: Readonly<Record<string, string>>,
     where: CommandOf | undefined,
-    verify: ChoiceVerifier | undefined,
+    verify: Verify | undefined,
     by: '${STATE_TAG}' | '${KIND_TAG}' = '${STATE_TAG}',
 ): Decide<D> =>
     ((...args: any[]) => {
@@ -234,7 +269,7 @@ const decideWith = <D>(
         if (handler === undefined) throw notASource(subject, Object.keys(decision as object));
         const r = handler(...args);
         if (!r.ok) return r;
-        if (verify) {
+        if (verify?.applicable && verify.choices) {
             const names = verify.applicable(...args);
             const choices = verify.choices(...args);
             const selected = Object.keys(r.value as object).filter((name) => (r.value as Record<string, unknown>)[name] !== undefined);
@@ -257,10 +292,22 @@ const decideWith = <D>(
             }
             value[name] = { aggregate, events: o.events };
         }
+        const violation = verify?.ensures?.(...args, value);
+        if (violation !== undefined) throw postconditionViolated(violation);
         return { ok: true, value };
     }) as Decide<D>;
 
-export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: ChoiceVerifier): Decide<D> =>
+/**
+ * Implements a command from its decision (a generated \`<Command><Aggregate>Decision\`): one handler per source state,
+ * or one function for a factory and for an aggregate without states. The result calls the handler of the input's
+ * \`${STATE_TAG}\` with the same arguments; an error passes through unchanged. Each outcome's aggregate is made from the
+ * shape: the fields \`set\` gives, the other fields of the target state from the input (common fields, and the
+ * state-specific fields carried over), and the target \`${STATE_TAG}\`. The input's other fields are dropped. Events
+ * pass through. With \`verify\`, the result is checked (see \`Verify\`).
+ *
+ *     confirm: decide<Sales.ConfirmOrderDecision>(Sales.OrderShape, { Draft: (order, at) => ok({ Confirmed: { set: …, events: … } }) })
+ */
+export const decide = <D>(shape: Shape, decision: D, targets: Readonly<Record<string, string>> = {}, verify?: Verify): Decide<D> =>
     decideWith(shape, decision, targets, undefined, verify);
 
 /**
@@ -278,8 +325,8 @@ export interface CommandOf {
  */
 type NamedRest<D> = D extends (...args: infer A) => unknown
     ? A[0] extends { readonly ${STATE_TAG}: string }
-        ? [command: CommandOf, verify?: ChoiceVerifier]
-        : [command?: undefined, verify?: ChoiceVerifier]
+        ? [command: CommandOf, verify?: Verify]
+        : [command?: undefined, verify?: Verify]
     : never;
 
 /**
@@ -295,7 +342,7 @@ export const decideNamed = <D>() => <const Targets extends Readonly<Record<strin
     decision: D,
     ...rest: NamedRest<D>
 ): Decide<D, Targets> => {
-    const [where, verify] = rest as readonly unknown[] as readonly [CommandOf | undefined, ChoiceVerifier | undefined];
+    const [where, verify] = rest as readonly unknown[] as readonly [CommandOf | undefined, Verify | undefined];
     if (where !== undefined && where.availability.commands[where.command] === undefined)
         throw new Error(\`DomainTrail: \${where.availability.aggregate} has no command '\${where.command}' that takes an aggregate.\`);
     return decideWith(shape, decision, targets, where, verify) as Decide<D, Targets>;
@@ -319,7 +366,7 @@ export const decideByKind = <D>() => <const Targets extends Readonly<Record<stri
     targets: Targets,
     decision: D,
     where: CommandOf,
-    verify?: ChoiceVerifier,
+    verify?: Verify,
 ): DecideByKind<D, Targets> => {
     if (where.availability.commands[where.command] === undefined)
         throw new Error(\`DomainTrail: \${where.availability.aggregate} has no command '\${where.command}' that takes an aggregate.\`);
@@ -721,6 +768,16 @@ const invariantLines = (invs: readonly InvariantModel[]): string[] =>
  */
 const seeLine = (loc: Location): string => `@see ${loc.file.replace(/\\/g, '/')}:${loc.line}`;
 
+/** JSDoc lines of the postconditions of named outcomes (`@ensures name: …`), each once. */
+const ensuresLines = (outcomes: readonly OutcomeModel[]): string[] => {
+    const seen = new Set<OutcomeModel['ensures']>();
+    return outcomes.flatMap((o) => {
+        if (!o.ensures || seen.has(o.ensures)) return [];
+        seen.add(o.ensures);
+        return [`@ensures ${o.name}: ${o.ensures.source}`];
+    });
+};
+
 /** JSDoc lines of a command's requirements; one declared without an expression says so. */
 const requirementLines = (reqs: readonly RequirementModel[], error: (qname: string) => string): string[] =>
     reqs.map((r) => `@requires ${r.name}${r.label ? ` (${r.label})` : ''} else ${error(r.error)}: ${r.source ?? 'not expressed in the DSL'}`);
@@ -882,8 +939,10 @@ class ContextEmitter {
             'PlainDateTime',
             'ZonedDateTime',
             'TimeZone',
+            'Postcondition',
             'Result',
             'Shape',
+            'SuccessOf',
             'Timestamp',
         ].filter(uses);
         const values = [
@@ -1156,6 +1215,7 @@ class ContextEmitter {
             else this.commandNamed(agg, c);
             this.push(c.legacy ? this.requiresCheck(agg, c) : this.checks.namedRequirements(agg, c));
             if (!c.legacy) this.push(this.checks.choices(agg, c));
+            this.push(this.checks.ensures(agg, c));
         }
         if (commands.length > 0) {
             this.out.push('');
@@ -1424,6 +1484,7 @@ class ContextEmitter {
             ...describedLines(c),
             ...requirementLines(c.requires, (e) => this.ref(e)),
             ...all.map((o) => `@outcome ${o.name}: ${o.from.join(' | ')} -> ${o.to}${o.select ? `; select ${o.select.kind}` : ''}`),
+            ...ensuresLines(all),
             seeLine(c.location),
         ]);
         if (c.factory) {
@@ -1478,6 +1539,7 @@ class ContextEmitter {
             c.factory || !agg.states.length
                 ? 'Use decideNamed with an outcome-to-target map to form the aggregate.'
                 : `Use ${keyed ? 'decideByKind' : 'decideNamed'} with an outcome-to-target map to form the aggregate, and \`{ availability: ${availabilityName(agg)}, command: ${quote(c.name)} }\` to check the ${keyed ? 'kind and the ' : ''}source states.`,
+            ...ensuresLines(all),
             seeLine(c.location),
         ]);
         if (c.factory) {
@@ -1650,6 +1712,7 @@ class ContextEmitter {
             ? []
             : [`@changes ${c.changes.length ? c.changes.join(', ') : `none — the command changes no ${stateful ? 'common ' : ''}field`}`];
         const sources = transitions.flatMap((t) => t.from.map((from) => ({ from, to: t.to })));
+        const ensures = c.ensures ? [`@ensures ${c.ensures.source}`] : [];
 
         const transition = c.factory
             ? `new -> ${transitions[0]?.to.join(' | ') || agg.name}`
@@ -1666,6 +1729,7 @@ class ContextEmitter {
             ...describedLines(c),
             ...requires,
             ...changes,
+            ...ensures,
             ...this.emitsLines(c.emits.map((e) => ({ e, when: e.when }))),
             seeLine(c.location),
         ]);
@@ -1694,6 +1758,7 @@ class ContextEmitter {
             `Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate${c.factory ? ' from them' : ', taking the other fields from the input'}.`,
             ...requires,
             ...changes,
+            ...ensures,
             ...outcomeLines,
             ...(keyed ? [] : this.emitsLines(c.emits.map((e) => ({ e, when: e.when })))),
             seeLine(c.location),

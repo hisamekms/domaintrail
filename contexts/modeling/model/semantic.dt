@@ -38,6 +38,8 @@ context Modeling {
     discriminator
     context
     function
+    /// `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome.
+    frame
   }
   enum SemanticCardinality { one optional many nonEmpty }
   enum SemanticComparisonKind {

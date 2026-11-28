@@ -19,9 +19,20 @@ import {
     type SourceModel,
     type StateDecl,
 } from '../source-model.js';
-import { cardinality } from '../types.js';
+import { cardinality, memberType, multiplicityText, sameType } from '../types.js';
 
 const required = (f: FieldDecl): boolean => cardinality(f.multiplicity) !== 'optional';
+
+/**
+ * Whether a source state's field is carried over as the target's: the same name, kind, multiplicity and type (as
+ * `outcomeFields` of the Typed Model); a field of that name of another type is new in the target.
+ */
+const sameField = (f: FieldDecl, g: FieldDecl): boolean =>
+    f.name === g.name &&
+    f.kind === g.kind &&
+    multiplicityText(f.multiplicity) === multiplicityText(g.multiplicity) &&
+    f.aggregate?.text === g.aggregate?.text &&
+    sameType(memberType(f), memberType(g));
 
 /** What an outcome must set: the field, and a parameter of the command of that name to suggest. */
 export interface MissingValue {
@@ -55,7 +66,7 @@ export function missingValues(agg: AggregateDecl): MissingValue[] {
         // the fields that come into existence: all of them on create, else those of the target no source state has
         const fresh = cmd.factory
             ? [...common, ...(kind ? kindFields(kind) : []), ...target]
-            : target.filter((f) => !from.length || from.some((s) => !stateFields(s).some((g) => g.name === f.name)));
+            : target.filter((f) => !from.length || from.some((s) => !stateFields(s).some((g) => sameField(f, g))));
         for (const f of fresh)
             if (
                 required(f) &&

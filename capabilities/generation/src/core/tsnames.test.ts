@@ -22,6 +22,12 @@ describe('generated TypeScript names (M011)', () => {
             "Generated TypeScript name 'commandErrors' for the command error catalog collides with value object 'commandErrors'.",
         ]);
     });
+    test('collision with the check of the postconditions of a command', async () => {
+        const a = await checkSales(`${ORDER} value checkFinishOrderEnsures`);
+        expect(only(a, 'M011').map((d) => d.message)).toEqual([
+            "Generated TypeScript name 'checkFinishOrderEnsures' for value object 'checkFinishOrderEnsures' collides with the check of the postconditions of 'Order.finish'.",
+        ]);
+    });
     test('the command type name has its own suffix', async () => {
         const a = await checkSales(`${ORDER} value FinishOrder`);
         expect(only(a, 'M011')).toEqual([]);

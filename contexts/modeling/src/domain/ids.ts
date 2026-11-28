@@ -45,6 +45,12 @@ export const changeId = (ownerId: string, field: string): DeclarationId => as<De
 /** `ensures { … }` of an outcome (or of a shorthand command). */
 export const ensuresId = (ownerId: string): DeclarationId => as<DeclarationId>(`${ownerId}.ensures`);
 
+/**
+ * The frame condition of an outcome for a field it does not list in `changes` (ADR 0043): a carried field stays
+ * `before.x`, an optional field the outcome makes exist stays absent. `Sales.Order:confirm->confirmed.unchanged.note`.
+ */
+export const unchangedId = (outcomeId: string, field: string): DeclarationId => as<DeclarationId>(`${outcomeId}.unchanged.${field}`);
+
 export const invariantId = (ownerId: string, invariant: string): DeclarationId => as<DeclarationId>(`${ownerId}.invariant.${invariant}`);
 export const requirementId = (command: string, requirement: string): DeclarationId => as<DeclarationId>(`${command}.requires.${requirement}`);
 export const outcomeId = (command: string, outcome: string): DeclarationId => as<DeclarationId>(`${command}->${outcome}`);
