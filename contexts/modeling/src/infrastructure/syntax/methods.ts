@@ -23,6 +23,8 @@ const usage: Record<string, string> = {
 };
 
 export function methodForm(e: MemberAccess): MethodForm {
+    if (e.optional && (e.call || e.member === 'length'))
+        return { k: 'invalid', message: `'?.' reads a field of an optional value; compare it with null first to call '.${e.member}'.` };
     if (!e.call) return e.member === 'length' ? { k: 'length' } : { k: 'member' };
     const param = e.param?.name;
     const args = e.args;

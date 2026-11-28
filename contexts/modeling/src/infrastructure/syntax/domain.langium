@@ -184,7 +184,12 @@ Invariant:
 // ---- Invariant expressions ----
 
 Expression:
-    Implies;
+    Coalesce;
+
+// `a ?? b`: `b` when the optional `a` is absent (the loosest operator, as in TypeScript, where it does not mix with
+// `&&` and `||` without parentheses either)
+Coalesce infers Expression:
+    Implies ({infer BinaryExpr.left=current} op='??' right=Implies)*;
 
 Implies infers Expression:
     Or ({infer BinaryExpr.left=current} op='implies' right=Or)*;
@@ -205,7 +210,7 @@ Unary infers Expression:
     {infer NotExpr} ('not' | '!') operand=Unary | Postfix;
 
 Postfix infers Expression:
-    Primary ({infer MemberAccess.receiver=current} '.' member=ValueName
+    Primary ({infer MemberAccess.receiver=current} ('.' | optional?='?.') member=ValueName
         (call?='(' (param=LambdaParam '=>')? (args+=Expression (',' args+=Expression)*)? ')')?)*;
 
 Primary infers Expression:

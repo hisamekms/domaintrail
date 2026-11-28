@@ -139,7 +139,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 return { ...base, k: 'matches', operand: receiver, pattern: patternSource(m.pattern), operandAt: receiverAt, patternAt: site(e, 'args', 0) };
             // a call that is no method form is reported as such (parse.ts); it checks as nothing more
             if (m.k === 'invalid') return { ...base, k: 'bool', value: false };
-            return { ...base, k: 'member', receiver, member: e.member, memberAt: site(e, 'member') };
+            return { ...base, k: 'member', receiver, member: e.member, memberAt: site(e, 'member'), ...(e.optional && { optional: true }) };
         }
         const nullCompared = nullComparison(e);
         if (nullCompared) {

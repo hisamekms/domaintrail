@@ -198,3 +198,43 @@ context A {
                 (identifier))
               (identifier))
             (null)))))))
+
+================================================================================
+Optional chaining and coalescing
+================================================================================
+
+context A {
+  aggregate X {
+    invariant a { (address?.city ?? "") != "x" && note == null || note.length > 0 }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (parenthesized_expression
+                  (binary_expression
+                    (member_expression
+                      (identifier)
+                      (identifier))
+                    (string)))
+                (string))
+              (binary_expression
+                (identifier)
+                (null)))
+            (binary_expression
+              (member_expression
+                (identifier)
+                (identifier))
+              (number
+                (integer)))))))))

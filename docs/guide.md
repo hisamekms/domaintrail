@@ -857,10 +857,13 @@ the valid states and named outcomes per kind; restored data and migrations remai
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
-- Operators, loosest first: `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
+- Operators, loosest first: `??`, `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
   `!(A) || B`.
 - Optional values: `x != null` (it is present) and `x == null`. `x != null` narrows `x` on the right of `&&`, and
   `x == null` narrows it on the right of `||`: `note == null || note.length > 0`.
+- `x?.f` reads a field of an optional `x` and is absent when `x` is: `address?.city` is a `String?`. `a ?? b` is `a`
+  when it is present, else `b` (of the same type): `(note ?? "").length`. `address?.city != null` narrows both
+  `address` and `address.city`.
 - Methods: on a list `c`: `c.length`, `c.every(x => …)`, `c.some(x => …)`, `c.unique()`,
   `c.unique(x => key, …)`, `c.includes(x)`; on a string `s`: `s.length` (in code points), `s.matches("regex")`.
 - `c.unique()`: the elements of a collection are distinct. With keys, `lines.unique(l => l.sku)` means no two

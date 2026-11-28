@@ -659,6 +659,22 @@ class ExprChecker {
             }
             return BOOL;
         }
+        if (op === '??') {
+            // `a ?? b`: the value of the optional `a`, else `b`, of the same type
+            const l = this.check(e.left, scope);
+            const r = this.check(e.right, scope);
+            if (l.k === 'error' || r.k === 'error') return ERROR;
+            if (l.k !== 'opt') {
+                this.rules.error('M009', `'??' gives the left operand when it is present, but '${showType(l)}' is always present.`, e.leftAt);
+                return l;
+            }
+            const right = r.k === 'opt' ? r.inner : r;
+            if (!equatable(l.inner, right)) {
+                this.rules.error('M009', `'??' gives '${showType(l.inner)}' or '${showType(r)}': both sides must have the same type.`, e.at);
+                return ERROR;
+            }
+            return r.k === 'opt' ? l : l.inner;
+        }
         const l = this.check(e.left, scope);
         const r = this.check(e.right, scope);
         if (l.k === 'error' || r.k === 'error') return BOOL;
@@ -767,7 +783,19 @@ class ExprChecker {
     }
 
     private member(e: ExprOf<'member'>, scope: Scope): Ty {
+        if (!e.optional) return this.memberOf(e, this.infer(e.receiver, scope), scope);
+        // `x?.f`: the field of an optional value, absent when the value is
         const recv = this.infer(e.receiver, scope);
+        if (recv.k === 'error') return ERROR;
+        if (recv.k !== 'opt') {
+            this.rules.error('M009', `'?.' reads a field of an optional value, but '${showType(recv)}' is always present: write '.${e.member}'.`, e.memberAt);
+            return ERROR;
+        }
+        const t = this.memberOf(e, recv.inner, scope);
+        return t.k === 'error' || t.k === 'opt' ? t : { k: 'opt', inner: t };
+    }
+
+    private memberOf(e: ExprOf<'member'>, recv: Ty, scope: Scope): Ty {
         const m = e.member;
         switch (recv.k) {
             case 'error':
@@ -909,7 +937,14 @@ const LOGICAL_SPELLING: Readonly<Record<'and' | 'or' | 'implies', string>> = { a
 function guards(e: Expr, holds = true): string[] {
     if (e.k === 'exists') {
         const p = pathOf(e.operand);
-        return p && holds ? [p] : [];
+        if (!p || !holds) return [];
+        // `x?.f != null` shows `x` present too (and each receiver read with `?.`)
+        const receivers: string[] = [];
+        for (let x: Expr = e.operand; x.k === 'member'; x = x.receiver) {
+            const r = x.optional ? pathOf(x.receiver) : undefined;
+            if (r) receivers.push(r);
+        }
+        return [...receivers.reverse(), p];
     }
     if (e.k === 'not') return guards(e.operand, !holds);
     if (e.k === 'binary' && e.op === 'and' && holds) return [...guards(e.left, true), ...guards(e.right, true)];
