@@ -986,7 +986,7 @@ export interface ConfirmedOrder extends OrderCommon {
 
 /**
  * 取消済み
- * @invariant otherNeedsNote (その他の取消には備考が必要): !(reason == CancelReason.Other) || exists(note)
+ * @invariant otherNeedsNote (その他の取消には備考が必要): !(reason == CancelReason.Other) || note != null
  * @see sales/order.dt:37
  */
 export interface CancelledOrder extends OrderCommon {
@@ -1235,7 +1235,7 @@ export interface CancelOrderParams {
 /**
  * Order.cancel (Draft | Confirmed -> Cancelled)
  * 注文を取り消す
- * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: !(reason == CancelReason.Other) || exists(note)
+ * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: !(reason == CancelReason.Other) || note != null
  * @changes none — the command changes no common field
  * @emits OrderCancelled — exactly once when the command succeeds
  * @emits RefundRequested — exactly once when it comes from Confirmed
@@ -1267,7 +1267,7 @@ export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
 /**
  * Order.cancel, decided per source state; implement it with \`decide(OrderShape, …)\` from the runtime.
  * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
- * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: !(reason == CancelReason.Other) || exists(note)
+ * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: !(reason == CancelReason.Other) || note != null
  * @changes none — the command changes no common field
  * Draft -> Cancelled — set: reason (new in Cancelled); carried over: id, items, customer, note
  * Confirmed -> Cancelled — set: reason (new in Cancelled); carried over: id, items, customer, note; dropped: confirmedAt

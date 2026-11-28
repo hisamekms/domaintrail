@@ -64,7 +64,7 @@ context Collaboration {
     range: SourceRange? "依頼時の範囲"
 
     invariant workspaceHasNoRange "ワークスペース全体には範囲がない" {
-      !(target.kind == ModelTarget.Workspace) || !exists(range)
+      !(target.kind == ModelTarget.Workspace) || range == null
     }
   }
 }

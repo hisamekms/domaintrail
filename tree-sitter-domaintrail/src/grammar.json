@@ -2621,15 +2621,15 @@
         },
         {
           "type": "SYMBOL",
-          "name": "call_expression"
-        },
-        {
-          "type": "SYMBOL",
           "name": "method_call"
         },
         {
           "type": "SYMBOL",
           "name": "boolean"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "null"
         },
         {
           "type": "SYMBOL",
@@ -2882,35 +2882,6 @@
         }
       ]
     },
-    "call_expression": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "FIELD",
-          "name": "function",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_unary_function"
-          }
-        },
-        {
-          "type": "STRING",
-          "value": "("
-        },
-        {
-          "type": "FIELD",
-          "name": "argument",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_expression"
-          }
-        },
-        {
-          "type": "STRING",
-          "value": ")"
-        }
-      ]
-    },
     "method_call": {
       "type": "PREC",
       "value": 6,
@@ -3003,15 +2974,6 @@
         ]
       }
     },
-    "_unary_function": {
-      "type": "ALIAS",
-      "content": {
-        "type": "STRING",
-        "value": "exists"
-      },
-      "named": true,
-      "value": "function_name"
-    },
     "lambda": {
       "type": "SEQ",
       "members": [
@@ -3049,6 +3011,10 @@
           "value": "false"
         }
       ]
+    },
+    "null": {
+      "type": "STRING",
+      "value": "null"
     },
     "number": {
       "type": "SEQ",
@@ -3322,6 +3288,10 @@
               {
                 "type": "STRING",
                 "value": "false"
+              },
+              {
+                "type": "STRING",
+                "value": "null"
               },
               {
                 "type": "STRING",

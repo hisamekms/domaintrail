@@ -49,7 +49,7 @@ shared context Common "共通" {
     invariant sane { !(lines.length >= 0 && lines.every(l => l.qty > -1)) || !(note == "x") }
     create command place(id: OrderId, customer: KnownCustomer) -> Draft emits Placed
     state Draft
-    state Done { at: Timestamp  invariant later { exists(note) || lines.unique(l => l.id) } }
+    state Done { at: Timestamp  invariant later { note != null || lines.unique(l => l.id) } }
     command finish(at: Timestamp) Draft -> Done
       requires hasLines "明細がある" { lines.length > 0 && lines.includes(lines) && lines.some(l => l.qty in 1..2) } else Missing
       requires documented else Missing
@@ -152,7 +152,8 @@ describe('the model as written', () => {
             // the pattern of `.matches("…")` (a part of that expression, sited as its `patternAt`)
             const pattern = (n: { $type: string; $container?: unknown }): boolean =>
                 n.$type === 'StringLiteral' && (n.$container as { $type?: string; member?: string } | undefined)?.member === 'matches';
-            const nodes = nodesOf(a).filter((n) => !['Terms', 'LambdaParam', 'Multiplicity'].includes(n.$type) && !pattern(n));
+            // and the `null` of `x != null` (a part of that comparison, which is `exists(x)` in the model)
+            const nodes = nodesOf(a).filter((n) => !['Terms', 'LambdaParam', 'Multiplicity', 'NullLiteral'].includes(n.$type) && !pattern(n));
             expect(nodes.length).toBeGreaterThan(100);
             const missing = nodes.filter((n) => !sites.has(rangeKey(fileOf(a, n), rangeOf(n.$cstNode)))).map((n) => n.$type);
             expect(missing).toEqual([]);

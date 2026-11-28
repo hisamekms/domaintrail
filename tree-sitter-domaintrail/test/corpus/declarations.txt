@@ -212,7 +212,7 @@ context A {
     state Open
     state Closed "閉" {
       closedAt: Timestamp
-      invariant closed { exists(closedAt) }
+      invariant closed { closedAt != null }
     }
   }
 }
@@ -285,9 +285,9 @@ context A {
               (primitive_type))
             (invariant
               (identifier)
-              (call_expression
-                (function_name)
-                (identifier)))))))))
+              (binary_expression
+                (identifier)
+                (null)))))))))
 
 ================================================================================
 Events and errors

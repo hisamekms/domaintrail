@@ -114,7 +114,7 @@ context A {
     invariant a { items.every(i => i.quantity > 0) && items.some(i => i.gift) }
     invariant b { items.unique() && items.unique(i => i.sku, i.size) }
     invariant c { tags.includes("new") && name.length <= 20 && code.matches("^[A-Z]+$") }
-    invariant d { exists(customer.address.zip) }
+    invariant d { customer.address.zip != null }
   }
 }
 
@@ -191,10 +191,10 @@ context A {
               (string))))
         (invariant
           (identifier)
-          (call_expression
-            (function_name)
+          (binary_expression
             (member_expression
               (member_expression
                 (identifier)
                 (identifier))
-              (identifier))))))))
+              (identifier))
+            (null)))))))

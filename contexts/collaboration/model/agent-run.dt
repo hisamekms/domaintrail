@@ -69,7 +69,7 @@ context Collaboration {
 
     invariant distinctRequests "依頼は1件1回" { requests.unique(r => r.request) }
     invariant proposalsOfRequests "変更案は束ねた依頼のもの" {
-      !(exists(proposals)) || proposals.approved.every(p => requests.some(r => r.request == p.request))
+      proposals == null || proposals.approved.every(p => requests.some(r => r.request == p.request))
     }
   }
 
@@ -94,7 +94,7 @@ context Collaboration {
 
     /// 一部だけ・対応しなかった依頼には、そのわけを添える。
     invariant noteExplains "一部と未対応には補足がある" {
-      !((status == RequestProgress.Partial || status == RequestProgress.Skipped)) || exists(note)
+      !((status == RequestProgress.Partial || status == RequestProgress.Skipped)) || note != null
     }
   }
 
@@ -147,7 +147,7 @@ context Collaboration {
     invariant distinctRequests "依頼は1件1回" { requests.unique(r => r.request) }
     invariant distinctQuestions "問いのキーは1回" { questions.unique(q => q.id) }
     invariant answeredHasAnswer "問いとして答えた依頼には回答がある" {
-      !(requests.some(r => r.status == RequestProgress.Answered)) || exists(answer)
+      !(requests.some(r => r.status == RequestProgress.Answered)) || answer != null
     }
   }
 
@@ -158,7 +158,7 @@ context Collaboration {
     chosen: ReplyOption[0..*] "選んだ選択肢"
     freeText: Text? "自由記述"
 
-    invariant answered "選択か自由記述がある" { chosen.length >= 1 || exists(freeText) }
+    invariant answered "選択か自由記述がある" { chosen.length >= 1 || freeText != null }
     invariant distinctChosen "選択肢は1回" { chosen.unique(o => o.id) }
   }
 
@@ -293,10 +293,10 @@ context Collaboration {
         (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       }
       /// 完了の返答は問わない（問うなら確認待ち）。
-      invariant completedAsksNothing "完了の返答に問いはない" { !(exists(reply)) || reply.questions.length == 0 }
+      invariant completedAsksNothing "完了の返答に問いはない" { reply == null || reply.questions.length == 0 }
       /// 返答が挙げる依頼は、この実行の依頼。
       invariant completedReplyAboutInput "完了の返答の依頼は実行の依頼" {
-        !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
+        reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       }
     }
     /// エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
@@ -309,9 +309,9 @@ context Collaboration {
       resultRevision: RevisionId "結果リビジョン"
       finishedAt: Timestamp "終了日時"
 
-      invariant clarificationAsks "確認待ちの返答には問いがある" { !(exists(reply)) || reply.questions.length >= 1 }
+      invariant clarificationAsks "確認待ちの返答には問いがある" { reply == null || reply.questions.length >= 1 }
       invariant clarificationReplyAboutInput "確認の返答の依頼は実行の依頼" {
-        !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
+        reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       }
     }
     /// エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
@@ -336,7 +336,7 @@ context Collaboration {
       finishedAt: Timestamp "終了日時"
 
       invariant ruleNotMetReported "成功の条件を満たさないことが報告にある" {
-        !(reason == FailureReason.RuleNotMet) || (exists(report) && exists(resultRevision) && !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(resultRevision != baseRevision) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))))
+        !(reason == FailureReason.RuleNotMet) || (report != null && resultRevision != null && !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(resultRevision != baseRevision) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))))
       }
     }
     state Cancelled "中止" {
@@ -358,7 +358,7 @@ context Collaboration {
         (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       }
       /// 機械的な打ち消しが束ねるのは、打ち消しの依頼だけ。
-      invariant revertsRevertRequests "打ち消しの依頼を束ねる" { input.requests.every(r => exists(r.reverts)) }
+      invariant revertsRevertRequests "打ち消しの依頼を束ねる" { input.requests.every(r => (r.reverts != null)) }
     }
 
     /// 人が付箋を直した記録（ADR 0033）。AI を使わず、dt が `.dtes` に書いた。待ちには入らず、書いた時点で記録する。直す前の
@@ -375,7 +375,7 @@ context Collaboration {
       hotspotName: StormingLocalName? "AI が付けた名前"
 
       invariant editChanges "手直しはファイルを変える" { resultRevision != baseRevision }
-      invariant editsEditRequests "手直しの記録を束ねる" { input.requests.every(r => exists(r.edit)) }
+      invariant editsEditRequests "手直しの記録を束ねる" { input.requests.every(r => (r.edit != null)) }
     }
 
     /// 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
@@ -393,7 +393,7 @@ context Collaboration {
     /// 参加者が付箋を直した（誰でも直せる）。待ちに入らず、dt が書いた記録として作る。
     create command recordEdit(id: AgentRunId, session: ActiveSession, requests: PendingRequest[1..*], input: RunInput, queuedBy: ParticipantId, queuedAt: Timestamp, baseRevision: RevisionId "基準リビジョン", resultRevision: RevisionId "結果リビジョン", reapplies: AgentRunId? "当て直した実行", finishedAt: Timestamp) "手直しを記録する"
       -> Edited
-      requires inputEdits "入力は手直しの記録" { input.requests.every(r => exists(r.edit)) } else InputMismatch
+      requires inputEdits "入力は手直しの記録" { input.requests.every(r => (r.edit != null)) } else InputMismatch
       requires editInputCoversRequests "入力は束ねた記録の写し" {
         input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
       } else InputMismatch
@@ -417,7 +417,7 @@ context Collaboration {
     /// 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
     command revert(baseRevision: RevisionId "基準リビジョン", resultRevision: RevisionId "結果リビジョン", changed: Bool "変更あり", finishedAt: Timestamp) "機械的に打ち消す"
       Queued -> Reverted
-      requires inputReverts "入力は打ち消しの依頼" { input.requests.every(r => exists(r.reverts)) } else InputMismatch
+      requires inputReverts "入力は打ち消しの依頼" { input.requests.every(r => (r.reverts != null)) } else InputMismatch
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
         (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       } else ChangedMismatch
@@ -426,7 +426,7 @@ context Collaboration {
     /// 順が来た打ち消しの実行を、サーバーが機械的に打ち消せなかった: 待ちのまま、わけを添えてエージェントに任せる。
     command leaveToAgent(obstacle: RevertObstacle "わけ") "AI に任せる"
       Queued -> Queued
-      requires inputReverts "入力は打ち消しの依頼" { input.requests.every(r => exists(r.reverts)) } else InputMismatch
+      requires inputReverts "入力は打ち消しの依頼" { input.requests.every(r => (r.reverts != null)) } else InputMismatch
       changes revertObstacle
       emits RevertLeftToAgent
 
@@ -443,10 +443,10 @@ context Collaboration {
         (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       } else ChangedMismatch
       requires replyAsksNothing "完了の返答に問いはない" {
-        !(exists(reply)) || reply.questions.length == 0
+        reply == null || reply.questions.length == 0
       } else InvalidReply
       requires replyAboutInput "返答の依頼は実行の依頼" {
-        !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
+        reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       } else InvalidReply
       outcome Completed: Running -> Completed
         select {
@@ -463,10 +463,10 @@ context Collaboration {
     command askClarification(question: Text, reply: AgentReply?, resultRevision: RevisionId, finishedAt: Timestamp) "確認を求める"
       Running -> NeedsClarification
       requires replyAsks "確認待ちの返答には問いがある" {
-        !(exists(reply)) || reply.questions.length >= 1
+        reply == null || reply.questions.length >= 1
       } else InvalidReply
       requires replyAboutInput "返答の依頼は実行の依頼" {
-        !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
+        reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       } else InvalidReply
       emits RunNeedsClarification
 

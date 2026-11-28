@@ -10,6 +10,7 @@
 (number) @number
 (multiplicity (integer) @number)
 (boolean) @boolean
+(null) @constant.builtin
 
 ; Declarations
 

@@ -59,14 +59,14 @@ describe('invariant types', () => {
     });
 
     test.each([
-        ['note == 1', "Operator '==' cannot be applied to 'String?' and 'Int'. Optional values must be guarded with exists(...) first."],
+        ['note == 1', "Operator '==' cannot be applied to 'String?' and 'Int'. Optional values must be compared with null first (x != null && …)."],
         ['total > "x"', "Operator '>' cannot be applied to 'Decimal' and 'String'."],
         ['total.length > 0', "'.length' is the size of a list or a string, not of 'Decimal'."],
         ['lines.every(l => l.quantity)', "The predicate of '.every(…)' must be Bool, but has type 'Int'."],
-        ['exists(total)', "exists() requires an optional value, but 'Decimal' is always present."],
+        ['total != null', "'!= null' and '== null' compare an optional value, but 'Decimal' is always present."],
         ['!total', "Operator '!' requires Bool, but got 'Decimal'."],
         ['total > 0 && 1', "Operator '&&' requires Bool operands, but the right operand has type 'Int'."],
-        ['lines.some(l => l.price.amount > 0)', "'l.price' is optional; guard the access with exists(...) first."],
+        ['lines.some(l => l.price.amount > 0)', "'l.price' is optional; compare it with null first (x != null && …)."],
         ['id == 0', "Operator '==' cannot be applied to 'OrderId' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
         const a = await model(`invariant i { ${expr} }`);
@@ -74,7 +74,7 @@ describe('invariant types', () => {
     });
 
     test('exists() guards narrow optional values', async () => {
-        const a = await model('invariant i { lines.every(l => !(exists(l.price)) || l.price.amount > 0) && (exists(note) && note != "") }');
+        const a = await model('invariant i { lines.every(l => l.price == null || l.price.amount > 0) && (note != null && note != "") }');
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -135,8 +135,8 @@ describe('unique and contains', () => {
         const a = await lists(`
     invariant member { skus.includes(favorite) && skus.includes("ABC") }
     invariant subset { required.every(s => skus.includes(s)) }
-    invariant guarded { !(exists(reason)) || reasons.includes(reason) }
-    invariant ofValues { lines.every(l => !(exists(l.price)) || prices.includes(l.price)) }`);
+    invariant guarded { reason == null || reasons.includes(reason) }
+    invariant ofValues { lines.every(l => l.price == null || prices.includes(l.price)) }`);
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -152,7 +152,7 @@ describe('unique and contains', () => {
         ['skus.includes(total)', "'.includes(…)' cannot compare elements of type 'Sku' with 'Decimal'."],
         [
             'reasons.includes(reason)',
-            "'.includes(…)' cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be guarded with exists(...) first.",
+            "'.includes(…)' cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be compared with null first (x != null && …).",
         ],
         ['lines.includes(prices)', "'.includes(…)' cannot compare elements of type 'Line' with 'Money[0..*]'."],
     ])('M009 %s', async (expr, message) => {

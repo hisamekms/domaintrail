@@ -217,6 +217,7 @@ Primary infers Expression:
     | {infer UniqueExpr} 'unique' '(' collection=Expression (',' param=LambdaParam '=>' keys+=Expression (',' keys+=Expression)*)? ')'
     | {infer ContainsExpr} 'contains' '(' collection=Expression ',' element=Expression ')'
     | {infer QuantifierExpr} quantifier=('all' | 'any') '(' collection=Expression ',' param=LambdaParam '=>' body=Expression ')'
+    | {infer NullLiteral} null?='null'
     | {infer BoolLiteral} value=('true' | 'false')
     | {infer DecimalLiteral} negative?='-'? value=DECIMAL
     | {infer IntLiteral} negative?='-'? value=INT
@@ -240,7 +241,7 @@ FeatureName returns string:
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never
 // read alone in an expression: it is written after a `.` (`Op.and`).
 ValueName returns string:
-    FeatureName | 'not' | 'in' | 'and' | 'or' | 'implies' | 'true' | 'false' | 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID'
+    FeatureName | 'not' | 'in' | 'and' | 'or' | 'implies' | 'true' | 'false' | 'null' | 'String' | 'Int' | 'Decimal' | 'Bool' | 'Timestamp' | 'UUID'
     | 'Date' | 'Time' | 'YearMonth' | 'DateTime' | 'ZonedDateTime' | 'TimeZone';
 
 QualifiedName returns string:

@@ -55,7 +55,7 @@ context Sales {
   value Period {
     from: Timestamp
     until: Timestamp?
-    invariant ordered { !(exists(until)) || from <= until }
+    invariant ordered { until == null || from <= until }
   }
   value Tags { names: String[0..*]  invariant distinctNames { names.unique() } }
   value Approval {
@@ -85,7 +85,7 @@ context Sales {
     state Cancelled {
       reason: Reason
       note: String?
-      invariant otherNeedsNote { !(reason == Reason.Other) || exists(note) }
+      invariant otherNeedsNote { !(reason == Reason.Other) || note != null }
       invariant audited "監査済み"
     }
     create command place(id: OrderId) -> Draft

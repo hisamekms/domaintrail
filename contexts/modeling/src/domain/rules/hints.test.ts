@@ -140,10 +140,10 @@ describe('fix hints', () => {
   id OrderId: UUID
   aggregate Order {
     id: OrderId
-    invariant a { exists(paidAt) }
+    invariant a { paidAt != null }
     state Draft
     state Paid { paidAt: Timestamp? }
-    command refund() Draft | Paid -> Draft requires r { exists(paidAt) } else Invalid
+    command refund() Draft | Paid -> Draft requires r { paidAt != null } else Invalid
   }
   error Invalid`);
         expect(hints(a, 'M010')).toEqual([

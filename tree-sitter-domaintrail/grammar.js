@@ -30,7 +30,7 @@ const FEATURE_KEYWORDS = [
 ];
 
 /** The other keywords that may name enum values, union variants and members after `.` (ValueName). */
-const VALUE_KEYWORDS = ['not', 'in', 'and', 'or', 'implies', 'true', 'false', 'String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth', 'DateTime', 'ZonedDateTime', 'TimeZone'];
+const VALUE_KEYWORDS = ['not', 'in', 'and', 'or', 'implies', 'true', 'false', 'null', 'String', 'Int', 'Decimal', 'Bool', 'Timestamp', 'UUID', 'Date', 'Time', 'YearMonth', 'DateTime', 'ZonedDateTime', 'TimeZone'];
 
 const commaSep1 = (rule) => seq(rule, repeat(seq(',', rule)));
 const pipeSep1 = (rule) => seq(rule, repeat(seq('|', rule)));
@@ -348,9 +348,9 @@ module.exports = grammar({
       $.not_expression,
       $.member_expression,
       $.parenthesized_expression,
-      $.call_expression,
       $.method_call,
       $.boolean,
+      $.null,
       $.number,
       $.string,
       $._feature_name,
@@ -380,8 +380,6 @@ module.exports = grammar({
 
     parenthesized_expression: ($) => seq('(', $._expression, ')'),
 
-    call_expression: ($) => seq(field('function', $._unary_function), '(', field('argument', $._expression), ')'),
-
     // `xs.every(x => p)`, `xs.includes(x)`, `xs.unique()`, `text.matches("r")`: the parser takes any name; Modeling
     // reports a call that is none of its methods
     method_call: ($) => prec(PREC.member, seq(
@@ -396,11 +394,11 @@ module.exports = grammar({
       ')',
     )),
 
-    _unary_function: ($) => alias('exists', $.function_name),
-
     lambda: ($) => seq(field('parameter', $._feature_name), '=>', field('body', $._expression)),
 
     boolean: (_) => choice('true', 'false'),
+
+    null: (_) => 'null',
 
     number: ($) => seq(optional('-'), choice($.decimal, $.integer)),
 

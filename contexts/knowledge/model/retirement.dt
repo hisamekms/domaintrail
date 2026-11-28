@@ -25,7 +25,7 @@ context Knowledge {
     proposal: RetirementProposalId? "候補"
 
     invariant replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
-      !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+      replacedBy == null || (reason != null && reason == RetirementReason.replaced)
     }
   }
 
@@ -73,14 +73,14 @@ context Knowledge {
     proposedBy: Proposer "出したもの"
     proposedAt: Timestamp "出した日時"
 
-    invariant retireHasReason "廃止の候補には理由がある" { !(action == ProposalAction.retire) || exists(reason) }
+    invariant retireHasReason "廃止の候補には理由がある" { !(action == ProposalAction.retire) || reason != null }
     invariant unretireHasNoReason "取り消しの候補に理由はない" {
-      !(action == ProposalAction.unretire) || !exists(reason)
+      !(action == ProposalAction.unretire) || reason == null
     }
     invariant replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
-      !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+      replacedBy == null || (reason != null && reason == RetirementReason.replaced)
     }
-    invariant notReplacedByItself "自分には置き換わらない" { !(exists(replacedBy)) || replacedBy != item }
+    invariant notReplacedByItself "自分には置き換わらない" { replacedBy == null || replacedBy != item }
     invariant distinctEvidence "根拠は1回" { evidence.unique() }
 
     state Open "未決"
@@ -98,16 +98,16 @@ context Knowledge {
     create command propose(id: RetirementProposalId, item: KnowledgeItemId "ナレッジ", action: ProposalAction, reason: RetirementReason?, replacedBy: KnowledgeItemId? "置き換え先", explanation: Reason, evidence: Evidence[1..*], proposedBy: Proposer, proposedAt: Timestamp) "候補を出す"
       -> Open
       requires retireHasReason "廃止の候補には理由がある" {
-        !(action == ProposalAction.retire) || exists(reason)
+        !(action == ProposalAction.retire) || reason != null
       } else MalformedProposal
       requires unretireHasNoReason "取り消しの候補に理由はない" {
-        !(action == ProposalAction.unretire) || !exists(reason)
+        !(action == ProposalAction.unretire) || reason == null
       } else MalformedProposal
       requires replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
-        !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+        replacedBy == null || (reason != null && reason == RetirementReason.replaced)
       } else MalformedProposal
       requires notReplacedByItself "自分には置き換わらない" {
-        !(exists(replacedBy)) || replacedBy != item
+        replacedBy == null || replacedBy != item
       } else MalformedProposal
       requires distinctEvidence "根拠は1回" { evidence.unique() } else MalformedProposal
       emits RetirementProposed

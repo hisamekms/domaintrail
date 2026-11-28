@@ -238,7 +238,7 @@ context Rental "レンタル" { // a bounded context; "…" is a label (表示�
       emits LeaseStarted
     command close(closedAt: Timestamp)
       Active -> Closed
-      requires settled { !exists(discount) } else DiscountPending
+      requires settled { discount == null } else DiscountPending
       emits LeaseClosed
   }
 
@@ -294,7 +294,7 @@ context Sales { // a bounded context; may be split across files
     }
     state Cancelled {
       reason: CancelReason
-      invariant otherNeedsNote { !(reason == CancelReason.Other) || exists(note) }
+      invariant otherNeedsNote { !(reason == CancelReason.Other) || note != null }
     }
 
     command confirm(at: Timestamp)
@@ -354,7 +354,7 @@ context Sales {
     invariant activeHasAddress { !(active == true) || addresses.length > 0 }
     invariant servedArea { active == false || addresses.some(a => a.city == "Tokyo" || !(a.city == "Osaka")) }
     invariant distinctAddresses { addresses.unique(a => a.city, a.street) } // the combination is distinct
-    invariant shippingListed { !(exists(shipping)) || addresses.includes(shipping) }
+    invariant shippingListed { shipping == null || addresses.includes(shipping) }
 
     /// No other customer has the same email address: checked when one is given (AvailableEmail), kept by the store.
     invariant uniqueEmail "メールアドレスは顧客ごとに一意" @externalCheck("顧客ストア全体の照会が必要")
@@ -610,7 +610,7 @@ context Expenses "経費" {
     id: ExpenseId
     applicant: StaffId "申請者"
     approver: StaffId? "承認者"
-    invariant notSelfApproved "申請者は承認できない" { !(exists(approver)) || approver != applicant }
+    invariant notSelfApproved "申請者は承認できない" { approver == null || approver != applicant }
 
     create command submit(id: ExpenseId, applicant: StaffId "申請者", performedBy: StaffId "実施者") "申請する" // by proxy, too
       emits ExpenseSubmitted
@@ -818,7 +818,7 @@ The rules (`dt check`; M030 errors, M031 warnings):
 - With kinds and states, commands name their outcomes (`outcome name: A -> B`), not the shorthand `A -> B`.
 - Without states, a kind's commands use the form of an aggregate without states (`changes`, `emits`).
 
-A union of states with optional fields guarded by a classification (`!(type == SiteType.STORE) || exists(storeCode)`)
+A union of states with optional fields guarded by a classification (`!(type == SiteType.STORE) || storeCode != null`)
 is the shape of kinds: M031 says so.
 
 **Generated code.** The aggregate is a union of its kinds (`StorePickupSite | DistributionCenterPickupSite`), each of
@@ -859,8 +859,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
 - Field paths: `note`, `item.quantity`, `amount.amount`.
 - Operators, loosest first: `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `!`. An implication "if A then B" is
   `!(A) || B`.
-- Functions and methods: `exists(x)` (an optional is present; narrows `x` on the right of `&&`, and of `||` after
-  `!exists(x)`), and on a list `c`: `c.length`, `c.every(x => …)`, `c.some(x => …)`, `c.unique()`,
+- Optional values: `x != null` (it is present) and `x == null`. `x != null` narrows `x` on the right of `&&`, and
+  `x == null` narrows it on the right of `||`: `note == null || note.length > 0`.
+- Methods: on a list `c`: `c.length`, `c.every(x => …)`, `c.some(x => …)`, `c.unique()`,
   `c.unique(x => key, …)`, `c.includes(x)`; on a string `s`: `s.length` (in code points), `s.matches("regex")`.
 - `c.unique()`: the elements of a collection are distinct. With keys, `lines.unique(l => l.sku)` means no two
   elements have the same key, and `confirmations.unique(c => c.scenario, c.reviewer)` that no two have the same
@@ -871,7 +872,7 @@ the valid states and named outcomes per kind; restored data and migrations remai
   values by name, value objects by all their fields, entities by `id`, union values by discriminator and fields.
   Both sides must be of the same type (domain primitives also compare with literals, and over `Int` or `Decimal` with
   `.length`, also in `<`, `<=`, `>`, `>=` and ranges); collections and optional values cannot be
-  compared (guard an optional with `exists(...)` first).
+  compared (compare an optional with null first: `x != null && …`).
 - An invariant must be a Bool expression. `dt check` checks only its type; whether a value holds it is checked by the
   generated check functions (`checkConfirmedOrder`, see [Generated checks](#generated-checks)), with exactly these
   semantics.

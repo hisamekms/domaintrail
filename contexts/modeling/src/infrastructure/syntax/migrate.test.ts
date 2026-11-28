@@ -124,3 +124,24 @@ test('a function form inside parentheses keeps them', () => {
     const src = `context L {\n  value V {\n    ns: Int[0..*]\n    p: Bool\n    invariant x { !(any(ns, n => n > 0)) || p }\n  }\n}\n`;
     expect(migrateDomain(src).text).toContain('{ !(ns.some(n => n > 0)) || p }');
 });
+
+describe('migrateDomain: null safety', () => {
+    const opt = (expr: string) => `context L {\n  value V {\n    note: String?  p: Bool\n    invariant x { ${expr} }\n  }\n}\n`;
+    const out = (expr: string): string => {
+        const text = migrateDomain(opt(expr)).text;
+        return text.slice(text.indexOf('invariant x { ') + 'invariant x { '.length, text.lastIndexOf(' }\n  }'));
+    };
+    const cases: (readonly [string, string])[] = [
+        ['exists(note)', 'note != null'],
+        ['!exists(note) || note.length > 0', 'note == null || note.length > 0'],
+        ['!(exists(note)) || note.length > 0', 'note == null || note.length > 0'],
+        ['exists(note) && p', 'note != null && p'],
+        ['exists(note) == p', '(note != null) == p'],
+    ];
+    for (const [old, next] of cases)
+        test(`${old} → ${next}`, async () => {
+            expect(out(old)).toBe(next);
+            expect(await invariantOf(opt(next))).toEqual(await invariantOf(opt(old)));
+            expect(migrateDomain(migrateDomain(opt(old)).text).rewrites).toEqual([]);
+        });
+});

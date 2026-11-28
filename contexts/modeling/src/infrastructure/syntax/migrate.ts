@@ -68,6 +68,7 @@ export const LEGACY_SPELLINGS: Readonly<Record<string, string>> = {
     contains: 'xs.includes(x)',
     unique: 'xs.unique() or xs.unique(x => key, …)',
     matches: 'text.matches("pattern")',
+    exists: 'x != null',
 };
 
 /** The legacy operator tokens of a parsed model, in source order. */
@@ -83,7 +84,9 @@ export function legacyTokens(root: AstNode): LeafCstNode[] {
                 ? ownToken(node, ['count', 'length', 'contains', 'unique', 'matches'])
                 : ast.isQuantifierExpr(node)
                   ? ownToken(node, ['all', 'any'])
-                  : undefined;
+                  : ast.isExistsExpr(node)
+                    ? ownToken(node, ['exists'])
+                    : undefined;
         if (op) out.push(op);
     }
     return out.sort((a, b) => a.offset - b.offset);
@@ -102,6 +105,23 @@ export function migrateDomain(text: string): DomainMigration {
 
     const edits: Edit[] = [];
     const rewrites: DomainMigrationRewrite[] = [];
+    /** Whether a comparison put where `node` stands needs parentheses: as an operand of another comparison or range,
+     *  of `!`, or as a receiver. */
+    const needsParens = (node: AstNode): boolean => {
+        const parent = node.$container;
+        if (ast.isNotExpr(parent) || ast.isMemberAccess(parent) || ast.isRangeExpr(parent)) return true;
+        return ast.isBinaryExpr(parent) && ['==', '!=', '<', '<=', '>', '>='].includes(parent.op);
+    };
+    const existsEdit = (node: ast.ExistsExpr, op: '!=' | '=='): void => {
+        const fn = ownToken(node, ['exists']);
+        const open = ownTokens(node, '(').filter((t) => !!fn && t.offset > fn.offset)[0];
+        const close = ownTokens(node, ')').filter((t) => !!open && t.offset > open.offset)[0];
+        if (!fn || !open || !close) return;
+        const wrap = needsParens(node);
+        edits.push({ start: fn.offset, end: open.end, text: wrap ? '(' : '' });
+        edits.push({ start: close.offset, end: close.end, text: ` ${op} null${wrap ? ')' : ''}` });
+        rewrites.push({ line: lineAt(text, fn.offset), from: 'exists(x)', to: `x ${op} null` });
+    };
     const visit = (node: AstNode): void => {
         if (ast.isBinaryExpr(node)) {
             const op = ownToken(node, ['and', 'or', 'implies']);
@@ -152,6 +172,23 @@ export function migrateDomain(text: string): DomainMigration {
                     edits.push({ start: r.end, end: close.end, text: `${wrap ? ')' : ''}.${method}${method === 'unique' ? '()' : ''}` });
                 }
                 rewrites.push({ line: lineAt(text, fn.offset), from: `${name}(…)`, to: `.${method}${method === 'length' ? '' : '(…)'}` });
+            }
+        } else if (ast.isExistsExpr(node) && !(ast.isNotExpr(node.$container) && node.$container.operand === node)) {
+            // `exists(x)` → `x != null` (parenthesized where a comparison cannot stand as it is)
+            existsEdit(node, '!=');
+        } else if (ast.isNotExpr(node) && ast.isExistsExpr(node.operand)) {
+            // `!exists(x)`, `!(exists(x))`, `not exists(x)` → `x == null`
+            const range = rangeOf(node);
+            const inner = node.operand;
+            const fn = ownToken(inner, ['exists']);
+            const open = ownTokens(inner, '(').filter((t) => !!fn && t.offset > fn.offset)[0];
+            const close = ownTokens(inner, ')').filter((t) => !!open && t.offset > open.offset)[0];
+            if (fn && open && close) {
+                const x = text.slice(open.end, close.offset).trim();
+                const wrap = needsParens(node);
+                edits.push({ start: range.start, end: range.end, text: `${wrap ? '(' : ''}${x} == null${wrap ? ')' : ''}` });
+                rewrites.push({ line: lineAt(text, range.start), from: '!exists(x)', to: 'x == null' });
+                return; // the operand is rewritten as a whole
             }
         } else if (ast.isNotExpr(node)) {
             const op = ownToken(node, ['not']);
