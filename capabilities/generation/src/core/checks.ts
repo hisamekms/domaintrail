@@ -1242,13 +1242,11 @@ export class CheckWriter {
                 `'${b.key}' in ${value}`,
                 `${value}.${b.key} !== undefined`,
                 ...(!c.factory && agg.states.length && b.from ? [`${subject}.${STATE_TAG} === '${b.from}'`] : []),
-                // a create makes the aggregate of a kind; any other outcome keeps the input's (checked first: the
-                // return narrows the aggregate made to the kind, for the entries after it)
-                ...(b.kind !== undefined ? [c.factory ? `${after}.${KIND_TAG} === '${b.kind}'` : `${subject}.${KIND_TAG} === '${b.kind}'`] : []),
+                ...(b.kind !== undefined && !c.factory ? [`${subject}.${KIND_TAG} === '${b.kind}'`] : []),
             ];
-            if (b.kind !== undefined && !c.factory)
+            if (b.kind !== undefined)
                 entries.unshift(
-                    `if (${after}.${KIND_TAG} !== '${b.kind}') ${violation(unchangedId(b.outcomeId, KIND_TAG), 'unchanged', `after.${KIND_TAG} == before.${KIND_TAG}`, KIND_TAG)}`,
+                    `if (${after}.${KIND_TAG} !== '${b.kind}') ${violation(c.factory ? changeId(b.contractId, KIND_TAG) : unchangedId(b.outcomeId, KIND_TAG), c.factory ? 'changes' : 'unchanged', c.factory ? `after.${KIND_TAG} == ${b.kind}` : `after.${KIND_TAG} == before.${KIND_TAG}`, KIND_TAG)}`,
                 );
             if (!entries.length) continue;
             body.push(`if (${guards.join(' && ')}) {`, ...entries.map((l) => `    ${l}`), '}');

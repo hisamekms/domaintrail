@@ -1,0 +1,43 @@
+context Corpus {
+  id ItemId: UUID
+  id CustomerId: UUID
+  primitive Amount: Decimal(2) { value in 0.00..100.00 }
+  value Part { amount: Amount }
+  aggregate Item {
+    id: ItemId
+    total: Amount
+    parts: Part[0..*]
+    customerId: CustomerId
+    note: String?
+    state Draft
+    state Ready { shippedAt: Date? }
+
+    create command open(id: ItemId, total: Amount, parts: Part[0..*], customer: CustomerId)
+      -> Draft
+      changes id = id, total = total, parts = parts, customerId = customer
+      ensures { after.total >= 0.00 }
+
+    command revise(total: Amount)
+      Draft -> Draft
+      changes total = total
+      ensures { after.total >= 0.00 && (after.note == null || after.note != null) }
+
+    command reviseMany(total: Amount, note: String?)
+      Draft -> Draft, Ready -> Ready
+      changes total = total
+      ensures { match (after) { Draft => after.total >= 0.00, Ready => after.total >= 0.00 } }
+
+    command impossible()
+      Draft -> Draft
+      ensures { false }
+
+    command vacuous()
+      Draft -> Draft
+      ensures { true }
+
+    command prepare(at: Date)
+      Draft -> Ready
+      changes shippedAt = at
+      ensures { match (before) { Draft => before.total >= 0.00 } && match (after) { Ready => after.shippedAt != null && after.shippedAt == at } }
+  }
+}

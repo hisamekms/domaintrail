@@ -1,0 +1,125 @@
+[
+  {
+    "command": "start",
+    "subject": null,
+    "params": {
+      "id": "i1"
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "start",
+    "subject": null,
+    "params": {
+      "id": "i1"
+    },
+    "value": {
+      "Open": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i2"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:start.changes.id",
+      "outcome": "Open",
+      "kind": "changes",
+      "field": "id",
+      "source": "id = id"
+    }
+  },
+  {
+    "command": "close",
+    "subject": {
+      "state": "Open",
+      "id": "i1"
+    },
+    "params": {},
+    "value": {
+      "Closed": {
+        "aggregate": {
+          "state": "Closed",
+          "id": "i1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  },
+  {
+    "command": "close",
+    "subject": {
+      "state": "Open",
+      "id": "i1"
+    },
+    "params": {},
+    "value": {
+      "Closed": {
+        "aggregate": {
+          "state": "Closed",
+          "id": "i2"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:close->Closed.unchanged.id",
+      "outcome": "Closed",
+      "kind": "unchanged",
+      "field": "id",
+      "source": "after.id == before.id"
+    }
+  },
+  {
+    "command": "close",
+    "subject": {
+      "state": "Open",
+      "id": "i1"
+    },
+    "params": {},
+    "value": {
+      "Closed": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1"
+        },
+        "events": {}
+      }
+    },
+    "expected": {
+      "id": "Corpus.Item:close.ensures",
+      "outcome": "Closed",
+      "kind": "ensures",
+      "source": "!isOpen(after)"
+    }
+  },
+  {
+    "command": "close",
+    "subject": {
+      "state": "Closed",
+      "id": "i1"
+    },
+    "params": {},
+    "value": {
+      "Closed": {
+        "aggregate": {
+          "state": "Open",
+          "id": "i1"
+        },
+        "events": {}
+      }
+    },
+    "expected": null
+  }
+]

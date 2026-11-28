@@ -1,6 +1,7 @@
 # Plan: formal verification with TLA+
 
-Status: Phase 0 done; Phases 1–7 proposed. Input: `main` at `4d8a2ed`. Integration branch: `feat/formal-verification`;
+Status: Phases 0 and 3 done; Phases 1–2 and 4–7 proposed. Input: `main` at `4d8a2ed`. Integration branch:
+`feat/formal-verification`;
 merge each phase into it by PR, then merge to `main` once at the end.
 
 This file replaces the maintainer's Japanese integration plan in the repository. TLA+ is generated directly from
@@ -236,11 +237,13 @@ repair success. See the [trial protocol](formal-verification/language-revision.m
 Add in Phase 2 a static `dt check` rule for an error declared but no longer used by any `else`
 ([spike finding](formal-verification/spike/results.md#L66)).
 
-### Phase 3 — `ensures` in TypeScript
+### Phase 3 — `ensures` in TypeScript (done)
 
-Apply `ensures` to successful `decide` results in TypeScript runtime checks and contract tests (ADRs 0019/0020).
-`ensures` is the postcondition of a successful transition. These checks define the semantic reference for Phase 4;
-cross-backend examples must agree.
+**Done.** `ensures` applies to successful `decide` results in TypeScript runtime checks and contract tests (ADRs 0019/0020).
+It is the postcondition of a successful transition; these checks define the semantic reference for Phase 4. Delivered by
+[#161](https://github.com/hisamekms/domaintrail/pull/161) (postcondition checks), [#162](https://github.com/hisamekms/domaintrail/pull/162)
+(state match), [#163](https://github.com/hisamekms/domaintrail/pull/163) (aggregate function parameters),
+[#164](https://github.com/hisamekms/domaintrail/pull/164) (T7), and the reference corpus (`test/fixtures/ensures`).
 
 ### Phase 4 — TLA+ generator and `dt verify`
 

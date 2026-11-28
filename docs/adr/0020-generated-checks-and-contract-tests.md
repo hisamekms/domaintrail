@@ -7,7 +7,7 @@
   failing one decides the error)
 - Amended by: [ADR 0028](0028-generated-typescript-changes.md) (`check<Aggregate>Common`; the `'uuid'` invariant; the generic
   helpers as `domaintrail/testing`; command parameters as an object; values of recursive types)
-- Amended by: [ADR 0043](0043-typescript-ensures-runtime.md) (proposed; runtime postcondition checks and
+- Amended by: [ADR 0043](0043-typescript-ensures-runtime.md) (runtime postcondition checks and
   contract coverage)
 
 ## Context

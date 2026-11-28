@@ -8,7 +8,7 @@
   whose output depends on the input
 - Amended by: [ADR 0036](0036-commands-in-any-state.md) (a state that is not a source state throws a contract violation)
 - Amended by: [ADR 0042](0042-language-revision-and-ensures.md) (proposed; `changes` value assignments and
-  `ensures`), [ADR 0043](0043-typescript-ensures-runtime.md) (proposed; successful decision postconditions)
+  `ensures`), [ADR 0043](0043-typescript-ensures-runtime.md) (successful decision postconditions)
 
 ## Context
 
