@@ -39,6 +39,12 @@ context Modeling {
       left: ExprModel
       right: ExprModel
     }
+    /// `test ? then : else`.
+    conditional {
+      test: ExprModel
+      ifTrue: ExprModel
+      ifFalse: ExprModel
+    }
     /// `operand in lower..upper`.
     range {
       operand: ExprModel

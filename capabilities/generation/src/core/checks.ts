@@ -415,6 +415,10 @@ export class ExprCompiler {
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
+            case 'conditional': {
+                const test = this.compile(e.test, scope);
+                return wrapped(`${test.js} ? ${this.compile(e.ifTrue, scope).js} : ${this.compile(e.ifFalse, scope).js}`, true);
+            }
             case 'range': {
                 const v = this.compile(e.operand, scope);
                 const lo = this.compile(e.lower, scope);

@@ -113,6 +113,8 @@ function toExprModel(e: Expr): ExprModel {
             return { k: 'not', operand: toExprModel(e.operand) };
         case 'binary':
             return { k: 'binary', op: OPS[e.op], left: toExprModel(e.left), right: toExprModel(e.right) };
+        case 'conditional':
+            return { k: 'conditional', test: toExprModel(e.test), ifTrue: toExprModel(e.ifTrue), ifFalse: toExprModel(e.ifFalse) };
         case 'range':
             return { k: 'range', operand: toExprModel(e.operand), lower: toExprModel(e.lower), upper: toExprModel(e.upper) };
         case 'count':

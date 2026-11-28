@@ -238,3 +238,45 @@ context A {
                 (identifier))
               (number
                 (integer)))))))))
+
+================================================================================
+Conditional expressions
+================================================================================
+
+context A {
+  aggregate X {
+    invariant a { days <= (express ? 2 : limit) && (note != null ? note.length > 0 : true) }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (identifier)
+              (parenthesized_expression
+                (conditional_expression
+                  (identifier)
+                  (number
+                    (integer))
+                  (identifier))))
+            (parenthesized_expression
+              (conditional_expression
+                (binary_expression
+                  (identifier)
+                  (null))
+                (binary_expression
+                  (member_expression
+                    (identifier)
+                    (identifier))
+                  (number
+                    (integer)))
+                (boolean)))))))))

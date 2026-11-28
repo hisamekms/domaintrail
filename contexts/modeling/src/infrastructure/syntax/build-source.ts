@@ -11,6 +11,7 @@ import {
     isBinaryExpr,
     isBoolLiteral,
     isCommand,
+    isConditionalExpr,
     isContainsExpr,
     isCountExpr,
     isDecimalLiteral,
@@ -157,6 +158,17 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 right: expr(e.right),
                 leftAt: site(e, 'left'),
                 rightAt: site(e, 'right'),
+            };
+        if (isConditionalExpr(e))
+            return {
+                ...base,
+                k: 'conditional',
+                test: expr(e.test),
+                ifTrue: expr(e.ifTrue),
+                ifFalse: expr(e.ifFalse),
+                testAt: site(e, 'test'),
+                ifTrueAt: site(e, 'ifTrue'),
+                ifFalseAt: site(e, 'ifFalse'),
             };
         if (isRangeExpr(e)) return { ...base, k: 'range', operand: expr(e.operand), lower: expr(e.lower), upper: expr(e.upper) };
         if (isCountExpr(e)) return { ...base, k: 'count', collection: expr(e.collection), collectionAt: site(e, 'collection') };
