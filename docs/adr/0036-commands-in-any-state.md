@@ -9,7 +9,7 @@
 
 ## Context
 
-A command's generated type takes only its source states (`CancelOrder` takes a `DraftOrder | ConfirmedOrder`). An
+A command's generated type takes only its source states (`CancelOrderCommand` takes a `DraftOrder | ConfirmedOrder`). An
 aggregate loaded from a store can be in any state, so the application narrows it before every call, and the branch
 where the state is not a source state has nowhere in the model to go. One user wrote a dozen such checks by hand, each
 returning an error the model does not declare (`RequestNotCancellable`, `CollectionNotAssignable`, …), so the error

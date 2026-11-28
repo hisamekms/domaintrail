@@ -22,9 +22,16 @@ describe('generated TypeScript names (M011)', () => {
             "Generated TypeScript name 'commandErrors' for the command error catalog collides with value object 'commandErrors'.",
         ]);
     });
-    test('collision between a generated command type and a declared type', async () => {
+    test('the command type name has its own suffix', async () => {
         const a = await checkSales(`${ORDER} value FinishOrder`);
-        expect(only(a, 'M011')[0].message).toBe("Generated TypeScript name 'FinishOrder' for value object 'FinishOrder' collides with command 'Order.finish'.");
+        expect(only(a, 'M011')).toEqual([]);
+    });
+
+    test('a command may share its name with a state, kind, and kind-state pair', async () => {
+        const a = await checkSales(
+            `id RotationId: UUID aggregate Rotation { id: RotationId state Draft state Open state Held kind HOLD { command hold() { outcome held: Draft -> Held } } command draft() Draft -> Draft }`,
+        );
+        expect(only(a, 'M011')).toEqual([]);
     });
 
     test('collision with the decision of a command, and with the shape of an aggregate', async () => {
@@ -47,7 +54,7 @@ describe('generated TypeScript names (M011)', () => {
     test('reserved discriminant and parameter names', async () => {
         const a = await checkSales(`${ORDER.replace('finish(at: Timestamp)', 'finish(order: Timestamp, default: Int)')} event E { type: String }`);
         expect(only(a, 'M011').map((d) => d.message)).toEqual([
-            "Parameter 'order' of FinishOrder collides with the aggregate parameter 'order'.",
+            "Parameter 'order' of FinishOrderCommand collides with the aggregate parameter 'order'.",
             "Parameter name 'default' is a reserved word in TypeScript.",
             "Field 'type' is reserved for the discriminant of generated event types.",
         ]);

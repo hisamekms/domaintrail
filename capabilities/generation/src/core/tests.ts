@@ -43,7 +43,7 @@ import {
     KIND_TAG,
     aggregateParamName,
     choiceCheckName,
-    commandTypeName,
+    commandStem,
     commandsInterfaceName,
     kindTypeName,
     makeTypeName,
@@ -570,7 +570,7 @@ class TestsEmitter {
             if (hasDeclared(invs)) out.push(`readonly ${el.name}?: Partial<${this.ctx}.${declaredChecksName(el.name)}>;`);
             if (el.kind !== 'aggregate') continue;
             for (const c of el.commands) {
-                const t = commandTypeName(el, c);
+                const t = commandStem(el, c);
                 const requirements = [...c.requires, ...el.kinds.flatMap((k) => kindCase(el, k.name, c.name)?.requires ?? [])];
                 if (hasDeclared(requirements)) out.push(`readonly ${t}?: Partial<${this.ctx}.${declaredRequiresName(t)}>;`);
             }
@@ -628,7 +628,7 @@ class TestsEmitter {
               ];
         // the parameters as one record, an optional one left out or given (none without parameters)
         const input = `fc.tuple(${[...subject, ...(c.params.length ? [this.record([], c.params)] : [])].join(', ')})`;
-        const t = commandTypeName(agg, c);
+        const t = commandStem(agg, c);
         const declaredReqs = c.requires.filter((r) => !r.expr).map((r) => `'${r.name}'`);
         const invs = aggregateInvariants(agg);
         const declaredInvs = invs.filter((i) => !i.expr).map((i) => `'${i.name}'`);
@@ -692,7 +692,7 @@ class TestsEmitter {
             ...agg.kinds.flatMap((k) => (kindCase(agg, k.name, c.name)?.requires ?? []).map((r) => ({ key: `${k.name}_${r.name}`, requirement: r }))),
         ];
         const declaredReqs = requirements.filter((x) => !x.requirement.expr).map((x) => `'${x.key}'`);
-        const t = commandTypeName(agg, c);
+        const t = commandStem(agg, c);
         const outcomes = all.map((o) => {
             const applies = hasKinds ? kinds.filter((kind) => applicableOutcomes(agg, c, kind).includes(o)) : [];
             return `{ name: '${o.name}', to: '${o.to}', from: [${o.from.map((s) => `'${s}'`).join(', ')}], kinds: [${applies.map((k) => `'${k}'`).join(', ')}] }`;
@@ -865,8 +865,7 @@ class TestsEmitter {
                         ...c.requires.filter(hasExternalCheck).map((r) => r.name),
                         ...el.kinds.flatMap((k) => (kindCase(el, k.name, c.name)?.requires ?? []).filter(hasExternalCheck).map((r) => `${k.name}_${r.name}`)),
                     ];
-                    if (required.length)
-                        entries.push({ key: commandTypeName(el, c), type: `${ctx}.${declaredRequiresName(commandTypeName(el, c))}`, names: required });
+                    if (required.length) entries.push({ key: commandStem(el, c), type: `${ctx}.${declaredRequiresName(commandStem(el, c))}`, names: required });
                 }
             return entries;
         });
@@ -907,7 +906,7 @@ class TestsEmitter {
                               (name) =>
                                   `readonly ${name}: { ${externalChoices
                                       .filter(({ agg }) => agg.name === name)
-                                      .map(({ c, agg }) => `readonly ${c.name}: ${ctx}.${commandTypeName(agg, c)}ChoiceChecks`)
+                                      .map(({ c, agg }) => `readonly ${c.name}: ${ctx}.${commandStem(agg, c)}ChoiceChecks`)
                                       .join('; ')} }`,
                           )
                           .join('; ')} };`,

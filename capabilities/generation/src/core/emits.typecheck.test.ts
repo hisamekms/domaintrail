@@ -151,15 +151,15 @@ const events: readonly Tasks.WorkEvent[] = r.ok ? eventList(outcome(r.value).eve
                 "Types of property 'Completed' are incompatible",
             ],
         };
-        const noEvents = `export const start: Tasks.StartWork = (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: { 'Tasks.StepRecorded': step(work) } } });`;
-        const empty = `export const add: Tasks.AddWork = (work) => ok({ Draft: { aggregate: work, events: { 'Tasks.ItemAdded': [] } } });`;
+        const noEvents = `export const start: Tasks.StartWorkCommand = (work) => ok({ InProgress: { aggregate: { ...work, state: 'InProgress' }, events: { 'Tasks.StepRecorded': step(work) } } });`;
+        const empty = `export const add: Tasks.AddWorkCommand = (work) => ok({ Draft: { aggregate: work, events: { 'Tasks.ItemAdded': [] } } });`;
         await writeFile(
             path.join(dir, 'src', 'wrong.ts'),
             [
                 `import { ok, type Tasks } from '../generated/index.js';`,
                 `const step = (w: Tasks.Work): Tasks.StepRecorded => ({ type: 'Tasks.StepRecorded', workId: w.id });`,
                 `const done = (w: Tasks.Work): Tasks.WorkCompleted => ({ type: 'Tasks.WorkCompleted', workId: w.id });`,
-                ...Object.entries(cases).map(([name, [body]]) => `export const ${name}: Tasks.ProgressWork = (work, { at }) => ${body};`),
+                ...Object.entries(cases).map(([name, [body]]) => `export const ${name}: Tasks.ProgressWorkCommand = (work, { at }) => ${body};`),
                 noEvents,
                 empty,
                 '',

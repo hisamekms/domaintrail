@@ -1663,7 +1663,7 @@ export interface ConfirmOrderParams {
  * @emits OrderConfirmed — exactly once when the command succeeds
  * @see sales/order.dt:51
  */
-export type ConfirmOrder = (
+export type ConfirmOrderCommand = (
     order: DraftOrder,
     params: ConfirmOrderParams,
 ) => Result<{
@@ -1680,7 +1680,7 @@ this shape, also with one target. With several targets the value is a union, and
 so a value holds exactly one outcome:
 
 ```ts
-export type ProgressWork = (
+export type ProgressWorkCommand = (
     work: InProgressWork,
     params: ProgressWorkParams,
 ) => Result<
@@ -1731,7 +1731,7 @@ caller with a `DraftOrder` gets a `DraftOrder` back, never a `ConfirmedOrder`; a
 `DraftOrder | ConfirmedOrder` gets either:
 
 ```ts
-export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
+export type ChangeNoteOrderCommand = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
     params: ChangeNoteOrderParams,
 ) => {
@@ -1871,7 +1871,7 @@ errors of their `else` are part of its error type (after those of `errors`, each
  * @emits nothing
  * @see review/review.dt:24
  */
-export type AcceptReview = (
+export type AcceptReviewCommand = (
     review: ReviewingReview | EscalatedReview,
     params: AcceptReviewParams,
 ) => Result<{
@@ -1882,7 +1882,7 @@ export type AcceptReview = (
 }, Conflict | NotApprover | Blocked | NotSignedOff>;
 ```
 
-**Commands in any state.** A command's type takes only its source states (`ConfirmOrder` takes a `DraftOrder`), so calling it in another state
+**Commands in any state.** A command's type takes only its source states (`ConfirmOrderCommand` takes a `DraftOrder`), so calling it in another state
 does not compile. An aggregate loaded from a store can be in any state, and the model already says which states each
 command takes. For every aggregate with states or kinds, the generated module therefore also has, for each command that
 is not a factory (ADR 0036, 0037):
@@ -1933,7 +1933,7 @@ command it implements, and checks the state (per kind) before the decision runs:
 
 The generated files are the **contract**, your code is the **implementation**:
 
-- Generated: types — the shapes of the model, the command signatures (`ConfirmOrder`, `OrderCommands`) and their
+- Generated: types — the shapes of the model, the command signatures (`ConfirmOrderCommand`, `OrderCommands`) and their
   decisions (`ConfirmOrderDecision`), and the constructor signatures of domain primitives (`MakeQuantity`) — plus
   data without logic: one shape constant per aggregate (`OrderShape`), the field names `decide` needs, and one
   availability constant (`OrderAvailability`), the source states of each command (see

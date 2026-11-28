@@ -19,7 +19,7 @@ boundary has to be stated.
 ## Decision
 
 - **Generated code is the contract: types only.** The shapes of the model, command signatures
-  (`ConfirmOrder`, `<Aggregate>Commands`) and constructor signatures of domain primitives (`Make<Name>`). Invariants
+  (`ConfirmOrderCommand`, `<Aggregate>Commands`) and constructor signatures of domain primitives (`Make<Name>`). Invariants
   are documented as JSDoc (`@invariant`) and not checked. (Amended by [ADR 0019](0019-command-changes-and-decisions.md):
   besides types, **data without logic** — one constant per aggregate, `<Aggregate>Shape`, restating its field names
   for `decide` of the runtime. Behaviour stays in the runtime, which is the same for every model, and in users' code.

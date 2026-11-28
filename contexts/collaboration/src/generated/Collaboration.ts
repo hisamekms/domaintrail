@@ -1100,7 +1100,7 @@ export interface QueueAgentRunParams {
  * @emits RunQueued — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:382
  */
-export type QueueAgentRun = (
+export type QueueAgentRunCommand = (
     params: QueueAgentRunParams,
 ) => Result<{
     readonly Queued: {
@@ -1174,7 +1174,7 @@ export interface RecordEditAgentRunParams {
  * @emits RunEdited — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:395
  */
-export type RecordEditAgentRun = (
+export type RecordEditAgentRunCommand = (
     params: RecordEditAgentRunParams,
 ) => Result<{
     readonly Edited: {
@@ -1234,7 +1234,7 @@ export interface NameHotspotAgentRunParams {
  * @emits RunHotspotNamed — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:407
  */
-export type NameHotspotAgentRun = (
+export type NameHotspotAgentRunCommand = (
     agentRun: EditedAgentRun,
     params: NameHotspotAgentRunParams,
 ) => Result<{
@@ -1288,7 +1288,7 @@ export interface NoteConflictAgentRunParams {
  * @emits RunEditConflicted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:414
  */
-export type NoteConflictAgentRun = (
+export type NoteConflictAgentRunCommand = (
     agentRun: EditedAgentRun,
     params: NoteConflictAgentRunParams,
 ) => Result<{
@@ -1339,7 +1339,7 @@ export interface RevertAgentRunParams {
  * @emits RunReverted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:420
  */
-export type RevertAgentRun = (
+export type RevertAgentRunCommand = (
     agentRun: QueuedAgentRun,
     params: RevertAgentRunParams,
 ) => Result<{
@@ -1396,7 +1396,7 @@ export interface LeaveToAgentAgentRunParams {
  * @emits RevertLeftToAgent — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:430
  */
-export type LeaveToAgentAgentRun = (
+export type LeaveToAgentAgentRunCommand = (
     agentRun: QueuedAgentRun,
     params: LeaveToAgentAgentRunParams,
 ) => Result<{
@@ -1451,7 +1451,7 @@ export interface StartAgentRunParams {
  * @emits RunStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:437
  */
-export type StartAgentRun = (
+export type StartAgentRunCommand = (
     agentRun: QueuedAgentRun,
     params: StartAgentRunParams,
 ) => Result<{
@@ -1508,7 +1508,7 @@ export interface FinishAgentRunParams {
  * @outcome Failed: Running -> Failed; select expression
  * @see contexts/collaboration/model/agent-run.dt:445
  */
-export type FinishAgentRun = (
+export type FinishAgentRunCommand = (
     agentRun: RunningAgentRun,
     params: FinishAgentRunParams,
 ) => Result<
@@ -1591,7 +1591,7 @@ export interface AskClarificationAgentRunParams {
  * @emits RunNeedsClarification — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:469
  */
-export type AskClarificationAgentRun = (
+export type AskClarificationAgentRunCommand = (
     agentRun: RunningAgentRun,
     params: AskClarificationAgentRunParams,
 ) => Result<{
@@ -1652,7 +1652,7 @@ export interface DeclineAgentRunParams {
  * @emits RunDeclined — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:481
  */
-export type DeclineAgentRun = (
+export type DeclineAgentRunCommand = (
     agentRun: RunningAgentRun,
     params: DeclineAgentRunParams,
 ) => Result<{
@@ -1710,7 +1710,7 @@ export interface FailAgentRunParams {
  * @emits RunFailed — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:491
  */
-export type FailAgentRun = (
+export type FailAgentRunCommand = (
     agentRun: RunningAgentRun,
     params: FailAgentRunParams,
 ) => Result<{
@@ -1768,7 +1768,7 @@ export interface CancelAgentRunParams {
  * @emits RunCancelled — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:498
  */
-export type CancelAgentRun = (
+export type CancelAgentRunCommand = (
     agentRun: QueuedAgentRun | RunningAgentRun,
     params: CancelAgentRunParams,
 ) => Result<{
@@ -1820,29 +1820,29 @@ export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningA
  */
 export interface AgentRunCommands {
     /** 実行を登録する */
-    readonly queue: QueueAgentRun;
+    readonly queue: QueueAgentRunCommand;
     /** 手直しを記録する */
-    readonly recordEdit: RecordEditAgentRun;
+    readonly recordEdit: RecordEditAgentRunCommand;
     /** ホットスポットの名前を付ける */
-    readonly nameHotspot: NameHotspotAgentRun;
+    readonly nameHotspot: NameHotspotAgentRunCommand;
     /** 食い違いを記す */
-    readonly noteConflict: NoteConflictAgentRun;
+    readonly noteConflict: NoteConflictAgentRunCommand;
     /** 機械的に打ち消す */
-    readonly revert: RevertAgentRun;
+    readonly revert: RevertAgentRunCommand;
     /** AI に任せる */
-    readonly leaveToAgent: LeaveToAgentAgentRun;
+    readonly leaveToAgent: LeaveToAgentAgentRunCommand;
     /** 実行を始める */
-    readonly start: StartAgentRun;
+    readonly start: StartAgentRunCommand;
     /** 実行を終える */
-    readonly finish: FinishAgentRun;
+    readonly finish: FinishAgentRunCommand;
     /** 確認を求める */
-    readonly askClarification: AskClarificationAgentRun;
+    readonly askClarification: AskClarificationAgentRunCommand;
     /** 辞退する */
-    readonly decline: DeclineAgentRun;
+    readonly decline: DeclineAgentRunCommand;
     /** 実行を失敗にする */
-    readonly fail: FailAgentRun;
+    readonly fail: FailAgentRunCommand;
     /** 実行を中止する */
-    readonly cancel: CancelAgentRun;
+    readonly cancel: CancelAgentRunCommand;
 }
 
 /**
@@ -1891,7 +1891,7 @@ export type NameHotspotAgentRunUnavailable = CommandUnavailable<'Collaboration.A
 export type NameHotspotAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: NameHotspotAgentRunParams,
-) => ReturnType<NameHotspotAgentRun> | Err<NameHotspotAgentRunUnavailable>;
+) => ReturnType<NameHotspotAgentRunCommand> | Err<NameHotspotAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.noteConflict can be called on the agentRun in its state (Edited).
@@ -1912,7 +1912,7 @@ export type NoteConflictAgentRunUnavailable = CommandUnavailable<'Collaboration.
 export type NoteConflictAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: NoteConflictAgentRunParams,
-) => ReturnType<NoteConflictAgentRun> | Err<NoteConflictAgentRunUnavailable>;
+) => ReturnType<NoteConflictAgentRunCommand> | Err<NoteConflictAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.revert can be called on the agentRun in its state (Queued).
@@ -1933,7 +1933,7 @@ export type RevertAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentR
 export type RevertAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: RevertAgentRunParams,
-) => ReturnType<RevertAgentRun> | Err<RevertAgentRunUnavailable>;
+) => ReturnType<RevertAgentRunCommand> | Err<RevertAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.leaveToAgent can be called on the agentRun in its state (Queued).
@@ -1954,7 +1954,7 @@ export type LeaveToAgentAgentRunUnavailable = CommandUnavailable<'Collaboration.
 export type LeaveToAgentAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: LeaveToAgentAgentRunParams,
-) => ReturnType<LeaveToAgentAgentRun> | Err<LeaveToAgentAgentRunUnavailable>;
+) => ReturnType<LeaveToAgentAgentRunCommand> | Err<LeaveToAgentAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.start can be called on the agentRun in its state (Queued).
@@ -1975,7 +1975,7 @@ export type StartAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRu
 export type StartAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: StartAgentRunParams,
-) => ReturnType<StartAgentRun> | Err<StartAgentRunUnavailable>;
+) => ReturnType<StartAgentRunCommand> | Err<StartAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.finish can be called on the agentRun in its state (Running).
@@ -1996,7 +1996,7 @@ export type FinishAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentR
 export type FinishAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: FinishAgentRunParams,
-) => ReturnType<FinishAgentRun> | Err<FinishAgentRunUnavailable>;
+) => ReturnType<FinishAgentRunCommand> | Err<FinishAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.askClarification can be called on the agentRun in its state (Running).
@@ -2017,7 +2017,7 @@ export type AskClarificationAgentRunUnavailable = CommandUnavailable<'Collaborat
 export type AskClarificationAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: AskClarificationAgentRunParams,
-) => ReturnType<AskClarificationAgentRun> | Err<AskClarificationAgentRunUnavailable>;
+) => ReturnType<AskClarificationAgentRunCommand> | Err<AskClarificationAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.decline can be called on the agentRun in its state (Running).
@@ -2038,7 +2038,7 @@ export type DeclineAgentRunUnavailable = CommandUnavailable<'Collaboration.Agent
 export type DeclineAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: DeclineAgentRunParams,
-) => ReturnType<DeclineAgentRun> | Err<DeclineAgentRunUnavailable>;
+) => ReturnType<DeclineAgentRunCommand> | Err<DeclineAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.fail can be called on the agentRun in its state (Running).
@@ -2059,7 +2059,7 @@ export type FailAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun
 export type FailAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: FailAgentRunParams,
-) => ReturnType<FailAgentRun> | Err<FailAgentRunUnavailable>;
+) => ReturnType<FailAgentRunCommand> | Err<FailAgentRunUnavailable>;
 
 /**
  * Whether AgentRun.cancel can be called on the agentRun in its state (Queued | Running).
@@ -2080,7 +2080,7 @@ export type CancelAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentR
 export type CancelAgentRunFromAnyState = (
     agentRun: AgentRun,
     params: CancelAgentRunParams,
-) => ReturnType<CancelAgentRun> | Err<CancelAgentRunUnavailable>;
+) => ReturnType<CancelAgentRunCommand> | Err<CancelAgentRunUnavailable>;
 
 /**
  * The commands of AgentRun that take the agentRun, for the agentRun in any state: make it with `anyStateAgentRunCommands`.
@@ -2560,7 +2560,7 @@ export interface ApproveAssumptionApprovalParams {
  * @emits AssumptionApproved — exactly once when the command succeeds
  * @see contexts/collaboration/model/approval.dt:28
  */
-export type ApproveAssumptionApproval = (
+export type ApproveAssumptionApprovalCommand = (
     params: ApproveAssumptionApprovalParams,
 ) => Result<{
     readonly Approved: {
@@ -2602,7 +2602,7 @@ export function checkApproveAssumptionApprovalRequires(params: ApproveAssumption
  */
 export interface AssumptionApprovalCommands {
     /** 前提を承認する */
-    readonly approve: ApproveAssumptionApproval;
+    readonly approve: ApproveAssumptionApprovalCommand;
 }
 
 /**
@@ -3089,7 +3089,7 @@ export interface StartSlashCommandParams {
  * @emits SlashCommandStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:111
  */
-export type StartSlashCommand = (
+export type StartSlashCommandCommand = (
     params: StartSlashCommandParams,
 ) => Result<{
     readonly Working: {
@@ -3132,7 +3132,7 @@ export interface ListSlashCommandParams {
  * @emits CandidatesListed — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:117
  */
-export type ListSlashCommand = (
+export type ListSlashCommandCommand = (
     slashCommand: WorkingSlashCommand,
     params: ListSlashCommandParams,
 ) => Result<{
@@ -3179,7 +3179,7 @@ export interface AnswerSlashCommandParams {
  * @emits SlashCommandAnswered — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:123
  */
-export type AnswerSlashCommand = (
+export type AnswerSlashCommandCommand = (
     slashCommand: WorkingSlashCommand,
     params: AnswerSlashCommandParams,
 ) => Result<{
@@ -3233,7 +3233,7 @@ export interface ApplySlashCommandParams {
  * @emits CandidatesApplied — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:130
  */
-export type ApplySlashCommand = (
+export type ApplySlashCommandCommand = (
     slashCommand: ListedSlashCommand,
     params: ApplySlashCommandParams,
 ) => Result<{
@@ -3293,7 +3293,7 @@ export interface StopSlashCommandParams {
  * @emits SlashCommandStopped — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:140
  */
-export type StopSlashCommand = (
+export type StopSlashCommandCommand = (
     slashCommand: WorkingSlashCommand | ListedSlashCommand,
     params: StopSlashCommandParams,
 ) => Result<{
@@ -3345,15 +3345,15 @@ export function checkStopSlashCommandRequires(slashCommand: WorkingSlashCommand 
  */
 export interface SlashCommandCommands {
     /** コマンドを始める */
-    readonly start: StartSlashCommand;
+    readonly start: StartSlashCommandCommand;
     /** 候補を挙げる */
-    readonly list: ListSlashCommand;
+    readonly list: ListSlashCommandCommand;
     /** 答える */
-    readonly answer: AnswerSlashCommand;
+    readonly answer: AnswerSlashCommandCommand;
     /** 採用したものを反映する */
-    readonly apply: ApplySlashCommand;
+    readonly apply: ApplySlashCommandCommand;
     /** コマンドを中止する */
-    readonly stop: StopSlashCommand;
+    readonly stop: StopSlashCommandCommand;
 }
 
 /**
@@ -3396,7 +3396,7 @@ export type ListSlashCommandUnavailable = CommandUnavailable<'Collaboration.Slas
 export type ListSlashCommandFromAnyState = (
     slashCommand: SlashCommand,
     params: ListSlashCommandParams,
-) => ReturnType<ListSlashCommand> | Err<ListSlashCommandUnavailable>;
+) => ReturnType<ListSlashCommandCommand> | Err<ListSlashCommandUnavailable>;
 
 /**
  * Whether SlashCommand.answer can be called on the slashCommand in its state (Working).
@@ -3417,7 +3417,7 @@ export type AnswerSlashCommandUnavailable = CommandUnavailable<'Collaboration.Sl
 export type AnswerSlashCommandFromAnyState = (
     slashCommand: SlashCommand,
     params: AnswerSlashCommandParams,
-) => ReturnType<AnswerSlashCommand> | Err<AnswerSlashCommandUnavailable>;
+) => ReturnType<AnswerSlashCommandCommand> | Err<AnswerSlashCommandUnavailable>;
 
 /**
  * Whether SlashCommand.apply can be called on the slashCommand in its state (Listed).
@@ -3438,7 +3438,7 @@ export type ApplySlashCommandUnavailable = CommandUnavailable<'Collaboration.Sla
 export type ApplySlashCommandFromAnyState = (
     slashCommand: SlashCommand,
     params: ApplySlashCommandParams,
-) => ReturnType<ApplySlashCommand> | Err<ApplySlashCommandUnavailable>;
+) => ReturnType<ApplySlashCommandCommand> | Err<ApplySlashCommandUnavailable>;
 
 /**
  * Whether SlashCommand.stop can be called on the slashCommand in its state (Working | Listed).
@@ -3459,7 +3459,7 @@ export type StopSlashCommandUnavailable = CommandUnavailable<'Collaboration.Slas
 export type StopSlashCommandFromAnyState = (
     slashCommand: SlashCommand,
     params: StopSlashCommandParams,
-) => ReturnType<StopSlashCommand> | Err<StopSlashCommandUnavailable>;
+) => ReturnType<StopSlashCommandCommand> | Err<StopSlashCommandUnavailable>;
 
 /**
  * The commands of SlashCommand that take the slashCommand, for the slashCommand in any state: make it with `anyStateSlashCommandCommands`.
@@ -4915,7 +4915,7 @@ export interface StartInterviewParams {
  * @emits InterviewStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:157
  */
-export type StartInterview = (
+export type StartInterviewCommand = (
     params: StartInterviewParams,
 ) => Result<{
     readonly Asking: {
@@ -4958,7 +4958,7 @@ export interface HearInterviewParams {
  * @emits InterviewAnswered — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:163
  */
-export type HearInterview = (
+export type HearInterviewCommand = (
     interview: AskingInterview | BriefedInterview,
     params: HearInterviewParams,
 ) => Result<{
@@ -5014,7 +5014,7 @@ export interface AskInterviewParams {
  * @emits InterviewQuestionAsked — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:169
  */
-export type AskInterview = (
+export type AskInterviewCommand = (
     interview: AskingInterview,
     params: AskInterviewParams,
 ) => Result<{
@@ -5072,7 +5072,7 @@ export interface SummarizeInterviewParams {
  * @emits InterviewBriefed — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:178
  */
-export type SummarizeInterview = (
+export type SummarizeInterviewCommand = (
     interview: AskingInterview,
     params: SummarizeInterviewParams,
 ) => Result<{
@@ -5136,7 +5136,7 @@ export interface ConfirmInterviewParams {
  * @emits InterviewConfirmed — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:188
  */
-export type ConfirmInterview = (
+export type ConfirmInterviewCommand = (
     interview: BriefedInterview,
     params: ConfirmInterviewParams,
 ) => Result<{
@@ -5196,7 +5196,7 @@ export interface RejectInterviewParams {
  * @emits InterviewRejected — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:197
  */
-export type RejectInterview = (
+export type RejectInterviewCommand = (
     interview: BriefedInterview,
     params: RejectInterviewParams,
 ) => Result<{
@@ -5254,7 +5254,7 @@ export interface StopInterviewParams {
  * @emits InterviewStopped — exactly once when the command succeeds
  * @see contexts/collaboration/model/interview.dt:206
  */
-export type StopInterview = (
+export type StopInterviewCommand = (
     interview: AskingInterview | BriefedInterview,
     params: StopInterviewParams,
 ) => Result<{
@@ -5306,19 +5306,19 @@ export function checkStopInterviewRequires(interview: AskingInterview | BriefedI
  */
 export interface InterviewCommands {
     /** 聞き取りを始める */
-    readonly start: StartInterview;
+    readonly start: StartInterviewCommand;
     /** 答えを聞く */
-    readonly hear: HearInterview;
+    readonly hear: HearInterviewCommand;
     /** 問う */
-    readonly ask: AskInterview;
+    readonly ask: AskInterviewCommand;
     /** 要約を出す */
-    readonly summarize: SummarizeInterview;
+    readonly summarize: SummarizeInterviewCommand;
     /** 要約を確定する */
-    readonly confirm: ConfirmInterview;
+    readonly confirm: ConfirmInterviewCommand;
     /** 要約を却下する */
-    readonly reject: RejectInterview;
+    readonly reject: RejectInterviewCommand;
     /** 聞き取りを中止する */
-    readonly stop: StopInterview;
+    readonly stop: StopInterviewCommand;
 }
 
 /**
@@ -5363,7 +5363,7 @@ export type HearInterviewUnavailable = CommandUnavailable<'Collaboration.Intervi
 export type HearInterviewFromAnyState = (
     interview: Interview,
     params: HearInterviewParams,
-) => ReturnType<HearInterview> | Err<HearInterviewUnavailable>;
+) => ReturnType<HearInterviewCommand> | Err<HearInterviewUnavailable>;
 
 /**
  * Whether Interview.ask can be called on the interview in its state (Asking).
@@ -5384,7 +5384,7 @@ export type AskInterviewUnavailable = CommandUnavailable<'Collaboration.Intervie
 export type AskInterviewFromAnyState = (
     interview: Interview,
     params: AskInterviewParams,
-) => ReturnType<AskInterview> | Err<AskInterviewUnavailable>;
+) => ReturnType<AskInterviewCommand> | Err<AskInterviewUnavailable>;
 
 /**
  * Whether Interview.summarize can be called on the interview in its state (Asking).
@@ -5405,7 +5405,7 @@ export type SummarizeInterviewUnavailable = CommandUnavailable<'Collaboration.In
 export type SummarizeInterviewFromAnyState = (
     interview: Interview,
     params: SummarizeInterviewParams,
-) => ReturnType<SummarizeInterview> | Err<SummarizeInterviewUnavailable>;
+) => ReturnType<SummarizeInterviewCommand> | Err<SummarizeInterviewUnavailable>;
 
 /**
  * Whether Interview.confirm can be called on the interview in its state (Briefed).
@@ -5426,7 +5426,7 @@ export type ConfirmInterviewUnavailable = CommandUnavailable<'Collaboration.Inte
 export type ConfirmInterviewFromAnyState = (
     interview: Interview,
     params: ConfirmInterviewParams,
-) => ReturnType<ConfirmInterview> | Err<ConfirmInterviewUnavailable>;
+) => ReturnType<ConfirmInterviewCommand> | Err<ConfirmInterviewUnavailable>;
 
 /**
  * Whether Interview.reject can be called on the interview in its state (Briefed).
@@ -5447,7 +5447,7 @@ export type RejectInterviewUnavailable = CommandUnavailable<'Collaboration.Inter
 export type RejectInterviewFromAnyState = (
     interview: Interview,
     params: RejectInterviewParams,
-) => ReturnType<RejectInterview> | Err<RejectInterviewUnavailable>;
+) => ReturnType<RejectInterviewCommand> | Err<RejectInterviewUnavailable>;
 
 /**
  * Whether Interview.stop can be called on the interview in its state (Asking | Briefed).
@@ -5468,7 +5468,7 @@ export type StopInterviewUnavailable = CommandUnavailable<'Collaboration.Intervi
 export type StopInterviewFromAnyState = (
     interview: Interview,
     params: StopInterviewParams,
-) => ReturnType<StopInterview> | Err<StopInterviewUnavailable>;
+) => ReturnType<StopInterviewCommand> | Err<StopInterviewUnavailable>;
 
 /**
  * The commands of Interview that take the interview, for the interview in any state: make it with `anyStateInterviewCommands`.
@@ -6034,7 +6034,7 @@ export interface PlaceMarkParams {
  * @emits MarkPlaced — exactly once when the command succeeds
  * @see contexts/collaboration/model/mark.dt:81
  */
-export type PlaceMark = (
+export type PlaceMarkCommand = (
     params: PlaceMarkParams,
 ) => Result<{
     readonly Placed: {
@@ -6091,7 +6091,7 @@ export interface RemoveMarkParams {
  * @emits MarkRemoved — exactly once when the command succeeds
  * @see contexts/collaboration/model/mark.dt:98
  */
-export type RemoveMark = (
+export type RemoveMarkCommand = (
     mark: PlacedMark,
     params: RemoveMarkParams,
 ) => Result<{
@@ -6125,9 +6125,9 @@ export type RemoveMarkDecision = {
  */
 export interface MarkCommands {
     /** 印を付ける */
-    readonly place: PlaceMark;
+    readonly place: PlaceMarkCommand;
     /** 印を外す */
-    readonly remove: RemoveMark;
+    readonly remove: RemoveMarkCommand;
 }
 
 /**
@@ -6167,7 +6167,7 @@ export type RemoveMarkUnavailable = CommandUnavailable<'Collaboration.Mark', 're
 export type RemoveMarkFromAnyState = (
     mark: Mark,
     params: RemoveMarkParams,
-) => ReturnType<RemoveMark> | Err<RemoveMarkUnavailable>;
+) => ReturnType<RemoveMarkCommand> | Err<RemoveMarkUnavailable>;
 
 /**
  * The commands of Mark that take the mark, for the mark in any state: make it with `anyStateMarkCommands`.
@@ -6746,7 +6746,7 @@ export interface ProposeChangeProposalParams {
  * @emits ChangeProposed — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:91
  */
-export type ProposeChangeProposal = (
+export type ProposeChangeProposalCommand = (
     params: ProposeChangeProposalParams,
 ) => Result<{
     readonly Open: {
@@ -6800,7 +6800,7 @@ export interface ApproveChangeProposalParams {
  * @emits ProposalApproved — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:98
  */
-export type ApproveChangeProposal = (
+export type ApproveChangeProposalCommand = (
     changeProposal: OpenChangeProposal,
     params: ApproveChangeProposalParams,
 ) => Result<{
@@ -6862,7 +6862,7 @@ export interface RejectChangeProposalParams {
  * @emits ProposalRejected — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:110
  */
-export type RejectChangeProposal = (
+export type RejectChangeProposalCommand = (
     changeProposal: OpenChangeProposal,
     params: RejectChangeProposalParams,
 ) => Result<{
@@ -6918,7 +6918,7 @@ export interface WithdrawChangeProposalParams {
  * @emits ProposalWithdrawn — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:119
  */
-export type WithdrawChangeProposal = (
+export type WithdrawChangeProposalCommand = (
     changeProposal: OpenChangeProposal,
     params: WithdrawChangeProposalParams,
 ) => Result<{
@@ -6962,13 +6962,13 @@ export function checkWithdrawChangeProposalRequires(changeProposal: OpenChangePr
  */
 export interface ChangeProposalCommands {
     /** 変更案を書く */
-    readonly propose: ProposeChangeProposal;
+    readonly propose: ProposeChangeProposalCommand;
     /** 変更案を承認する */
-    readonly approve: ApproveChangeProposal;
+    readonly approve: ApproveChangeProposalCommand;
     /** 変更案を却下する */
-    readonly reject: RejectChangeProposal;
+    readonly reject: RejectChangeProposalCommand;
     /** 変更案を取り下げる */
-    readonly withdraw: WithdrawChangeProposal;
+    readonly withdraw: WithdrawChangeProposalCommand;
 }
 
 /**
@@ -7010,7 +7010,7 @@ export type ApproveChangeProposalUnavailable = CommandUnavailable<'Collaboration
 export type ApproveChangeProposalFromAnyState = (
     changeProposal: ChangeProposal,
     params: ApproveChangeProposalParams,
-) => ReturnType<ApproveChangeProposal> | Err<ApproveChangeProposalUnavailable>;
+) => ReturnType<ApproveChangeProposalCommand> | Err<ApproveChangeProposalUnavailable>;
 
 /**
  * Whether ChangeProposal.reject can be called on the changeProposal in its state (Open).
@@ -7031,7 +7031,7 @@ export type RejectChangeProposalUnavailable = CommandUnavailable<'Collaboration.
 export type RejectChangeProposalFromAnyState = (
     changeProposal: ChangeProposal,
     params: RejectChangeProposalParams,
-) => ReturnType<RejectChangeProposal> | Err<RejectChangeProposalUnavailable>;
+) => ReturnType<RejectChangeProposalCommand> | Err<RejectChangeProposalUnavailable>;
 
 /**
  * Whether ChangeProposal.withdraw can be called on the changeProposal in its state (Open).
@@ -7052,7 +7052,7 @@ export type WithdrawChangeProposalUnavailable = CommandUnavailable<'Collaboratio
 export type WithdrawChangeProposalFromAnyState = (
     changeProposal: ChangeProposal,
     params: WithdrawChangeProposalParams,
-) => ReturnType<WithdrawChangeProposal> | Err<WithdrawChangeProposalUnavailable>;
+) => ReturnType<WithdrawChangeProposalCommand> | Err<WithdrawChangeProposalUnavailable>;
 
 /**
  * The commands of ChangeProposal that take the changeProposal, for the changeProposal in any state: make it with `anyStateChangeProposalCommands`.
@@ -7715,7 +7715,7 @@ export interface WriteSessionRecordParams {
  * @emits RecordWritten — exactly once when the command succeeds
  * @see contexts/collaboration/model/record.dt:140
  */
-export type WriteSessionRecord = (
+export type WriteSessionRecordCommand = (
     params: WriteSessionRecordParams,
 ) => Result<{
     readonly Written: {
@@ -7758,7 +7758,7 @@ export interface ReviseSessionRecordParams {
  * @emits RecordRevised — exactly once when the command succeeds
  * @see contexts/collaboration/model/record.dt:146
  */
-export type ReviseSessionRecord = (
+export type ReviseSessionRecordCommand = (
     sessionRecord: WrittenSessionRecord,
     params: ReviseSessionRecordParams,
 ) => Result<{
@@ -7792,9 +7792,9 @@ export type ReviseSessionRecordDecision = {
  */
 export interface SessionRecordCommands {
     /** 記録する */
-    readonly write: WriteSessionRecord;
+    readonly write: WriteSessionRecordCommand;
     /** 記録を書き足す */
-    readonly revise: ReviseSessionRecord;
+    readonly revise: ReviseSessionRecordCommand;
 }
 
 /**
@@ -7834,7 +7834,7 @@ export type ReviseSessionRecordUnavailable = never;
 export type ReviseSessionRecordFromAnyState = (
     sessionRecord: SessionRecord,
     params: ReviseSessionRecordParams,
-) => ReturnType<ReviseSessionRecord> | Err<ReviseSessionRecordUnavailable>;
+) => ReturnType<ReviseSessionRecordCommand> | Err<ReviseSessionRecordUnavailable>;
 
 /**
  * The commands of SessionRecord that take the sessionRecord, for the sessionRecord in any state: make it with `anyStateSessionRecordCommands`.
@@ -8351,7 +8351,7 @@ export interface SendRequestParams {
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:125
  */
-export type SendRequest = (
+export type SendRequestCommand = (
     params: SendRequestParams,
 ) => Result<{
     readonly Sent: {
@@ -8422,7 +8422,7 @@ export interface RequestRevertRequestParams {
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:138
  */
-export type RequestRevertRequest = (
+export type RequestRevertRequestCommand = (
     params: RequestRevertRequestParams,
 ) => Result<{
     readonly Sent: {
@@ -8482,7 +8482,7 @@ export interface RecordEditRequestParams {
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:147
  */
-export type RecordEditRequest = (
+export type RecordEditRequestCommand = (
     params: RecordEditRequestParams,
 ) => Result<{
     readonly Sent: {
@@ -8534,7 +8534,7 @@ export interface AnswerRequestParams {
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:155
  */
-export type AnswerRequest = (
+export type AnswerRequestCommand = (
     params: AnswerRequestParams,
 ) => Result<{
     readonly Sent: {
@@ -8578,7 +8578,7 @@ export interface RedactRequestParams {
  * @emits RequestRedacted — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:162
  */
-export type RedactRequest = <S extends SentRequest | DismissedRequest>(
+export type RedactRequestCommand = <S extends SentRequest | DismissedRequest>(
     request: S,
     params: RedactRequestParams,
 ) => {
@@ -8630,15 +8630,15 @@ export type RedactRequestDecision = {
  */
 export interface RequestCommands {
     /** 依頼を送る */
-    readonly send: SendRequest;
+    readonly send: SendRequestCommand;
     /** 打ち消しを頼む */
-    readonly requestRevert: RequestRevertRequest;
+    readonly requestRevert: RequestRevertRequestCommand;
     /** 付箋の手直しを記録する */
-    readonly recordEdit: RecordEditRequest;
+    readonly recordEdit: RecordEditRequestCommand;
     /** AI が答える */
-    readonly answer: AnswerRequest;
+    readonly answer: AnswerRequestCommand;
     /** 墨消しする */
-    readonly redact: RedactRequest;
+    readonly redact: RedactRequestCommand;
 }
 
 /**
@@ -8678,7 +8678,7 @@ export type RedactRequestUnavailable = never;
 export type RedactRequestFromAnyState = (
     request: Request,
     params: RedactRequestParams,
-) => ReturnType<RedactRequest> | Err<RedactRequestUnavailable>;
+) => ReturnType<RedactRequestCommand> | Err<RedactRequestUnavailable>;
 
 /**
  * The commands of Request that take the request, for the request in any state: make it with `anyStateRequestCommands`.
@@ -9225,7 +9225,7 @@ export interface TakeRevisionParams {
  * @emits RevisionRecorded — exactly once when the command succeeds
  * @see contexts/collaboration/model/revision.dt:69
  */
-export type TakeRevision = (
+export type TakeRevisionCommand = (
     params: TakeRevisionParams,
 ) => Result<{
     readonly Recorded: {
@@ -9304,7 +9304,7 @@ export interface RestoreRevisionParams {
  * @emits RevisionRestored — exactly once when the command succeeds
  * @see contexts/collaboration/model/revision.dt:79
  */
-export type RestoreRevision = (
+export type RestoreRevisionCommand = (
     params: RestoreRevisionParams,
 ) => Result<{
     readonly Recorded: {
@@ -9356,9 +9356,9 @@ export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclared
  */
 export interface RevisionCommands {
     /** スナップショットを取る */
-    readonly take: TakeRevision;
+    readonly take: TakeRevisionCommand;
     /** リビジョンを復元する */
-    readonly restore: RestoreRevision;
+    readonly restore: RestoreRevisionCommand;
 }
 
 /**
@@ -9779,7 +9779,7 @@ export interface StartSessionParams {
  * @emits SessionStarted — exactly once when the command succeeds
  * @see contexts/collaboration/model/session.dt:46
  */
-export type StartSession = (
+export type StartSessionCommand = (
     params: StartSessionParams,
 ) => Result<{
     readonly Open: {
@@ -9826,7 +9826,7 @@ export interface JoinSessionParams {
  * @emits ParticipantJoined — exactly once when the command succeeds
  * @see contexts/collaboration/model/session.dt:52
  */
-export type JoinSession = (
+export type JoinSessionCommand = (
     session: OpenSession,
     params: JoinSessionParams,
 ) => Result<{
@@ -9882,7 +9882,7 @@ export interface CollaborateSessionParams {
  * @emits SessionCollaborated — exactly once when the command succeeds
  * @see contexts/collaboration/model/session.dt:60
  */
-export type CollaborateSession = (
+export type CollaborateSessionCommand = (
     session: OpenSession,
     params: CollaborateSessionParams,
 ) => Result<{
@@ -9941,7 +9941,7 @@ export interface ChooseJourneySessionParams {
  * @emits JourneyChosen — exactly once when the command succeeds
  * @see contexts/collaboration/model/session.dt:68
  */
-export type ChooseJourneySession = (
+export type ChooseJourneySessionCommand = (
     session: OpenSession,
     params: ChooseJourneySessionParams,
 ) => Result<{
@@ -9997,7 +9997,7 @@ export interface CloseSessionParams {
  * @emits SessionClosed — exactly once when the command succeeds
  * @see contexts/collaboration/model/session.dt:77
  */
-export type CloseSession = (
+export type CloseSessionCommand = (
     session: OpenSession,
     params: CloseSessionParams,
 ) => Result<{
@@ -10041,15 +10041,15 @@ export function checkCloseSessionRequires(_session: OpenSession, params: CloseSe
  */
 export interface SessionCommands {
     /** セッションを始める */
-    readonly start: StartSession;
+    readonly start: StartSessionCommand;
     /** 参加する */
-    readonly join: JoinSession;
+    readonly join: JoinSessionCommand;
     /** 共同編集にする */
-    readonly collaborate: CollaborateSession;
+    readonly collaborate: CollaborateSessionCommand;
     /** いまの道のりを決める */
-    readonly chooseJourney: ChooseJourneySession;
+    readonly chooseJourney: ChooseJourneySessionCommand;
     /** セッションを終える */
-    readonly close: CloseSession;
+    readonly close: CloseSessionCommand;
 }
 
 /**
@@ -10092,7 +10092,7 @@ export type JoinSessionUnavailable = CommandUnavailable<'Collaboration.Session',
 export type JoinSessionFromAnyState = (
     session: Session,
     params: JoinSessionParams,
-) => ReturnType<JoinSession> | Err<JoinSessionUnavailable>;
+) => ReturnType<JoinSessionCommand> | Err<JoinSessionUnavailable>;
 
 /**
  * Whether Session.collaborate can be called on the session in its state (Open).
@@ -10113,7 +10113,7 @@ export type CollaborateSessionUnavailable = CommandUnavailable<'Collaboration.Se
 export type CollaborateSessionFromAnyState = (
     session: Session,
     params: CollaborateSessionParams,
-) => ReturnType<CollaborateSession> | Err<CollaborateSessionUnavailable>;
+) => ReturnType<CollaborateSessionCommand> | Err<CollaborateSessionUnavailable>;
 
 /**
  * Whether Session.chooseJourney can be called on the session in its state (Open).
@@ -10134,7 +10134,7 @@ export type ChooseJourneySessionUnavailable = CommandUnavailable<'Collaboration.
 export type ChooseJourneySessionFromAnyState = (
     session: Session,
     params: ChooseJourneySessionParams,
-) => ReturnType<ChooseJourneySession> | Err<ChooseJourneySessionUnavailable>;
+) => ReturnType<ChooseJourneySessionCommand> | Err<ChooseJourneySessionUnavailable>;
 
 /**
  * Whether Session.close can be called on the session in its state (Open).
@@ -10155,7 +10155,7 @@ export type CloseSessionUnavailable = CommandUnavailable<'Collaboration.Session'
 export type CloseSessionFromAnyState = (
     session: Session,
     params: CloseSessionParams,
-) => ReturnType<CloseSession> | Err<CloseSessionUnavailable>;
+) => ReturnType<CloseSessionCommand> | Err<CloseSessionUnavailable>;
 
 /**
  * The commands of Session that take the session, for the session in any state: make it with `anyStateSessionCommands`.
@@ -11233,7 +11233,7 @@ export interface OpenTriageParams {
  * @emits TriageOpened — exactly once when the command succeeds
  * @see contexts/collaboration/model/triage.dt:108
  */
-export type OpenTriage = (
+export type OpenTriageCommand = (
     params: OpenTriageParams,
 ) => Result<{
     readonly Pending: {
@@ -11280,7 +11280,7 @@ export interface RecordTriageParams {
  * @outcome Decided: Pending -> Decided; select expression
  * @see contexts/collaboration/model/triage.dt:115
  */
-export type RecordTriage = (
+export type RecordTriageCommand = (
     triage: PendingTriage,
     params: RecordTriageParams,
 ) => Result<
@@ -11363,7 +11363,7 @@ export interface OverrideTriageParams {
  * @emits TriageOverridden — exactly once when the command succeeds
  * @see contexts/collaboration/model/triage.dt:141
  */
-export type OverrideTriage = (
+export type OverrideTriageCommand = (
     triage: DecidedTriage,
     params: OverrideTriageParams,
 ) => Result<{
@@ -11423,7 +11423,7 @@ export interface ReaddressTriageParams {
  * @emits TriageReaddressed — exactly once when the command succeeds
  * @see contexts/collaboration/model/triage.dt:151
  */
-export type ReaddressTriage = (
+export type ReaddressTriageCommand = (
     triage: DecidedTriage,
     params: ReaddressTriageParams,
 ) => Result<{
@@ -11482,7 +11482,7 @@ export interface ConcludeTriageParams {
  * @emits TriageConcluded — exactly once when the command succeeds
  * @see contexts/collaboration/model/triage.dt:161
  */
-export type ConcludeTriage = (
+export type ConcludeTriageCommand = (
     triage: DecidedTriage,
     params: ConcludeTriageParams,
 ) => Result<{
@@ -11528,15 +11528,15 @@ export function checkConcludeTriageRequires(triage: DecidedTriage, params: Concl
  */
 export interface TriageCommands {
     /** 仕分けを始める */
-    readonly open: OpenTriage;
+    readonly open: OpenTriageCommand;
     /** 段の答えを記録する */
-    readonly record: RecordTriage;
+    readonly record: RecordTriageCommand;
     /** 結論を訂正する */
-    readonly override: OverrideTriage;
+    readonly override: OverrideTriageCommand;
     /** AI に送り直す */
-    readonly readdress: ReaddressTriage;
+    readonly readdress: ReaddressTriageCommand;
     /** 行き先を記録する */
-    readonly conclude: ConcludeTriage;
+    readonly conclude: ConcludeTriageCommand;
 }
 
 /**
@@ -11579,7 +11579,7 @@ export type RecordTriageUnavailable = CommandUnavailable<'Collaboration.Triage',
 export type RecordTriageFromAnyState = (
     triage: Triage,
     params: RecordTriageParams,
-) => ReturnType<RecordTriage> | Err<RecordTriageUnavailable>;
+) => ReturnType<RecordTriageCommand> | Err<RecordTriageUnavailable>;
 
 /**
  * Whether Triage.override can be called on the triage in its state (Decided).
@@ -11600,7 +11600,7 @@ export type OverrideTriageUnavailable = CommandUnavailable<'Collaboration.Triage
 export type OverrideTriageFromAnyState = (
     triage: Triage,
     params: OverrideTriageParams,
-) => ReturnType<OverrideTriage> | Err<OverrideTriageUnavailable>;
+) => ReturnType<OverrideTriageCommand> | Err<OverrideTriageUnavailable>;
 
 /**
  * Whether Triage.readdress can be called on the triage in its state (Decided).
@@ -11621,7 +11621,7 @@ export type ReaddressTriageUnavailable = CommandUnavailable<'Collaboration.Triag
 export type ReaddressTriageFromAnyState = (
     triage: Triage,
     params: ReaddressTriageParams,
-) => ReturnType<ReaddressTriage> | Err<ReaddressTriageUnavailable>;
+) => ReturnType<ReaddressTriageCommand> | Err<ReaddressTriageUnavailable>;
 
 /**
  * Whether Triage.conclude can be called on the triage in its state (Decided).
@@ -11642,7 +11642,7 @@ export type ConcludeTriageUnavailable = CommandUnavailable<'Collaboration.Triage
 export type ConcludeTriageFromAnyState = (
     triage: Triage,
     params: ConcludeTriageParams,
-) => ReturnType<ConcludeTriage> | Err<ConcludeTriageUnavailable>;
+) => ReturnType<ConcludeTriageCommand> | Err<ConcludeTriageUnavailable>;
 
 /**
  * The commands of Triage that take the triage, for the triage in any state: make it with `anyStateTriageCommands`.

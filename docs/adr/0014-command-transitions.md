@@ -75,7 +75,7 @@ aggregate Work {
   implements the command from such handlers):
 
   ```ts
-  export type ChangeWork = <S extends DraftWork | InProgressWork>(
+  export type ChangeWorkCommand = <S extends DraftWork | InProgressWork>(
       work: S,
       title: Title,
   ) => Result<readonly [

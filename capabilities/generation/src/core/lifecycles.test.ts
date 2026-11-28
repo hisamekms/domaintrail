@@ -277,7 +277,7 @@ test('named requirement and choice expressions resolve fields of their source st
             path.join(dir, 'implementation.ts'),
             `import * as X from './X.js';
 import { decideNamed, ok } from './_runtime.js';
-export const finish: X.FinishRun = decideNamed<X.FinishRunDecision>()(
+export const finish: X.FinishRunCommand = decideNamed<X.FinishRunDecision>()(
     X.RunShape,
     { finished: 'Done', unchanged: 'Running' },
     (run, params) => params.resultRevision === run.baseRevision
