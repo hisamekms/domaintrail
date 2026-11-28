@@ -37,7 +37,7 @@ import { BOOL, COMPUTED_INT, ERROR, basePrimitive, isBool, isDomainPrimitive, is
 export interface ExpressionFact {
     expression: Expr;
     type?: Ty;
-    comparison?: 'primitive' | 'domainPrimitive' | 'entityId' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
+    comparison?: 'primitive' | 'domainPrimitive' | 'entityStructural' | 'valueObjectStructural' | 'unionStructural' | 'ordered' | 'enumValue' | 'notComparable';
     symbol?: {
         kind:
             | 'field'
@@ -1369,7 +1369,7 @@ class ExprChecker {
 function comparisonKind(l: Ty, r: Ty, ordering: boolean): NonNullable<ExpressionFact['comparison']> {
     if (ordering) return 'ordered';
     if (l.k === 'tag' && r.k === 'tag') return 'enumValue';
-    if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityId' : 'valueObjectStructural';
+    if (l.k === 'struct' && r.k === 'struct' && l.decl === r.decl) return l.decl.kind === 'entity' ? 'entityStructural' : 'valueObjectStructural';
     if (l.k === 'union' && r.k === 'union' && l.decl === r.decl) return 'unionStructural';
     if (l.k === 'enum' && r.k === 'enum') return 'enumValue';
     if (isDomainPrimitive(l) || isDomainPrimitive(r)) return 'domainPrimitive';

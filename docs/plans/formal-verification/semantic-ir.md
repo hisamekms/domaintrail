@@ -106,8 +106,9 @@ syntax for diagnostics. Scope facts cover aggregate, state, kind, command/case, 
 parameters, and lambda bindings. In particular, command parameters are inputs and are not implicitly bound to fields of
 the same name.
 
-Record comparison kind per expression occurrence: entity identity by ID, structural value-object equality, union tag and
-fields, or not comparable. Record optional presence facts at edges, with current true-edge behavior. A presence fact's
+Record comparison kind per expression occurrence: structural owned-entity equality (`entityStructural`, all fields as
+ADR 0042 decides), structural value-object equality, union tag and fields, or not comparable. Record optional
+presence facts at edges, with current true-edge behavior. A presence fact's
 `path` is the checker's guard path key used to narrow the expression at that edge; it is resolved in the scope of that
 expression and holds for everything below it. It is ambiguous when a lambda inside the expression rebinds the path's
 first
@@ -165,8 +166,9 @@ Migration steps and regressions:
    context receivers take theirs from the symbol; a union's tag has an IR type `{ name: <union>, tag: true }`).
    Progress (step 3c, done): the compiler's cases produce JavaScript only; types come from the IR alone (`fieldTy`
    remains for the generated equality functions over declared fields).
-   Progress (step 3d, done): `==`/`!=` choose the equality from the IR's comparison fact (structural and entity ID
-   kinds call the element's equality function; the others compare scalars).
+   Progress (step 3d, done): `==`/`!=` choose the equality from the IR's comparison fact (the structural kinds,
+   owned entities' among them, call the element's equality function; the others compare scalars). The entity kind was
+   `entityId` until owned entities compared structurally (ADR 0042); it is now `entityStructural`.
    Progress (step 3e, done): the checker runs once. `analyzeDomain` keeps the expression facts it recorded, and
    `semanticIROf(analysis)` builds the IR from them without checking again.
    Applicability (step 3, closed): the generator keeps the shared Modeling helpers (`applicableOutcomes`,

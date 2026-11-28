@@ -9656,7 +9656,7 @@ export type MakeActiveSession = (value: SessionId) => Promise<Result<ActiveSessi
 
 /**
  * Fields shared by every state of セッション (Session).
- * @invariant distinctParticipants (参加者は1人1回): participants.unique()
+ * @invariant distinctParticipants (参加者は1人1回): participants.unique(p => p.id)
  * @invariant facilitatorListed (ファシリテーターは参加者の1人): participants.some(p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
  * @invariant soleFacilitator (ファシリテーターは1人): participants.every(p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
  * @see contexts/collaboration/model/session.dt:23
@@ -9724,7 +9724,7 @@ export const SessionShape: Shape = {
  */
 export function checkSessionCommon(session: SessionCommon): readonly ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] {
     const violated: ('distinctParticipants' | 'facilitatorListed' | 'soleFacilitator')[] = [];
-    if (!(distinct(session.participants, equalParticipant))) violated.push('distinctParticipants');
+    if (!(distinct(session.participants, (p, p2) => p.id === p2.id))) violated.push('distinctParticipants');
     if (!(session.participants.some((p) => (p.id === session.facilitator) && (p.role === 'Facilitator')))) violated.push('facilitatorListed');
     if (!(session.participants.every((p) => !(p.role === 'Facilitator') || (p.id === session.facilitator)))) violated.push('soleFacilitator');
     return violated;
@@ -10200,11 +10200,11 @@ export interface Participant {
 }
 
 /**
- * Whether two Participant are the same entity: by `id` (ADR 0016).
+ * Whether two Participant values are equal: by all their fields (ADR 0042).
  * @see contexts/collaboration/model/session.dt:86
  */
 export function equalParticipant(a: Participant, b: Participant): boolean {
-    return a.id === b.id;
+    return a.id === b.id && a.name === b.name && a.role === b.role && a.joinedAt === b.joinedAt;
 }
 
 /**

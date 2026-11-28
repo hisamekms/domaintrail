@@ -923,7 +923,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
   object and use it as the key.
 - `c.includes(x)`: `x` is an element of `c`. A subset is written with `every`: `required.every(s => confirmed.includes(s))`.
 - Equality — `==`, `!=`, `unique` and `includes` compare alike: primitives and domain primitives by value, enum
-  values by name, value objects by all their fields, entities by `id`, union values by discriminator and fields.
+  values by name, value objects and owned entities by all their fields (an entity's `id` among them), references
+  (IDs) by value, union values by discriminator and fields. To compare entities by identity, compare their IDs:
+  `a.id == b.id`, `lines.unique(l => l.id)`, `lines.some(l => l.id == line.id)`.
   Both sides must be of the same type (domain primitives also compare with literals, and over `Int` or `Decimal` with
   `.length`, also in `<`, `<=`, `>`, `>=` and ranges); collections and optional values cannot be
   compared (compare an optional with null first: `x != null && …`).

@@ -12,6 +12,7 @@ import {
     generationGateDiagnostics,
     hasExternalObligations,
     migrateDomain,
+    migrateEntityComparisons,
 } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
@@ -635,7 +636,9 @@ Examples:
 The expression syntax of DomainTrail is moving to a TS-like one (docs/plans/formal-verification/language-revision.md).
 This rewrites the constructs that have a new spelling with the same meaning, and nothing else: comments and layout
 stay, parentheses are added only where the meaning needs them (\`p implies q\` becomes \`!(p) || q\`), and a second
-run changes nothing. A file that does not parse is listed and left as it is.
+run changes nothing. Owned entities now compare by all their fields (ADR 0042), so a comparison of owned entities is
+rewritten to the \`id\` it compared: \`a == b\` → \`a.id == b.id\`, \`xs.unique()\` → \`xs.unique(x => x.id)\`, and
+\`xs.includes(e)\` → \`xs.some(x => x.id == e.id)\`. A file that does not parse is listed and left as it is.
 Exits 0 when every file was migrated, 1 when a file does not parse or no .dt file is found, 2 on an invalid config.
 
 Examples:
@@ -675,16 +678,27 @@ Examples:
             );
             const chosen = new Set(entries.map((e) => e.path));
             let listed = 0;
+            /** Whether a file was unchanged before this step's rewrite: it is then one more changed file. */
+            const unchanged = async (file: string): Promise<boolean> => !migrated.has(file) || migrated.get(file) === (await readFile(file, 'utf8'));
             for (const done of completeChanges(await analyzeDomain(sources))) {
                 if (!chosen.has(done.path)) continue;
                 for (const a of done.added) io.out(`${done.path}:${a.line} - outcome ${a.outcome}: changes ${a.changes}`);
                 listed += done.added.length;
-                if (
-                    !migrated.has(path.join(cfg.root, done.path)) ||
-                    migrated.get(path.join(cfg.root, done.path)) === (await readFile(path.join(cfg.root, done.path), 'utf8'))
-                )
-                    changed++;
-                if (!opts.dryRun) await writeFile(path.join(cfg.root, done.path), done.text);
+                const file = path.join(cfg.root, done.path);
+                if (await unchanged(file)) changed++;
+                migrated.set(file, done.text);
+                if (!opts.dryRun) await writeFile(file, done.text);
+            }
+            // ADR 0042: owned entities compare by all their fields; the comparisons written for `id` say so
+            const completed = sources.map((s) => ({ path: s.path, text: migrated.get(path.join(cfg.root, s.path)) ?? s.text }));
+            for (const done of migrateEntityComparisons(await analyzeDomain(completed))) {
+                if (!chosen.has(done.path)) continue;
+                for (const r of done.rewrites) io.out(`${done.path}:${r.line} - ${r.from} → ${r.to}`);
+                rewritten += done.rewrites.length;
+                const file = path.join(cfg.root, done.path);
+                if (await unchanged(file)) changed++;
+                migrated.set(file, done.text);
+                if (!opts.dryRun) await writeFile(file, done.text);
             }
             io.out(
                 `${entries.length} file(s): ${rewritten} construct(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'}, ${listed} outcome(s) ${opts.dryRun ? 'to complete' : 'completed'} in 'changes', in ${changed} file(s), ${unparsed} not parsed.`,

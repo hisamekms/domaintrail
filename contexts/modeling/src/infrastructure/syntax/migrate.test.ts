@@ -2,7 +2,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { ExprModel } from '../../domain/model.js';
 import { analyzeDomain } from '../../application/analyze.js';
-import { migrateDomain } from './migrate.js';
+import { migrateDomain, migrateEntityComparisons } from './migrate.js';
 
 const model = (expr: string) => `context L {\n  value V {\n    p: Bool  q: Bool  r: Bool  s: Bool  a: Int  b: Int\n    invariant x { ${expr} }\n  }\n}\n`;
 
@@ -144,4 +144,74 @@ describe('migrateDomain: null safety', () => {
             expect(await invariantOf(opt(next))).toEqual(await invariantOf(opt(old)));
             expect(migrateDomain(migrateDomain(opt(old)).text).rewrites).toEqual([]);
         });
+});
+
+describe('migrateEntityComparisons: owned entities compared by id (ADR 0042)', () => {
+    const shop = (body: string) => `context S {
+  id OrderId: UUID
+  id LineId: UUID
+  value Money { amount: Decimal(2) }
+  entity Line {
+    id: LineId
+    price: Money
+  }
+  aggregate Order {
+    id: OrderId
+    owns lines: Line[0..*]
+    owns first: Line
+    owns second: Line
+    flag: Bool
+    ${body}
+    command add(line: Line) requires fresh { !(lines.includes(line)) } else Duplicate changes lines = [...before.lines, line]
+  }
+  error Duplicate
+}
+`;
+    const errors = async (text: string) =>
+        (await analyzeDomain([{ path: 's.dt', text }])).diagnostics.filter((d) => d.severity === 'error').map((d) => d.message);
+    const run = async (text: string) => migrateEntityComparisons(await analyzeDomain([{ path: 's.dt', text }]));
+    /** The migrated source (the command's requirement is rewritten too) and its invariant. */
+    const out = async (expr: string): Promise<{ text: string; expr: string }> => {
+        const text = (await run(shop(`invariant x { ${expr} }`)))[0]!.text;
+        return { text, expr: text.slice(text.indexOf('invariant x { ') + 'invariant x { '.length, text.indexOf(' }\n    command')) };
+    };
+    const cases: (readonly [string, string])[] = [
+        ['first == second', 'first.id == second.id'],
+        ['first != second', 'first.id != second.id'],
+        ['first == (flag ? first : second)', 'first.id == (flag ? first : second).id'],
+        ['lines.unique()', 'lines.unique(l => l.id)'],
+        ['lines.unique(l => l.price, l)', 'lines.unique(l => l.price, l.id)'],
+        ['lines.includes(first)', 'lines.some(l => l.id == first.id)'],
+        ['lines.every(l => lines.includes(l))', 'lines.every(l => lines.some(x => x.id == l.id))'],
+        ['lines.every(x => x != first) && lines.some(l => l == second)', 'lines.every(x => x.id != first.id) && lines.some(l => l.id == second.id)'],
+        // value objects and IDs keep their equality
+        ['first.price == second.price', 'first.price == second.price'],
+        ['first.id == second.id', 'first.id == second.id'],
+        ['lines.unique(l => l.price)', 'lines.unique(l => l.price)'],
+        ['lines.every(l => l.id != first.id)', 'lines.every(l => l.id != first.id)'],
+    ];
+    for (const [old, next] of cases)
+        test(`${old} → ${next}`, async () => {
+            const migrated = await out(old);
+            expect(migrated.expr).toBe(next);
+            expect(await errors(migrated.text)).toEqual([]);
+            expect(await run(migrated.text)).toEqual([]);
+        });
+
+    test("a command's requirement, with comments and layout kept, and a report line per rewrite", async () => {
+        const src = shop(`invariant x {\n      first == second // same line\n      && lines.unique()\n    }`);
+        const [done] = await run(src);
+        expect(done!.text).toContain('requires fresh { !(lines.some(l => l.id == line.id)) }');
+        expect(done!.text).toContain('invariant x {\n      first.id == second.id // same line\n      && lines.unique(l => l.id)\n    }');
+        expect(done!.rewrites).toEqual([
+            { line: 16, from: 'a == b', to: 'a.id == b.id' },
+            { line: 17, from: 'xs.unique()', to: 'xs.unique(l => l.id)' },
+            { line: 19, from: 'xs.includes(e)', to: 'xs.some(l => l.id == e.id)' },
+        ]);
+        expect(await run(done!.text)).toEqual([]);
+    });
+
+    test('a source without entity comparisons is not listed', async () => {
+        expect(await run(shop('invariant x { first.price == second.price }').replace('!(lines.includes(line))', 'true'))).toEqual([]);
+    });
 });

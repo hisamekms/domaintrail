@@ -492,7 +492,7 @@ exports[`dt generate ts of examples/shop the contents of each file: generated/do
 
 import type { Availability, CommandUnavailable, Err, NoEvents, Result, Shape, Timestamp } from './_runtime.js';
 import { availableCommands, distinct, err, fromAnyState, isAvailable, ok } from './_runtime.js';
-import type * as Common from './Common.js';
+import * as Common from './Common.js';
 
 /**
  * 顧客ID
@@ -1531,11 +1531,11 @@ export interface OrderItem {
 }
 
 /**
- * Whether two OrderItem are the same entity: by \`id\` (ADR 0016).
+ * Whether two OrderItem values are equal: by all their fields (ADR 0042).
  * @see sales/order.dt:76
  */
 export function equalOrderItem(a: OrderItem, b: OrderItem): boolean {
-    return a.id === b.id;
+    return a.id === b.id && a.sku === b.sku && a.quantity === b.quantity && Common.equalMoney(a.unitPrice, b.unitPrice);
 }
 
 /**

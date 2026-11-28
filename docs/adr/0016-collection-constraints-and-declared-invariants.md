@@ -33,13 +33,18 @@ constructs that compute values.
 - entities by `id`;
 - union values by discriminator and fields.
 
+(Amended by [ADR 0042](0042-language-revision-and-ensures.md): owned entities compare structurally, by all their
+fields, like value objects; references to aggregates still compare by ID. `unique` and `includes` follow `==`.
+`dt migrate domain` rewrites the comparisons of owned entities written before to the `id` they meant: `a == b` →
+`a.id == b.id`, `xs.unique()` → `xs.unique(x => x.id)`, `xs.includes(e)` → `xs.some(x => x.id == e.id)`.)
+
 Both sides must have the same type. Collections and optional values are not equatable, as before. This is a contract
 for code that checks the invariants; the type rules do not change.
 
 ### `unique`
 
 ```dt
-unique(keys)                                         // the elements are distinct (entities: by id)
+unique(keys)                                         // the elements are distinct (entities: by id; ADR 0042: all fields)
 unique(lines, l => l.sku)
 unique(confirmations, c => c.scenario, c.reviewer)  // the combination is distinct
 ```

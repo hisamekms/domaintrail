@@ -370,11 +370,11 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             nodes.flatMap((node) => [node, ...flatten(node.children)]);
         const nodes = flatten(ir.expressions);
         expect(nodes.filter((node) => node.comparison).map((node) => node.comparison)).toEqual([
-            'entityId',
+            'entityStructural',
             'valueObjectStructural',
             'unionStructural',
             'ordered',
-            'entityId',
+            'entityStructural',
         ]);
     });
     test('projects optional presence facts on guarded right operands, on both edges', async () => {
