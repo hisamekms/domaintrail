@@ -290,16 +290,16 @@ context Names {
   aggregate Box {
     id: BoxId
     items: Item[0..*]
-    invariant shadow { all(items, box => box.count > 0) }
-    invariant reserved { all(items, enum => all(items, function => enum.name != function.name || enum == function)) }
-    invariant imported { !(any(items, distinct => distinct.count > 0)) || unique(items, Common => Common.name) }
-    invariant same { all(items, item => any(items, item => item.count > 0)) }
-    invariant pair { unique(items, item => item.name) }
-    invariant quoted { all(items, checks => checks.name != "it's \\"q\\"\\\\") }
+    invariant shadow { items.every(box => box.count > 0) }
+    invariant reserved { items.every(enum => items.every(function => enum.name != function.name || enum == function)) }
+    invariant imported { !(items.some(distinct => distinct.count > 0)) || items.unique(Common => Common.name) }
+    invariant same { items.every(item => items.some(item => item.count > 0)) }
+    invariant pair { items.unique(item => item.name) }
+    invariant quoted { items.every(checks => checks.name != "it's \\"q\\"\\\\") }
     state Open
     create command make(id: BoxId) -> Open
     command add(item: Item, item2: Item?) Open -> Open
-      requires fresh { all(items, item => item.name != "x") } else Dup
+      requires fresh { items.every(item => item.name != "x") } else Dup
       requires counted { !(exists(item2)) || item2.count > 0 } else Dup
       changes items
   }

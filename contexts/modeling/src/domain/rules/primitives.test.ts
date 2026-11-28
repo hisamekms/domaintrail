@@ -62,7 +62,7 @@ describe('domain primitive declarations', () => {
     });
 
     test('regular expressions are taken literally and checked', async () => {
-        const a = await checkSales(String.raw`primitive Code: String { matches(value, "\d+\"x") } primitive Bad: String { value.matches("([a-z") }`);
+        const a = await checkSales(String.raw`primitive Code: String { value.matches("\d+\"x") } primitive Bad: String { value.matches("([a-z") }`);
         const [d, ...rest] = only(a, 'M009');
         expect(rest).toEqual([]); // "\d+\"x" is a valid pattern: backslashes are not string escapes
         expect(d.message).toContain('Invalid regular expression'); // wording depends on the JS engine

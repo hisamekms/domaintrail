@@ -7,7 +7,7 @@ import { check, generateFromAnalysis, only } from '../test-helpers.js';
 const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {
   id CustomerId: UUID
   id TenantId: UUID
-  primitive EmailAddress: String { matches(value, "^[^@]+@[^@]+$") }
+  primitive EmailAddress: String { value.matches("^[^@]+@[^@]+$") }
   value Spend {
     amount: Decimal
   }
