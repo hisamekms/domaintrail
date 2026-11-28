@@ -11,7 +11,7 @@ const SITE = `
   aggregate Site {
     id: SiteId
     name: String
-    invariant named { length(name) > 0 }
+    invariant named { name.length > 0 }
     state Active
     state Paused
     command suspend()
@@ -70,9 +70,9 @@ describe('aggregate kinds (ADR 0037)', () => {
     });
 
     test('a kind field is in scope only inside its kind', async () => {
-        const a = await checkSales(SITE.replace('invariant named { length(name) > 0 }', 'invariant named { length(name) > 0 and dockCount > 0 }'));
+        const a = await checkSales(SITE.replace('invariant named { name.length > 0 }', 'invariant named { name.length > 0 && dockCount > 0 }'));
         expect(messages(a, 'M010')).toEqual(["Field 'dockCount' exists only in kind 'Center' and is not in scope here."]);
-        const other = await checkSales(SITE.replace('requires fewDocks { dockCount < 50 }', 'requires fewDocks { length(closingTime) < 50 }'));
+        const other = await checkSales(SITE.replace('requires fewDocks { dockCount < 50 }', 'requires fewDocks { closingTime.length < 50 }'));
         expect(messages(other, 'M010')).toEqual(["Field 'closingTime' exists only in kind 'Store' and is not in scope here."]);
     });
 

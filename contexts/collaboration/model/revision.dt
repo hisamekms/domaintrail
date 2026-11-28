@@ -60,7 +60,7 @@ context Collaboration {
     owns validation: ValidationSummary "検証の要約"
     takenAt: Timestamp "取得日時"
 
-    invariant distinctPaths "パスは1ファイル1回" { unique(files, f => f.path) }
+    invariant distinctPaths "パスは1ファイル1回" { files.unique(f => f.path) }
     /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
     invariant hashOfFiles "内容ハッシュはファイルから決まる" @externalCheck("内容ハッシュをファイル内容から再計算する")
 

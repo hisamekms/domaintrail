@@ -36,7 +36,7 @@ describe('dt show', () => {
         expect(r.out).toContain('  owns items: OrderItem[0..*] "明細"');
         expect(r.out).toContain('  references customer: CustomerId -> Customer "顧客" (from type)');
         expect(r.out).toContain('  note: String? "備考" (from term)');
-        expect(r.out).toContain('  invariant distinctSkus "商品コードは明細ごとに一意" { unique(items, item => item.sku) }');
+        expect(r.out).toContain('  invariant distinctSkus "商品コードは明細ごとに一意" { items.unique(item => item.sku) }');
         expect(r.out).toContain('  state Cancelled "取消済み"  // sales/order.dt:37');
         expect(r.out).toContain('    reason: CancelReason "取消理由" (from term)');
         expect(r.out).toContain(
@@ -75,7 +75,7 @@ describe('dt show', () => {
         expect(r.out).toEqual([
             'command Sales.Order.confirm(at: Timestamp "日時" (from term)) "注文を確定する"  // sales/order.dt:51',
             '  Draft -> Confirmed',
-            '  requires hasItems "明細が1件以上" { count(items) > 0 } else EmptyOrder',
+            '  requires hasItems "明細が1件以上" { items.length > 0 } else EmptyOrder',
             '  emits OrderConfirmed',
             '  outcomes',
             '    Draft -> Confirmed: emits OrderConfirmed',
@@ -98,7 +98,7 @@ describe('dt show', () => {
             'state Sales.Order.Confirmed "確定済み"  // sales/order.dt:32',
             '  /// 顧客が注文を確定した日時。キャンセル可否の判定に使う。',
             '  confirmedAt: Timestamp "確定日時" (from term)',
-            '  invariant hasItems "明細が1件以上" { count(items) > 0 }',
+            '  invariant hasItems "明細が1件以上" { items.length > 0 }',
             '  common fields of Order: id, items, customer, note',
             '  entered by: confirm (Draft -> Confirmed), changeNote (Confirmed -> Confirmed)',
             '  left by: cancel (Confirmed -> Cancelled), changeNote (Confirmed -> Confirmed)',
@@ -257,7 +257,7 @@ describe('dt show --format json', () => {
     test('a command, a state, a context and the overview', async () => {
         const command = await json('Order.confirm');
         expect(command).toMatchObject({ show: 'command', aggregate: 'Sales.Order', command: { name: 'confirm', errors: ['Sales.EmptyOrder'] } });
-        expect(command.command.requires).toEqual([{ name: 'hasItems', label: '明細が1件以上', source: 'count(items) > 0', error: 'Sales.EmptyOrder' }]);
+        expect(command.command.requires).toEqual([{ name: 'hasItems', label: '明細が1件以上', source: 'items.length > 0', error: 'Sales.EmptyOrder' }]);
         const state = await json('Order.Draft');
         expect(state.show).toBe('state');
         expect(state.enteredBy).toContainEqual({ command: 'place', to: 'Draft' });

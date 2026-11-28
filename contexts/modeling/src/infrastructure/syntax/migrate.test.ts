@@ -84,3 +84,43 @@ describe('migrateDomain: logical operators', () => {
         expect(migrateDomain('context {')).toEqual({ text: 'context {', rewrites: [], parsed: false });
     });
 });
+
+/** `count(xs)` and `xs.length` are one expression now: the size of a list is `length` as that of a string is. */
+function sized(e: ExprModel): ExprModel {
+    return JSON.parse(JSON.stringify(e), (_, v: unknown) =>
+        v && typeof v === 'object' && (v as { k?: string }).k === 'count' ? { k: 'length', operand: (v as { collection: unknown }).collection } : v,
+    ) as ExprModel;
+}
+
+describe('migrateDomain: method forms', () => {
+    const list = (expr: string) =>
+        `context L {\n  value I { n: Int  s: String }\n  value V {\n    xs: I[0..*]  ns: Int[0..*]  t: String  a: Int  b: Int\n    invariant x { ${expr} }\n  }\n}\n`;
+    const out = (expr: string): string => {
+        const text = migrateDomain(list(expr)).text;
+        return text.slice(text.indexOf('invariant x { ') + 'invariant x { '.length, text.lastIndexOf(' }\n  }'));
+    };
+    const cases: (readonly [string, string])[] = [
+        ['count(xs) > 0', 'xs.length > 0'],
+        ['length(t) <= 8', 't.length <= 8'],
+        ['all(xs, i => i.n > 0)', 'xs.every(i => i.n > 0)'],
+        ['any(xs, i => length(i.s) > 0)', 'xs.some(i => i.s.length > 0)'],
+        ['contains(ns, a)', 'ns.includes(a)'],
+        ['unique(xs)', 'xs.unique()'],
+        ['unique(xs, i => i.n, i.s)', 'xs.unique(i => i.n, i.s)'],
+        ['matches(t, "^[A-Z]+$")', 't.matches("^[A-Z]+$")'],
+        ['count((xs)) > 0', '(xs).length > 0'],
+        ['all(xs, i => all(xs, j => i.n >= j.n)) && count(xs) > 1', 'xs.every(i => xs.every(j => i.n >= j.n)) && xs.length > 1'],
+    ];
+    for (const [old, next] of cases)
+        test(`${old} → ${next}`, async () => {
+            expect(out(old)).toBe(next);
+            expect(await invariantOf(list(next))).toEqual(sized(await invariantOf(list(old))));
+            const once = migrateDomain(list(old)).text;
+            expect(migrateDomain(once).rewrites).toEqual([]);
+        });
+});
+
+test('a function form inside parentheses keeps them', () => {
+    const src = `context L {\n  value V {\n    ns: Int[0..*]\n    p: Bool\n    invariant x { !(any(ns, n => n > 0)) || p }\n  }\n}\n`;
+    expect(migrateDomain(src).text).toContain('{ !(ns.some(n => n > 0)) || p }');
+});

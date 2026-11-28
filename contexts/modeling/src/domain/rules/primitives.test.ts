@@ -7,10 +7,10 @@ const DECLS = `
   primitive Price: Int { value in 0..1000000 }
   primitive Celsius: Decimal { value in -273.15..1000 }
   primitive Email: String {
-    invariant format "形式" { matches(value, "^[^@\\s]+@[^@\\s]+$") }
-    invariant maxLength { length(value) <= 254 }
+    invariant format "形式" { value.matches("^[^@\\s]+@[^@\\s]+$") }
+    invariant maxLength { value.length <= 254 }
   }
-  id InvoiceNo: String { matches(value, "^INV-\\d{8}$") }
+  id InvoiceNo: String { value.matches("^INV-\\d{8}$") }
 `;
 
 const withOrder = (invariants: string) =>
@@ -43,18 +43,18 @@ describe('domain primitive declarations', () => {
             ['format', '形式'],
             ['maxLength', undefined],
         ]);
-        expect(element(m, 'Sales.InvoiceNo')).toMatchObject({ kind: 'id', invariants: [{ source: 'matches(value, "^INV-\\d{8}$")' }] });
+        expect(element(m, 'Sales.InvoiceNo')).toMatchObject({ kind: 'id', invariants: [{ source: 'value.matches("^INV-\\d{8}$")' }] });
     });
 
     test('invariants see only `value`, typed as the base primitive', async () => {
         const a = await checkSales(`
-  primitive A: Int { length(value) > 0 }
+  primitive A: Int { value.length > 0 }
   primitive B: String { value > 0 }
   primitive C: Int { value }
   primitive D: Int { other > 0 }
   primitive E: Decimal { value in 0..1.5 }`);
         expect(a.diagnostics.map((d) => `${d.code} ${d.message}`)).toEqual([
-            "M009 length() requires a String value, but got 'Int'.",
+            "M009 '.length' is the size of a list or a string, not of 'Int'.",
             "M009 Operator '>' cannot be applied to 'String' and 'Int'.",
             "M008 The constraint of 'C' must be a Bool expression, but has type 'Int'.",
             "M001 Cannot resolve name 'other'.",
@@ -62,7 +62,7 @@ describe('domain primitive declarations', () => {
     });
 
     test('regular expressions are taken literally and checked', async () => {
-        const a = await checkSales(String.raw`primitive Code: String { matches(value, "\d+\"x") } primitive Bad: String { matches(value, "([a-z") }`);
+        const a = await checkSales(String.raw`primitive Code: String { value.matches("\d+\"x") } primitive Bad: String { value.matches("([a-z") }`);
         const [d, ...rest] = only(a, 'M009');
         expect(rest).toEqual([]); // "\d+\"x" is a valid pattern: backslashes are not string escapes
         expect(d.message).toContain('Invalid regular expression'); // wording depends on the JS engine
@@ -71,10 +71,10 @@ describe('domain primitive declarations', () => {
 
     test("M002: an ID or primitive on UUID cannot declare an invariant named 'uuid', the generated one", async () => {
         const a = await checkSales(`
-  id OrderId: UUID { invariant uuid { length(value) == 36 } }
-  primitive Token: UUID { invariant uuid { length(value) == 36 } }
-  primitive Code: String { invariant uuid { length(value) == 36 } }
-  id OtherId: UUID { invariant v7 { matches(value, "^.{14}7") } }`);
+  id OrderId: UUID { invariant uuid { value.length == 36 } }
+  primitive Token: UUID { invariant uuid { value.length == 36 } }
+  primitive Code: String { invariant uuid { value.length == 36 } }
+  id OtherId: UUID { invariant v7 { value.matches("^.{14}7") } }`);
         expect(only(a, 'M002').map((d) => [d.message, d.hint])).toEqual([
             [
                 "Invariant 'uuid' of 'OrderId' clashes with the invariant generated for its base 'UUID'.",
@@ -98,7 +98,7 @@ describe('domain primitive declarations', () => {
 
 describe('domain primitives in other invariants', () => {
     test('compare with literals and with the same domain primitive', async () => {
-        const a = await withOrder('invariant ok { !(quantity > 0 && quantity <= maxQuantity && quantity in 1..10 && exists(email)) || length(email) > 3 }');
+        const a = await withOrder('invariant ok { !(quantity > 0 && quantity <= maxQuantity && quantity in 1..10 && exists(email)) || email.length > 3 }');
         expect(codes(a)).toEqual([]);
     });
 
@@ -107,8 +107,8 @@ describe('domain primitives in other invariants', () => {
         ['quantity > rawCount', "Operator '>' cannot be applied to 'Quantity' and 'Int'."],
         ['quantity == "1"', "Operator '==' cannot be applied to 'Quantity' and 'String'."],
         ['quantity in 0..rawCount', "Range 'Int..Int' cannot be applied to 'Quantity'."],
-        ['!(exists(email)) || email == count(notes)', "Operator '==' cannot be applied to 'Email' and 'Int'."],
-        ['count(notes) <= price && price > rawCount', "Operator '>' cannot be applied to 'Price' and 'Int'."],
+        ['!(exists(email)) || email == notes.length', "Operator '==' cannot be applied to 'Email' and 'Int'."],
+        ['notes.length <= price && price > rawCount', "Operator '>' cannot be applied to 'Price' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
         const a = await withOrder(`invariant i { ${expr} }`);
         expect(only(a, 'M009').map((d) => d.message)).toEqual([message]);
@@ -116,14 +116,14 @@ describe('domain primitives in other invariants', () => {
 
     test('Int and Decimal domain primitives compare with the numbers count() and length() compute, on either side', async () => {
         const exprs = [
-            'count(notes) >= quantity',
-            'quantity == count(notes)',
-            'price != length(title)',
-            '(count(notes)) < (price)',
-            'quantity in 0..count(notes)',
-            'count(notes) in quantity..maxQuantity',
-            'length(title) <= temperature',
-            '!(exists(email)) || length(email) <= quantity',
+            'notes.length >= quantity',
+            'quantity == notes.length',
+            'price != title.length',
+            '(notes.length) < (price)',
+            'quantity in 0..notes.length',
+            'notes.length in quantity..maxQuantity',
+            'title.length <= temperature',
+            '!(exists(email)) || email.length <= quantity',
         ];
         const a = await withOrder(exprs.map((x, i) => `invariant i${i} { ${x} }`).join('\n    '));
         expect(codes(a)).toEqual([]);

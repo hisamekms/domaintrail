@@ -21,7 +21,7 @@ const FILES = {
   aggregate Order "注文" with Common.Tenanted {
     id: OrderId
     owns items: OrderItem[0..*]
-    invariant sameTenant { all(items, i => i.tenant == tenant) }
+    invariant sameTenant { items.every(i => i.tenant == tenant) }
     create command place(id: OrderId) -> Draft emits OrderPlaced
     command confirm() Draft -> Confirmed emits OrderConfirmed, Billing.Billed
     state Draft
@@ -93,7 +93,7 @@ describe('field sets: generated TypeScript', () => {
   fields Described { label: String  doc: String? }
   value Term with Described {
     name: String
-    invariant named { length(name) > 0 && length(label) > 0 }
+    invariant named { name.length > 0 && label.length > 0 }
   }`);
         expect(v.diagnostics).toEqual([]);
         const sales = ts(v, 'Sales');

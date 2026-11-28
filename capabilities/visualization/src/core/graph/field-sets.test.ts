@@ -20,7 +20,7 @@ const FILES = {
   aggregate Order "注文" with Common.Tenanted {
     id: OrderId
     owns items: OrderItem[0..*]
-    invariant sameTenant { all(items, i => i.tenant == tenant) }
+    invariant sameTenant { items.every(i => i.tenant == tenant) }
     create command place(id: OrderId) -> Draft emits OrderPlaced
     command confirm() Draft -> Confirmed emits OrderConfirmed, Billing.Billed
     state Draft

@@ -12,7 +12,7 @@ context Collaboration "コラボレーション" {
   }
 
   /// 本文や問いかけのように、人が書く空でない文章。
-  primitive Text "文章": String { length(value) >= 1 && length(value) <= 20000 }
+  primitive Text "文章": String { value.length >= 1 && value.length <= 20000 }
 
   /// 1 始まりの行番号。
   primitive LineNumber "行番号": Int { value >= 1 }
@@ -24,12 +24,12 @@ context Collaboration "コラボレーション" {
   primitive Tally "件数": Int { value >= 0 }
 
   /// SHA-256 の16進表記（小文字64桁）。ファイルやスナップショットの内容を識別する。
-  primitive ContentHash "内容ハッシュ": String { matches(value, "^[0-9a-f]{64}$") }
+  primitive ContentHash "内容ハッシュ": String { value.matches("^[0-9a-f]{64}$") }
 
   /// ワークスペースのルートからの相対パス（`/` 区切り）。絶対パス、`.` と `..` の区間、バックスラッシュを含まない。
   primitive WorkspacePath "ワークスペース内パス": String {
-    invariant relative "ルートからの相対パス" { matches(value, "^[^/\\]+(/[^/\\]+)*$") }
-    invariant noDotSegment "`.` と `..` を含まない" { !matches(value, "(^|/)\.\.?(/|$)") }
+    invariant relative "ルートからの相対パス" { value.matches("^[^/\\]+(/[^/\\]+)*$") }
+    invariant noDotSegment "`.` と `..` を含まない" { !value.matches("(^|/)\.\.?(/|$)") }
   }
 
   /// ソースの言語。

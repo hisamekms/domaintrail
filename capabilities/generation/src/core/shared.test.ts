@@ -6,7 +6,7 @@ const COMMON = `shared context Common "共通" {
   terms { currency: "通貨" }
   enum Currency { JPY USD }
   value Money { amount: Decimal currency: Currency }
-  primitive Email: String { matches(value, "@") }
+  primitive Email: String { value.matches("@") }
 }`;
 
 describe('shared contexts: generated TypeScript', () => {

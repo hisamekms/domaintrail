@@ -5,7 +5,7 @@ import { generateFromAnalysis, check } from '../test-helpers.js';
 const SALES = `context Sales "販売" {
   id UserId: UUID
   id PartnerId: UUID
-  primitive PartyName: String { length(value) > 0 }
+  primitive PartyName: String { value.length > 0 }
   enum Process { DELIVERY "配達" PRINTING "印刷" }
 
   /// 実際の行為者。
@@ -21,7 +21,7 @@ const SALES = `context Sales "販売" {
     PRINTING { details: PrintingSpec }
   }
 
-  union Coverage by form { DESCRIPTION { text: String  invariant notBlank { length(text) > 0 } } }
+  union Coverage by form { DESCRIPTION { text: String  invariant notBlank { text.length > 0 } } }
 
   id SpecId: UUID
   aggregate Spec "仕様" {
@@ -60,7 +60,7 @@ export type Actor =
           readonly partnerId?: PartnerId;
       };`);
         expect(code).toContain("readonly type: 'DELIVERY';\n          readonly details: DeliverySpec;");
-        expect(code).toContain("/** @invariant notBlank: length(text) > 0 */\n    | {\n          readonly form: 'DESCRIPTION';");
+        expect(code).toContain("/** @invariant notBlank: text.length > 0 */\n    | {\n          readonly form: 'DESCRIPTION';");
         expect(code).toContain('readonly details: Details;');
     });
 });

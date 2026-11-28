@@ -127,7 +127,7 @@ describe('behaviour cards', () => {
     test('a command card lists its requirements with their expression and the error of else', () => {
         const html = renderToStaticMarkup(<CommandCard agg={order} c={command('addItem')} model={model} names={names()} tx={tx} onSelect={() => {}} />);
         expect(html).toContain(`<div class="bcard-caption">${tx.requirements}</div>`);
-        expect(html).toContain('<code>all(items, i =&gt; i.sku != item.sku)</code>');
+        expect(html).toContain('<code>items.every(i =&gt; i.sku != item.sku)</code>');
         const card = (onSelect: (id: string) => void) => CommandCard({ agg: order, c: command('addItem'), model, names: names(), tx, onSelect });
         expect(clickOn(card, '商品コードの重複 DuplicateSku', 2)).toEqual(['Sales.DuplicateSku', 'Sales.DuplicateSku']);
         expect(text(html)).toContain('同じ商品コードの明細がない newSku');

@@ -36,7 +36,7 @@ Comparisons, ranges and literals
 context A {
   aggregate X {
     invariant a { total >= 0 && rate < 1.5 && delta > -2 && min <= -0.5 }
-    invariant b { count(items) in 1..10 && name != "" && flag == true && done == false }
+    invariant b { items.length in 1..10 && name != "" && flag == true && done == false }
     invariant c { (a || b) && kind == Kind.Big }
   }
 }
@@ -76,8 +76,8 @@ context A {
             (binary_expression
               (binary_expression
                 (range_expression
-                  (call_expression
-                    (function_name)
+                  (member_expression
+                    (identifier)
                     (identifier))
                   (number
                     (integer))
@@ -111,9 +111,9 @@ Functions and lambdas
 
 context A {
   aggregate X {
-    invariant a { all(items, i => i.quantity > 0) && any(items, i => i.gift) }
-    invariant b { unique(items) && unique(items, i => i.sku, i.size) }
-    invariant c { contains(tags, "new") && length(name) <= 20 && matches(code, "^[A-Z]+$") }
+    invariant a { items.every(i => i.quantity > 0) && items.some(i => i.gift) }
+    invariant b { items.unique() && items.unique(i => i.sku, i.size) }
+    invariant c { tags.includes("new") && name.length <= 20 && code.matches("^[A-Z]+$") }
     invariant d { exists(customer.address.zip) }
   }
 }
@@ -129,9 +129,10 @@ context A {
         (invariant
           (identifier)
           (binary_expression
-            (call_expression
-              (function_name)
+            (method_call
               (identifier)
+              (function_name
+                (identifier))
               (lambda
                 (identifier)
                 (binary_expression
@@ -140,9 +141,10 @@ context A {
                     (identifier))
                   (number
                     (integer)))))
-            (call_expression
-              (function_name)
+            (method_call
               (identifier)
+              (function_name
+                (identifier))
               (lambda
                 (identifier)
                 (member_expression
@@ -151,12 +153,14 @@ context A {
         (invariant
           (identifier)
           (binary_expression
-            (call_expression
-              (function_name)
-              (identifier))
-            (call_expression
-              (function_name)
+            (method_call
               (identifier)
+              (function_name
+                (identifier)))
+            (method_call
+              (identifier)
+              (function_name
+                (identifier))
               (lambda
                 (identifier)
                 (member_expression
@@ -169,19 +173,21 @@ context A {
           (identifier)
           (binary_expression
             (binary_expression
-              (call_expression
-                (function_name)
+              (method_call
                 (identifier)
+                (function_name
+                  (identifier))
                 (string))
               (binary_expression
-                (call_expression
-                  (function_name)
+                (member_expression
+                  (identifier)
                   (identifier))
                 (number
                   (integer))))
-            (call_expression
-              (function_name)
+            (method_call
               (identifier)
+              (function_name
+                (identifier))
               (string))))
         (invariant
           (identifier)

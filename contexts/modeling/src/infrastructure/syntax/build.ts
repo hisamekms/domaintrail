@@ -1,4 +1,5 @@
 import { AstUtils, type AstNode } from 'langium';
+import { methodForm, patternSource } from './methods.js';
 import type { Location } from '@domaintrail/kernel';
 import {
     isAggregate,
@@ -311,7 +312,17 @@ function exprModel(e: Expression): ExprModel {
     if (isDecimalLiteral(e)) return { k: 'decimal', value: `${e.negative ? '-' : ''}${e.value}` };
     if (isStringLiteral(e)) return { k: 'string', value: e.value };
     if (isNameRef(e)) return { k: 'name', name: e.name };
-    if (isMemberAccess(e)) return { k: 'member', receiver: exprModel(e.receiver), member: e.member };
+    if (isMemberAccess(e)) {
+        const m = methodForm(e);
+        if (m.k === 'length') return { k: 'length', operand: exprModel(e.receiver) };
+        if (m.k === 'quantifier')
+            return { k: 'quantifier', quantifier: m.quantifier, collection: exprModel(e.receiver), param: m.param, body: exprModel(m.body) };
+        if (m.k === 'contains') return { k: 'contains', collection: exprModel(e.receiver), element: exprModel(m.element) };
+        if (m.k === 'unique')
+            return { k: 'unique', collection: exprModel(e.receiver), ...(m.param !== undefined && { param: m.param }), keys: m.keys.map(exprModel) };
+        if (m.k === 'matches') return { k: 'matches', operand: exprModel(e.receiver), pattern: patternSource(m.pattern) };
+        return { k: 'member', receiver: exprModel(e.receiver), member: e.member };
+    }
     if (isNotExpr(e)) return { k: 'not', operand: exprModel(e.operand) };
     if (isBinaryExpr(e)) return { k: 'binary', op: BINARY_OPS[e.op], left: exprModel(e.left), right: exprModel(e.right) };
     if (isRangeExpr(e)) return { k: 'range', operand: exprModel(e.operand), lower: exprModel(e.lower), upper: exprModel(e.upper) };

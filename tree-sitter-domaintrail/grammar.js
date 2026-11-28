@@ -349,6 +349,7 @@ module.exports = grammar({
       $.member_expression,
       $.parenthesized_expression,
       $.call_expression,
+      $.method_call,
       $.boolean,
       $.number,
       $.string,
@@ -379,23 +380,23 @@ module.exports = grammar({
 
     parenthesized_expression: ($) => seq('(', $._expression, ')'),
 
-    call_expression: ($) => choice(
-      seq(field('function', $._unary_function), '(', field('argument', $._expression), ')'),
-      seq(field('function', alias('matches', $.function_name)), '(', field('argument', $._expression), ',', field('pattern', $.string), ')'),
-      seq(field('function', alias('contains', $.function_name)), '(', field('argument', $._expression), ',', field('element', $._expression), ')'),
-      seq(
-        field('function', alias('unique', $.function_name)),
-        '(',
-        field('argument', $._expression),
-        optional(seq(',', field('key', $.lambda), repeat(seq(',', field('key', $._expression))))),
-        ')',
-      ),
-      seq(field('function', $._quantifier), '(', field('argument', $._expression), ',', field('predicate', $.lambda), ')'),
-    ),
+    call_expression: ($) => seq(field('function', $._unary_function), '(', field('argument', $._expression), ')'),
 
-    _unary_function: ($) => alias(choice('count', 'exists', 'length'), $.function_name),
+    // `xs.every(x => p)`, `xs.includes(x)`, `xs.unique()`, `text.matches("r")`: the parser takes any name; Modeling
+    // reports a call that is none of its methods
+    method_call: ($) => prec(PREC.member, seq(
+      field('object', $._expression),
+      '.',
+      field('method', alias($._value_name, $.function_name)),
+      '(',
+      optional(seq(
+        field('argument', choice($.lambda, $._expression)),
+        repeat(seq(',', field('argument', $._expression))),
+      )),
+      ')',
+    )),
 
-    _quantifier: ($) => alias(choice('all', 'any'), $.function_name),
+    _unary_function: ($) => alias('exists', $.function_name),
 
     lambda: ($) => seq(field('parameter', $._feature_name), '=>', field('body', $._expression)),
 

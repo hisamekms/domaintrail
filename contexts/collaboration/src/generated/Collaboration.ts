@@ -178,8 +178,8 @@ export function equalFrozenReplyTarget(a: FrozenReplyTarget, b: FrozenReplyTarge
 /**
  * 実行の入力
  * 登録のときに凍結した、実行の入力。束ねた依頼（依頼と実行の多対多）はここにある。
- * @invariant distinctRequests (依頼は1件1回): unique(requests, r => r.request)
- * @invariant proposalsOfRequests (変更案は束ねた依頼のもの): !(exists(proposals)) || all(proposals.approved, p => any(requests, r => r.request == p.request))
+ * @invariant distinctRequests (依頼は1件1回): requests.unique(r => r.request)
+ * @invariant proposalsOfRequests (変更案は束ねた依頼のもの): !(exists(proposals)) || proposals.approved.every(p => requests.some(r => r.request == p.request))
  * @see contexts/collaboration/model/agent-run.dt:58
  */
 export interface RunInput {
@@ -221,7 +221,7 @@ export function checkRunInput(runInput: RunInput): readonly ('distinctRequests' 
 /**
  * 返答のキー
  * エージェントの返答の中で、問いや選択肢を指す短いキー（英数字と `_` `-`）。長さの上限は返答の上限（コード）が決める。
- * @invariant valid: matches(value, "^[A-Za-z0-9_-]+$")
+ * @invariant valid: value.matches("^[A-Za-z0-9_-]+$")
  * Make it with `makeReplyKey`; never `as ReplyKey` (see dt guide lint).
  * @see contexts/collaboration/model/agent-run.dt:77
  */
@@ -334,7 +334,7 @@ export function equalReplyOption(a: ReplyOption, b: ReplyOption): boolean {
 /**
  * 問い
  * エージェントがファシリテーターに選んでもらう問い。
- * @invariant distinctOptions (選択肢のキーは1回): unique(options, o => o.id)
+ * @invariant distinctOptions (選択肢のキーは1回): options.unique(o => o.id)
  * @see contexts/collaboration/model/agent-run.dt:109
  */
 export interface ReplyQuestion {
@@ -391,7 +391,7 @@ export function equalReplyAlternative(a: ReplyAlternative, b: ReplyAlternative):
 /**
  * 前提
  * 依頼があいまいだったところで、エージェントが置いた前提。
- * @invariant distinctAlternatives (別の選択のキーは1回): unique(alternatives, a => a.id)
+ * @invariant distinctAlternatives (別の選択のキーは1回): alternatives.unique(a => a.id)
  * @see contexts/collaboration/model/agent-run.dt:126
  */
 export interface ReplyAssumption {
@@ -425,9 +425,9 @@ export function checkReplyAssumption(replyAssumption: ReplyAssumption): readonly
  * エージェントの返答
  * エージェントの返答を検証したもの。AI の申告で、信頼しない入力として上限とともに検証してから持つ。件数と長さの上限は
  * コードの1か所（`domain/reply.ts`）にある。
- * @invariant distinctRequests (依頼は1件1回): unique(requests, r => r.request)
- * @invariant distinctQuestions (問いのキーは1回): unique(questions, q => q.id)
- * @invariant answeredHasAnswer (問いとして答えた依頼には回答がある): !(any(requests, r => r.status == RequestProgress.Answered)) || exists(answer)
+ * @invariant distinctRequests (依頼は1件1回): requests.unique(r => r.request)
+ * @invariant distinctQuestions (問いのキーは1回): questions.unique(q => q.id)
+ * @invariant answeredHasAnswer (問いとして答えた依頼には回答がある): !(requests.some(r => r.status == RequestProgress.Answered)) || exists(answer)
  * @see contexts/collaboration/model/agent-run.dt:136
  */
 export interface AgentReply {
@@ -468,8 +468,8 @@ export function checkAgentReply(agentReply: AgentReply): readonly ('distinctRequ
 /**
  * 答えた問い
  * ファシリテーターが選んだ、問い1つへの答え。登録のときに問いと選択肢を写し取る。
- * @invariant answered (選択か自由記述がある): count(chosen) >= 1 || exists(freeText)
- * @invariant distinctChosen (選択肢は1回): unique(chosen, o => o.id)
+ * @invariant answered (選択か自由記述がある): chosen.length >= 1 || exists(freeText)
+ * @invariant distinctChosen (選択肢は1回): chosen.unique(o => o.id)
  * @see contexts/collaboration/model/agent-run.dt:155
  */
 export interface AnsweredQuestion {
@@ -505,7 +505,7 @@ export function checkAnsweredQuestion(answeredQuestion: AnsweredQuestion): reado
 /**
  * 回答
  * 確認待ちの実行の問いへの、ファシリテーターの回答。次の実行の入力に凍結する。
- * @invariant distinctQuestions (問いは1回): unique(answers, a => a.question)
+ * @invariant distinctQuestions (問いは1回): answers.unique(a => a.question)
  * @see contexts/collaboration/model/agent-run.dt:166
  */
 export interface Answer {
@@ -779,8 +779,8 @@ export interface RunningAgentRun extends AgentRunCommon {
  * 完了
  * @invariant succeeded (成功の条件を満たす): report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))
  * @invariant unchangedKeepsBase (変更がなければ結果は基準リビジョン): (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
- * @invariant completedAsksNothing (完了の返答に問いはない): !(exists(reply)) || count(reply.questions) == 0
- * @invariant completedReplyAboutInput (完了の返答の依頼は実行の依頼): !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @invariant completedAsksNothing (完了の返答に問いはない): !(exists(reply)) || reply.questions.length == 0
+ * @invariant completedReplyAboutInput (完了の返答の依頼は実行の依頼): !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @see contexts/collaboration/model/agent-run.dt:275
  */
 export interface CompletedAgentRun extends AgentRunCommon {
@@ -806,8 +806,8 @@ export interface CompletedAgentRun extends AgentRunCommon {
 /**
  * 確認待ち
  * エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
- * @invariant clarificationAsks (確認待ちの返答には問いがある): !(exists(reply)) || count(reply.questions) >= 1
- * @invariant clarificationReplyAboutInput (確認の返答の依頼は実行の依頼): !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @invariant clarificationAsks (確認待ちの返答には問いがある): !(exists(reply)) || reply.questions.length >= 1
+ * @invariant clarificationReplyAboutInput (確認の返答の依頼は実行の依頼): !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @see contexts/collaboration/model/agent-run.dt:303
  */
 export interface NeedsClarificationAgentRun extends AgentRunCommon {
@@ -829,8 +829,8 @@ export interface NeedsClarificationAgentRun extends AgentRunCommon {
 /**
  * 辞退
  * エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
- * @invariant declinedAsksNothing (辞退の返答に問いはない): count(reply.questions) == 0
- * @invariant declinedReplyAboutInput (辞退の返答の依頼は実行の依頼): (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @invariant declinedAsksNothing (辞退の返答に問いはない): reply.questions.length == 0
+ * @invariant declinedReplyAboutInput (辞退の返答の依頼は実行の依頼): (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @see contexts/collaboration/model/agent-run.dt:318
  */
 export interface DeclinedAgentRun extends AgentRunCommon {
@@ -888,7 +888,7 @@ export interface CancelledAgentRun extends AgentRunCommon {
  * 結果の差を逆向きに当て（3方向のマージ）、dt fmt と dt check で確かめて書いた。打ち消す前のワークスペースが基準
  * リビジョン、打ち消した後が結果リビジョン。その実行の変更がもう残っていなければ、何も書かずに終わる（変更なし）。
  * @invariant revertKeepsBaseUnchanged (打ち消すものがなければ結果は基準リビジョン): (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
- * @invariant revertsRevertRequests (打ち消しの依頼を束ねる): all(input.requests, r => exists(r.reverts))
+ * @invariant revertsRevertRequests (打ち消しの依頼を束ねる): input.requests.every(r => exists(r.reverts))
  * @see contexts/collaboration/model/agent-run.dt:350
  */
 export interface RevertedAgentRun extends AgentRunCommon {
@@ -908,7 +908,7 @@ export interface RevertedAgentRun extends AgentRunCommon {
  * 人が付箋を直した記録（ADR 0033）。AI を使わず、dt が `.dtes` に書いた。待ちには入らず、書いた時点で記録する。直す前の
  * ワークスペースが基準リビジョン、直した後が結果リビジョン。ほかの実行と同じく打ち消せる。
  * @invariant editChanges (手直しはファイルを変える): resultRevision != baseRevision
- * @invariant editsEditRequests (手直しの記録を束ねる): all(input.requests, r => exists(r.edit))
+ * @invariant editsEditRequests (手直しの記録を束ねる): input.requests.every(r => exists(r.edit))
  * @see contexts/collaboration/model/agent-run.dt:366
  */
 export interface EditedAgentRun extends AgentRunCommon {
@@ -1095,8 +1095,8 @@ export interface QueueAgentRunParams {
  * 実行を登録する
  * 実行を登録するのはファシリテーター（問いへの回答と別案の選択も、登録の入力）。
  * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
- * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
- * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
+ * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: requests.unique()
+ * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
  * @emits RunQueued — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:382
  */
@@ -1113,8 +1113,8 @@ export type QueueAgentRun = (
  * AgentRun.queue, decided by one function; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * @requires facilitatorQueues (ファシリテーターが登録する) else FacilitatorOnly: queuedByRole == ParticipantRole.Facilitator
- * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: unique(requests)
- * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
+ * @requires distinctRequests (依頼は1件1回) else DuplicateRequest: requests.unique()
+ * @requires inputCoversRequests (入力は束ねた依頼の写し) else InputMismatch: input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
  * new -> Queued — set: every field
  * @emits RunQueued — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:382
@@ -1168,8 +1168,8 @@ export interface RecordEditAgentRunParams {
  * AgentRun.recordEdit (new -> Edited) — factory
  * 手直しを記録する
  * 参加者が付箋を直した（誰でも直せる）。待ちに入らず、dt が書いた記録として作る。
- * @requires inputEdits (入力は手直しの記録) else InputMismatch: all(input.requests, r => exists(r.edit))
- * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
+ * @requires inputEdits (入力は手直しの記録) else InputMismatch: input.requests.every(r => exists(r.edit))
+ * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
  * @requires editChanges (手直しはファイルを変える) else ChangedMismatch: resultRevision != baseRevision
  * @emits RunEdited — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:394
@@ -1186,8 +1186,8 @@ export type RecordEditAgentRun = (
 /**
  * AgentRun.recordEdit, decided by one function; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires inputEdits (入力は手直しの記録) else InputMismatch: all(input.requests, r => exists(r.edit))
- * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
+ * @requires inputEdits (入力は手直しの記録) else InputMismatch: input.requests.every(r => exists(r.edit))
+ * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
  * @requires editChanges (手直しはファイルを変える) else ChangedMismatch: resultRevision != baseRevision
  * new -> Edited — set: every field
  * @emits RunEdited — exactly once when the command succeeds
@@ -1333,7 +1333,7 @@ export interface RevertAgentRunParams {
  * AgentRun.revert (Queued -> Reverted)
  * 機械的に打ち消す
  * 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
- * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => exists(r.reverts))
  * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
  * @changes none — the command changes no common field
  * @emits RunReverted — exactly once when the command succeeds
@@ -1352,7 +1352,7 @@ export type RevertAgentRun = (
 /**
  * AgentRun.revert, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => exists(r.reverts))
  * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
  * @changes none — the command changes no common field
  * Queued -> Reverted — set: baseRevision (new in Reverted), resultRevision (new in Reverted), changed (new in Reverted), finishedAt (new in Reverted); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
@@ -1391,7 +1391,7 @@ export interface LeaveToAgentAgentRunParams {
  * AgentRun.leaveToAgent (Queued -> Queued)
  * AI に任せる
  * 順が来た打ち消しの実行を、サーバーが機械的に打ち消せなかった: 待ちのまま、わけを添えてエージェントに任せる。
- * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => exists(r.reverts))
  * @changes revertObstacle
  * @emits RevertLeftToAgent — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:427
@@ -1409,7 +1409,7 @@ export type LeaveToAgentAgentRun = (
 /**
  * AgentRun.leaveToAgent, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: all(input.requests, r => exists(r.reverts))
+ * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => exists(r.reverts))
  * @changes revertObstacle
  * Queued -> Queued — set: revertObstacle; carried over: id, session, input, queuedBy, queuedAt
  * @see contexts/collaboration/model/agent-run.dt:427
@@ -1502,8 +1502,8 @@ export interface FinishAgentRunParams {
  * dt fmt / dt check を省いてよい）。
  * 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
  * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
- * @requires replyAsksNothing (完了の返答に問いはない) else InvalidReply: !(exists(reply)) || count(reply.questions) == 0
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsksNothing (完了の返答に問いはない) else InvalidReply: !(exists(reply)) || reply.questions.length == 0
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @outcome Completed: Running -> Completed; select expression
  * @outcome Failed: Running -> Failed; select expression
  * @see contexts/collaboration/model/agent-run.dt:441
@@ -1585,8 +1585,8 @@ export interface AskClarificationAgentRunParams {
 /**
  * AgentRun.askClarification (Running -> NeedsClarification)
  * 確認を求める
- * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: !(exists(reply)) || count(reply.questions) >= 1
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: !(exists(reply)) || reply.questions.length >= 1
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunNeedsClarification — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:463
@@ -1604,8 +1604,8 @@ export type AskClarificationAgentRun = (
 /**
  * AgentRun.askClarification, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: !(exists(reply)) || count(reply.questions) >= 1
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: !(exists(reply)) || reply.questions.length >= 1
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: !(exists(reply)) || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> NeedsClarification — set: question (new in NeedsClarification), reply (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * @see contexts/collaboration/model/agent-run.dt:463
@@ -1646,8 +1646,8 @@ export interface DeclineAgentRunParams {
  * AgentRun.decline (Running -> Declined)
  * 辞退する
  * エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
- * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: count(reply.questions) == 0
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: reply.questions.length == 0
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @changes none — the command changes no common field
  * @emits RunDeclined — exactly once when the command succeeds
  * @see contexts/collaboration/model/agent-run.dt:474
@@ -1665,8 +1665,8 @@ export type DeclineAgentRun = (
 /**
  * AgentRun.decline, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: count(reply.questions) == 0
- * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+ * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: reply.questions.length == 0
+ * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @changes none — the command changes no common field
  * Running -> Declined — set: reply (new in Declined), resultRevision (new in Declined), finishedAt (new in Declined); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
  * @see contexts/collaboration/model/agent-run.dt:474
@@ -2787,7 +2787,7 @@ export function equalNextAnswer(a: NextAnswer, b: NextAnswer): boolean {
 /**
  * 候補の見出し
  * 候補の見出し（「支払いが失敗した」など）。上限はコード（`CANDIDATE_LIMITS`）が決める。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeCandidateLabel`; never `as CandidateLabel` (see dt guide lint).
  * @see contexts/collaboration/model/command.dt:45
  */
@@ -3228,7 +3228,7 @@ export interface ApplySlashCommandParams {
  * ファシリテーターが候補を選んで反映する（誰が始めたコマンドでも。反映が承認になる）。実行の登録と同じ取引で、その
  * 実行を記録する。
  * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
- * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: all(chosen, c => c < count(candidates))
+ * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: chosen.every(c => c < candidates.length)
  * @changes none — the command changes no common field
  * @emits CandidatesApplied — exactly once when the command succeeds
  * @see contexts/collaboration/model/command.dt:127
@@ -3247,7 +3247,7 @@ export type ApplySlashCommand = (
  * SlashCommand.apply, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
- * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: all(chosen, c => c < count(candidates))
+ * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: chosen.every(c => c < candidates.length)
  * @changes none — the command changes no common field
  * Listed -> Applied — set: chosen (new in Applied), appliedBy (new in Applied), appliedAt (new in Applied), run (new in Applied); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide, candidates; dropped: listedAt
  * @see contexts/collaboration/model/command.dt:127
@@ -3606,7 +3606,7 @@ export interface CommandAlreadyRunning {
 /**
  * 文章
  * 本文や問いかけのように、人が書く空でない文章。
- * @invariant valid: length(value) >= 1 && length(value) <= 20000
+ * @invariant valid: value.length >= 1 && value.length <= 20000
  * Make it with `makeText`; never `as Text` (see dt guide lint).
  * @see contexts/collaboration/model/context.dt:15
  */
@@ -3790,7 +3790,7 @@ export const makeTally: MakeTally = (value) => {
 /**
  * 内容ハッシュ
  * SHA-256 の16進表記（小文字64桁）。ファイルやスナップショットの内容を識別する。
- * @invariant valid: matches(value, "^[0-9a-f]{64}$")
+ * @invariant valid: value.matches("^[0-9a-f]{64}$")
  * Make it with `makeContentHash`; never `as ContentHash` (see dt guide lint).
  * @see contexts/collaboration/model/context.dt:27
  */
@@ -3836,8 +3836,8 @@ export const makeContentHash: MakeContentHash = (value) => {
 /**
  * ワークスペース内パス
  * ワークスペースのルートからの相対パス（`/` 区切り）。絶対パス、`.` と `..` の区間、バックスラッシュを含まない。
- * @invariant relative (ルートからの相対パス): matches(value, "^[^/\\]+(/[^/\\]+)*$")
- * @invariant noDotSegment (`.` と `..` を含まない): !matches(value, "(^|/)\.\.?(/|$)")
+ * @invariant relative (ルートからの相対パス): value.matches("^[^/\\]+(/[^/\\]+)*$")
+ * @invariant noDotSegment (`.` と `..` を含まない): !value.matches("(^|/)\.\.?(/|$)")
  * Make it with `makeWorkspacePath`; never `as WorkspacePath` (see dt guide lint).
  * @see contexts/collaboration/model/context.dt:30
  */
@@ -3894,7 +3894,7 @@ export type SourceLanguage =
  * ガイドの区切り
  * ガイドの地図の区切り（`brief`、`events`、`bcSplit` など）。どの区切りがあり、どう済んだと決めるかはコード
  * （`domain/guide.ts`）が決める。
- * @invariant valid: matches(value, "^[a-zA-Z]+$") && length(value) <= 40
+ * @invariant valid: value.matches("^[a-zA-Z]+$") && value.length <= 40
  * Make it with `makeGuideStepKey`; never `as GuideStepKey` (see dt guide lint).
  * @see contexts/collaboration/model/guide.dt:4
  */
@@ -3941,7 +3941,7 @@ export const makeGuideStepKey: MakeGuideStepKey = (value) => {
  * 道のり
  * ガイドの道のりの名前: ストーミングの ES の道のり（`es:` とストーミングの ID）か、名前の付いたモデリングの道のりの
  * ID（小文字・数字・ハイフンの短い名前）。道のりは道のりのファイル（`domaintrail.journey.json`）にある。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeGuideJourneyKey`; never `as GuideJourneyKey` (see dt guide lint).
  * @see contexts/collaboration/model/guide.dt:8
  */
@@ -4243,7 +4243,7 @@ export type UiLanguage =
  * 要約の行き先
  * 要約の行き先の名前: ストーミングの ID（`/es:start`、DSL の識別子）か、モデリングの道のりの ID（`/model:start`、
  * 小文字・数字・ハイフン）。
- * @invariant valid: matches(value, "^[_a-zA-Z0-9][A-Za-z0-9_-]*$") && length(value) <= 100
+ * @invariant valid: value.matches("^[_a-zA-Z0-9][A-Za-z0-9_-]*$") && value.length <= 100
  * Make it with `makeBriefName`; never `as BriefName` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:17
  */
@@ -4289,7 +4289,7 @@ export const makeBriefName: MakeBriefName = (value) => {
 /**
  * 行き先の見出し
  * 新しく作る行き先の見出し（ラベル）。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeBriefLabel`; never `as BriefLabel` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:20
  */
@@ -4336,7 +4336,7 @@ export const makeBriefLabel: MakeBriefLabel = (value) => {
  * 要約の本文
  * 要約の本文: 道のりの「なぜ」を見出しのある行で（「目的: …」）。道のりの項目から作り、編集もこの形で読む。上限は
  * コード（`domain/interviews.ts` の `INTERVIEW_LIMITS`）が決める。
- * @invariant valid: length(value) >= 1 && length(value) <= 1500
+ * @invariant valid: value.length >= 1 && value.length <= 1500
  * Make it with `makeBriefText`; never `as BriefText` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:24
  */
@@ -4382,7 +4382,7 @@ export const makeBriefText: MakeBriefText = (value) => {
 /**
  * 要約の項目
  * 要約の項目1つ（目的・範囲・制約）: 短い1行。
- * @invariant valid: length(value) >= 1 && length(value) <= 240
+ * @invariant valid: value.length >= 1 && value.length <= 240
  * Make it with `makeBriefField`; never `as BriefField` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:27
  */
@@ -4428,7 +4428,7 @@ export const makeBriefField: MakeBriefField = (value) => {
 /**
  * 参加者の役割
  * 参加者の役割（「窓口担当」）。人の名前は書かない。
- * @invariant valid: length(value) >= 1 && length(value) <= 60
+ * @invariant valid: value.length >= 1 && value.length <= 60
  * Make it with `makeRoleName`; never `as RoleName` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:30
  */
@@ -4474,7 +4474,7 @@ export const makeRoleName: MakeRoleName = (value) => {
 /**
  * 道のりの名前
  * モデリングの道のりの名前（「Billing の深掘り」）。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeJourneyName`; never `as JourneyName` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:33
  */
@@ -4520,7 +4520,7 @@ export const makeJourneyName: MakeJourneyName = (value) => {
 /**
  * 短い説明
  * 新しいストーミングの短い説明（`///` に書く1行）。
- * @invariant valid: length(value) >= 1 && length(value) <= 200
+ * @invariant valid: value.length >= 1 && value.length <= 200
  * Make it with `makeShortDescription`; never `as ShortDescription` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:36
  */
@@ -4649,7 +4649,7 @@ export function equalInterviewBrief(a: InterviewBrief, b: InterviewBrief): boole
  * AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
  * 要素の参照（`@{es:Returns}`）を含むことがあり、画面はそれをラベルで出す。見える長さは 40 字までで、
  * 参照を書いたままの長さは 200 字まで。
- * @invariant valid: length(value) >= 1 && length(value) <= 200
+ * @invariant valid: value.length >= 1 && value.length <= 200
  * Make it with `makeAnswerChoice`; never `as AnswerChoice` (see dt guide lint).
  * @see contexts/collaboration/model/interview.dt:86
  */
@@ -4695,7 +4695,7 @@ export const makeAnswerChoice: MakeAnswerChoice = (value) => {
 /**
  * 答えを待つ問い
  * 答えを待っている AI の問いと、その選択肢（ないこともある）。画面は、始めた人にだけ選択肢のボタンを出す。
- * @invariant distinctChoices (同じ選択肢は1回): unique(choices)
+ * @invariant distinctChoices (同じ選択肢は1回): choices.unique()
  * @see contexts/collaboration/model/interview.dt:89
  */
 export interface AskedQuestion {
@@ -5699,7 +5699,7 @@ export const makeMarkId: MakeMarkId = (value) => {
  * 反応に使う絵文字1つ（書記素1つ）。ZWJ でつないだ組・肌の色・国旗・キーキャップも1つと数える。アプリは絵文字に意味を
  * 与えない。正規化した形で持つ: NFC で、テキスト表示が既定の絵文字には VS16（U+FE0F）を付けた完全修飾の形（❤ と ❤️ は
  * 同じ反応）。
- * @invariant bounded (長すぎない): length(value) >= 1 && length(value) <= 64
+ * @invariant bounded (長すぎない): value.length >= 1 && value.length <= 64
  * @invariant singleEmoji (正規化した絵文字1つ): not expressed in the DSL
  * Make it with `makeEmojiWith`; never `as Emoji` (see dt guide lint).
  * @see contexts/collaboration/model/mark.dt:8
@@ -6326,7 +6326,7 @@ export const makeChangeProposalId: MakeChangeProposalId = (value) => {
  * 変更案の文
  * 変更案の文（「どう」）。上限はコード（`domain/proposals.ts` の `PROPOSAL_LIMITS`）が決める: AI の文は短く、
  * ファシリテーターの編集は長くてもよい。前の形（何を・どこを・どう）で保存した変更案は、3つをつないだ文として読む。
- * @invariant valid: length(value) >= 1 && length(value) <= 2000
+ * @invariant valid: value.length >= 1 && value.length <= 2000
  * Make it with `makeProposalText`; never `as ProposalText` (see dt guide lint).
  * @see contexts/collaboration/model/proposal.dt:7
  */
@@ -6372,7 +6372,7 @@ export const makeProposalText: MakeProposalText = (value) => {
 /**
  * 選択肢の見出し
  * 変更案の選択肢の見出し（「集約だけ」など）。上限はコードが決める。
- * @invariant valid: length(value) >= 1 && length(value) <= 200
+ * @invariant valid: value.length >= 1 && value.length <= 200
  * Make it with `makeProposalLabel`; never `as ProposalLabel` (see dt guide lint).
  * @see contexts/collaboration/model/proposal.dt:10
  */
@@ -6489,7 +6489,7 @@ export function equalProposalOption(a: ProposalOption, b: ProposalOption): boole
  * 変更案の中身
  * 変更案の中身: 対象のモデルの要素と、どう変えるかを1〜2行で。AI が迷ったときは選択肢（2つか3つ、勧めは1つ）。
  * ファイル名やパスは持たない。差分の見本はまだない。
- * @invariant choiceOfTwoOrMore (選択肢はないか、2つ以上): count(options) == 0 || count(options) >= 2
+ * @invariant choiceOfTwoOrMore (選択肢はないか、2つ以上): options.length == 0 || options.length >= 2
  * @invariant oneRecommended (選択肢があれば、AI の勧めはちょうど1つ): not expressed in the DSL
  * @see contexts/collaboration/model/proposal.dt:27
  */
@@ -6577,7 +6577,7 @@ export function equalApprovedProposal(a: ApprovedProposal, b: ApprovedProposal):
 /**
  * 承認した変更案の組
  * まとめて承認した変更案。まとめて承認したものは1つの実行になる。
- * @invariant distinctProposals (変更案は1回): unique(approved, p => p.proposal)
+ * @invariant distinctProposals (変更案は1回): approved.unique(p => p.proposal)
  * @see contexts/collaboration/model/proposal.dt:52
  */
 export interface ApprovedProposals {
@@ -6795,7 +6795,7 @@ export interface ApproveChangeProposalParams {
  * ファシリテーターが承認する（選択肢があれば1つ選び、その「どう」を編集してもよい）。実行の登録と同じ取引で、その
  * 実行を記録する。
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
- * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(count(content.options) == 0) || !exists(option)) && (!(count(content.options) >= 1) || exists(option) && option < count(content.options))
+ * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(content.options.length == 0) || !exists(option)) && (!(content.options.length >= 1) || exists(option) && option < content.options.length)
  * @changes none — the command changes no common field
  * @emits ProposalApproved — exactly once when the command succeeds
  * @see contexts/collaboration/model/proposal.dt:97
@@ -6814,7 +6814,7 @@ export type ApproveChangeProposal = (
  * ChangeProposal.approve, decided per source state; implement it with `decide(ChangeProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
- * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(count(content.options) == 0) || !exists(option)) && (!(count(content.options) >= 1) || exists(option) && option < count(content.options))
+ * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(content.options.length == 0) || !exists(option)) && (!(content.options.length >= 1) || exists(option) && option < content.options.length)
  * @changes none — the command changes no common field
  * Open -> Approved — set: approvedBy (new in Approved), approvedAt (new in Approved), option (new in Approved), editedHow (new in Approved), run (new in Approved); carried over: id, session, triage, request, requestedBy, content, proposedAt
  * @see contexts/collaboration/model/proposal.dt:97
@@ -7264,7 +7264,7 @@ export const makeJourneyRequestId: MakeJourneyRequestId = (value) => {
 /**
  * 記録の道のりの名前
  * 記録したときの道のりの名前（ES はストーミングのラベル、モデリングは道のりの名前）。あとで名前が変わっても、記録は変わらない。
- * @invariant valid: length(value) >= 1 && length(value) <= 200
+ * @invariant valid: value.length >= 1 && value.length <= 200
  * Make it with `makeJourneyLabel`; never `as JourneyLabel` (see dt guide lint).
  * @see contexts/collaboration/model/record.dt:9
  */
@@ -8185,11 +8185,11 @@ export type MakeMentionableParticipant = (value: ParticipantId, context: Session
 
 /**
  * Fields shared by every state of メッセージ (Request).
- * @invariant atMostTwentyTargets (対象は20件まで): count(targets) <= 20
- * @invariant distinctTargets (同じ対象は1回): unique(targets, t => t.target)
- * @invariant atMostTwentyMentions (言及する人は20人まで): count(mentions) <= 20
- * @invariant distinctMentions (同じ人の言及は1回): unique(mentions)
- * @invariant noWorkspaceTarget (ワークスペース全体は対象に挙げない): all(targets, t => t.target.kind != ModelTarget.Workspace)
+ * @invariant atMostTwentyTargets (対象は20件まで): targets.length <= 20
+ * @invariant distinctTargets (同じ対象は1回): targets.unique(t => t.target)
+ * @invariant atMostTwentyMentions (言及する人は20人まで): mentions.length <= 20
+ * @invariant distinctMentions (同じ人の言及は1回): mentions.unique()
+ * @invariant noWorkspaceTarget (ワークスペース全体は対象に挙げない): targets.every(t => t.target.kind != ModelTarget.Workspace)
  * @see contexts/collaboration/model/request.dt:84
  */
 export interface RequestCommon {
@@ -8343,11 +8343,11 @@ export interface SendRequestParams {
 /**
  * Request.send (new -> Sent) — factory
  * 依頼を送る
- * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: count(targets) <= 20
- * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: unique(targets, t => t.target)
- * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
- * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: count(mentions) <= 20
- * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: unique(mentions)
+ * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: targets.length <= 20
+ * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: targets.unique(t => t.target)
+ * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: targets.every(t => t.target.kind != ModelTarget.Workspace)
+ * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: mentions.length <= 20
+ * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: mentions.unique()
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:125
  */
@@ -8363,11 +8363,11 @@ export type SendRequest = (
 /**
  * Request.send, decided by one function; implement it with `decide(RequestShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: count(targets) <= 20
- * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: unique(targets, t => t.target)
- * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: all(targets, t => t.target.kind != ModelTarget.Workspace)
- * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: count(mentions) <= 20
- * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: unique(mentions)
+ * @requires atMostTwentyTargets (対象は20件まで) else TooManyTargets: targets.length <= 20
+ * @requires distinctTargets (同じ対象は1回) else DuplicateTarget: targets.unique(t => t.target)
+ * @requires noWorkspaceTarget (ワークスペース全体は対象に挙げない) else WorkspaceTarget: targets.every(t => t.target.kind != ModelTarget.Workspace)
+ * @requires atMostTwentyMentions (言及する人は20人まで) else TooManyMentions: mentions.length <= 20
+ * @requires distinctMentions (同じ人の言及は1回) else DuplicateMention: mentions.unique()
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
  * @see contexts/collaboration/model/request.dt:125
@@ -9101,7 +9101,7 @@ export function equalRevisionOrigin(a: RevisionOrigin, b: RevisionOrigin): boole
 
 /**
  * Fields shared by every state of リビジョン (Revision).
- * @invariant distinctPaths (パスは1ファイル1回): unique(files, f => f.path)
+ * @invariant distinctPaths (パスは1ファイル1回): files.unique(f => f.path)
  * @invariant hashOfFiles (内容ハッシュはファイルから決まる): not expressed in the DSL
  * @see contexts/collaboration/model/revision.dt:54
  */
@@ -9530,7 +9530,7 @@ export const makeSessionId: MakeSessionId = (value) => {
 /**
  * 参加者ID
  * 参加者の識別子。認証された本人（または開発用の本人）ごとに決まる。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeParticipantId`; never `as ParticipantId` (see dt guide lint).
  * @see contexts/collaboration/model/session.dt:6
  */
@@ -9576,7 +9576,7 @@ export const makeParticipantId: MakeParticipantId = (value) => {
 /**
  * 表示名
  * 他の参加者に見せる名前。メールアドレスは他の参加者に見せない。
- * @invariant valid: length(value) >= 1 && length(value) <= 200
+ * @invariant valid: value.length >= 1 && value.length <= 200
  * Make it with `makeDisplayName`; never `as DisplayName` (see dt guide lint).
  * @see contexts/collaboration/model/session.dt:9
  */
@@ -9656,9 +9656,9 @@ export type MakeActiveSession = (value: SessionId) => Promise<Result<ActiveSessi
 
 /**
  * Fields shared by every state of セッション (Session).
- * @invariant distinctParticipants (参加者は1人1回): unique(participants)
- * @invariant facilitatorListed (ファシリテーターは参加者の1人): any(participants, p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
- * @invariant soleFacilitator (ファシリテーターは1人): all(participants, p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
+ * @invariant distinctParticipants (参加者は1人1回): participants.unique()
+ * @invariant facilitatorListed (ファシリテーターは参加者の1人): participants.some(p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
+ * @invariant soleFacilitator (ファシリテーターは1人): participants.every(p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
  * @see contexts/collaboration/model/session.dt:23
  */
 export interface SessionCommon {
@@ -9820,7 +9820,7 @@ export interface JoinSessionParams {
  * Session.join (Open -> Open)
  * 参加する
  * 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。ひとりのセッションにはほかの人は参加しない。
- * @requires newcomer (まだ参加していない) else AlreadyJoined: all(participants, p => p.id != participant)
+ * @requires newcomer (まだ参加していない) else AlreadyJoined: participants.every(p => p.id != participant)
  * @requires collaborative (共同編集のセッション) else SoloSession: mode == SessionMode.Collab
  * @changes participants
  * @emits ParticipantJoined — exactly once when the command succeeds
@@ -9839,7 +9839,7 @@ export type JoinSession = (
 /**
  * Session.join, decided per source state; implement it with `decide(SessionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires newcomer (まだ参加していない) else AlreadyJoined: all(participants, p => p.id != participant)
+ * @requires newcomer (まだ参加していない) else AlreadyJoined: participants.every(p => p.id != participant)
  * @requires collaborative (共同編集のセッション) else SoloSession: mode == SessionMode.Collab
  * @changes participants
  * Open -> Open — set: participants; carried over: id, facilitator, mode, startedAt, currentJourney
@@ -10348,7 +10348,7 @@ export interface SessionAlreadyClosed {
 /**
  * 要素名
  * `.dt` モデルの要素の名前（`Sales.Order`、`Sales.Order.confirm` など）。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeElementName`; never `as ElementName` (see dt guide lint).
  * @see contexts/collaboration/model/target.dt:3
  */
@@ -10394,7 +10394,7 @@ export const makeElementName: MakeElementName = (value) => {
 /**
  * ストーミング名
  * ストーミングの名前。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeStormingName`; never `as StormingName` (see dt guide lint).
  * @see contexts/collaboration/model/target.dt:6
  */
@@ -10440,7 +10440,7 @@ export const makeStormingName: MakeStormingName = (value) => {
 /**
  * ストーミング内の要素名
  * ストーミングの中で要素を指す名前。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeStormingLocalName`; never `as StormingLocalName` (see dt guide lint).
  * @see contexts/collaboration/model/target.dt:9
  */
@@ -10486,7 +10486,7 @@ export const makeStormingLocalName: MakeStormingLocalName = (value) => {
 /**
  * タイムライン名
  * ストーミングのタイムラインの名前。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeTimelineName`; never `as TimelineName` (see dt guide lint).
  * @see contexts/collaboration/model/target.dt:12
  */
@@ -10532,7 +10532,7 @@ export const makeTimelineName: MakeTimelineName = (value) => {
 /**
  * ストーミングのイベント名
  * ストーミングのイベントの名前。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeStormingEventName`; never `as StormingEventName` (see dt guide lint).
  * @see contexts/collaboration/model/target.dt:15
  */
@@ -10578,7 +10578,7 @@ export const makeStormingEventName: MakeStormingEventName = (value) => {
 /**
  * 出現の道筋
  * タイムラインの中でイベントの出現を指す道筋。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeOccurrencePath`; never `as OccurrencePath` (see dt guide lint).
  * @see contexts/collaboration/model/target.dt:18
  */
@@ -11866,7 +11866,7 @@ export interface TriageNotProposable {
 /**
  * コンテキスト名
  * `.dt` モデルのコンテキストの名前。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeContextName`; never `as ContextName` (see dt guide lint).
  * @see contexts/collaboration/model/view.dt:3
  */
@@ -11912,7 +11912,7 @@ export const makeContextName: MakeContextName = (value) => {
 /**
  * 段階名
  * ストーミングの段階の名前。
- * @invariant valid: length(value) >= 1
+ * @invariant valid: value.length >= 1
  * Make it with `makeStageName`; never `as StageName` (see dt guide lint).
  * @see contexts/collaboration/model/view.dt:6
  */
@@ -11958,7 +11958,7 @@ export const makeStageName: MakeStageName = (value) => {
 /**
  * カタログの絞り込み
  * カタログの絞り込みの文字列。
- * @invariant valid: length(value) >= 1 && length(value) <= 200
+ * @invariant valid: value.length >= 1 && value.length <= 200
  * Make it with `makeCatalogQuery`; never `as CatalogQuery` (see dt guide lint).
  * @see contexts/collaboration/model/view.dt:9
  */
@@ -12004,7 +12004,7 @@ export const makeCatalogQuery: MakeCatalogQuery = (value) => {
 /**
  * カタログの区分
  * カタログの区分（`aggregates`、`events` など）。
- * @invariant valid: matches(value, "^[A-Za-z]+$") && length(value) <= 40
+ * @invariant valid: value.matches("^[A-Za-z]+$") && value.length <= 40
  * Make it with `makeCatalogSection`; never `as CatalogSection` (see dt guide lint).
  * @see contexts/collaboration/model/view.dt:12
  */

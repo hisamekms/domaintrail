@@ -27,7 +27,7 @@ const MODEL = `context M {
     name: String
     expr: Expr?
     children: Rule[0..*]
-    invariant named { length(name) > 0 }
+    invariant named { name.length > 0 }
   }
   value Chain { label: String  next: Chain? }
   id DocId: UUID

@@ -1,6 +1,7 @@
 // The AST → model as written mapping (domain/source-model.ts): every declaration with its sites, its expressions as
 // trees and its references resolved to the declarations they name. A site is the range of a node or of one of its
 // properties (`siteOf`), where Modeling's rules report.
+import { methodForm, patternSource } from './methods.js';
 import type { AstNode, Reference } from 'langium';
 import {
     isAggregate,
@@ -104,7 +105,41 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         if (isDecimalLiteral(e)) return { ...base, k: 'decimal', value: e.value, negative: e.negative };
         if (isStringLiteral(e)) return { ...base, k: 'string', value: e.value };
         if (isNameRef(e)) return { ...base, k: 'name', name: e.name };
-        if (isMemberAccess(e)) return { ...base, k: 'member', receiver: expr(e.receiver), member: e.member, memberAt: site(e, 'member') };
+        if (isMemberAccess(e)) {
+            // the method forms of Phase 2 (`xs.every(x => p)`, `x.length`, …) are the expressions their functions were
+            const m = methodForm(e);
+            const receiver = expr(e.receiver);
+            const receiverAt = site(e, 'receiver');
+            if (m.k === 'length') return { ...base, k: 'length', operand: receiver, operandAt: receiverAt };
+            if (m.k === 'quantifier')
+                return {
+                    ...base,
+                    k: 'quantifier',
+                    quantifier: m.quantifier,
+                    collection: receiver,
+                    param: m.param,
+                    body: expr(m.body),
+                    collectionAt: receiverAt,
+                    bodyAt: site(e, 'args', 0),
+                };
+            if (m.k === 'contains')
+                return { ...base, k: 'contains', collection: receiver, element: expr(m.element), collectionAt: receiverAt, elementAt: site(e, 'args', 0) };
+            if (m.k === 'unique')
+                return {
+                    ...base,
+                    k: 'unique',
+                    collection: receiver,
+                    ...(m.param !== undefined && { param: m.param }),
+                    keys: m.keys.map(expr),
+                    collectionAt: receiverAt,
+                    keysAt: m.keys.map((_, i) => site(e, 'args', i)),
+                };
+            if (m.k === 'matches')
+                return { ...base, k: 'matches', operand: receiver, pattern: patternSource(m.pattern), operandAt: receiverAt, patternAt: site(e, 'args', 0) };
+            // a call that is no method form is reported as such (parse.ts); it checks as nothing more
+            if (m.k === 'invalid') return { ...base, k: 'bool', value: false };
+            return { ...base, k: 'member', receiver, member: e.member, memberAt: site(e, 'member') };
+        }
         if (isNotExpr(e)) return { ...base, k: 'not', operand: expr(e.operand) };
         if (isBinaryExpr(e))
             return {

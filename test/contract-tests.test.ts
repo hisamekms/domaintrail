@@ -54,9 +54,9 @@ context Shop {
   primitive Qty: Int { value in 1..10 }
 
   primitive Code: String {
-    invariant format { matches(value, "^[A-Z]{2}[0-9]$") }
+    invariant format { value.matches("^[A-Z]{2}[0-9]$") }
     invariant reserved "予約語でない"
-    invariant short { length(value) <= 3 }
+    invariant short { value.length <= 3 }
   }
 
   value Line {
@@ -68,7 +68,7 @@ context Shop {
     id: CartId
     lines: Line[0..*]
 
-    invariant distinctCodes { unique(lines, l => l.code) }
+    invariant distinctCodes { lines.unique(l => l.code) }
 
     state Open
 
@@ -84,15 +84,15 @@ context Shop {
 
     command add(line: Line, limit: Int)
       Open -> Open
-      requires fresh { all(lines, l => l.code != line.code) } else Duplicate
-      requires underLimit { count(lines) < limit } else Full
+      requires fresh { lines.every(l => l.code != line.code) } else Duplicate
+      requires underLimit { lines.length < limit } else Full
       requires allowed "許可された商品" else Forbidden
       changes lines
       emits Added[2..3]
 
     command close()
       Open -> Closed
-      requires notEmpty { count(lines) > 0 } else Empty
+      requires notEmpty { lines.length > 0 } else Empty
   }
 
   event Opened {

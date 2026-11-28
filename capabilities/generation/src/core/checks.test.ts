@@ -27,7 +27,7 @@ shared context Common {
   enum Currency { JPY USD }
   primitive Amount: Decimal { invariant nonNegative { value >= 0 } }
   value Money { amount: Amount  currency: Currency }
-  value Caption { text: String  max: Amount  invariant fits { length(text) <= max } }
+  value Caption { text: String  max: Amount  invariant fits { text.length <= max } }
 }`,
     'sales.dt': `
 context Sales {
@@ -35,25 +35,25 @@ context Sales {
   id OrderId: UUID
   primitive Quantity: Int { value in 1..999 }
   primitive Sku: String {
-    invariant format { matches(value, "^[A-Z]{3}-\\d{4}$") }
+    invariant format { value.matches("^[A-Z]{3}-\\d{4}$") }
     invariant reserved "予約語でない"
-    invariant short { length(value) <= 8 }
+    invariant short { value.length <= 8 }
   }
-  primitive Code: String { matches(value, "^a/b$") }
+  primitive Code: String { value.matches("^a/b$") }
   primitive Note: String
-  primitive Token: UUID { invariant v4 { matches(value, "^.{14}4") } }
+  primitive Token: UUID { invariant v4 { value.matches("^.{14}4") } }
   enum Reason { Requested Other }
   value Period {
     from: Timestamp
     until: Timestamp?
     invariant ordered { !(exists(until)) || from <= until }
   }
-  value Tags { names: String[0..*]  invariant distinctNames { unique(names) } }
+  value Tags { names: String[0..*]  invariant distinctNames { names.unique() } }
   value Approval {
     needed: Quantity
     confirmedBy: String[0..*]
-    invariant enough { count(confirmedBy) >= needed }
-    invariant exact { needed == count(confirmedBy) || (count(confirmedBy) in 0..needed) }
+    invariant enough { confirmedBy.length >= needed }
+    invariant exact { needed == confirmedBy.length || (confirmedBy.length in 0..needed) }
   }
   entity Line {
     id: LineId
@@ -62,7 +62,7 @@ context Sales {
     price: Money
   }
   union Payment {
-    Card { last4: String  invariant digits { matches(last4, "^\\d{4}$") } }
+    Card { last4: String  invariant digits { last4.matches("^\\d{4}$") } }
     Cash
   }
   aggregate Order {
@@ -70,8 +70,8 @@ context Sales {
     owns lines: Line[0..*]
     payment: Payment?
     prices: Money[0..*]
-    invariant distinctSkus { unique(lines, l => l.sku) }
-    invariant distinctLines { unique(lines) }
+    invariant distinctSkus { lines.unique(l => l.sku) }
+    invariant distinctLines { lines.unique() }
     state Draft
     state Cancelled {
       reason: Reason
@@ -82,10 +82,10 @@ context Sales {
     create command place(id: OrderId) -> Draft
     command add(line: Line, total: Decimal)
       Draft -> Draft
-      requires newSku { all(lines, x => x.sku != line.sku) } else Duplicate
+      requires newSku { lines.every(x => x.sku != line.sku) } else Duplicate
       requires known "既知の商品" else Unknown
       requires small { total < 100.5 } else TooLarge
-      requires priced { contains(prices, line.price) } else Unpriced
+      requires priced { prices.includes(line.price) } else Unpriced
       changes lines
     command cancel(reason: Reason) Draft -> Cancelled
   }
@@ -95,7 +95,7 @@ context Sales {
     title: String
     invariant titled "件名がある"
     state Open
-    state Closed { invariant short { length(title) <= 80 } }
+    state Closed { invariant short { title.length <= 80 } }
   }
   id MemoId: UUID
   aggregate Memo {
@@ -113,9 +113,9 @@ context Sales {
 test('portable expressions count Unicode scalars, compare Decimal exactly, and preserve regex classes', async () => {
     const m = await generated({
         'portable.dt': `context Portable {
-  primitive TwoScalars: String { invariant two { length(value) == 2 } }
+  primitive TwoScalars: String { invariant two { value.length == 2 } }
   primitive Big: Decimal { invariant bound { value > 9007199254740992.00 } }
-  primitive Address: String { invariant format { matches(value, "^[^@\\s]+@[^@\\s]+$") } }
+  primitive Address: String { invariant format { value.matches("^[^@\\s]+@[^@\\s]+$") } }
 }`,
     });
     expect(m.Portable.checkTwoScalars('😀a')).toEqual([]);
@@ -290,16 +290,16 @@ context Names {
   aggregate Box {
     id: BoxId
     items: Item[0..*]
-    invariant shadow { all(items, box => box.count > 0) }
-    invariant reserved { all(items, enum => all(items, function => enum.name != function.name || enum == function)) }
-    invariant imported { !(any(items, distinct => distinct.count > 0)) || unique(items, Common => Common.name) }
-    invariant same { all(items, item => any(items, item => item.count > 0)) }
-    invariant pair { unique(items, item => item.name) }
-    invariant quoted { all(items, checks => checks.name != "it's \\"q\\"\\\\") }
+    invariant shadow { items.every(box => box.count > 0) }
+    invariant reserved { items.every(enum => items.every(function => enum.name != function.name || enum == function)) }
+    invariant imported { !(items.some(distinct => distinct.count > 0)) || items.unique(Common => Common.name) }
+    invariant same { items.every(item => items.some(item => item.count > 0)) }
+    invariant pair { items.unique(item => item.name) }
+    invariant quoted { items.every(checks => checks.name != "it's \\"q\\"\\\\") }
     state Open
     create command make(id: BoxId) -> Open
     command add(item: Item, item2: Item?) Open -> Open
-      requires fresh { all(items, item => item.name != "x") } else Dup
+      requires fresh { items.every(item => item.name != "x") } else Dup
       requires counted { !(exists(item2)) || item2.count > 0 } else Dup
       changes items
   }

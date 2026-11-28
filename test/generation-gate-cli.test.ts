@@ -90,7 +90,7 @@ describe('generation gate CLI', () => {
     });
 
     test('a target capability error blocks generation before writing', async () => {
-        const dir = await project('context X { primitive Code: String { matches(value, "^(?=a)a$") } }');
+        const dir = await project('context X { primitive Code: String { value.matches("^(?=a)a$") } }');
         expect((await run(dir, 'check', '--for-generation')).code).toBe(0);
 
         const result = await run(dir, 'generate', 'ts', '--format', 'json');

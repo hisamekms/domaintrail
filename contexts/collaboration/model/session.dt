@@ -3,10 +3,10 @@ context Collaboration {
   id SessionId "セッションID": UUID
 
   /// 参加者の識別子。認証された本人（または開発用の本人）ごとに決まる。
-  id ParticipantId "参加者ID": String { length(value) >= 1 }
+  id ParticipantId "参加者ID": String { value.length >= 1 }
 
   /// 他の参加者に見せる名前。メールアドレスは他の参加者に見せない。
-  primitive DisplayName "表示名": String { length(value) >= 1 && length(value) <= 200 }
+  primitive DisplayName "表示名": String { value.length >= 1 && value.length <= 200 }
 
   /// セッションでの役割。ファシリテーターはセッションを始めた人で、認証から導かない。
   enum ParticipantRole "役割" { Facilitator "ファシリテーター" Participant "参加者" }
@@ -30,12 +30,12 @@ context Collaboration {
     /// ないときは、道のりのファイルのいちばん新しい進行中の道のり。前のセッションにはない。
     currentJourney: GuideJourneyKey? "いまの道のり"
 
-    invariant distinctParticipants "参加者は1人1回" { unique(participants) }
+    invariant distinctParticipants "参加者は1人1回" { participants.unique() }
     invariant facilitatorListed "ファシリテーターは参加者の1人" {
-      any(participants, p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
+      participants.some(p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
     }
     invariant soleFacilitator "ファシリテーターは1人" {
-      all(participants, p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
+      participants.every(p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
     }
 
     state Open "開催中"
@@ -50,7 +50,7 @@ context Collaboration {
     /// 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。ひとりのセッションにはほかの人は参加しない。
     command join(participant: ParticipantId, name: DisplayName, joinedAt: Timestamp) "参加する"
       Open -> Open
-      requires newcomer "まだ参加していない" { all(participants, p => p.id != participant) } else AlreadyJoined
+      requires newcomer "まだ参加していない" { participants.every(p => p.id != participant) } else AlreadyJoined
       requires collaborative "共同編集のセッション" { mode == SessionMode.Collab } else SoloSession
       changes participants
       emits ParticipantJoined

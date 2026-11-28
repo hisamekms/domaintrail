@@ -105,13 +105,13 @@ context Collaboration {
     /// メッセージか）は残る。ナレッジを消すと、その出典のメッセージが墨消しになる（ADR 0031 の 7）。
     redactedAt: Timestamp? "墨消し日時"
 
-    invariant atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 }
-    invariant distinctTargets "同じ対象は1回" { unique(targets, t => t.target) }
-    invariant atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 }
-    invariant distinctMentions "同じ人の言及は1回" { unique(mentions) }
+    invariant atMostTwentyTargets "対象は20件まで" { targets.length <= 20 }
+    invariant distinctTargets "同じ対象は1回" { targets.unique(t => t.target) }
+    invariant atMostTwentyMentions "言及する人は20人まで" { mentions.length <= 20 }
+    invariant distinctMentions "同じ人の言及は1回" { mentions.unique() }
     /// ワークスペース全体は、対象を挙げないことで表す。
     invariant noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
-      all(targets, t => t.target.kind != ModelTarget.Workspace)
+      targets.every(t => t.target.kind != ModelTarget.Workspace)
     }
 
     state Sent "送信済み"
@@ -124,13 +124,13 @@ context Collaboration {
 
     create command send(id: RequestId, session: ActiveSession, author: ParticipantId, targets: TargetSnapshot[0..20], body: Text, sentAt: Timestamp, replyTo: ReplyableTarget?, mentions: MentionableParticipant[0..20], viewedAt: ViewedAt?) "依頼を送る"
       -> Sent
-      requires atMostTwentyTargets "対象は20件まで" { count(targets) <= 20 } else TooManyTargets
-      requires distinctTargets "同じ対象は1回" { unique(targets, t => t.target) } else DuplicateTarget
+      requires atMostTwentyTargets "対象は20件まで" { targets.length <= 20 } else TooManyTargets
+      requires distinctTargets "同じ対象は1回" { targets.unique(t => t.target) } else DuplicateTarget
       requires noWorkspaceTarget "ワークスペース全体は対象に挙げない" {
-        all(targets, t => t.target.kind != ModelTarget.Workspace)
+        targets.every(t => t.target.kind != ModelTarget.Workspace)
       } else WorkspaceTarget
-      requires atMostTwentyMentions "言及する人は20人まで" { count(mentions) <= 20 } else TooManyMentions
-      requires distinctMentions "同じ人の言及は1回" { unique(mentions) } else DuplicateMention
+      requires atMostTwentyMentions "言及する人は20人まで" { mentions.length <= 20 } else TooManyMentions
+      requires distinctMentions "同じ人の言及は1回" { mentions.unique() } else DuplicateMention
       emits RequestSent
 
     /// ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。

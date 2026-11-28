@@ -120,7 +120,7 @@ describe('verified types: dt show and dependencies', () => {
     const sales = (extra = '', members = 'contact: EmailAddress') => `context Sales {
       id CustomerId: UUID
       id TenantId: UUID
-      primitive EmailAddress: String { matches(value, "^[^@]+@[^@]+$") }
+      primitive EmailAddress: String { value.matches("^[^@]+@[^@]+$") }
       value Spend {
         amount: Decimal
       }

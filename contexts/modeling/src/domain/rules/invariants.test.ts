@@ -31,7 +31,7 @@ describe('invariant scopes', () => {
     });
 
     test('state-level invariants see common and their own fields', async () => {
-        const a = await model('', 'invariant i { !(count(lines) > 0 && reason == Reason.Other) || total > 0 }');
+        const a = await model('', 'invariant i { !(lines.length > 0 && reason == Reason.Other) || total > 0 }');
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -54,19 +54,19 @@ describe('invariant scopes', () => {
 
 describe('invariant types', () => {
     test('M008 the result must be Bool', async () => {
-        const a = await model('invariant i { count(lines) }');
+        const a = await model('invariant i { lines.length }');
         expect(only(a, 'M008')[0].message).toBe("Invariant 'i' must be a Bool expression, but has type 'Int'.");
     });
 
     test.each([
         ['note == 1', "Operator '==' cannot be applied to 'String?' and 'Int'. Optional values must be guarded with exists(...) first."],
         ['total > "x"', "Operator '>' cannot be applied to 'Decimal' and 'String'."],
-        ['count(total) > 0', "count() requires a collection, but got 'Decimal'."],
-        ['all(lines, l => l.quantity)', "The predicate of all() must be Bool, but has type 'Int'."],
+        ['total.length > 0', "'.length' is the size of a list or a string, not of 'Decimal'."],
+        ['lines.every(l => l.quantity)', "The predicate of '.every(…)' must be Bool, but has type 'Int'."],
         ['exists(total)', "exists() requires an optional value, but 'Decimal' is always present."],
         ['!total', "Operator '!' requires Bool, but got 'Decimal'."],
         ['total > 0 && 1', "Operator '&&' requires Bool operands, but the right operand has type 'Int'."],
-        ['any(lines, l => l.price.amount > 0)', "'l.price' is optional; guard the access with exists(...) first."],
+        ['lines.some(l => l.price.amount > 0)', "'l.price' is optional; guard the access with exists(...) first."],
         ['id == 0', "Operator '==' cannot be applied to 'OrderId' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
         const a = await model(`invariant i { ${expr} }`);
@@ -74,12 +74,12 @@ describe('invariant types', () => {
     });
 
     test('exists() guards narrow optional values', async () => {
-        const a = await model('invariant i { all(lines, l => !(exists(l.price)) || l.price.amount > 0) && (exists(note) && note != "") }');
+        const a = await model('invariant i { lines.every(l => !(exists(l.price)) || l.price.amount > 0) && (exists(note) && note != "") }');
         expect(a.diagnostics).toEqual([]);
     });
 
     test('enum values, qualified enum values and numeric comparisons', async () => {
-        const a = await model('', 'invariant i { reason != Sales.Reason.Requested || total >= 1.5 || count(lines) == 0 }');
+        const a = await model('', 'invariant i { reason != Sales.Reason.Requested || total >= 1.5 || lines.length == 0 }');
         expect(a.diagnostics).toEqual([]);
         const b = await model('', 'invariant i { reason == Reason.Unknown }');
         expect(only(b, 'M001')[0].message).toBe("Enum 'Reason' has no value 'Unknown'.");
@@ -124,37 +124,37 @@ describe('unique and contains', () => {
 
     test('unique over elements, one key and a combination of keys', async () => {
         const a = await lists(`
-    invariant distinctLines { unique(lines) }
-    invariant distinctSkus { unique(lines, l => l.sku) && unique(skus) }
-    invariant distinctPairs { unique(lines, l => l.sku, l.id) }
-    invariant distinctPrices { unique(prices) }`);
+    invariant distinctLines { lines.unique() }
+    invariant distinctSkus { lines.unique(l => l.sku) && skus.unique() }
+    invariant distinctPairs { lines.unique(l => l.sku, l.id) }
+    invariant distinctPrices { prices.unique() }`);
         expect(a.diagnostics).toEqual([]);
     });
 
     test('contains: membership, subsets and literals of a domain primitive', async () => {
         const a = await lists(`
-    invariant member { contains(skus, favorite) && contains(skus, "ABC") }
-    invariant subset { all(required, s => contains(skus, s)) }
-    invariant guarded { !(exists(reason)) || contains(reasons, reason) }
-    invariant ofValues { all(lines, l => !(exists(l.price)) || contains(prices, l.price)) }`);
+    invariant member { skus.includes(favorite) && skus.includes("ABC") }
+    invariant subset { required.every(s => skus.includes(s)) }
+    invariant guarded { !(exists(reason)) || reasons.includes(reason) }
+    invariant ofValues { lines.every(l => !(exists(l.price)) || prices.includes(l.price)) }`);
         expect(a.diagnostics).toEqual([]);
     });
 
     test.each([
-        ['unique(total)', "unique() requires a collection, but got 'Decimal'."],
+        ['total.unique()', "'.unique(…)' requires a collection, but got 'Decimal'."],
         [
-            'unique(lines, l => l.note)',
-            "Key 'l.note' of unique() is optional ('String?'); keys must always be present. Group the keys into a value object and use it as the key.",
+            'lines.unique(l => l.note)',
+            "Key 'l.note' of '.unique(…)' is optional ('String?'); keys must always be present. Group the keys into a value object and use it as the key.",
         ],
-        ['unique(lines, l => l.sku, l.tags)', "Key 'l.tags' of unique() has type 'String[0..*]', which cannot be compared with '=='."],
-        ['unique(lines, l => l.missing)', "'Line' has no field 'missing'."],
-        ['contains(total, 1)', "contains() requires a collection, but got 'Decimal'."],
-        ['contains(skus, total)', "contains() cannot compare elements of type 'Sku' with 'Decimal'."],
+        ['lines.unique(l => l.sku, l.tags)', "Key 'l.tags' of '.unique(…)' has type 'String[0..*]', which cannot be compared with '=='."],
+        ['lines.unique(l => l.missing)', "'Line' has no field 'missing'."],
+        ['total.includes(1)', "'.includes(…)' requires a collection, but got 'Decimal'."],
+        ['skus.includes(total)', "'.includes(…)' cannot compare elements of type 'Sku' with 'Decimal'."],
         [
-            'contains(reasons, reason)',
-            "contains() cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be guarded with exists(...) first.",
+            'reasons.includes(reason)',
+            "'.includes(…)' cannot compare elements of type 'Reason' with 'Reason?'. Optional values must be guarded with exists(...) first.",
         ],
-        ['contains(lines, prices)', "contains() cannot compare elements of type 'Line' with 'Money[0..*]'."],
+        ['lines.includes(prices)', "'.includes(…)' cannot compare elements of type 'Line' with 'Money[0..*]'."],
     ])('M009 %s', async (expr, message) => {
         const a = await lists(`invariant i { ${expr} }`);
         expect(a.diagnostics.filter((d) => d.severity === 'error').map((d) => d.message)).toEqual([message]);
@@ -170,8 +170,8 @@ describe('unique and contains', () => {
     contains: String[0..*]
     matches: String
     all: Int[0..*]
-    invariant i { count > 0 && unique && count(contains) == count && contains(contains, matches) }
-    invariant j { all(all, any => any > count) && unique(all, exists => exists) }
+    invariant i { count > 0 && unique && contains.length == count && contains.includes(matches) }
+    invariant j { all.every(any => any > count) && all.unique(exists => exists) }
   }`);
         expect(a.diagnostics).toEqual([]);
     });
@@ -216,13 +216,13 @@ describe('invariants without an expression', () => {
     test('in domain primitives, next to invariants with an expression', async () => {
         const a = await checkSales(`
   primitive Code: String {
-    invariant format { matches(value, "^[A-Z]+$") }
+    invariant format { value.matches("^[A-Z]+$") }
     invariant registered "登録済みのコード"
     invariant bare
   }`);
         expect(codes(a)).toEqual(['M018']);
         expect(element(a.model, 'Sales.Code').invariants.map((i) => [i.name, i.source])).toEqual([
-            ['format', 'matches(value, "^[A-Z]+$")'],
+            ['format', 'value.matches("^[A-Z]+$")'],
             ['registered', undefined],
             ['bare', undefined],
         ]);

@@ -6,7 +6,7 @@ import { availableCommands, distinct, err, fromAnyState, isAvailable, ok, sameLi
 /**
  * ナレッジID
  * ナレッジの識別子（`kn_` と小文字の英数字）。抽出の操作を作るときに dt が決める（同じ抽出を送り直しても同じ ID）。
- * @invariant valid: matches(value, "^kn_[0-9a-z]{8,32}$")
+ * @invariant valid: value.matches("^kn_[0-9a-z]{8,32}$")
  * Make it with `makeKnowledgeItemId`; never `as KnowledgeItemId` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:11
  */
@@ -52,7 +52,7 @@ export const makeKnowledgeItemId: MakeKnowledgeItemId = (value) => {
 /**
  * 画像ID
  * 画像の識別子（`img_` と小文字の英数字）。本文は `![…](image:img_…)` で画像を指す。
- * @invariant valid: matches(value, "^img_[0-9a-z]{8,32}$")
+ * @invariant valid: value.matches("^img_[0-9a-z]{8,32}$")
  * Make it with `makeImageId`; never `as ImageId` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:14
  */
@@ -98,7 +98,7 @@ export const makeImageId: MakeImageId = (value) => {
 /**
  * プロジェクト名
  * ナレッジとメンバーを持つ共有の単位の名前。ワークスペースは `knowledge.project` でこれを指す。API のパスに入る。
- * @invariant valid: matches(value, "^[a-z0-9][a-z0-9-]{0,62}$")
+ * @invariant valid: value.matches("^[a-z0-9][a-z0-9-]{0,62}$")
  * Make it with `makeProjectName`; never `as ProjectName` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:17
  */
@@ -144,7 +144,7 @@ export const makeProjectName: MakeProjectName = (value) => {
 /**
  * 見出し
  * ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
- * @invariant valid: length(value) <= 40 && matches(value, "^\S(.*\S)?$")
+ * @invariant valid: value.length <= 40 && value.matches("^\S(.*\S)?$")
  * Make it with `makeItemTitle`; never `as ItemTitle` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:20
  */
@@ -190,7 +190,7 @@ export const makeItemTitle: MakeItemTitle = (value) => {
 /**
  * 本文
  * ナレッジの本文（Markdown）。
- * @invariant valid: length(value) >= 1 && length(value) <= 20000
+ * @invariant valid: value.length >= 1 && value.length <= 20000
  * Make it with `makeItemText`; never `as ItemText` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:23
  */
@@ -236,7 +236,7 @@ export const makeItemText: MakeItemText = (value) => {
 /**
  * 引用
  * 出典のメッセージの短い引用。セッションのデータベースは1台にしか残らないので、AI の言い換えを読み手が確かめられるのはこれ。
- * @invariant valid: length(value) >= 1 && length(value) <= 500
+ * @invariant valid: value.length >= 1 && value.length <= 500
  * Make it with `makeQuote`; never `as Quote` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:26
  */
@@ -282,7 +282,7 @@ export const makeQuote: MakeQuote = (value) => {
 /**
  * 立場
  * 立場（案件担当、営業、外注先など）。役割で書き、人の名前は書かない。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makePerspective`; never `as Perspective` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:29
  */
@@ -328,7 +328,7 @@ export const makePerspective: MakePerspective = (value) => {
 /**
  * 理由
  * 抽出が操作ごとに添える理由。監査のログに残る。
- * @invariant valid: length(value) >= 1 && length(value) <= 2000
+ * @invariant valid: value.length >= 1 && value.length <= 2000
  * Make it with `makeReason`; never `as Reason` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:32
  */
@@ -374,7 +374,7 @@ export const makeReason: MakeReason = (value) => {
 /**
  * 付箋
  * 付箋の参照 `<Storming>.<LocalId>`。ラベルを変えても切れない。付箋があるかは `dt check` が確かめる。
- * @invariant valid: matches(value, "^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$")
+ * @invariant valid: value.matches("^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$")
  * Make it with `makeStickyRef`; never `as StickyRef` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:35
  */
@@ -420,7 +420,7 @@ export const makeStickyRef: MakeStickyRef = (value) => {
 /**
  * セッション
  * セッションの ID（コラボレーションのセッション）。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeSessionRef`; never `as SessionRef` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:38
  */
@@ -466,7 +466,7 @@ export const makeSessionRef: MakeSessionRef = (value) => {
 /**
  * メッセージ
  * セッションの中のメッセージの ID（人のメッセージか AI の答え）。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeMessageRef`; never `as MessageRef` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:41
  */
@@ -512,7 +512,7 @@ export const makeMessageRef: MakeMessageRef = (value) => {
 /**
  * ユーザー
  * ユーザー（Access のメールアドレス）。
- * @invariant valid: length(value) >= 1 && length(value) <= 320
+ * @invariant valid: value.length >= 1 && value.length <= 320
  * Make it with `makeUserName`; never `as UserName` (see dt guide lint).
  * @see contexts/knowledge/model/context.dt:44
  */
@@ -709,7 +709,7 @@ export function equalLabels(a: Labels, b: Labels): boolean {
 /**
  * 中身
  * ナレッジの中身: 見出し、本文、ラベル、どの付箋の話か。版ごとに残るのはこれ。
- * @invariant distinctAbout (付箋は1回): unique(about)
+ * @invariant distinctAbout (付箋は1回): about.unique()
  * @see contexts/knowledge/model/context.dt:78
  */
 export interface ItemContent {
@@ -1088,10 +1088,10 @@ export function equalRedaction(a: Redaction, b: Redaction): boolean {
 
 /**
  * Fields shared by every state of ナレッジ (KnowledgeItem).
- * @invariant distinctSources (出典のメッセージは1回): unique(sources, s => s.session, s.message)
- * @invariant distinctConflicts (食い違うナレッジは1回): unique(conflictsWith)
- * @invariant notConflictingItself (自分とは食い違わない): !contains(conflictsWith, id)
- * @invariant conflictsSourced (食い違いには出典がある): count(conflictsWith) == 0 || count(sources) >= 1
+ * @invariant distinctSources (出典のメッセージは1回): sources.unique(s => s.session, s.message)
+ * @invariant distinctConflicts (食い違うナレッジは1回): conflictsWith.unique()
+ * @invariant notConflictingItself (自分とは食い違わない): !conflictsWith.includes(id)
+ * @invariant conflictsSourced (食い違いには出典がある): conflictsWith.length == 0 || sources.length >= 1
  * @see contexts/knowledge/model/item.dt:5
  */
 export interface KnowledgeItemCommon {
@@ -1225,7 +1225,7 @@ export interface AddKnowledgeItemParams {
  * KnowledgeItem.add (new -> Live) — factory
  * 足す
  * 抽出が新しい発見を足す。
- * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
+ * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: sources.unique(s => s.session, s.message)
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:36
  */
@@ -1241,7 +1241,7 @@ export type AddKnowledgeItem = (
 /**
  * KnowledgeItem.add, decided by one function; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
+ * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: sources.unique(s => s.session, s.message)
  * new -> Live — set: every field
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:36
@@ -1288,7 +1288,7 @@ export interface AddConflictingKnowledgeItemParams {
  * KnowledgeItem.addConflicting (new -> Live) — factory
  * 食い違いとして足す
  * 抽出が、前のナレッジと食い違う発見を足す（前のナレッジには `linkConflict` でつなぐ）。
- * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
+ * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: sources.unique(s => s.session, s.message)
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:44
@@ -1305,7 +1305,7 @@ export type AddConflictingKnowledgeItem = (
 /**
  * KnowledgeItem.addConflicting, decided by one function; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: unique(sources, s => s.session, s.message)
+ * @requires distinctSources (出典のメッセージは1回) else DuplicateSource: sources.unique(s => s.session, s.message)
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
  * new -> Live — set: every field
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
@@ -1352,7 +1352,7 @@ export interface AddSourceKnowledgeItemParams {
  * 出典を足す
  * 同じ発見がまた言われた: 出典を1つ足す。合意（話がそのまま進んだ）なら、発言を合意に上げる（ほかの出どころは変えない）。
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
- * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session || s.message != source.message)
+ * @requires newSource (まだない出典) else DuplicateSource: sources.every(s => s.session != source.session || s.message != source.message)
  * @changes content, sources, updatedAt
  * @emits KnowledgeSourceAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:53
@@ -1371,7 +1371,7 @@ export type AddSourceKnowledgeItem = (
  * KnowledgeItem.addSource, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
- * @requires newSource (まだない出典) else DuplicateSource: all(sources, s => s.session != source.session || s.message != source.message)
+ * @requires newSource (まだない出典) else DuplicateSource: sources.every(s => s.session != source.session || s.message != source.message)
  * @changes content, sources, updatedAt
  * Live -> Live — set: content, sources, updatedAt; carried over: id, version, conflictsWith, createdIn, createdAt, bookmarked, retirement
  * @see contexts/knowledge/model/item.dt:53
@@ -1488,7 +1488,7 @@ export interface LinkConflictKnowledgeItemParams {
  * 抽出が、このナレッジと食い違う新しいナレッジをつなぐ。
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
- * @requires sourced (出典がある) else ConflictWithoutSource: count(sources) >= 1
+ * @requires sourced (出典がある) else ConflictWithoutSource: sources.length >= 1
  * @changes conflictsWith, updatedAt
  * @emits KnowledgeConflictLinked — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:73
@@ -1508,7 +1508,7 @@ export type LinkConflictKnowledgeItem = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires current (抽出が見た版のまま) else StaleOperation: base == version
  * @requires notItself (自分とは食い違わない) else ConflictWithItself: other != id
- * @requires sourced (出典がある) else ConflictWithoutSource: count(sources) >= 1
+ * @requires sourced (出典がある) else ConflictWithoutSource: sources.length >= 1
  * @changes conflictsWith, updatedAt
  * Live -> Live — set: conflictsWith, updatedAt; carried over: id, content, sources, version, createdIn, createdAt, bookmarked, retirement
  * @see contexts/knowledge/model/item.dt:73
@@ -2658,7 +2658,7 @@ export interface KnowledgeItemGone {
 /**
  * 廃止の候補ID
  * 廃止の候補の識別子（`rp_` と小文字の英数字）。候補を出す側の中身から決める（同じ候補を送り直しても同じ ID）。
- * @invariant valid: matches(value, "^rp_[0-9a-z]{8,32}$")
+ * @invariant valid: value.matches("^rp_[0-9a-z]{8,32}$")
  * Make it with `makeRetirementProposalId`; never `as RetirementProposalId` (see dt guide lint).
  * @see contexts/knowledge/model/retirement.dt:3
  */
@@ -2704,7 +2704,7 @@ export const makeRetirementProposalId: MakeRetirementProposalId = (value) => {
 /**
  * 見直し
  * 見直しの1回を指す名前。見直しの担当が決める。
- * @invariant valid: length(value) >= 1 && length(value) <= 100
+ * @invariant valid: value.length >= 1 && value.length <= 100
  * Make it with `makeReviewRef`; never `as ReviewRef` (see dt guide lint).
  * @see contexts/knowledge/model/retirement.dt:6
  */
@@ -2750,7 +2750,7 @@ export const makeReviewRef: MakeReviewRef = (value) => {
 /**
  * 根拠の説明
  * 根拠の短い説明（付箋がどう変わったか）。
- * @invariant valid: length(value) >= 1 && length(value) <= 500
+ * @invariant valid: value.length >= 1 && value.length <= 500
  * Make it with `makeEvidenceNote`; never `as EvidenceNote` (see dt guide lint).
  * @see contexts/knowledge/model/retirement.dt:9
  */
@@ -2952,7 +2952,7 @@ export function equalProposer(a: Proposer, b: Proposer): boolean {
  * @invariant unretireHasNoReason (取り消しの候補に理由はない): !(action == ProposalAction.unretire) || !exists(reason)
  * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
  * @invariant notReplacedByItself (自分には置き換わらない): !(exists(replacedBy)) || replacedBy != item
- * @invariant distinctEvidence (根拠は1回): unique(evidence)
+ * @invariant distinctEvidence (根拠は1回): evidence.unique()
  * @see contexts/knowledge/model/retirement.dt:63
  */
 export interface RetirementProposalCommon {
@@ -3115,7 +3115,7 @@ export interface ProposeRetirementProposalParams {
  * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || !exists(reason)
  * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
  * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: !(exists(replacedBy)) || replacedBy != item
- * @requires distinctEvidence (根拠は1回) else MalformedProposal: unique(evidence)
+ * @requires distinctEvidence (根拠は1回) else MalformedProposal: evidence.unique()
  * @emits RetirementProposed — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:98
  */
@@ -3135,7 +3135,7 @@ export type ProposeRetirementProposal = (
  * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || !exists(reason)
  * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
  * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: !(exists(replacedBy)) || replacedBy != item
- * @requires distinctEvidence (根拠は1回) else MalformedProposal: unique(evidence)
+ * @requires distinctEvidence (根拠は1回) else MalformedProposal: evidence.unique()
  * new -> Open — set: every field
  * @emits RetirementProposed — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:98

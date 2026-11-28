@@ -59,6 +59,7 @@ function inlineSep(a: Token, b: Token): 'none' | 'space' {
     if ([')', ',', ']', '?', '.', '..', ':', '::', '['].includes(b.text)) return 'none';
     if (['(', '[', '.', '..', '::'].includes(a.text)) return 'none';
     if (a.text === '!' && ast.isNotExpr(a.leaf.astNode)) return 'none'; // `!x`, `!(p)`: the prefix sticks
+    if (b.text === '(' && ast.isMemberAccess(b.leaf.astNode) && b.leaf.astNode.call && a.leaf.astNode === b.leaf.astNode) return 'none'; // `xs.every(…)`
     if (b.text === '(' && a.leaf.astNode === b.leaf.astNode && (ast.isCommand(a.leaf.astNode) || ast.isExternalCheck(a.leaf.astNode) || FUNCTIONS.has(a.text)))
         return 'none';
     if (a.text === '-' && (ast.isIntLiteral(a.leaf.astNode) || ast.isDecimalLiteral(a.leaf.astNode))) return 'none';

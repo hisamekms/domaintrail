@@ -33,7 +33,7 @@ describe('requires', () => {
     command accept(person: PersonId) "受入"
       Reviewing | Escalated -> Accepted
       requires authorizedApprover "承認者である" {
-        contains(policy.approvers, person)
+        policy.approvers.includes(person)
       } else NotApprover
       /// 阻害がすべて解決済み
       requires noOpenBlocker "未解決の阻害がない" else Blocked
@@ -44,7 +44,7 @@ describe('requires', () => {
             {
                 name: 'authorizedApprover',
                 label: '承認者である',
-                source: 'contains(policy.approvers, person)',
+                source: 'policy.approvers.includes(person)',
                 expr: {
                     k: 'contains',
                     collection: { k: 'member', receiver: { k: 'name', name: 'policy' }, member: 'approvers' },
@@ -61,7 +61,7 @@ describe('requires', () => {
     test('an error listed in errors and named by else, or by several requirements, is listed once', async () => {
         const a = await review(`
     command accept(person: PersonId) Reviewing -> Accepted
-      requires a { contains(policy.approvers, person) } else NotApprover
+      requires a { policy.approvers.includes(person) } else NotApprover
       requires b { blockers == 0 } else Blocked
       requires c { reviewer != person } else NotApprover
       errors Blocked, Conflict`);
@@ -115,7 +115,7 @@ describe('scope of requires', () => {
     test('parameters, common fields and fields taken from field sets', async () => {
         const a = await review(`
     command accept(person: PersonId) Reviewing | Escalated | Accepted -> Accepted
-      requires x { !(contains(policy.approvers, person) && exists(auditedBy)) || auditedBy != person } else NotApprover`);
+      requires x { !(policy.approvers.includes(person) && exists(auditedBy)) || auditedBy != person } else NotApprover`);
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -154,7 +154,7 @@ describe('scope of requires', () => {
     test('a factory sees its parameters only', async () => {
         const a = await review(`
     create command open(person: PersonId, policy: Policy) -> Reviewing
-      requires x { contains(policy.approvers, person) } else NotApprover
+      requires x { policy.approvers.includes(person) } else NotApprover
       requires y { exists(auditedBy) || blockers > 0 } else Blocked`);
         expect(errors(a)).toEqual([
             ['M010', "Field 'auditedBy' of 'Review' is not in scope: the requirements of a 'create command' see only its parameters."],
@@ -169,7 +169,7 @@ describe('scope of requires', () => {
     id: CustomerId
     active: Bool
     emails: String[0..*]
-    command addEmail(email: String) requires active { active && !contains(emails, email) } else Inactive
+    command addEmail(email: String) requires active { active && !emails.includes(email) } else Inactive
   }
   error Inactive`);
         expect(a.diagnostics).toEqual([]);
@@ -180,7 +180,7 @@ describe('scope of requires', () => {
     command accept(policy: Policy, blockers: Int, note: String) Reviewing | Escalated -> Accepted
       requires x { blockers == 0 } else Blocked
     command reject(policy: Policy) Reviewing -> Accepted
-    create command open(policy: Policy) -> Reviewing requires x { count(policy.approvers) > 0 } else NotApprover`);
+    create command open(policy: Policy) -> Reviewing requires x { policy.approvers.length > 0 } else NotApprover`);
         // `note` is a field of Reviewing only, so it is not seen by the requirements of `accept`
         expect(errors(a)).toEqual([
             ['M019', "Parameter 'policy' of command 'accept' has the name of a field of 'Review' that its requirements see."],
@@ -193,7 +193,7 @@ describe('scope of requires', () => {
         const a = await review(
             `
     command accept(needed: Count, limit: Int) Reviewing -> Accepted
-      requires enough { count(policy.approvers) >= needed } else NotApprover
+      requires enough { policy.approvers.length >= needed } else NotApprover
       requires inLimit { needed <= limit } else Blocked`,
             'primitive Count: Int { value in 0..100 }',
         );

@@ -6,7 +6,7 @@ import { check } from '../../test-helpers.js';
 const SALES = `context Sales "販売" {
   id UserId: UUID
   id PartnerId: UUID
-  primitive PartyName: String { length(value) > 0 }
+  primitive PartyName: String { value.length > 0 }
   enum Process { DELIVERY "配達" PRINTING "印刷" }
 
   /// 実際の行為者。
@@ -22,7 +22,7 @@ const SALES = `context Sales "販売" {
     PRINTING { details: PrintingSpec }
   }
 
-  union Coverage by form { DESCRIPTION { text: String  invariant notBlank { length(text) > 0 } } }
+  union Coverage by form { DESCRIPTION { text: String  invariant notBlank { text.length > 0 } } }
 
   id SpecId: UUID
   aggregate Spec "仕様" {
