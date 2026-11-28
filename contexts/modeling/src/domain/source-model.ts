@@ -379,7 +379,13 @@ export type Expr = ExprBase &
               leftAt: Site;
               rightAt: Site;
           }
-        | { k: 'match'; subject: Expr; cases: { variant: string; bindings: string[]; body: Expr; at: Site; variantAt: Site }[]; subjectAt: Site }
+        | {
+              k: 'match';
+              subject: Expr;
+              /** `tag`: the trial's M2/M3 spellings name the variant by its tag, `kind: Union.Variant` (trial-arm.ts). */
+              cases: { variant: string; bindings: string[]; body: Expr; at: Site; variantAt: Site; tag?: { key: string; union: string; at: Site } }[];
+              subjectAt: Site;
+          }
         | { k: 'call'; name: string; args: Expr[]; nameAt: Site; argsAt: Site[] }
         | { k: 'list'; items: { spread: boolean; value: Expr }[] }
         | { k: 'listMethod'; method: 'map' | 'filter' | 'sum'; collection: Expr; param?: string; body?: Expr; collectionAt: Site; bodyAt?: Site }
@@ -392,7 +398,8 @@ export type Expr = ExprBase &
         | { k: 'matches'; operand: Expr; pattern: string; operandAt: Site; patternAt: Site }
         | { k: 'unique'; collection: Expr; param?: string; keys: Expr[]; collectionAt: Site; keysAt: Site[] }
         | { k: 'contains'; collection: Expr; element: Expr; collectionAt: Site; elementAt: Site }
-        | { k: 'quantifier'; quantifier: 'all' | 'any'; collection: Expr; param: string; body: Expr; collectionAt: Site; bodyAt: Site }
+        /** `method`: the name as written (`every`, `some`; a trial arm's `forall`, `exists`), for the diagnostics. */
+        | { k: 'quantifier'; quantifier: 'all' | 'any'; method?: string; collection: Expr; param: string; body: Expr; collectionAt: Site; bodyAt: Site }
     );
 
 interface ExprBase {

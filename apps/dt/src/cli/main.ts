@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
@@ -1394,12 +1395,15 @@ Examples:
   dt guide --all > domaintrail-guide.md`,
         )
         .action((topic: string | undefined, opts: { all?: boolean }) => {
+            // a build for the Phase 2 AI trial serves its arm's guide (docs/plans/formal-verification/trial/guides)
+            const trialGuide = process.env['DOMAINTRAIL_TRIAL_GUIDE'];
+            const text = trialGuide ? readFileSync(trialGuide, 'utf8') : guide;
             if (opts.all) {
                 if (topic) throw new CliError('Give a topic or --all, not both.');
-                io.out(guide.trimEnd());
+                io.out(text.trimEnd());
                 return;
             }
-            const parsed = parseGuide(guide);
+            const parsed = parseGuide(text);
             if (!topic) return io.out(quickReference(parsed));
             const found = guideTopic(parsed, topic);
             if ('error' in found) throw new CliError(found.error);

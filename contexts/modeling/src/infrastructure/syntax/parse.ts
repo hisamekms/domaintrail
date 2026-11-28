@@ -4,6 +4,7 @@
 // written.
 import { LEGACY_SPELLINGS, legacyTokens } from './migrate.js';
 import { methodForm, nullComparison } from './methods.js';
+import { MATCH_USAGE, matchSpellingOf, trialArm, type MatchSpelling } from './trial-arm.js';
 import * as path from 'node:path';
 import { AstUtils, URI, isCompositeCstNode, type AstNode, type LangiumDocument } from 'langium';
 import { didYouMean, suggestFrom, type Candidate, type Diagnostic, type SourceFile } from '@domaintrail/kernel';
@@ -17,7 +18,9 @@ import {
     isEventDecl,
     isFieldSet,
     isIdType,
+    isMatchExpr,
     isMemberAccess,
+    isNameRef,
     isNullLiteral,
     isPolicy,
     isPrimitiveDecl,
@@ -149,6 +152,30 @@ export async function parseDomain(sources: readonly SourceFile[]): Promise<Parse
                     message: "'null' is compared with an optional value: 'x == null' or 'x != null'.",
                     elementId: elementIdOf(node),
                 });
+                continue;
+            }
+            if (isMatchExpr(node) && node.$cstNode) {
+                const at = (n: AstNode) => {
+                    const r = n.$cstNode!.range;
+                    return { start: { line: r.start.line + 1, column: r.start.character + 1 }, end: { line: r.end.line + 1, column: r.end.character + 1 } };
+                };
+                const report = (n: AstNode, code: 'SYNTAX' | 'M009', message: string) =>
+                    diagnostics.push({ file: resolveFile(doc.uri.toString()), ...at(n), severity: 'error', code, message, elementId: elementIdOf(n) });
+                // one spelling of `match` per arm of the AI trial; A0's without one (trial-arm.ts)
+                const written: MatchSpelling = node.whenCases.length ? 'M2' : node.withCases.length ? 'M3' : 'A0';
+                const allowed = matchSpellingOf(trialArm());
+                if (written !== allowed) report(node, 'SYNTAX', `This form of 'match' is not DomainTrail syntax: write ${MATCH_USAGE[allowed]}.`);
+                else if (written === 'M3') {
+                    if (node.end !== 'exhaustive') report(node, 'SYNTAX', "A 'match(x).with(…)' chain ends with '.exhaustive()'.");
+                    for (const c of node.withCases)
+                        for (const n of AstUtils.streamAst(c.body))
+                            if (
+                                isNameRef(n) &&
+                                n.name === c.param.name &&
+                                !(isMemberAccess(n.$container) && n.$containerProperty === 'receiver' && !n.$container.call)
+                            )
+                                report(n, 'M009', `'${n.name}' is the matched variant: read its fields as '${n.name}.field'.`);
+                }
                 continue;
             }
             if (!isMemberAccess(node)) continue;

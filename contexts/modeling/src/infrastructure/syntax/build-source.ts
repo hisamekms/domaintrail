@@ -104,6 +104,19 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
             at: site(t),
         };
 
+    // M3 (trial): the parameters of the `.with` handlers being lowered, each with the variant's fields it reads
+    const handlers: { readonly param: string; readonly fields: string[] }[] = [];
+    /** A `.with` handler `v => value`: `v.field` reads the field of the matched variant, as A0's binding does. */
+    const narrowedHandler = (param: string, body: () => src.Expr): { body: src.Expr; bindings: string[] } => {
+        const handler = { param, fields: [] as string[] };
+        handlers.push(handler);
+        try {
+            return { body: body(), bindings: handler.fields };
+        } finally {
+            handlers.pop();
+        }
+    };
+
     const expr = (e: Expression): src.Expr => {
         const base = { at: site(e), text: e.$cstNode?.text.replace(/\s+/g, ' ').trim() ?? '' };
         if (isBoolLiteral(e)) return { ...base, k: 'bool', value: e.value === 'true' };
@@ -111,6 +124,11 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         if (isDecimalLiteral(e)) return { ...base, k: 'decimal', value: e.value, negative: e.negative };
         if (isStringLiteral(e)) return { ...base, k: 'string', value: e.value };
         if (isNameRef(e)) return { ...base, k: 'name', name: e.name };
+        const handler = handlers.at(-1);
+        if (handler && isMemberAccess(e) && !e.call && !e.optional && isNameRef(e.receiver) && e.receiver.name === handler.param) {
+            if (!handler.fields.includes(e.member)) handler.fields.push(e.member);
+            return { ...base, k: 'name', name: e.member };
+        }
         if (isMemberAccess(e)) {
             // the method forms of Phase 2 (`xs.every(x => p)`, `x.length`, …) are the expressions their functions were
             const m = methodForm(e);
@@ -122,6 +140,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                     ...base,
                     k: 'quantifier',
                     quantifier: m.quantifier,
+                    method: m.method,
                     collection: receiver,
                     param: m.param,
                     body: expr(m.body),
@@ -179,7 +198,29 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 k: 'match',
                 subject: expr(e.subject),
                 subjectAt: site(e, 'subject'),
-                cases: e.cases.map((c) => ({ variant: c.variant, bindings: [...c.bindings], body: expr(c.body), at: site(c), variantAt: site(c, 'variant') })),
+                // the trial's M2 and M3 spellings (trial-arm.ts) build the same cases as A0's
+                cases: [
+                    ...e.cases.map((c) => ({ variant: c.variant, bindings: [...c.bindings], body: expr(c.body), at: site(c), variantAt: site(c, 'variant') })),
+                    ...e.whenCases.map((c) => ({
+                        variant: c.variant,
+                        bindings: [...c.bindings],
+                        body: expr(c.body),
+                        at: site(c),
+                        variantAt: site(c, 'variant'),
+                        tag: { key: c.tagKey, union: c.tagType, at: site(c, 'tagKey') },
+                    })),
+                    ...e.withCases.map((c) => {
+                        const { body, bindings } = narrowedHandler(c.param.name, () => expr(c.body));
+                        return {
+                            variant: c.variant,
+                            bindings,
+                            body,
+                            at: site(c),
+                            variantAt: site(c, 'variant'),
+                            tag: { key: c.tagKey, union: c.tagType, at: site(c, 'tagKey') },
+                        };
+                    }),
+                ],
             };
         if (isCallExpr(e))
             return {

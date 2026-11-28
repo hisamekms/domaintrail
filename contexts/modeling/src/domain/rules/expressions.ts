@@ -736,6 +736,20 @@ class ExprChecker {
                         );
                         continue;
                     }
+                    if (c.tag && c.tag.key !== discriminatorOf(u))
+                        this.rules.error(
+                            'M009',
+                            `The tag of union '${u.name}' is '${discriminatorOf(u)}', not '${c.tag.key}'.`,
+                            c.tag.at,
+                            `write '${discriminatorOf(u)}: ${u.name}.${c.variant}'`,
+                        );
+                    if (c.tag && c.tag.union !== u.name)
+                        this.rules.error(
+                            'M009',
+                            `'${c.tag.union}.${c.variant}' is not a variant of '${u.name}', the union matched.`,
+                            c.variantAt,
+                            `write '${discriminatorOf(u)}: ${u.name}.${c.variant}'`,
+                        );
                     if (seen.has(c.variant)) this.rules.error('M009', `Variant '${c.variant}' has two cases.`, c.variantAt);
                     seen.add(c.variant);
                     const fields = new Map(fieldsOf(variant.members).map((f) => [f.name, f]));
@@ -884,7 +898,7 @@ class ExprChecker {
                 else if (coll.k !== 'error') {
                     this.rules.error(
                         'M009',
-                        `'.${e.quantifier === 'all' ? 'every' : 'some'}(…)' requires a collection, but got '${showType(coll)}'.`,
+                        `'.${e.method ?? (e.quantifier === 'all' ? 'every' : 'some')}(…)' requires a collection, but got '${showType(coll)}'.`,
                         e.collectionAt,
                     );
                 }
@@ -893,7 +907,7 @@ class ExprChecker {
                 if (body.k !== 'error' && !isBool(body)) {
                     this.rules.error(
                         'M009',
-                        `The predicate of '.${e.quantifier === 'all' ? 'every' : 'some'}(…)' must be Bool, but has type '${showType(body)}'.`,
+                        `The predicate of '.${e.method ?? (e.quantifier === 'all' ? 'every' : 'some')}(…)' must be Bool, but has type '${showType(body)}'.`,
                         e.bodyAt,
                     );
                 }

@@ -72,6 +72,29 @@ identical. Diff rendered guides before each run; reject differences outside the 
 version, guide version, generated guide hash, and allowlisted diff for each arm. Only the match reference/example (M2,
 M3) and quantifier reference/example (Q2), plus a summary that repeats those spellings, may differ.
 
+## Prototype build
+
+One build serves every arm. `DOMAINTRAIL_TRIAL_ARM` (`A0`, `M2`, `M3`, `Q2`) selects the arm's spelling; without it the
+language is A0 and the trial spellings are errors. Each arm reads its own spelling only: another arm's spelling is a
+SYNTAX error whose message shows the arm's own form and no other. Every arm builds the same Typed Model and Semantic IR
+(contexts/modeling/src/infrastructure/syntax/trial-arm.test.ts), so checks, IR and generated code do not depend on the
+arm. `DOMAINTRAIL_TRIAL_GUIDE` makes `dt guide` serve the given file. The exact grammar of the trial spellings is in
+`domain.langium` (`WhenCase`, `WithCase`):
+
+```text
+M2  match '(' Expression ')' '{' ( 'when' '{' tag ':' Union '.' Variant (',' field)* ','? '}' ':' Expression ';' )+ '}'
+M3  match '(' Expression ')' ( '.' 'with' '(' '{' tag ':' Union '.' Variant '}' ',' v '=>' Expression ')' )+ '.' 'exhaustive' '(' ')'
+Q2  xs.forall(x => Expression)   xs.exists(x => Expression)      (in place of xs.every / xs.some)
+```
+
+`tag` is the union's discriminator (`kind` unless named with `by`). In M3, `v.field` in a handler reads the field of the
+matched variant; `v` alone is an error.
+
+`bun scripts/trial-guides.ts <run-dir>/guides` renders the four guides from docs/guide.md and
+[guide-arms.json](guide-arms.json), the only parameters, and writes `manifest.json` with the template's, the parameters'
+and each guide's SHA-256 and the lines each arm changes. It fails if a parameter does not apply exactly once, changes
+the line count or a line outside it, or if a guide's examples do not check under its arm.
+
 ## Packet inventory
 
 - [Tasks and scoring packets](tasks.md): four workforce scheduling tasks with requirements, normalized semantic

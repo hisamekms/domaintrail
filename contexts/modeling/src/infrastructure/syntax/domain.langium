@@ -252,13 +252,25 @@ Primary infers Expression:
     | {infer DecimalLiteral} negative?='-'? value=DECIMAL
     | {infer IntLiteral} negative?='-'? value=INT
     | {infer StringLiteral} value=STRING
-    | {infer MatchExpr} 'match' '(' subject=Expression ')' '{' cases+=MatchCase (',' cases+=MatchCase)* ','? '}'
+    | {infer MatchExpr} 'match' '(' subject=Expression ')' (
+        '{' cases+=MatchCase (',' cases+=MatchCase)* ','? '}'
+        // prototype spellings of the Phase 2 AI trial, read only under DOMAINTRAIL_TRIAL_ARM (parse.ts): M2 and M3
+        | '{' whenCases+=WhenCase+ '}'
+        | withCases+=WithCase+ '.' end=ID '(' ')')
     | {infer CallExpr} function=ID '(' (args+=Expression (',' args+=Expression)*)? ')'
     | {infer NameRef} name=FeatureName;
 
 // `Variant { field, … } => value`: a case of `match`, with the variant's fields it reads by name
 MatchCase:
     variant=ValueName ('{' (bindings+=FeatureName (',' bindings+=FeatureName)*)? '}')? '=>' body=Expression;
+
+// M2 (trial): `when { kind: Union.Variant, field, … }: value;`
+WhenCase:
+    'when' '{' tagKey=FeatureName ':' tagType=ID '.' variant=ValueName (',' bindings+=FeatureName)* ','? '}' ':' body=Expression ';';
+
+// M3 (trial): `.with({ kind: Union.Variant }, v => value)`, the handler's parameter narrowed to the variant
+WithCase:
+    '.' 'with' '(' '{' tagKey=FeatureName ':' tagType=ID '.' variant=ValueName '}' ',' param=LambdaParam '=>' body=Expression ')';
 
 ListElement:
     spread?='...'? value=Expression;

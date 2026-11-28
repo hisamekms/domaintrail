@@ -337,8 +337,16 @@ const BINARY_OPS: Readonly<Record<string, BinaryOp>> = {
     '/': 'div',
 };
 
+// M3 (trial): the parameters of the `.with` handlers being read, each with the variant's fields it reads (build-source.ts)
+const handlers: { readonly param: string; readonly fields: string[] }[] = [];
+
 /** The tree of an expression (syntax only; the model has no errors when it is read for generated checks). */
 function exprModel(e: Expression): ExprModel {
+    const handler = handlers.at(-1);
+    if (handler && isMemberAccess(e) && !e.call && !e.optional && isNameRef(e.receiver) && e.receiver.name === handler.param) {
+        if (!handler.fields.includes(e.member)) handler.fields.push(e.member);
+        return { k: 'name', name: e.member };
+    }
     if (isBoolLiteral(e)) return { k: 'bool', value: e.value === 'true' };
     if (isIntLiteral(e)) return { k: 'int', value: e.negative ? -e.value : e.value };
     if (isDecimalLiteral(e)) return { k: 'decimal', value: `${e.negative ? '-' : ''}${e.value}` };
@@ -375,7 +383,19 @@ function exprModel(e: Expression): ExprModel {
         return {
             k: 'match',
             subject: exprModel(e.subject),
-            cases: e.cases.map((c) => ({ variant: c.variant, bindings: [...c.bindings], body: exprModel(c.body) })),
+            cases: [
+                ...[...e.cases, ...e.whenCases].map((c) => ({ variant: c.variant, bindings: [...c.bindings], body: exprModel(c.body) })),
+                ...e.withCases.map((c) => {
+                    const handler = { param: c.param.name, fields: [] as string[] };
+                    handlers.push(handler);
+                    try {
+                        const body = exprModel(c.body);
+                        return { variant: c.variant, bindings: handler.fields, body };
+                    } finally {
+                        handlers.pop();
+                    }
+                }),
+            ],
         };
     if (isCallExpr(e)) return { k: 'call', name: e.function, args: e.args.map(exprModel) };
     if (isListLiteral(e)) return { k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: exprModel(i.value) })) };
