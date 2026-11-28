@@ -107,7 +107,15 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
         if (isMemberAccess(e)) return { ...base, k: 'member', receiver: expr(e.receiver), member: e.member, memberAt: site(e, 'member') };
         if (isNotExpr(e)) return { ...base, k: 'not', operand: expr(e.operand) };
         if (isBinaryExpr(e))
-            return { ...base, k: 'binary', op: e.op, left: expr(e.left), right: expr(e.right), leftAt: site(e, 'left'), rightAt: site(e, 'right') };
+            return {
+                ...base,
+                k: 'binary',
+                op: e.op === '&&' ? 'and' : e.op === '||' ? 'or' : e.op,
+                left: expr(e.left),
+                right: expr(e.right),
+                leftAt: site(e, 'left'),
+                rightAt: site(e, 'right'),
+            };
         if (isRangeExpr(e)) return { ...base, k: 'range', operand: expr(e.operand), lower: expr(e.lower), upper: expr(e.upper) };
         if (isCountExpr(e)) return { ...base, k: 'count', collection: expr(e.collection), collectionAt: site(e, 'collection') };
         if (isExistsExpr(e)) return { ...base, k: 'exists', operand: expr(e.operand), operandAt: site(e, 'operand') };

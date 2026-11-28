@@ -2,7 +2,7 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { semanticIROf, contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations } from '@domaintrail/modeling';
+import { semanticIROf, contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations, migrateDomain } from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
@@ -233,6 +233,7 @@ Examples:
   dt check                      validate every .dt and .dtes file below the current directory
   dt -r domain generate ts      check, then write TypeScript (by default into domain/generated/domain)
   dt fmt                        rewrite every .dt and .dtes file in the canonical layout (run it after editing)
+  dt migrate domain             rewrite .dt files to the TS-like expression syntax (and → &&, p implies q → !(p) || q)
   dt migrate dtes               rewrite .dtes files of earlier versions (v0.1's \`actor\`/\`target\`, a policy's command's \`reads\`) to the current grammar
   dt open                       the Live View with the chat and the AI at http://127.0.0.1:4321 (runs until Ctrl+C)
   dt lsp                        language server over stdio, started by editors and AI agents
@@ -611,6 +612,54 @@ Examples:
                 );
             }
             exitCode = left ? 1 : 0;
+        });
+
+    migrating
+        .command('domain')
+        .description('Rewrite .dt files to the TS-like expression syntax in place: `and`/`or`/`not` → `&&`/`||`/`!`, `p implies q` → `!(p) || q`.')
+        .argument('[files...]', 'files to migrate, relative to the current directory (default: the .dt sources of the workspace)')
+        .option('--dry-run', 'write nothing; list what would be rewritten')
+        .addHelpText(
+            'after',
+            `
+The expression syntax of DomainTrail is moving to a TS-like one (docs/plans/formal-verification/language-revision.md).
+This rewrites the constructs that have a new spelling with the same meaning, and nothing else: comments and layout
+stay, parentheses are added only where the meaning needs them (\`p implies q\` becomes \`!(p) || q\`), and a second
+run changes nothing. A file that does not parse is listed and left as it is.
+Exits 0 when every file was migrated, 1 when a file does not parse or no .dt file is found, 2 on an invalid config.
+
+Examples:
+  dt migrate domain
+  dt migrate domain --dry-run
+  dt migrate domain sales/order.dt`,
+        )
+        .action(async (files: string[], opts: { dryRun?: boolean }) => {
+            const cfg = await config();
+            const all = (await deps.findDomainFiles(cfg.root, cfg.sources, cfg.respectGitignore)).map((f) => ({ path: f, file: path.join(cfg.root, f) }));
+            const entries = files.length
+                ? files.map((f) => ({ path: path.relative(cfg.root, path.resolve(f)), file: path.resolve(f) }))
+                : all.filter((e) => !isStormingFile(e.path));
+            if (!entries.length) throw new CliError(noSourcesMessage(cfg));
+            let rewritten = 0;
+            let changed = 0;
+            let unparsed = 0;
+            for (const e of entries) {
+                const m = migrateDomain(await readFile(e.file, 'utf8'));
+                if (!m.parsed) {
+                    unparsed++;
+                    io.err(`${e.path} - not migrated: it does not parse (\`dt check\` shows why)`);
+                    continue;
+                }
+                for (const r of m.rewrites) io.out(`${e.path}:${r.line} - ${r.from} → ${r.to}`);
+                if (!m.rewrites.length) continue;
+                rewritten += m.rewrites.length;
+                changed++;
+                if (!opts.dryRun) await writeFile(e.file, m.text);
+            }
+            io.out(
+                `${entries.length} file(s): ${rewritten} construct(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'} in ${changed} file(s), ${unparsed} not parsed.`,
+            );
+            exitCode = unparsed ? 1 : 0;
         });
 
     const exporting = program.command('export').description('Export the model: its sources as one ZIP archive, or a diagram as an SVG file.');
