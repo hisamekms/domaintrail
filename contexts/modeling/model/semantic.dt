@@ -38,7 +38,8 @@ context Modeling {
     discriminator
     context
     function
-    /// `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome.
+    /// `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome; `this` in
+    /// `requires`, choice rules and the aggregate's invariants: the aggregate itself, as the subject of `match`.
     frame
   }
   enum SemanticCardinality { one optional many nonEmpty }

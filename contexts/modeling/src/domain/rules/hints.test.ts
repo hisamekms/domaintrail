@@ -148,7 +148,7 @@ describe('fix hints', () => {
   error Invalid`);
         expect(hints(a, 'M010')).toEqual([
             "move the field to the common fields of 'Order', or use it only in the invariants of state 'Paid'",
-            "declare 'paidAt' with the same type in every source state of 'refund' (or among the common fields), or split the command by source state",
+            "bind it in a case of 'match (this)': 'match (this) { Paid { paidAt } => … }'; or declare 'paidAt' with the same type in every source state of 'refund' (or among the common fields)",
         ]);
     });
 

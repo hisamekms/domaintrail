@@ -49,6 +49,20 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - `match (u) { Variant { fields } => value, … }` over a union value: one case per variant, each once (a missing,
   unknown or repeated variant is an error), each case of one type, reading the variant's fields by name. It compiles
   to conditionals on the discriminator.
+- `match` over the aggregate's state: `match (before) { Draft => …, Confirmed { confirmedAt } => … }` in
+  `changes x = …` and `ensures` (one case per source state of the outcome), `match (after) { … }` in `ensures` (one per
+  target state), and `match (this) { … }` in `requires`, `select { … }` and the aggregate's own invariants (one per
+  source state of the command, or per state of the aggregate). A case reads the fields of its state it names, and
+  narrows `before` and `after` together (they are of one transition). With kinds, the cases may name the kinds instead
+  (never both in one `match`; nest one inside the other); the cases follow the (kind, state) pairs the aggregate can be
+  in, so a common command decided per kind from other states (a Store from `Paused`, a Center from `Active`) has, in
+  the Store case, only `Paused`. `this` is only a `match` subject: `this.x` is an error (write `x`), and `this` is not
+  in scope in `changes`, `ensures`, a create command's rules and the invariants of one state or kind. `this` is
+  reserved: a field or command parameter of an aggregate (M030), a lambda parameter or a binding (M021) named `this` is
+  an error. The generated checks test `state` / `kind`, and in
+  `check<Command>Ensures` the case of the branch's source and target state is chosen at generation. The check of the
+  common invariants (`check<Aggregate>Common`) takes the aggregate (`Order`, was `OrderCommon`) when one of them
+  matches on `this`.
 - Outcome contracts: `changes x = expr` gives a field's value after an outcome (over the parameters and `before.x`),
   and `ensures { … }` states a relation the result satisfies (over `before.x`, `after.x` and the parameters). A create
   outcome may list `id`. The generated `check<Command>Ensures` checks them (see Added).

@@ -893,6 +893,40 @@ the valid states and named outcomes per kind; restored data and migrations remai
   equality that determines a field alone belongs in `changes x = …` (M021). A create has no `before`. The
   generated `check<Command>Ensures` checks a result against them, and the fields left unchanged
   ([Generated checks](#generated-checks)).
+- Matching the aggregate's state: `match (before) { Draft => …, Confirmed { confirmedAt } => … }` in `changes x = …`
+  and `ensures` has one case for each source state of the outcome (of the command, in the shorthand form), and
+  `match (after) { … }` in `ensures` one for each target state. `match (this) { … }` does the same where the rule is
+  about the aggregate as it is: in `requires` and `select { … }` one case for each source state of the command (of the
+  outcome, for `select`), in an invariant of the aggregate one for each of its states. A case names the fields it
+  reads, as a union's case does: its state's and the common fields (`Cancelled { reason } => reason != ""`); in a case,
+  the subject is in that state, so a `match` on it inside the case has that one state. `before` and `after` are of one
+  transition: in a case of one, the other is narrowed with it. With `Draft -> Draft` and `Confirmed -> Confirmed`,
+  `match (after) { Confirmed => match (before) { Confirmed => … }, Draft => … }` has only `Confirmed` for `before`
+  there, and `before.confirmedAt` is readable. A case for a missing state, a state that is not among them, or one named
+  twice, is M009, as is a case of another type than the others.
+  ```dt
+  invariant reasonGiven { match (this) { Draft => true, Confirmed => total > 0, Cancelled { reason } => reason != "" } }
+  command cancel(why: String, at: Timestamp) {
+    requires notLate { match (this) { Draft => true, Confirmed { confirmedAt } => confirmedAt <= at } } else TooLate
+    outcome cancelled: Draft | Confirmed -> Cancelled
+      changes reason = why, total
+      ensures { match (before) { Draft => after.total == 0, Confirmed { total } => after.total == total } }
+  }
+  ```
+  With kinds ([Kinds of an aggregate](#kinds-of-an-aggregate)), the cases may name the kinds instead (one for each
+  kind of the command, or of the aggregate in its invariants), reading the kind's fields: `match (this) { Store
+  { hours } => hours > 0, Center => true }`. A `match` names states or kinds, never both (M009): to choose by both,
+  match on one inside a case of the other. The aggregate is one of the (kind, state) pairs it can be in there, and a
+  case keeps the pairs of its state or kind: a common command decided in `on` cases is, for each kind, in the source
+  states of that kind's case (a Store resuming from `Paused`, a Center from `Active`: `match (this) { Store => match
+  (this) { Paused { reason } => … }, Center => … }`); in an invariant of the aggregate, each kind is in the states it can
+  reach.
+- `this` is only a `match` subject: elsewhere the fields of the aggregate are read by name, and `this.x` is M001
+  (write `x`); `this` alone is M009. It is not in scope in `changes x = …` (write `before`) and `ensures` (write
+  `before` or `after`; a create has only `after`), in the rules of a `create command` (there is no aggregate yet) or in
+  an invariant of one state or kind (it holds in that one; read its fields by name): M001. A binding named like a
+  parameter of the command, which it would hide, is M019. `this` is reserved: no field of an aggregate and no
+  parameter of its commands is named `this` (M030), and no lambda parameter or binding (M021).
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure function of its parameters, called as
   `name(args)` from the expressions of its context and, when the context is shared, of every context. A function
   cannot call itself, directly or through others (M032).
@@ -1009,6 +1043,10 @@ context Review {
   field is M010. Other aggregates cannot be referenced; pass what is needed as parameters.
 - A parameter may not be named like a field its command's requirements see (M019), so that a name in `requires` has
   one meaning. Commands without `requires` are not affected.
+- **By source state**: `match (this) { Draft => …, Confirmed { confirmedAt } => … }` has one case for each source state
+  of the command, and a case reads the fields of its state by name (`confirmedAt <= at` only where it is confirmed);
+  see [Invariant expressions](#invariant-expressions). With kinds, the cases may name the command's kinds instead, and
+  in a kind's case the states are that kind's sources. A field of some source states only (M010) is read this way.
 - Name the fields of errors after their source, as for events ([naming payload fields](#command-events), M022): the
   parameters and the aggregate before the command.
 - `else Error` is required. The error joins the command's errors: it need not be listed in `errors` (listing it
@@ -1022,8 +1060,8 @@ context Review {
 - **When several requirements do not hold, the command returns the error of the first one in declaration order.**
   Order the requirements accordingly (the cheapest or most basic first); the generated tests expect exactly that
   error.
-- Not supported: requirements for some source states only (split the command instead), and a generic
-  `<Command>Rejected` error.
+- Not supported: requirements for some source states only (split the command instead, or decide by
+  `match (this) { … }` with `true` for the other states), and a generic `<Command>Rejected` error.
 - `requires` and `else` are also usable as field and parameter names.
 
 <!-- topic: policies -->
@@ -3664,7 +3702,7 @@ storming](#diagnostics-of-a-storming).
 | Code | Check |
 |---|---|
 | SYNTAX | lexer / parser errors (in `.dt` and `.dtes` files) |
-| M001 | types, aggregates and names in invariants and requirements resolve |
+| M001 | types, aggregates and names in invariants and requirements resolve; `this` (the aggregate, a `match` subject) is not in scope in `changes x = …` and `ensures`, a create command's rules and the invariants of one state or kind, and the aggregate's fields are read by name, not as `this.x` |
 | M002 | names are unique in their scope (also across files of one context); a type on `UUID` declares no invariant named `uuid`, the generated one |
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
@@ -3672,7 +3710,7 @@ storming](#diagnostics-of-a-storming).
 | M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
-| M009 | operators and operands have compatible types; a Decimal of known scale fits the `Decimal(n)` it is placed in (`x.round(n)` rounds it: a Decimal `x`, an Int literal `n` from 0 to 30); a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length` |
+| M009 | operators and operands have compatible types; a Decimal of known scale fits the `Decimal(n)` it is placed in (`x.round(n)` rounds it: a Decimal `x`, an Int literal `n` from 0 to 30); a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length`; `match` has one case for each variant of a union, or for each state (kind) the aggregate can be in there (`this`, `before`, `after`), states and kinds not mixed, and `this` is only a `match` subject |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them; a kind's fields only inside its kind |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
@@ -3682,9 +3720,9 @@ storming](#diagnostics-of-a-storming).
 | M016 | field sets: plain fields only (no `id`), `with` only on aggregates, entities, value objects and events, each field name from one place |
 | M017 | (warning) an event emitted by an aggregate's command has a field of that aggregate's ID type |
 | M018 | an invariant or requirement without an expression has a label or a `///` description |
-| M019 | a parameter of a command with `requires` is not named like a field its requirements see |
+| M019 | a parameter of a command with `requires` is not named like a field its requirements see; a binding of a case of `match` over the aggregate is not named like a parameter |
 | M020 | (warning) a `create command` has a parameter of the aggregate's ID type (commands are pure: the ID is passed in) |
-| M021 | outcome contracts: an outcome lists in `changes` every non-optional field it makes exist (a create every field, `id` included; a transition the fields new in its target, a field of another type there counting as new); `changes x = e` gives a value of `x`'s type in every target that has `x`, and some target has it; `ensures` is a Bool, an equality that determines a field alone is written `changes x = e`, and `before` / `after` name no lambda parameter or binding |
+| M021 | outcome contracts: an outcome lists in `changes` every non-optional field it makes exist (a create every field, `id` included; a transition the fields new in its target, a field of another type there counting as new); `changes x = e` gives a value of `x`'s type in every target that has `x`, and some target has it; `ensures` is a Bool, an equality that determines a field alone is written `changes x = e`, and `before` / `after` name no lambda parameter or binding, and `this` none anywhere |
 | M022 | (warning) a field of an event or error a command emits or returns, with no source of the same name and type (parameters, their fields, the aggregate's fields), while some source has its type; ID-typed, Int, Decimal and Bool fields are exempt |
 | M023 | policies: the event exists, the aggregate is one of the policy's own context, the command is one of the aggregate, the event is not of a shared context; (warning) two policies of a context state the same reaction |
 | M024 | verified types: the base and the context of `for` are value types (`for` not a verified type), no cycle; a verified type types command parameters and other verified types only, no field |
@@ -3693,7 +3731,7 @@ storming](#diagnostics-of-a-storming).
 | M027 | (warning) a field or parameter named `<stem>Id` (`ID`; `Ids` / `IDs` for several) is not typed `String`, `UUID` or the base of the ID type when `<Stem>Id` (`<Stem>ID`) is an ID type or `<Stem>` an aggregate or entity: of its context or a shared one, else of exactly one other context (none for a field of a shared context); it takes the ID type |
 | M028 | lifecycle declarations: a kind (or, without kinds, the aggregate with named outcomes) has an initial state, outcomes have valid sources and targets and change the fields of their kind, outcome names are unique, and choice and external-check annotations are well formed |
 | M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
-| M030 | the kinds of an aggregate (ADR 0037): a common command has its behaviour in itself or in an `on` case of every kind, never both; an `on` case names a common command that is not a factory; the create commands are the kinds', one per kind; no field is named `kind`; with states, commands name their outcomes |
+| M030 | the kinds of an aggregate (ADR 0037): a common command has its behaviour in itself or in an `on` case of every kind, never both; an `on` case names a common command that is not a factory; the create commands are the kinds', one per kind; no field is named `kind`; with states, commands name their outcomes; no field of an aggregate and no parameter of its commands is named `this` (the aggregate in `match (this)`) |
 | M032 | a function's body has its declared type; a call names a function of its context or of a shared context, with arguments of the parameters' types; no function calls itself, directly or through others |
 | M031 | (warning) kinds that declare nothing (a readonly enum field); `on` cases of a common command that are alike in every kind (a common behaviour); a field every kind declares with the same type (a common field); a state no kind reaches; optional fields an aggregate without kinds requires only for some values of an enum field (the fields of kinds) |
 | G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |

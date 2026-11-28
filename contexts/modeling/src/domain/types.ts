@@ -4,13 +4,16 @@
 // `multiplicityText` too.
 import type { Cardinality, PrimitiveName } from './model.js';
 import type {
+    AggregateDecl,
     EntityDecl,
     EnumDecl,
     FieldDecl,
     IdDecl,
+    KindDecl,
     Multiplicity,
     ParamDecl,
     PrimitiveDecl,
+    StateDecl,
     TypeRef,
     UnionDecl,
     ValueObjectDecl,
@@ -40,10 +43,44 @@ export type Ty =
     | { k: 'unionType'; decl: UnionDecl }
     /** A context name used as a qualifier, e.g. `Sales` in `Sales.Status.Open`. */
     | { k: 'ctx'; name: string }
-    /** `before` / `after` in `changes x = …` and `ensures`: the aggregate's fields before and after the outcome. */
-    | { k: 'frame'; name: 'before' | 'after'; fields: ReadonlyMap<string, FieldDecl | ParamDecl> }
+    /**
+     * `before` / `after` in `changes x = …` and `ensures`: the aggregate's fields before and after the outcome; `this`
+     * in `requires`, choice rules and the aggregate's own invariants: the aggregate itself (only a `match` subject).
+     * `aggregate` says which states and kinds it can be in there, for `match`.
+     */
+    | { k: 'frame'; name: 'before' | 'after' | 'this'; fields: ReadonlyMap<string, FieldDecl | ParamDecl>; aggregate?: AggregateFrame }
     /** Already reported; suppresses cascading diagnostics. */
     | { k: 'error' };
+
+/**
+ * One way the aggregate can be where an expression is: of `kind` (absent without kinds), in state `from` before the
+ * command and `to` after it (absent without states, and `to` where there is no after: `requires`, invariants).
+ */
+export interface AggregatePair {
+    kind?: KindDecl;
+    from?: StateDecl;
+    to?: StateDecl;
+}
+
+/**
+ * What `match (before)`, `match (after)` and `match (this)` choose among: the (kind, state) pairs the aggregate can be
+ * in where the expression is. `before` and `this` read the pairs' `from`, `after` their `to`; the frames of one
+ * contract share `pairs` (by `group`), so a case of one narrows the other: `after` in `Confirmed` came from the
+ * sources of the transitions into `Confirmed`.
+ */
+export interface AggregateFrame {
+    agg: AggregateDecl;
+    /** The common fields (those of the field sets included), which every case sees. */
+    common: ReadonlyMap<string, FieldDecl | ParamDecl>;
+    pairs: readonly AggregatePair[];
+    /** Which state of a pair the frame is in. */
+    side: 'from' | 'to';
+    /** The frames of one scope that narrow together. */
+    group: object;
+    /** How the diagnostics name the states and the kinds: `the source states of command 'cancel'`. */
+    statesWhat: string;
+    kindsWhat: string;
+}
 
 export const BOOL: Ty = { k: 'prim', name: 'Bool' };
 /** The result of `count(…)` and `length(…)`. */

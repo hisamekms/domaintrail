@@ -33,7 +33,9 @@ const quoted = (names: readonly string[]): string => names.map((n) => `'${n}'`).
  *   - with kinds, the factories are the kinds' (`create command` inside a kind), and every kind has one when the
  *     aggregate has factories at all;
  *   - `kind` names the discriminator: no field of an aggregate with kinds is named `kind`, and no kind like a state;
- *   - with kinds and states, commands use named outcomes (`outcome name: A -> B`), not the transition shorthand.
+ *   - with kinds and states, commands use named outcomes (`outcome name: A -> B`), not the transition shorthand;
+ *   - `this` is the aggregate in `match (this)`: no field of any aggregate, and no parameter of its commands, is
+ *     named `this`.
  *
  * M031 (warnings):
  *   - kinds of which none declares anything: a readonly enum field says the same;
@@ -46,6 +48,7 @@ const quoted = (names: readonly string[]): string => names.map((n) => `'${n}'`).
 export function checkKinds(model: SourceModel, rules: RuleSink): void {
     for (const agg of model.elements) {
         if (agg.kind !== 'aggregate') continue;
+        checkThis(agg, rules);
         const kinds = kindsOf(agg);
         if (!kinds.length) {
             checkKindShapedInvariants(agg, rules);
@@ -139,6 +142,31 @@ function checkFactories(agg: AggregateDecl, kinds: KindDecl[], rules: RuleSink):
                 `Kind '${k.name}' of '${agg.name}' has no create command, so no '${agg.name}' of that kind can be made.`,
                 k.nameAt,
                 `add 'create command …' to kind '${k.name}'`,
+            );
+}
+
+/** `this` names the aggregate itself (`match (this) { … }`): no field or parameter takes the name. */
+function checkThis(agg: AggregateDecl, rules: RuleSink): void {
+    const fields = [
+        ...includedFields(agg).map((x) => x.field),
+        ...commonFields(agg),
+        ...kindsOf(agg).flatMap(kindFields),
+        ...statesOf(agg).flatMap((s) => fieldsOf(s.members)),
+    ];
+    for (const f of fields.filter((x) => x.name === 'this'))
+        rules.error(
+            'M030',
+            `Field 'this' of '${agg.name}' has the name of the aggregate itself: 'this' is the '${agg.name}' in 'match (this) { … }'.`,
+            f.nameAt,
+            `rename the field`,
+        );
+    for (const c of commandsOf(agg))
+        for (const p of c.params.filter((x) => x.name === 'this'))
+            rules.error(
+                'M030',
+                `Parameter 'this' of command '${c.name}' has the name of the aggregate itself: 'this' is the '${agg.name}' in 'match (this) { … }'.`,
+                p.nameAt,
+                `rename the parameter`,
             );
 }
 

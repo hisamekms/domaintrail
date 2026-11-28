@@ -36,6 +36,7 @@ import {
     isTemporal,
     kindCase,
     kindOf,
+    validStatesFor,
 } from '@domaintrail/modeling';
 import type { Location } from '@domaintrail/kernel';
 import { camel } from '@domaintrail/kernel';
@@ -87,8 +88,11 @@ export type Ty =
     | { k: 'enumType'; el: EnumModel }
     | { k: 'unionType'; el: UnionModel }
     | { k: 'ctx'; name: string }
-    /** `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome. */
-    | { k: 'frame'; name: 'before' | 'after' };
+    /**
+     * `before` / `after` in `changes x = …` and `ensures`: the aggregate before / after the outcome; `this` in
+     * requirements, choice rules and the aggregate's invariants: the aggregate itself (a `match` subject).
+     */
+    | { k: 'frame'; name: 'before' | 'after' | 'this' };
 
 /** What the code of a context module provides to the checks it emits. */
 export interface CheckEnv {
@@ -116,7 +120,46 @@ interface Binding {
     inner?: string;
     /** Whether `inner` can be an operand of `&&` as it is (it is not a `||`). */
     tight?: boolean;
+    /** For `this`, `before` and `after`: the aggregate, and the (kind, state) pairs its TypeScript type can be in here. */
+    aggregate?: AggregateTags;
 }
+
+/** One way an aggregate can be where an expression reads it: its kind, its state before and after the command. */
+interface PairTag {
+    kind?: string;
+    from?: string;
+    to?: string;
+}
+
+/**
+ * The (kind, state) pairs an aggregate value can be in where an expression reads it: `match (this)` tests only the
+ * states (on `side`) or kinds among them, so TypeScript narrows without a comparison it rejects. The bindings of one
+ * `group` (`before` and `after` of one outcome) narrow together.
+ */
+interface AggregateTags {
+    agg: AggregateModel;
+    pairs: readonly PairTag[];
+    side: 'from' | 'to';
+    group: object;
+}
+
+/** `this`, `before` (`side` `from`) or `after` (`to`) read from `js`: an aggregate in one of `pairs`. */
+export const aggregateBinding = (js: string, agg: AggregateModel, pairs: readonly PairTag[], side: 'from' | 'to' = 'from', group: object = {}): Binding => ({
+    js,
+    aggregate: { agg, pairs, side, group },
+});
+
+/** The pairs of an aggregate taking a command: for each of `kinds` (`undefined` without kinds), in each of its sources. */
+const sourcePairs = (agg: AggregateModel, kinds: readonly (string | undefined)[], sources: (kind: string | undefined) => readonly string[]): PairTag[] =>
+    kinds.flatMap((kind) =>
+        agg.states.length
+            ? [...new Set(sources(kind))].map((from) => ({ ...(kind !== undefined && { kind }), from }))
+            : [{ ...(kind !== undefined && { kind }) }],
+    );
+
+/** The kinds a command is for: its own, or every kind (`[undefined]` without kinds). */
+const kindsOfCommand = (agg: AggregateModel, c: CommandModel): (string | undefined)[] =>
+    c.kind ? [c.kind] : agg.kinds.length ? agg.kinds.map((k) => k.name) : [undefined];
 type TypedBinding = Binding & { ty: Ty };
 
 /** `!x`, with parentheses unless `x` already has them. */
@@ -467,6 +510,7 @@ export class ExprCompiler {
             case 'match': {
                 // nested conditionals on the discriminator, which TypeScript narrows; a binding reads the variant's field
                 const s = this.compile(e.subject, scope);
+                if (s.aggregate) return this.matchAggregate(e, s, s.aggregate, scope);
                 const u = strip(s.ty);
                 const tag = u.k === 'union' ? u.el.discriminator : 'kind';
                 const arms = e.cases.map((c) => {
@@ -573,6 +617,42 @@ export class ExprCompiler {
         }
     }
 
+    /**
+     * `match (this) { State { f } => e, … }` (and over `before`, `after`): conditionals on the state (`STATE_TAG`) or
+     * the kind (`KIND_TAG`), which TypeScript narrows, over the cases the aggregate can be in here only (one case is
+     * its body alone); a binding reads the field of the aggregate, and in a case the subject is in that state or kind.
+     */
+    private matchAggregate(e: Extract<ExprModel, { k: 'match' }>, s: TypedBinding, tags: AggregateTags, scope: Scope): Binding {
+        const { agg, side } = tags;
+        const isState = (n: string): boolean => agg.states.some((x) => x.name === n);
+        const byKind = e.cases.every((c) => !isState(c.variant));
+        const tagOf = (p: PairTag): string | undefined => (byKind ? p.kind : p[side]);
+        const possible = new Set(tags.pairs.map(tagOf));
+        const cases = e.cases.filter((c) => possible.has(c.variant));
+        if (!cases.length) throw new Error(`'match (${this.sourceOf(e.subject) ?? ''})' has no case the aggregate can be in`);
+        const arms = cases.map((c) => {
+            // in the case: the pairs of its state or kind, for the subject and the bindings that narrow with it
+            const pairs = tags.pairs.filter((p) => tagOf(p) === c.variant);
+            const inner: Scope = new Map([
+                ...[...scope].map(([name, b]): [string, Binding] =>
+                    b.aggregate?.group === tags.group ? [name, { ...b, aggregate: { ...b.aggregate, pairs } }] : [name, b],
+                ),
+                ...c.bindings.map((b): [string, Binding] => [b, { js: `${s.js}.${b}` }]),
+            ]);
+            return { test: `${s.js}.${byKind ? KIND_TAG : STATE_TAG} === '${c.variant}'`, body: this.compile(c.body, inner) };
+        });
+        if (arms.length === 1) return arms[0]!.body;
+        const last = arms.at(-1)!;
+        const js = arms.slice(0, -1).reduceRight((rest, a) => `${a.test} ? ${a.body.js} : ${rest}`, last.body.js);
+        return { js: `(${js})`, wrapped: true, inner: js, tight: false };
+    }
+
+    /** Whether an expression reads `this`, the aggregate itself (as a `match` subject). */
+    readsSelf(e: ExprModel): boolean {
+        if (e.k === 'name' && e.name === 'this' && this.irNode(e)?.symbol?.kind === 'frame') return true;
+        return exprChildren(e).some((x) => this.readsSelf(x));
+    }
+
     private irNode(e: ExprModel): ReturnType<typeof exprModelIndex> extends Map<ExprModel, infer T> ? T | undefined : never {
         return this.irIndex.get(e);
     }
@@ -580,7 +660,8 @@ export class ExprCompiler {
     private irTy(e: ExprModel): Ty | undefined {
         const node = this.irNode(e);
         // `before` / `after` have no IR type: the frame symbol says which aggregate they are
-        if (node?.symbol?.kind === 'frame') return { k: 'frame', name: node.symbol.name === 'before' ? 'before' : 'after' };
+        if (node?.symbol?.kind === 'frame')
+            return { k: 'frame', name: node.symbol.name === 'before' ? 'before' : node.symbol.name === 'after' ? 'after' : 'this' };
         if (node?.type) {
             if (node.type.tag === true) return { k: 'enum' };
             return tyFromIr(this.env, node.type);
@@ -664,6 +745,45 @@ export class ExprCompiler {
             default:
                 throw new Error(`no field '${m}'`);
         }
+    }
+}
+
+/** The direct subexpressions of an expression. */
+function exprChildren(e: ExprModel): readonly ExprModel[] {
+    switch (e.k) {
+        case 'member':
+            return [e.receiver];
+        case 'not':
+        case 'exists':
+        case 'length':
+        case 'matches':
+            return [e.operand];
+        case 'round':
+            return [e.operand, e.scale];
+        case 'binary':
+            return [e.left, e.right];
+        case 'conditional':
+            return [e.test, e.ifTrue, e.ifFalse];
+        case 'call':
+            return e.args;
+        case 'match':
+            return [e.subject, ...e.cases.map((c) => c.body)];
+        case 'list':
+            return e.items.map((i) => i.value);
+        case 'listMethod':
+            return e.body ? [e.collection, e.body] : [e.collection];
+        case 'range':
+            return [e.operand, e.lower, e.upper];
+        case 'count':
+            return [e.collection];
+        case 'unique':
+            return [e.collection, ...e.keys];
+        case 'contains':
+            return [e.collection, e.element];
+        case 'quantifier':
+            return [e.collection, e.body];
+        default:
+            return [];
     }
 }
 
@@ -759,9 +879,28 @@ export function requirementScope(model: DomainModel, agg: AggregateModel, c: Com
     const first = states.find((s) => s.name === sources[0]);
     const fields = c.factory ? [] : [...agg.fields, ...(first?.fields ?? [])];
     const scope = fieldScope(model, subject, fields);
+    if (!c.factory)
+        scope.set(
+            'this',
+            aggregateBinding(
+                subject,
+                agg,
+                sourcePairs(agg, kindsOfCommand(agg, c), () => sources),
+            ),
+        );
     for (const p of c.params) scope.set(p.name, { js: `${params}.${p.name}` });
     return scope;
 }
+
+/** The pairs an aggregate of type `Agg` can be in: each kind in its valid states (ADR 0037). */
+const anyPairs = (agg: AggregateModel): PairTag[] =>
+    agg.kinds.length
+        ? agg.kinds.flatMap((k) =>
+              agg.states.length
+                  ? agg.states.filter((s) => validStatesFor(agg, k.name).includes(s.name)).map((s) => ({ kind: k.name, from: s.name }))
+                  : [{ kind: k.name }],
+          )
+        : agg.states.map((s) => ({ from: s.name }));
 
 interface Param {
     name: string;
@@ -904,6 +1043,15 @@ export class CheckWriter {
         const choices = outcomes.map(({ o, kind }) => {
             const choice = o.select;
             const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, decisionFields(agg, kind ?? '*', o.from[0]));
+            if (!c.factory)
+                scope.set(
+                    'this',
+                    aggregateBinding(
+                        subject,
+                        agg,
+                        sourcePairs(agg, kind !== undefined ? [kind] : kindsOfCommand(agg, c), () => o.from),
+                    ),
+                );
             for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}` });
             const code =
                 choice?.kind === 'expression'
@@ -973,6 +1121,11 @@ export class CheckWriter {
         }
         const body = entries.map(({ requirement, key, kind, inCase, sources }) => {
             const scope = c.factory ? new Map<string, Binding>() : fieldScope(this.env.model, subject, decisionFields(agg, kind ?? '*', sources[0]));
+            // a common requirement: each kind in its own sources (its `on` case's, or the common outcomes')
+            const pairs = inCase
+                ? sourcePairs(agg, [kind], () => sources)
+                : sourcePairs(agg, kind !== undefined ? [kind] : kindsOfCommand(agg, c), (k) => applicableOutcomes(agg, c, k ?? '*').flatMap((o) => o.from));
+            if (!c.factory) scope.set('this', aggregateBinding(subject, agg, pairs));
             for (const p of c.params) scope.set(p.name, { js: `${parameters}.${p.name}` });
             const holds = requirement.expr ? this.compiler.compile(requirement.expr, scope).js : `checks.${key}(${names})`;
             const check = `if (!(${holds})) return '${key}';`;
@@ -1025,8 +1178,11 @@ export class CheckWriter {
             const after = `${value}.${b.key}.aggregate`;
             const { set, carried } = outcomeFields(agg, c, b.from, b.to, o, b.kind);
             const scope: Scope = new Map(c.params.map((p): [string, Binding] => [p.name, { js: `${parameters}.${p.name}` }]));
-            if (!c.factory) scope.set('before', { js: subject });
-            scope.set('after', { js: after });
+            // one transition of one kind: before and after narrow together
+            const step: PairTag[] = [{ ...(b.kind !== undefined && { kind: b.kind }), ...(b.from && { from: b.from }), ...(b.to && { to: b.to }) }];
+            const group = {};
+            if (!c.factory) scope.set('before', aggregateBinding(subject, agg, step, 'from', group));
+            scope.set('after', aggregateBinding(after, agg, step, 'to', group));
             const entries: string[] = [];
             const violation = (id: string, kind: string, source: string, field?: string): string => {
                 ids.add(id);
@@ -1331,6 +1487,21 @@ export class CheckWriter {
         ];
     }
 
+    /** The scope of the aggregate's own invariants: its common fields, and `this` in any state and kind it can be in. */
+    private selfScope(agg: AggregateModel, subject: string): Scope {
+        const scope = fieldScope(this.env.model, subject, agg.fields);
+        scope.set('this', aggregateBinding(subject, agg, anyPairs(agg)));
+        return scope;
+    }
+
+    /**
+     * The type the check of the common invariants takes: the common fields (`<Agg>Common`), or the aggregate in any of
+     * its states and kinds (`<Agg>`) when an invariant chooses by them with `match (this)`.
+     */
+    private commonSubjectType(agg: AggregateModel): string {
+        return agg.invariants.some((i) => i.expr && this.compiler.readsSelf(i.expr)) ? agg.name : commonTypeName(agg);
+    }
+
     /**
      * The checks of an aggregate. With states: of the common part (the aggregate's invariants, also without any), per
      * state (the common part's and the state's) and for any state.
@@ -1361,7 +1532,7 @@ export class CheckWriter {
                     { name: subject, type: agg.name },
                     namesType(all.map((i) => i.name)),
                     declared && agg.name,
-                    collect(items(this.compiler, agg.invariants, fieldScope(model, subject, agg.fields), subject), ''),
+                    collect(items(this.compiler, agg.invariants, this.selfScope(agg, subject), subject), ''),
                 ),
             );
             return out;
@@ -1374,10 +1545,10 @@ export class CheckWriter {
                 [`The invariants of ${agg.name} (those of every state) that an aggregate violates, in declaration order; empty when it holds them all.`],
                 agg.location,
                 common,
-                { name: subject, type: common },
+                { name: subject, type: this.commonSubjectType(agg) },
                 namesType(agg.invariants.map((i) => i.name)),
                 commonDeclared && agg.name,
-                collect(items(this.compiler, agg.invariants, fieldScope(model, subject, agg.fields), subject), ''),
+                collect(items(this.compiler, agg.invariants, this.selfScope(agg, subject), subject), ''),
             ),
         );
         if (!all.length) return out;
@@ -1447,10 +1618,10 @@ export class CheckWriter {
                 [`The invariants of ${agg.name} (those of every kind${states.length ? ' and state' : ''}) that an aggregate violates, in declaration order.`],
                 agg.location,
                 common,
-                { name: subject, type: common },
+                { name: subject, type: this.commonSubjectType(agg) },
                 namesType(agg.invariants.map((i) => i.name)),
                 commonDeclared && agg.name,
-                collect(items(this.compiler, agg.invariants, fieldScope(model, subject, agg.fields), subject), ''),
+                collect(items(this.compiler, agg.invariants, this.selfScope(agg, subject), subject), ''),
             ),
             '',
         );
