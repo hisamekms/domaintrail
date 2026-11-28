@@ -857,6 +857,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
+- Lists: `[a, b]` and `[...xs, x]` (values of one type), `c.map(x => value)`, `c.filter(x => condition)`,
+  `c.sum(x => number)` and `c.sum()` (an Int, or a Decimal of the values' scale): `total == lines.sum(l => l.price *
+  l.quantity)`, `[Status.Open, Status.Held].includes(status)`.
 - Arithmetic: Int `+ - *`; Decimal `+ - * /`; an Int with a Decimal is a Decimal, and a domain primitive gives its
   base type. `/` rounds half-even to the larger declared scale of its operands (`Decimal(2)`: two digits after the
   point; a literal has the digits written), so `/` needs `Decimal(n)` operands, and its divisor must be shown

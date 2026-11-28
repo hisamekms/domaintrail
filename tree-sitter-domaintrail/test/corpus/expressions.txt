@@ -336,3 +336,69 @@ context A {
                   (decimal)))
               (number
                 (decimal)))))))))
+
+================================================================================
+Lists, spread and list methods
+================================================================================
+
+context A {
+  aggregate X {
+    invariant a { total == lines.sum(l => l.price) && [Status.Open, ...extra].includes(status) && lines.map(l => l.sku).filter(s => s != "").length > 0 }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (invariant
+          (identifier)
+          (binary_expression
+            (binary_expression
+              (binary_expression
+                (identifier)
+                (method_call
+                  (identifier)
+                  (function_name
+                    (identifier))
+                  (lambda
+                    (identifier)
+                    (member_expression
+                      (identifier)
+                      (identifier)))))
+              (method_call
+                (list
+                  (member_expression
+                    (identifier)
+                    (identifier))
+                  (spread
+                    (identifier)))
+                (function_name
+                  (identifier))
+                (identifier)))
+            (binary_expression
+              (member_expression
+                (method_call
+                  (method_call
+                    (identifier)
+                    (function_name
+                      (identifier))
+                    (lambda
+                      (identifier)
+                      (member_expression
+                        (identifier)
+                        (identifier))))
+                  (function_name
+                    (identifier))
+                  (lambda
+                    (identifier)
+                    (binary_expression
+                      (identifier)
+                      (string))))
+                (identifier))
+              (number
+                (integer)))))))))

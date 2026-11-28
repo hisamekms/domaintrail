@@ -13,6 +13,7 @@ import {
     isDecimalLiteral,
     isEntity,
     isConditionalExpr,
+    isListLiteral,
     isExistsExpr,
     isNullLiteral,
     isIntLiteral,
@@ -335,6 +336,14 @@ function exprModel(e: Expression): ExprModel {
         if (m.k === 'unique')
             return { k: 'unique', collection: exprModel(e.receiver), ...(m.param !== undefined && { param: m.param }), keys: m.keys.map(exprModel) };
         if (m.k === 'matches') return { k: 'matches', operand: exprModel(e.receiver), pattern: patternSource(m.pattern) };
+        if (m.k === 'listMethod')
+            return {
+                k: 'listMethod',
+                method: m.method,
+                collection: exprModel(e.receiver),
+                ...(m.param !== undefined && { param: m.param }),
+                ...(m.body && { body: exprModel(m.body) }),
+            };
         return { k: 'member', receiver: exprModel(e.receiver), member: e.member, ...(e.optional && { optional: true }) };
     }
     if (isNotExpr(e)) return { k: 'not', operand: exprModel(e.operand) };
@@ -345,6 +354,7 @@ function exprModel(e: Expression): ExprModel {
     }
     if (isNullLiteral(e)) return { k: 'bool', value: false }; // `null` alone is reported (parse.ts)
     if (isBinaryExpr(e)) return { k: 'binary', op: BINARY_OPS[e.op], left: exprModel(e.left), right: exprModel(e.right) };
+    if (isListLiteral(e)) return { k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: exprModel(i.value) })) };
     if (isConditionalExpr(e)) return { k: 'conditional', test: exprModel(e.test), ifTrue: exprModel(e.ifTrue), ifFalse: exprModel(e.ifFalse) };
     if (isRangeExpr(e)) return { k: 'range', operand: exprModel(e.operand), lower: exprModel(e.lower), upper: exprModel(e.upper) };
     if (isCountExpr(e)) return { k: 'count', collection: exprModel(e.collection) };

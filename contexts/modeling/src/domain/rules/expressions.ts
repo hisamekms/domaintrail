@@ -542,6 +542,63 @@ class ExprChecker {
                 }
                 return BOOL;
             }
+            case 'list': {
+                // `[a, b, ...xs]`: the elements, of one type
+                let elem: Ty | undefined;
+                for (const item of e.items) {
+                    const t = this.check(item.value, scope);
+                    if (t.k === 'error') return ERROR;
+                    const x = item.spread ? (t.k === 'list' ? t.elem : undefined) : t;
+                    if (!x) {
+                        this.rules.error('M009', `'...' spreads a list, but '${item.value.text}' is a '${showType(t)}'.`, item.value.at);
+                        return ERROR;
+                    }
+                    if (elem && !equatable(elem, x)) {
+                        this.rules.error(
+                            'M009',
+                            `A list holds values of one type, but '${item.value.text}' is a '${showType(x)}', not a '${showType(elem)}'.`,
+                            item.value.at,
+                        );
+                        return ERROR;
+                    }
+                    elem ??= x;
+                }
+                return { k: 'list', elem: elem ?? ERROR };
+            }
+            case 'listMethod': {
+                const coll = this.check(e.collection, scope);
+                if (coll.k === 'error') return ERROR;
+                if (coll.k !== 'list') {
+                    this.rules.error('M009', `'.${e.method}(…)' requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
+                    return ERROR;
+                }
+                let value: Ty = coll.elem;
+                if (e.param !== undefined && e.body) {
+                    this.recordLambda?.(e.param, e);
+                    value = this.check(e.body, { ...scope, lambdas: [...scope.lambdas, [e.param, coll.elem, e]] });
+                    if (value.k === 'error') return ERROR;
+                }
+                switch (e.method) {
+                    case 'map':
+                        return { k: 'list', elem: value };
+                    case 'filter':
+                        if (!isBool(value)) {
+                            this.rules.error('M009', `The predicate of '.filter(…)' must be Bool, but has type '${showType(value)}'.`, e.bodyAt ?? e.at);
+                            return ERROR;
+                        }
+                        return coll;
+                    case 'sum': {
+                        const base = basePrimitive(value);
+                        if (value.k === 'id' || (base !== 'Int' && base !== 'Decimal')) {
+                            this.rules.error('M009', `'.sum(…)' adds Int or Decimal values, but got '${showType(value)}'.`, e.bodyAt ?? e.collectionAt);
+                            return ERROR;
+                        }
+                        if (base === 'Int') return COMPUTED_INT;
+                        const scale = scaleOf(value);
+                        return { k: 'prim', name: 'Decimal', computed: true, ...(scale !== undefined && { scale }) };
+                    }
+                }
+            }
             case 'conditional': {
                 // `test ? then : else`: `then` is evaluated when `test` holds, `else` when it does not
                 const test = this.check(e.test, scope);

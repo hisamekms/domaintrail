@@ -415,6 +415,19 @@ export class ExprCompiler {
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
+            case 'list':
+                return { js: `[${e.items.map((i) => `${i.spread ? '...' : ''}${this.compile(i.value, scope).js}`).join(', ')}]` };
+            case 'listMethod': {
+                const c = this.compile(e.collection, scope);
+                const p = e.param !== undefined ? this.lambdaName(e.param, scope) : `$${this.temp++}`;
+                const b = e.param !== undefined && e.body ? this.compile(e.body, new Map([...scope, [e.param, { js: p }]])).js : p;
+                if (e.method !== 'sum') return { js: `${c.js}.${e.method}((${p}) => ${b})` };
+                const s = `$${this.temp++}`;
+                const sum = this.irTy(e);
+                return sum?.k === 'prim' && sum.name === 'Decimal'
+                    ? { js: `${c.js}.reduce((${s}, ${p}) => decimalAdd(${s}, String(${b})), '0')` }
+                    : { js: `${c.js}.reduce((${s}, ${p}) => ${s} + ${b}, 0)` };
+            }
             case 'conditional': {
                 const test = this.compile(e.test, scope);
                 return wrapped(`${test.js} ? ${this.compile(e.ifTrue, scope).js} : ${this.compile(e.ifFalse, scope).js}`, true);

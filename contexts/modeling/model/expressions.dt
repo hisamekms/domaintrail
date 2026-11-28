@@ -4,6 +4,14 @@ context Modeling {
 
   /// `all(collection, x => body)` and `any(collection, x => body)`.
   enum Quantifier { all any }
+  /// The list methods with a lambda: `.map(x => e)`, `.filter(x => p)`, `.sum(x => e)` (`.sum()` of numbers).
+  enum ListMethod { map filter sum }
+
+  /// An element of a list literal: a value, or `...xs` (`spread`).
+  value ListItem {
+    spread: Bool
+    value: ExprModel
+  }
 
   /// An invariant or requirement expression as a tree (syntax only: names are resolved by whoever reads it, in the
   /// scope of the invariant or requirement). Numbers keep their sign; `pattern` is the regular expression exactly as
@@ -38,6 +46,17 @@ context Modeling {
       op: BinaryOp
       left: ExprModel
       right: ExprModel
+    }
+    /// `[a, b, ...xs]`.
+    list {
+      items: ListItem[0..*]
+    }
+    /// `collection.map(param => body)`, `.filter(…)`, `.sum(…)`; `.sum()` has no `param` and `body`.
+    listMethod {
+      method: ListMethod
+      collection: ExprModel
+      param: String?
+      body: ExprModel?
     }
     /// `test ? then : else`.
     conditional {

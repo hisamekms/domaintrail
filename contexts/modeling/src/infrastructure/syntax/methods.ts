@@ -12,6 +12,7 @@ export type MethodForm =
     | { readonly k: 'contains'; readonly element: Expression }
     | { readonly k: 'unique'; readonly param?: string; readonly keys: readonly Expression[] }
     | { readonly k: 'matches'; readonly pattern: StringLiteral }
+    | { readonly k: 'listMethod'; readonly method: 'map' | 'filter' | 'sum'; readonly param?: string; readonly body?: Expression }
     | { readonly k: 'invalid'; readonly message: string };
 
 const usage: Record<string, string> = {
@@ -20,6 +21,9 @@ const usage: Record<string, string> = {
     includes: 'xs.includes(value)',
     unique: 'xs.unique() or xs.unique(x => key, …)',
     matches: 'text.matches("pattern")',
+    map: 'xs.map(x => value)',
+    filter: 'xs.filter(x => condition)',
+    sum: 'xs.sum() or xs.sum(x => number)',
 };
 
 export function methodForm(e: MemberAccess): MethodForm {
@@ -43,8 +47,17 @@ export function methodForm(e: MemberAccess): MethodForm {
                 : wrong();
         case 'matches':
             return param === undefined && args.length === 1 && isStringLiteral(args[0]) ? { k: 'matches', pattern: args[0] } : wrong();
+        case 'map':
+        case 'filter':
+            return param !== undefined && args.length === 1 ? { k: 'listMethod', method: e.member, param, body: args[0] } : wrong();
+        case 'sum':
+            if (param === undefined && args.length === 0) return { k: 'listMethod', method: 'sum' };
+            return param !== undefined && args.length === 1 ? { k: 'listMethod', method: 'sum', param, body: args[0] } : wrong();
         default:
-            return { k: 'invalid', message: `'${e.member}' is not a method: the methods are every, some, includes, unique and matches.` };
+            return {
+                k: 'invalid',
+                message: `'${e.member}' is not a method: the methods are every, some, includes, unique, matches, map, filter and sum.`,
+            };
     }
 }
 

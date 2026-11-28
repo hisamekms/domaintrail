@@ -358,6 +358,7 @@ module.exports = grammar({
       $.member_expression,
       $.parenthesized_expression,
       $.method_call,
+      $.list,
       $.boolean,
       $.null,
       $.number,
@@ -415,6 +416,13 @@ module.exports = grammar({
     )),
 
     lambda: ($) => seq(field('parameter', $._feature_name), '=>', field('body', $._expression)),
+
+    // `[a, b, ...xs]`
+    list: ($) => seq('[', optional(seq($._list_item, repeat(seq(',', $._list_item)))), ']'),
+
+    _list_item: ($) => choice($.spread, $._expression),
+
+    spread: ($) => seq('...', $._expression),
 
     boolean: (_) => choice('true', 'false'),
 
