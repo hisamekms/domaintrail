@@ -100,6 +100,8 @@ const expressionChildren = (expr: Expr): Expr[] => {
             return [expr.test, expr.ifTrue, expr.ifFalse];
         case 'call':
             return expr.args;
+        case 'match':
+            return [expr.subject, ...expr.cases.map((c) => c.body)];
         case 'list':
             return expr.items.map((i) => i.value);
         case 'listMethod':
@@ -832,6 +834,8 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
                 return [expr.test, expr.ifTrue, expr.ifFalse];
             case 'call':
                 return [...expr.args];
+            case 'match':
+                return [expr.subject, ...expr.cases.map((c) => c.body)];
             case 'list':
                 return expr.items.map((i) => i.value);
             case 'listMethod':

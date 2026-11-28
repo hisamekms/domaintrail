@@ -30,7 +30,7 @@ const FEATURE_KEYWORDS = [
   'context', 'shared', 'terms', 'primitive', 'enum', 'union', 'entity', 'aggregate', 'state', 'owns', 'references', 'create',
   'command', 'emits', 'errors', 'event', 'error', 'invariant',
   'readonly', 'initial', 'kind', 'on', 'outcome', 'select',
-  'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains', 'function',
+  'count', 'exists', 'length', 'matches', 'all', 'any', 'unique', 'contains', 'function', 'match',
 ];
 
 /** The other keywords that may name enum values, union variants and members after `.` (ValueName). */
@@ -373,6 +373,7 @@ module.exports = grammar({
       $.parenthesized_expression,
       $.method_call,
       $.call_expression,
+      $.match_expression,
       $.list,
       $.boolean,
       $.null,
@@ -431,6 +432,19 @@ module.exports = grammar({
     )),
 
     lambda: ($) => seq(field('parameter', $._feature_name), '=>', field('body', $._expression)),
+
+    // `match (x) { Variant { fields } => value, … }`
+    match_expression: ($) => seq(
+      'match', '(', field('subject', $._expression), ')',
+      '{', commaSep1($.match_case), optional(','), '}',
+    ),
+
+    match_case: ($) => seq(
+      field('variant', $._value_name),
+      optional(seq('{', optional(commaSep1(field('binding', $._feature_name))), '}')),
+      '=>',
+      field('value', $._expression),
+    ),
 
     // `name(args)`: a call of a function of the context
     call_expression: ($) => prec(PREC.member, seq(field('function', alias($.identifier, $.function_name)), '(', optional(seq($._expression, repeat(seq(',', $._expression)))), ')')),

@@ -376,6 +376,7 @@ export type Expr = ExprBase &
               leftAt: Site;
               rightAt: Site;
           }
+        | { k: 'match'; subject: Expr; cases: { variant: string; bindings: string[]; body: Expr; at: Site; variantAt: Site }[]; subjectAt: Site }
         | { k: 'call'; name: string; args: Expr[]; nameAt: Site; argsAt: Site[] }
         | { k: 'list'; items: { spread: boolean; value: Expr }[] }
         | { k: 'listMethod'; method: 'map' | 'filter' | 'sum'; collection: Expr; param?: string; body?: Expr; collectionAt: Site; bodyAt?: Site }

@@ -402,3 +402,48 @@ context A {
                 (identifier))
               (number
                 (integer)))))))))
+
+================================================================================
+Match over a union
+================================================================================
+
+context A {
+  value Day {
+    shift: Shift
+    invariant a { match (shift) { Staffed { hours, staff } => hours * staff, Open { hours } => hours, Closed => 0 } <= limit }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (value_declaration
+      (identifier)
+      (member_block
+        (field
+          (identifier)
+          (qualified_name
+            (identifier)))
+        (invariant
+          (identifier)
+          (binary_expression
+            (match_expression
+              (identifier)
+              (match_case
+                (identifier)
+                (identifier)
+                (identifier)
+                (binary_expression
+                  (identifier)
+                  (identifier)))
+              (match_case
+                (identifier)
+                (identifier)
+                (identifier))
+              (match_case
+                (identifier)
+                (number
+                  (integer))))
+            (identifier)))))))

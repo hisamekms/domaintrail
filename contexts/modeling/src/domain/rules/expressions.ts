@@ -211,6 +211,8 @@ function childExprs(x: Expr): Expr[] {
             return x.body ? [x.collection, x.body] : [x.collection];
         case 'call':
             return x.args;
+        case 'match':
+            return [x.subject, ...x.cases.map((c) => c.body)];
         default:
             return [];
     }
@@ -645,6 +647,59 @@ class ExprChecker {
                     this.rules.error('M009', `Invalid regular expression "${pattern}": ${reason}`, e.patternAt);
                 }
                 return BOOL;
+            }
+            case 'match': {
+                // `match (u) { V { f } => e, … }`: every variant of the union once, each body of one type
+                const subject = this.check(e.subject, scope);
+                if (subject.k === 'error') return ERROR;
+                if (subject.k !== 'union') {
+                    this.rules.error('M009', `'match' takes a union value, but '${e.subject.text}' is a '${showType(subject)}'.`, e.subjectAt);
+                    return ERROR;
+                }
+                const u = subject.decl;
+                const seen = new Set<string>();
+                let result: Ty | undefined;
+                for (const c of e.cases) {
+                    const variant = u.variants.find((v) => v.name === c.variant);
+                    if (!variant) {
+                        this.rules.error(
+                            'M009',
+                            `Union '${u.name}' has no variant '${c.variant}'.`,
+                            c.variantAt,
+                            didYouMean(
+                                c.variant,
+                                u.variants.map((v) => v.name),
+                            ),
+                        );
+                        continue;
+                    }
+                    if (seen.has(c.variant)) this.rules.error('M009', `Variant '${c.variant}' has two cases.`, c.variantAt);
+                    seen.add(c.variant);
+                    const fields = new Map(fieldsOf(variant.members).map((f) => [f.name, f]));
+                    const lambdas = [...scope.lambdas];
+                    for (const name of c.bindings) {
+                        const f = fields.get(name);
+                        if (!f) this.rules.error('M009', `Variant '${c.variant}' has no field '${name}'.`, c.at, didYouMean(name, [...fields.keys()]));
+                        lambdas.push([name, f ? memberType(f) : ERROR, c.body]);
+                    }
+                    const t = this.check(c.body, { ...scope, lambdas });
+                    if (t.k === 'error') continue;
+                    if (result && !assignable(result.k === 'opt' ? result : result, t) && !assignable(t, result)) {
+                        this.rules.error(
+                            'M009',
+                            `The cases of 'match' give '${showType(result)}' and '${showType(t)}': every case must have the same type.`,
+                            c.at,
+                        );
+                        continue;
+                    }
+                    result = result && result.k !== 'opt' && t.k === 'opt' ? t : (result ?? t);
+                }
+                const missing = u.variants.filter((v) => !seen.has(v.name)).map((v) => v.name);
+                if (missing.length) {
+                    this.rules.error('M009', `'match' over '${u.name}' has no case for ${missing.map((m) => `'${m}'`).join(', ')}.`, e.at);
+                    return ERROR;
+                }
+                return result ?? ERROR;
             }
             case 'call': {
                 // `name(args)`: a function of this context or of a shared context, with arguments of its parameters' types
