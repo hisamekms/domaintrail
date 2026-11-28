@@ -86,7 +86,7 @@ describe('did you mean', () => {
             'sales.dt': 'context Sales { enum Status { Open, Closed } }',
             'billing.dt': `context Billing {
   id InvoiceId: UUID
-  aggregate Invoice { id: InvoiceId open: Bool invariant a { open implies Status.Open == Sales.Status.Opn } }
+  aggregate Invoice { id: InvoiceId open: Bool invariant a { !(open) || Status.Open == Sales.Status.Opn } }
 }`,
         });
         expect(only(a, 'M001').map((d) => [d.message, d.hint])).toEqual([
@@ -97,7 +97,7 @@ describe('did you mean', () => {
             'sales.dt': 'context Sales { enum Status { Open, Closed } }',
             'billing.dt': `context Billing {
   id InvoiceId: UUID
-  aggregate Invoice { id: InvoiceId open: Bool invariant a { open implies Sales.Stats.Open == Sales.Status.Opn } }
+  aggregate Invoice { id: InvoiceId open: Bool invariant a { !(open) || Sales.Stats.Open == Sales.Status.Opn } }
 }`,
         });
         expect(only(b, 'M001').map((d) => d.hint)).toEqual(["did you mean 'Status'?", "did you mean 'Open'?"]);

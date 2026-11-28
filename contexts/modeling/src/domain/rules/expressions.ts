@@ -501,7 +501,7 @@ class ExprChecker {
             case 'not': {
                 const t = this.check(e.operand, scope);
                 if (t.k !== 'error' && !isBool(t)) {
-                    this.rules.error('M009', `Operator 'not' requires Bool, but got '${showType(t)}'.`, e.at);
+                    this.rules.error('M009', `Operator '!' requires Bool, but got '${showType(t)}'.`, e.at);
                 }
                 return BOOL;
             }
@@ -627,9 +627,10 @@ class ExprChecker {
         const { op } = e;
         if (op === 'and' || op === 'or' || op === 'implies') {
             const l = this.check(e.left, scope);
-            // `a and b` / `a implies b`: b is evaluated only when a holds, so a's exists() guards apply to b.
-            const guardedPaths = op === 'or' ? [] : guards(e.left);
-            const rightScope = op === 'or' ? scope : { ...scope, present: new Set([...scope.present, ...guardedPaths]) };
+            // `a && b` / `a implies b`: b is evaluated only when a holds; `a || b`: only when a does not. What a's
+            // outcome there shows present (`exists(x)` holding, `!exists(x)` not holding) is present in b.
+            const guardedPaths = guards(e.left, op !== 'or');
+            const rightScope = { ...scope, present: new Set([...scope.present, ...guardedPaths]) };
             if (guardedPaths.length) this.sink?.({ expression: e.right, paths: guardedPaths });
             const r = this.check(e.right, rightScope);
             for (const [side, t, at] of [
@@ -637,7 +638,11 @@ class ExprChecker {
                 ['right', r, e.rightAt],
             ] as const) {
                 if (t.k !== 'error' && !isBool(t)) {
-                    this.rules.error('M009', `Operator '${op}' requires Bool operands, but the ${side} operand has type '${showType(t)}'.`, at);
+                    this.rules.error(
+                        'M009',
+                        `Operator '${LOGICAL_SPELLING[op]}' requires Bool operands, but the ${side} operand has type '${showType(t)}'.`,
+                        at,
+                    );
                 }
             }
             return BOOL;
@@ -881,12 +886,23 @@ function pathOf(e: Expr): string | undefined {
 }
 
 /** Paths guaranteed present when `e` evaluates to true (exists() conjuncts). */
-function guards(e: Expr): string[] {
+/** How a logical operator is written (Phase 2): `implies` only in models not yet migrated. */
+const LOGICAL_SPELLING: Readonly<Record<'and' | 'or' | 'implies', string>> = { and: '&&', or: '||', implies: 'implies' };
+
+/**
+ * The optional paths an expression shows present when it evaluates to `holds`: `exists(x)` holding shows `x`; `!a`
+ * flips; `a && b` holding shows what both show holding; `a || b` not holding shows what both show not holding; and
+ * `a implies b` not holding shows what `a` shows holding and `b` not holding.
+ */
+function guards(e: Expr, holds = true): string[] {
     if (e.k === 'exists') {
         const p = pathOf(e.operand);
-        return p ? [p] : [];
+        return p && holds ? [p] : [];
     }
-    if (e.k === 'binary' && e.op === 'and') return [...guards(e.left), ...guards(e.right)];
+    if (e.k === 'not') return guards(e.operand, !holds);
+    if (e.k === 'binary' && e.op === 'and' && holds) return [...guards(e.left, true), ...guards(e.right, true)];
+    if (e.k === 'binary' && e.op === 'or' && !holds) return [...guards(e.left, false), ...guards(e.right, false)];
+    if (e.k === 'binary' && e.op === 'implies' && !holds) return [...guards(e.left, true), ...guards(e.right, false)];
     return [];
 }
 

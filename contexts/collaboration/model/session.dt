@@ -6,7 +6,7 @@ context Collaboration {
   id ParticipantId "参加者ID": String { length(value) >= 1 }
 
   /// 他の参加者に見せる名前。メールアドレスは他の参加者に見せない。
-  primitive DisplayName "表示名": String { length(value) >= 1 and length(value) <= 200 }
+  primitive DisplayName "表示名": String { length(value) >= 1 && length(value) <= 200 }
 
   /// セッションでの役割。ファシリテーターはセッションを始めた人で、認証から導かない。
   enum ParticipantRole "役割" { Facilitator "ファシリテーター" Participant "参加者" }
@@ -32,10 +32,10 @@ context Collaboration {
 
     invariant distinctParticipants "参加者は1人1回" { unique(participants) }
     invariant facilitatorListed "ファシリテーターは参加者の1人" {
-      any(participants, p => p.id == facilitator and p.role == ParticipantRole.Facilitator)
+      any(participants, p => p.id == facilitator && p.role == ParticipantRole.Facilitator)
     }
     invariant soleFacilitator "ファシリテーターは1人" {
-      all(participants, p => p.role == ParticipantRole.Facilitator implies p.id == facilitator)
+      all(participants, p => !(p.role == ParticipantRole.Facilitator) || p.id == facilitator)
     }
 
     state Open "開催中"

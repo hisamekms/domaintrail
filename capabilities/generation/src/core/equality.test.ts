@@ -16,7 +16,7 @@ test('value objects, unions, entities and guarded optionals compare by their equ
     o: Tag?
     invariant sameTag { a == b }
     invariant sameForm { s == t }
-    invariant optTag { exists(o) implies o == a }
+    invariant optTag { !(exists(o)) || o == a }
   }
   aggregate Agg { id: AggId  owns p: Part  owns q: Part  invariant samePart { p == q } }
 }`,

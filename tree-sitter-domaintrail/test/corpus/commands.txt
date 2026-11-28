@@ -49,7 +49,7 @@ context A {
     command cancel(reason: Reason) "取り消す"
       Draft | Confirmed -> Cancelled
       requires noteForOther "備考" {
-        reason == Reason.Other implies exists(note)
+        !(reason == Reason.Other) || exists(note)
       } else NoteRequired
       requires documented "説明のみ" else Common.Forbidden
       changes note, reason
@@ -82,11 +82,13 @@ context A {
             (identifier)
             (string)
             (binary_expression
-              (binary_expression
-                (identifier)
-                (member_expression
-                  (identifier)
-                  (identifier)))
+              (not_expression
+                (parenthesized_expression
+                  (binary_expression
+                    (identifier)
+                    (member_expression
+                      (identifier)
+                      (identifier)))))
               (call_expression
                 (function_name)
                 (identifier)))

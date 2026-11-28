@@ -14,26 +14,26 @@ context Collaboration {
 
   /// 要約の行き先の名前: ストーミングの ID（`/es:start`、DSL の識別子）か、モデリングの道のりの ID（`/model:start`、
   /// 小文字・数字・ハイフン）。
-  primitive BriefName "要約の行き先": String { matches(value, "^[_a-zA-Z0-9][A-Za-z0-9_-]*$") and length(value) <= 100 }
+  primitive BriefName "要約の行き先": String { matches(value, "^[_a-zA-Z0-9][A-Za-z0-9_-]*$") && length(value) <= 100 }
 
   /// 新しく作る行き先の見出し（ラベル）。
-  primitive BriefLabel "行き先の見出し": String { length(value) >= 1 and length(value) <= 100 }
+  primitive BriefLabel "行き先の見出し": String { length(value) >= 1 && length(value) <= 100 }
 
   /// 要約の本文: 道のりの「なぜ」を見出しのある行で（「目的: …」）。道のりの項目から作り、編集もこの形で読む。上限は
   /// コード（`domain/interviews.ts` の `INTERVIEW_LIMITS`）が決める。
-  primitive BriefText "要約の本文": String { length(value) >= 1 and length(value) <= 1500 }
+  primitive BriefText "要約の本文": String { length(value) >= 1 && length(value) <= 1500 }
 
   /// 要約の項目1つ（目的・範囲・制約）: 短い1行。
-  primitive BriefField "要約の項目": String { length(value) >= 1 and length(value) <= 240 }
+  primitive BriefField "要約の項目": String { length(value) >= 1 && length(value) <= 240 }
 
   /// 参加者の役割（「窓口担当」）。人の名前は書かない。
-  primitive RoleName "参加者の役割": String { length(value) >= 1 and length(value) <= 60 }
+  primitive RoleName "参加者の役割": String { length(value) >= 1 && length(value) <= 60 }
 
   /// モデリングの道のりの名前（「Billing の深掘り」）。
-  primitive JourneyName "道のりの名前": String { length(value) >= 1 and length(value) <= 100 }
+  primitive JourneyName "道のりの名前": String { length(value) >= 1 && length(value) <= 100 }
 
   /// 新しいストーミングの短い説明（`///` に書く1行）。
-  primitive ShortDescription "短い説明": String { length(value) >= 1 and length(value) <= 200 }
+  primitive ShortDescription "短い説明": String { length(value) >= 1 && length(value) <= 200 }
 
   /// イベントストーミングの結果の使い道: 人をそろえる、モデリングへつなげる。
   enum JourneyUse "使い道" { Align "認識をそろえる" Modeling "モデリングへつなげる" }
@@ -83,7 +83,7 @@ context Collaboration {
   /// AI の問いの選択肢（短い1行）。始めた人が押すと、それが答えとして送られる。AI の出力で、文字として出すだけ。
   /// 要素の参照（`@{es:Returns}`）を含むことがあり、画面はそれをラベルで出す。見える長さは 40 字までで、
   /// 参照を書いたままの長さは 200 字まで。
-  primitive AnswerChoice "答えの選択肢": String { length(value) >= 1 and length(value) <= 200 }
+  primitive AnswerChoice "答えの選択肢": String { length(value) >= 1 && length(value) <= 200 }
 
   /// 答えを待っている AI の問いと、その選択肢（ないこともある）。画面は、始めた人にだけ選択肢のボタンを出す。
   value AskedQuestion "答えを待つ問い" {
@@ -168,7 +168,7 @@ context Collaboration {
     command ask(answered: RequestId "答えたメッセージ", question: AskedQuestion "問い", askedAt: Timestamp) "問う"
       Asking -> Asking
       requires stillAwaited "そのメッセージをまだ待っている" {
-        exists(awaiting) and awaiting == answered
+        exists(awaiting) && awaiting == answered
       } else InterviewMovedOn
       changes awaiting, asked
       emits InterviewQuestionAsked
@@ -177,7 +177,7 @@ context Collaboration {
     command summarize(answered: RequestId "答えたメッセージ", summary: InterviewBrief "要約", briefedAt: Timestamp) "要約を出す"
       Asking -> Briefed
       requires stillAwaited "そのメッセージをまだ待っている" {
-        exists(awaiting) and awaiting == answered
+        exists(awaiting) && awaiting == answered
       } else InterviewMovedOn
       emits InterviewBriefed
 
@@ -203,7 +203,7 @@ context Collaboration {
     command stop(stoppedBy: ParticipantId, stoppedByRole: ParticipantRole, stoppedAt: Timestamp) "聞き取りを中止する"
       Asking | Briefed -> Stopped
       requires starterOrFacilitatorStops "始めた人かファシリテーターが中止する" {
-        stoppedBy == startedBy or stoppedByRole == ParticipantRole.Facilitator
+        stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
       } else NotTheInterviewer
       emits InterviewStopped
   }

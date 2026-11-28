@@ -69,7 +69,7 @@ context Collaboration {
 
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
     invariant proposalsOfRequests "変更案は束ねた依頼のもの" {
-      exists(proposals) implies all(proposals.approved, p => any(requests, r => r.request == p.request))
+      !(exists(proposals)) || all(proposals.approved, p => any(requests, r => r.request == p.request))
     }
   }
 
@@ -94,7 +94,7 @@ context Collaboration {
 
     /// 一部だけ・対応しなかった依頼には、そのわけを添える。
     invariant noteExplains "一部と未対応には補足がある" {
-      (status == RequestProgress.Partial or status == RequestProgress.Skipped) implies exists(note)
+      !((status == RequestProgress.Partial || status == RequestProgress.Skipped)) || exists(note)
     }
   }
 
@@ -147,7 +147,7 @@ context Collaboration {
     invariant distinctRequests "依頼は1件1回" { unique(requests, r => r.request) }
     invariant distinctQuestions "問いのキーは1回" { unique(questions, q => q.id) }
     invariant answeredHasAnswer "問いとして答えた依頼には回答がある" {
-      any(requests, r => r.status == RequestProgress.Answered) implies exists(answer)
+      !(any(requests, r => r.status == RequestProgress.Answered)) || exists(answer)
     }
   }
 
@@ -158,7 +158,7 @@ context Collaboration {
     chosen: ReplyOption[0..*] "選んだ選択肢"
     freeText: Text? "自由記述"
 
-    invariant answered "選択か自由記述がある" { count(chosen) >= 1 or exists(freeText) }
+    invariant answered "選択か自由記述がある" { count(chosen) >= 1 || exists(freeText) }
     invariant distinctChosen "選択肢は1回" { unique(chosen, o => o.id) }
   }
 
@@ -286,17 +286,17 @@ context Collaboration {
       /// エージェントが 0 で終了し、基準リビジョンより .dt のエラーが増えず、すべての .dtes が構文解析でき、dt fmt と dt check が
       /// 失敗せず、ファイルを変えたなら両方を実行した（変えなかったなら省いてよい）。
       invariant succeeded "成功の条件を満たす" {
-        report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))
+        report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))
       }
       /// 何も変わらなかった実行の結果リビジョンは基準リビジョンそのもの。
       invariant unchangedKeepsBase "変更がなければ結果は基準リビジョン" {
-        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+        (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       }
       /// 完了の返答は問わない（問うなら確認待ち）。
-      invariant completedAsksNothing "完了の返答に問いはない" { exists(reply) implies count(reply.questions) == 0 }
+      invariant completedAsksNothing "完了の返答に問いはない" { !(exists(reply)) || count(reply.questions) == 0 }
       /// 返答が挙げる依頼は、この実行の依頼。
       invariant completedReplyAboutInput "完了の返答の依頼は実行の依頼" {
-        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+        !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       }
     }
     /// エージェントが推測せずに問いを返した。ファイルはエージェントが残したまま（dt fmt / dt check は実行しない）。
@@ -309,9 +309,9 @@ context Collaboration {
       resultRevision: RevisionId "結果リビジョン"
       finishedAt: Timestamp "終了日時"
 
-      invariant clarificationAsks "確認待ちの返答には問いがある" { exists(reply) implies count(reply.questions) >= 1 }
+      invariant clarificationAsks "確認待ちの返答には問いがある" { !(exists(reply)) || count(reply.questions) >= 1 }
       invariant clarificationReplyAboutInput "確認の返答の依頼は実行の依頼" {
-        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+        !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       }
     }
     /// エージェントが規則に反する・範囲外として依頼を断った。理由は返答の要約。dt fmt / dt check は実行しない。
@@ -324,7 +324,7 @@ context Collaboration {
 
       invariant declinedAsksNothing "辞退の返答に問いはない" { count(reply.questions) == 0 }
       invariant declinedReplyAboutInput "辞退の返答の依頼は実行の依頼" {
-        (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+        (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       }
     }
     state Failed "失敗" {
@@ -336,7 +336,7 @@ context Collaboration {
       finishedAt: Timestamp "終了日時"
 
       invariant ruleNotMetReported "成功の条件を満たさないことが報告にある" {
-        reason == FailureReason.RuleNotMet implies (exists(report) and exists(resultRevision) and not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (resultRevision != baseRevision implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))))
+        !(reason == FailureReason.RuleNotMet) || (exists(report) && exists(resultRevision) && !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(resultRevision != baseRevision) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))))
       }
     }
     state Cancelled "中止" {
@@ -355,7 +355,7 @@ context Collaboration {
 
       /// 何も変わらなかった打ち消し（打ち消すものが残っていなかった）の結果リビジョンは基準リビジョンそのもの。
       invariant revertKeepsBaseUnchanged "打ち消すものがなければ結果は基準リビジョン" {
-        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+        (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       }
       /// 機械的な打ち消しが束ねるのは、打ち消しの依頼だけ。
       invariant revertsRevertRequests "打ち消しの依頼を束ねる" { all(input.requests, r => exists(r.reverts)) }
@@ -386,7 +386,7 @@ context Collaboration {
       } else FacilitatorOnly
       requires distinctRequests "依頼は1件1回" { unique(requests) } else DuplicateRequest
       requires inputCoversRequests "入力は束ねた依頼の写し" {
-        count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+        count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
       } else InputMismatch
       emits RunQueued
 
@@ -395,7 +395,7 @@ context Collaboration {
       -> Edited
       requires inputEdits "入力は手直しの記録" { all(input.requests, r => exists(r.edit)) } else InputMismatch
       requires editInputCoversRequests "入力は束ねた記録の写し" {
-        count(input.requests) == count(requests) and all(requests, r => any(input.requests, i => i.request == r))
+        count(input.requests) == count(requests) && all(requests, r => any(input.requests, i => i.request == r))
       } else InputMismatch
       requires editChanges "手直しはファイルを変える" { resultRevision != baseRevision } else ChangedMismatch
       emits RunEdited
@@ -419,7 +419,7 @@ context Collaboration {
       Queued -> Reverted
       requires inputReverts "入力は打ち消しの依頼" { all(input.requests, r => exists(r.reverts)) } else InputMismatch
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
-        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+        (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       } else ChangedMismatch
       emits RunReverted
 
@@ -440,22 +440,22 @@ context Collaboration {
     /// 返答は完了のときだけ残す（失敗は事実が決め、返答を見せない）。
     command finish(report: RunReport, resultRevision: RevisionId, changed: Bool, reply: AgentReply?, review: RunReview?, finishedAt: Timestamp) "実行を終える" {
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
-        (changed == true implies resultRevision != baseRevision) and (changed == false implies resultRevision == baseRevision)
+        (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       } else ChangedMismatch
       requires replyAsksNothing "完了の返答に問いはない" {
-        exists(reply) implies count(reply.questions) == 0
+        !(exists(reply)) || count(reply.questions) == 0
       } else InvalidReply
       requires replyAboutInput "返答の依頼は実行の依頼" {
-        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+        !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       } else InvalidReply
       outcome Completed: Running -> Completed
         select {
-          report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran))
+          report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))
         }
         emits RunCompleted
       outcome Failed: Running -> Failed
         select {
-          not (report.exitCode == 0 and report.newDtErrors == 0 and report.unparsedDtes == 0 and report.formatted != ToolOutcome.Failed and report.checked != ToolOutcome.Failed and (changed == true implies (report.formatted == ToolOutcome.Ran and report.checked == ToolOutcome.Ran)))
+          !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran)))
         }
         emits RunFailed
     }
@@ -463,10 +463,10 @@ context Collaboration {
     command askClarification(question: Text, reply: AgentReply?, resultRevision: RevisionId, finishedAt: Timestamp) "確認を求める"
       Running -> NeedsClarification
       requires replyAsks "確認待ちの返答には問いがある" {
-        exists(reply) implies count(reply.questions) >= 1
+        !(exists(reply)) || count(reply.questions) >= 1
       } else InvalidReply
       requires replyAboutInput "返答の依頼は実行の依頼" {
-        exists(reply) implies (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+        !(exists(reply)) || (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       } else InvalidReply
       emits RunNeedsClarification
 
@@ -475,7 +475,7 @@ context Collaboration {
       Running -> Declined
       requires replyAsksNothing "辞退の返答に問いはない" { count(reply.questions) == 0 } else InvalidReply
       requires replyAboutInput "返答の依頼は実行の依頼" {
-        (all(reply.requests, r => any(input.requests, i => i.request == r.request)) and all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) and all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
+        (all(reply.requests, r => any(input.requests, i => i.request == r.request)) && all(reply.questions, q => all(q.requests, x => any(input.requests, i => i.request == x))) && all(reply.assumptions, a => all(a.requests, x => any(input.requests, i => i.request == x))))
       } else InvalidReply
       emits RunDeclined
 

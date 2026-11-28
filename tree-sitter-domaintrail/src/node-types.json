@@ -147,6 +147,10 @@
             "named": false
           },
           {
+            "type": "&&",
+            "named": false
+          },
+          {
             "type": "<",
             "named": false
           },
@@ -167,15 +171,7 @@
             "named": false
           },
           {
-            "type": "and",
-            "named": false
-          },
-          {
-            "type": "implies",
-            "named": false
-          },
-          {
-            "type": "or",
+            "type": "||",
             "named": false
           }
         ]
@@ -2567,7 +2563,15 @@
     }
   },
   {
+    "type": "!",
+    "named": false
+  },
+  {
     "type": "!=",
+    "named": false
+  },
+  {
+    "type": "&&",
     "named": false
   },
   {
@@ -2699,10 +2703,6 @@
     "named": false
   },
   {
-    "type": "and",
-    "named": false
-  },
-  {
     "type": "block_comment",
     "named": true,
     "extra": true
@@ -2789,10 +2789,6 @@
     "named": true
   },
   {
-    "type": "implies",
-    "named": false
-  },
-  {
     "type": "in",
     "named": false
   },
@@ -2818,19 +2814,11 @@
     "extra": true
   },
   {
-    "type": "not",
-    "named": false
-  },
-  {
     "type": "of",
     "named": false
   },
   {
     "type": "on",
-    "named": false
-  },
-  {
-    "type": "or",
     "named": false
   },
   {
@@ -2915,6 +2903,10 @@
   },
   {
     "type": "|",
+    "named": false
+  },
+  {
+    "type": "||",
     "named": false
   },
   {

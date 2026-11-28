@@ -2646,39 +2646,6 @@
       "members": [
         {
           "type": "PREC_LEFT",
-          "value": 1,
-          "content": {
-            "type": "SEQ",
-            "members": [
-              {
-                "type": "FIELD",
-                "name": "left",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_expression"
-                }
-              },
-              {
-                "type": "FIELD",
-                "name": "operator",
-                "content": {
-                  "type": "STRING",
-                  "value": "implies"
-                }
-              },
-              {
-                "type": "FIELD",
-                "name": "right",
-                "content": {
-                  "type": "SYMBOL",
-                  "name": "_expression"
-                }
-              }
-            ]
-          }
-        },
-        {
-          "type": "PREC_LEFT",
           "value": 2,
           "content": {
             "type": "SEQ",
@@ -2696,7 +2663,7 @@
                 "name": "operator",
                 "content": {
                   "type": "STRING",
-                  "value": "or"
+                  "value": "||"
                 }
               },
               {
@@ -2729,7 +2696,7 @@
                 "name": "operator",
                 "content": {
                   "type": "STRING",
-                  "value": "and"
+                  "value": "&&"
                 }
               },
               {
@@ -2852,7 +2819,7 @@
         "members": [
           {
             "type": "STRING",
-            "value": "not"
+            "value": "!"
           },
           {
             "type": "FIELD",

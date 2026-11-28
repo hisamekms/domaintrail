@@ -21,9 +21,9 @@ context Knowledge {
 
     invariant distinctSources "出典のメッセージは1回" { unique(sources, s => s.session, s.message) }
     invariant distinctConflicts "食い違うナレッジは1回" { unique(conflictsWith) }
-    invariant notConflictingItself "自分とは食い違わない" { not contains(conflictsWith, id) }
+    invariant notConflictingItself "自分とは食い違わない" { !contains(conflictsWith, id) }
     /// 食い違いは、両方がそれぞれの出典をもって言われたときだけ。
-    invariant conflictsSourced "食い違いには出典がある" { count(conflictsWith) == 0 or count(sources) >= 1 }
+    invariant conflictsSourced "食い違いには出典がある" { count(conflictsWith) == 0 || count(sources) >= 1 }
 
     state Live "見える"
     /// 消したナレッジは、すぐにだれからも見えなくなる。ストアの掃除が、元に戻せる間を過ぎてから、版と画像をすべて消す。
@@ -54,7 +54,7 @@ context Knowledge {
       Live -> Live
       requires current "抽出が見た版のまま" { base == version } else StaleOperation
       requires newSource "まだない出典" {
-        all(sources, s => s.session != source.session or s.message != source.message)
+        all(sources, s => s.session != source.session || s.message != source.message)
       } else DuplicateSource
       changes content, sources, updatedAt
       emits KnowledgeSourceAdded
@@ -110,12 +110,12 @@ context Knowledge {
     /// 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
     command retire(reason: RetirementReason?, replacedBy: KnowledgeItemId? "置き換え先", proposal: RetirementProposalId? "候補", by: UserName, at: Timestamp) "廃止する"
       Live -> Live
-      requires notRetired "廃止していない" { not exists(retirement) } else AlreadyRetired
+      requires notRetired "廃止していない" { !exists(retirement) } else AlreadyRetired
       requires replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
-        exists(replacedBy) implies (exists(reason) and reason == RetirementReason.replaced)
+        !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
       } else ReplacementWithoutReason
       requires notReplacedByItself "自分には置き換わらない" {
-        exists(replacedBy) implies replacedBy != id
+        !(exists(replacedBy)) || replacedBy != id
       } else ReplacedByItself
       changes retirement, updatedAt
       emits KnowledgeItemRetired

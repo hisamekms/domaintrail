@@ -17,31 +17,31 @@ context Knowledge "ナレッジ" {
   primitive ProjectName "プロジェクト名": String { matches(value, "^[a-z0-9][a-z0-9-]{0,62}$") }
 
   /// ナレッジの見出し: 1行の短い文（40字まで）。Markdown ではなく、ただの文字。前後に空白を置かない。閉じたナレッジはこれだけを見せる。
-  primitive ItemTitle "見出し": String { length(value) <= 40 and matches(value, "^\S(.*\S)?$") }
+  primitive ItemTitle "見出し": String { length(value) <= 40 && matches(value, "^\S(.*\S)?$") }
 
   /// ナレッジの本文（Markdown）。
-  primitive ItemText "本文": String { length(value) >= 1 and length(value) <= 20000 }
+  primitive ItemText "本文": String { length(value) >= 1 && length(value) <= 20000 }
 
   /// 出典のメッセージの短い引用。セッションのデータベースは1台にしか残らないので、AI の言い換えを読み手が確かめられるのはこれ。
-  primitive Quote "引用": String { length(value) >= 1 and length(value) <= 500 }
+  primitive Quote "引用": String { length(value) >= 1 && length(value) <= 500 }
 
   /// 立場（案件担当、営業、外注先など）。役割で書き、人の名前は書かない。
-  primitive Perspective "立場": String { length(value) >= 1 and length(value) <= 100 }
+  primitive Perspective "立場": String { length(value) >= 1 && length(value) <= 100 }
 
   /// 抽出が操作ごとに添える理由。監査のログに残る。
-  primitive Reason "理由": String { length(value) >= 1 and length(value) <= 2000 }
+  primitive Reason "理由": String { length(value) >= 1 && length(value) <= 2000 }
 
   /// 付箋の参照 `<Storming>.<LocalId>`。ラベルを変えても切れない。付箋があるかは `dt check` が確かめる。
   primitive StickyRef "付箋": String { matches(value, "^[_a-zA-Z][_a-zA-Z0-9]*\.[_a-zA-Z][_a-zA-Z0-9]*$") }
 
   /// セッションの ID（コラボレーションのセッション）。
-  primitive SessionRef "セッション": String { length(value) >= 1 and length(value) <= 100 }
+  primitive SessionRef "セッション": String { length(value) >= 1 && length(value) <= 100 }
 
   /// セッションの中のメッセージの ID（人のメッセージか AI の答え）。
-  primitive MessageRef "メッセージ": String { length(value) >= 1 and length(value) <= 100 }
+  primitive MessageRef "メッセージ": String { length(value) >= 1 && length(value) <= 100 }
 
   /// ユーザー（Access のメールアドレス）。
-  primitive UserName "ユーザー": String { length(value) >= 1 and length(value) <= 320 }
+  primitive UserName "ユーザー": String { length(value) >= 1 && length(value) <= 320 }
 
   /// ナレッジの版（1 から）。
   primitive ItemVersion "版": Int { value >= 1 }

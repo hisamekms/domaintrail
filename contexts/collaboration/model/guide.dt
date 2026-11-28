@@ -1,11 +1,11 @@
 context Collaboration {
   /// ガイドの地図の区切り（`brief`、`events`、`bcSplit` など）。どの区切りがあり、どう済んだと決めるかはコード
   /// （`domain/guide.ts`）が決める。
-  primitive GuideStepKey "ガイドの区切り": String { matches(value, "^[a-zA-Z]+$") and length(value) <= 40 }
+  primitive GuideStepKey "ガイドの区切り": String { matches(value, "^[a-zA-Z]+$") && length(value) <= 40 }
 
   /// ガイドの道のりの名前: ストーミングの ES の道のり（`es:` とストーミングの ID）か、名前の付いたモデリングの道のりの
   /// ID（小文字・数字・ハイフンの短い名前）。道のりは道のりのファイル（`domaintrail.journey.json`）にある。
-  primitive GuideJourneyKey "道のり": String { length(value) >= 1 and length(value) <= 100 }
+  primitive GuideJourneyKey "道のり": String { length(value) >= 1 && length(value) <= 100 }
 
   /// ガイドの地図の世界: まだ（ブリーフも見ているビューもない）、イベントストーミング、モデリング。
   enum GuideWorld "ガイドの世界" { None "まだ" Storming "イベントストーミング" Model "モデリング" }

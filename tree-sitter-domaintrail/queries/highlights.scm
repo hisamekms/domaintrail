@@ -113,16 +113,15 @@
 ] @keyword
 
 [
-  "implies"
-  "or"
-  "and"
-  "not"
   "in"
 ] @keyword.operator
 
 ; Operators and punctuation
 
 [
+  "&&"
+  "||"
+  "!"
   "=="
   "!="
   "<="

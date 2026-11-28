@@ -312,12 +312,15 @@ export class ExprCompiler {
 
     /**
      * The condition under which `e`, an invariant or a requirement, is violated: `!(e)`, or `A && !B` for an implication
-     * `A implies B` (ADR 0028), which is the same condition without the double negation. `params` are the parameters of
+     * `A implies B` (ADR 0028) or `!(A) || B`, which is the same condition without the double negation. `params` are the parameters of
      * the check it is in, which lambda variables do not shadow.
      */
     violated(e: ExprModel, scope: Scope, params: readonly string[]): string {
         this.params = params;
         if (e.k === 'binary' && e.op === 'implies') return `${andOperand(this.compile(e.left, scope))} && ${negate(this.compile(e.right, scope))}`;
+        // `!(A) || B`, the implication of the TS-like syntax: violated when `A && !B`
+        if (e.k === 'binary' && e.op === 'or' && e.left.k === 'not')
+            return `${andOperand(this.compile(e.left.operand, scope))} && ${negate(this.compile(e.right, scope))}`;
         return negate(this.compile(e, scope));
     }
 

@@ -61,7 +61,7 @@ const PLAIN = `context Delivery {
         emits RequestAssigned
     }
     command cancel(reason: String) "依頼を取り消す" {
-      requires notOnHold { not onHold } else RequestOnHold
+      requires notOnHold { !onHold } else RequestOnHold
       outcome cancelled: Unassigned | Assigned -> Cancelled
         emits RequestCancelled
     }

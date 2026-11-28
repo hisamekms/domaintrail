@@ -98,9 +98,7 @@ describe('domain primitive declarations', () => {
 
 describe('domain primitives in other invariants', () => {
     test('compare with literals and with the same domain primitive', async () => {
-        const a = await withOrder(
-            'invariant ok { quantity > 0 and quantity <= maxQuantity and quantity in 1..10 and exists(email) implies length(email) > 3 }',
-        );
+        const a = await withOrder('invariant ok { !(quantity > 0 && quantity <= maxQuantity && quantity in 1..10 && exists(email)) || length(email) > 3 }');
         expect(codes(a)).toEqual([]);
     });
 
@@ -109,8 +107,8 @@ describe('domain primitives in other invariants', () => {
         ['quantity > rawCount', "Operator '>' cannot be applied to 'Quantity' and 'Int'."],
         ['quantity == "1"', "Operator '==' cannot be applied to 'Quantity' and 'String'."],
         ['quantity in 0..rawCount', "Range 'Int..Int' cannot be applied to 'Quantity'."],
-        ['exists(email) implies email == count(notes)', "Operator '==' cannot be applied to 'Email' and 'Int'."],
-        ['count(notes) <= price and price > rawCount', "Operator '>' cannot be applied to 'Price' and 'Int'."],
+        ['!(exists(email)) || email == count(notes)', "Operator '==' cannot be applied to 'Email' and 'Int'."],
+        ['count(notes) <= price && price > rawCount', "Operator '>' cannot be applied to 'Price' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
         const a = await withOrder(`invariant i { ${expr} }`);
         expect(only(a, 'M009').map((d) => d.message)).toEqual([message]);
@@ -125,7 +123,7 @@ describe('domain primitives in other invariants', () => {
             'quantity in 0..count(notes)',
             'count(notes) in quantity..maxQuantity',
             'length(title) <= temperature',
-            'exists(email) implies length(email) <= quantity',
+            '!(exists(email)) || length(email) <= quantity',
         ];
         const a = await withOrder(exprs.map((x, i) => `invariant i${i} { ${x} }`).join('\n    '));
         expect(codes(a)).toEqual([]);

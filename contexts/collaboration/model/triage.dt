@@ -3,7 +3,7 @@ context Collaboration {
   id TriageId "仕分けID": UUID
 
   /// 段の答えの確からしさ（0 以上 1 以下）。Clef の確率、軽いモデルの申告。
-  primitive Confidence "確からしさ": Decimal { value >= 0 and value <= 1 }
+  primitive Confidence "確からしさ": Decimal { value >= 0 && value <= 1 }
 
   /// 段にかかった時間（ミリ秒）。
   primitive Milliseconds "ミリ秒": Int { value >= 0 }
@@ -48,7 +48,7 @@ context Collaboration {
     error: Text? "失敗"
     at: Timestamp "日時"
 
-    invariant errorIsUnknown "失敗した段の答えはわからない" { exists(error) implies verdict == TriageVerdict.Unknown }
+    invariant errorIsUnknown "失敗した段の答えはわからない" { !(exists(error)) || verdict == TriageVerdict.Unknown }
   }
 
   /// 仕分けの行き先: AI の回答（メッセージと、回答が読んだリビジョン）、変更案、実行。
@@ -97,10 +97,10 @@ context Collaboration {
 
       invariant known "結論はわからないでない" { kind != TriageVerdict.Unknown }
       invariant answerIsConsultation "回答は相談の行き先" {
-        (exists(outcome) and outcome.kind == TriageOutcome.Answer) implies kind == TriageVerdict.Consultation
+        !((exists(outcome) && outcome.kind == TriageOutcome.Answer)) || kind == TriageVerdict.Consultation
       }
       invariant notForAiGoesNowhere "AI 宛てでないメッセージに行き先はない" {
-        kind == TriageVerdict.NotForAi implies not exists(outcome)
+        !(kind == TriageVerdict.NotForAi) || !exists(outcome)
       }
     }
 
@@ -113,23 +113,23 @@ context Collaboration {
     /// （軽いモデルのあとは相談として仕分け済み）。
     command record(step: TriageStep, recordedAt: Timestamp) "段の答えを記録する" {
       requires cascadeStage "カスケードの段" {
-        step.stage == TriageStage.Mechanical or step.stage == TriageStage.Clef or step.stage == TriageStage.Model
+        step.stage == TriageStage.Mechanical || step.stage == TriageStage.Clef || step.stage == TriageStage.Model
       } else InvalidTriageStep
       /// 機械的な判定は「AI 宛てでない」だけを決める（相談と依頼を言葉で分けない）。
       requires mechanicalDecidesNeither "機械的な判定は AI 宛てでないだけ" {
-        step.stage == TriageStage.Mechanical implies (step.verdict == TriageVerdict.NotForAi or step.verdict == TriageVerdict.Unknown)
+        !(step.stage == TriageStage.Mechanical) || (step.verdict == TriageVerdict.NotForAi || step.verdict == TriageVerdict.Unknown)
       } else InvalidTriageStep
       /// 段は前の段より後（機械的な判定 → Clef → 軽いモデル）で、同じ段は1回。
       requires inOrder "段の順" @externalCheck("段の順序と重複を、既存の段の記録を参照して判定する") else TriageStepOutOfOrder
       outcome Pending: Pending -> Pending
         select {
-          step.verdict == TriageVerdict.Unknown and step.stage != TriageStage.Model
+          step.verdict == TriageVerdict.Unknown && step.stage != TriageStage.Model
         }
         changes steps
         emits TriageStepRecorded
       outcome Decided: Pending -> Decided
         select {
-          step.verdict != TriageVerdict.Unknown or step.stage == TriageStage.Model
+          step.verdict != TriageVerdict.Unknown || step.stage == TriageStage.Model
         }
         changes steps
         emits TriageStepRecorded,
@@ -140,7 +140,7 @@ context Collaboration {
     command override(step: TriageStep, overriddenAt: Timestamp) "結論を訂正する"
       Decided -> Decided
       requires overridable "訂正できる結論" {
-        (step.stage == TriageStage.Answerer and kind == TriageVerdict.Consultation and not exists(outcome) and (step.verdict == TriageVerdict.ChangeRequest or step.verdict == TriageVerdict.NotForAi)) or (step.stage == TriageStage.Runner and kind == TriageVerdict.ChangeRequest and step.verdict == TriageVerdict.Consultation)
+        (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && !exists(outcome) && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
       } else TriageNotOverridable
       changes steps, kind, decidedBy, decidedAt
       emits TriageOverridden
@@ -159,9 +159,9 @@ context Collaboration {
     /// 仕分けの行き先（回答・変更案・実行）を記録する。1回だけ。
     command conclude(to: TriageOutcome "行き先", concludedAt: Timestamp) "行き先を記録する"
       Decided -> Decided
-      requires noOutcomeYet "行き先はまだない" { not exists(outcome) } else TriageAlreadyConcluded
+      requires noOutcomeYet "行き先はまだない" { !exists(outcome) } else TriageAlreadyConcluded
       requires outcomeFits "結論に合う行き先" {
-        kind != TriageVerdict.NotForAi and (to.kind == TriageOutcome.Answer implies kind == TriageVerdict.Consultation)
+        kind != TriageVerdict.NotForAi && (!(to.kind == TriageOutcome.Answer) || kind == TriageVerdict.Consultation)
       } else TriageNotConcludable
       changes outcome
       emits TriageConcluded

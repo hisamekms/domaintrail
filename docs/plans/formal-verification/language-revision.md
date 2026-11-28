@@ -41,6 +41,26 @@ field is `null`. The same rule applies to fields new in a transition's target st
 and shorthand Command. The default recursion depth for recursive values in the verification profile is 2. Mixed
 Int/Decimal arithmetic promotes the Int operand to Decimal and returns Decimal.
 
+Implementation order (Phase 2). The revision goes in by construct group:
+1. logical operators;
+2. method-form collection and string calls;
+3. null safety;
+4. conditional;
+5. arithmetic;
+6. lists;
+7. predicates and functions;
+8. `match`;
+9. `changes`/`ensures`.
+
+For each group, the parser reads the new spelling, and `dt migrate domain` (`migrateDomain` in Modeling) rewrites the
+old one. `scripts/migrate-sources.ts` then migrates every model in the repository: `.dt` files, Markdown `dt` blocks,
+and models in TypeScript template literals. After that, `dt check` reports each old spelling as an error, with its
+replacement and the migration as hint. The parser keeps reading old spellings only so that the migration can rewrite
+them; the language has one spelling. Because `implies` is gone, narrowing also takes the false edge: the right of `||`
+is checked under what the left shows when it does not hold (`!exists(x) || x.f > 0`). User-facing entries collect in
+[release-notes.md](release-notes.md) until the release, since the changelogs list released versions only. The AI trial
+starts once A0 `match` and quantifiers are in.
+
 ## 1. Current language and command contract
 
 ### Expressions

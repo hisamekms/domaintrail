@@ -31,7 +31,7 @@ describe('invariant scopes', () => {
     });
 
     test('state-level invariants see common and their own fields', async () => {
-        const a = await model('', 'invariant i { count(lines) > 0 and reason == Reason.Other implies total > 0 }');
+        const a = await model('', 'invariant i { !(count(lines) > 0 && reason == Reason.Other) || total > 0 }');
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -64,8 +64,8 @@ describe('invariant types', () => {
         ['count(total) > 0', "count() requires a collection, but got 'Decimal'."],
         ['all(lines, l => l.quantity)', "The predicate of all() must be Bool, but has type 'Int'."],
         ['exists(total)', "exists() requires an optional value, but 'Decimal' is always present."],
-        ['not total', "Operator 'not' requires Bool, but got 'Decimal'."],
-        ['total > 0 and 1', "Operator 'and' requires Bool operands, but the right operand has type 'Int'."],
+        ['!total', "Operator '!' requires Bool, but got 'Decimal'."],
+        ['total > 0 && 1', "Operator '&&' requires Bool operands, but the right operand has type 'Int'."],
         ['any(lines, l => l.price.amount > 0)', "'l.price' is optional; guard the access with exists(...) first."],
         ['id == 0', "Operator '==' cannot be applied to 'OrderId' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
@@ -74,12 +74,12 @@ describe('invariant types', () => {
     });
 
     test('exists() guards narrow optional values', async () => {
-        const a = await model('invariant i { all(lines, l => exists(l.price) implies l.price.amount > 0) and (exists(note) and note != "") }');
+        const a = await model('invariant i { all(lines, l => !(exists(l.price)) || l.price.amount > 0) && (exists(note) && note != "") }');
         expect(a.diagnostics).toEqual([]);
     });
 
     test('enum values, qualified enum values and numeric comparisons', async () => {
-        const a = await model('', 'invariant i { reason != Sales.Reason.Requested or total >= 1.5 or count(lines) == 0 }');
+        const a = await model('', 'invariant i { reason != Sales.Reason.Requested || total >= 1.5 || count(lines) == 0 }');
         expect(a.diagnostics).toEqual([]);
         const b = await model('', 'invariant i { reason == Reason.Unknown }');
         expect(only(b, 'M001')[0].message).toBe("Enum 'Reason' has no value 'Unknown'.");
@@ -125,7 +125,7 @@ describe('unique and contains', () => {
     test('unique over elements, one key and a combination of keys', async () => {
         const a = await lists(`
     invariant distinctLines { unique(lines) }
-    invariant distinctSkus { unique(lines, l => l.sku) and unique(skus) }
+    invariant distinctSkus { unique(lines, l => l.sku) && unique(skus) }
     invariant distinctPairs { unique(lines, l => l.sku, l.id) }
     invariant distinctPrices { unique(prices) }`);
         expect(a.diagnostics).toEqual([]);
@@ -133,10 +133,10 @@ describe('unique and contains', () => {
 
     test('contains: membership, subsets and literals of a domain primitive', async () => {
         const a = await lists(`
-    invariant member { contains(skus, favorite) and contains(skus, "ABC") }
+    invariant member { contains(skus, favorite) && contains(skus, "ABC") }
     invariant subset { all(required, s => contains(skus, s)) }
-    invariant guarded { exists(reason) implies contains(reasons, reason) }
-    invariant ofValues { all(lines, l => exists(l.price) implies contains(prices, l.price)) }`);
+    invariant guarded { !(exists(reason)) || contains(reasons, reason) }
+    invariant ofValues { all(lines, l => !(exists(l.price)) || contains(prices, l.price)) }`);
         expect(a.diagnostics).toEqual([]);
     });
 
@@ -170,8 +170,8 @@ describe('unique and contains', () => {
     contains: String[0..*]
     matches: String
     all: Int[0..*]
-    invariant i { count > 0 and unique and count(contains) == count and contains(contains, matches) }
-    invariant j { all(all, any => any > count) and unique(all, exists => exists) }
+    invariant i { count > 0 && unique && count(contains) == count && contains(contains, matches) }
+    invariant j { all(all, any => any > count) && unique(all, exists => exists) }
   }`);
         expect(a.diagnostics).toEqual([]);
     });

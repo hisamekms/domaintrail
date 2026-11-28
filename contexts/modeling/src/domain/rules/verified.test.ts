@@ -27,7 +27,7 @@ ${extra ? `  ${extra}\n` : ''}
       changes email
     command reach(email: Reachable) changes email
     command spend(spend: CoveredSpend)
-      requires positive { spend.amount > 0 and contact != email } else Unchanged
+      requires positive { spend.amount > 0 && contact != email } else Unchanged
       changes spent
     ${members}
   }
@@ -157,7 +157,7 @@ describe('verified types: the checker', () => {
     verified: Bool
     of: Int
     for: String
-    invariant k { verified == true implies of > 0 }
+    invariant k { !(verified == true) || of > 0 }
   }
   aggregate A {
     id: AId

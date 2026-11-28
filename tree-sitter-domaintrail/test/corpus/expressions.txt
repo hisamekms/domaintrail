@@ -4,7 +4,7 @@ Logical operators and precedence
 
 context A {
   aggregate X {
-    invariant a { not p and q or r implies s }
+    invariant a { !p && q || !(r) || s }
   }
 }
 
@@ -24,7 +24,9 @@ context A {
                 (not_expression
                   (identifier))
                 (identifier))
-              (identifier))
+              (not_expression
+                (parenthesized_expression
+                  (identifier))))
             (identifier)))))))
 
 ================================================================================
@@ -33,9 +35,9 @@ Comparisons, ranges and literals
 
 context A {
   aggregate X {
-    invariant a { total >= 0 and rate < 1.5 and delta > -2 and min <= -0.5 }
-    invariant b { count(items) in 1..10 and name != "" and flag == true and done == false }
-    invariant c { (a or b) and kind == Kind.Big }
+    invariant a { total >= 0 && rate < 1.5 && delta > -2 && min <= -0.5 }
+    invariant b { count(items) in 1..10 && name != "" && flag == true && done == false }
+    invariant c { (a || b) && kind == Kind.Big }
   }
 }
 
@@ -109,9 +111,9 @@ Functions and lambdas
 
 context A {
   aggregate X {
-    invariant a { all(items, i => i.quantity > 0) and any(items, i => i.gift) }
-    invariant b { unique(items) and unique(items, i => i.sku, i.size) }
-    invariant c { contains(tags, "new") and length(name) <= 20 and matches(code, "^[A-Z]+$") }
+    invariant a { all(items, i => i.quantity > 0) && any(items, i => i.gift) }
+    invariant b { unique(items) && unique(items, i => i.sku, i.size) }
+    invariant c { contains(tags, "new") && length(name) <= 20 && matches(code, "^[A-Z]+$") }
     invariant d { exists(customer.address.zip) }
   }
 }

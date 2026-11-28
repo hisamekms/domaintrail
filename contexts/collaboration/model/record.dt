@@ -6,7 +6,7 @@ context Collaboration {
   id JourneyRequestId "道のりのお願いID": UUID
 
   /// 記録したときの道のりの名前（ES はストーミングのラベル、モデリングは道のりの名前）。あとで名前が変わっても、記録は変わらない。
-  primitive JourneyLabel "記録の道のりの名前": String { length(value) >= 1 and length(value) <= 200 }
+  primitive JourneyLabel "記録の道のりの名前": String { length(value) >= 1 && length(value) <= 200 }
 
   /// 記録が名指す道のり: 鍵と、記録したときの名前。
   value RecordedJourney "記録の道のり" {

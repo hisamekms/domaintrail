@@ -22,11 +22,11 @@ const SOURCE = `context Sales {
     command complete()
     command inspect(passed: Bool) {
       outcome accepted: Assigned -> Accepted select { passed }
-      outcome rejected: Assigned -> Rejected select { not passed }
+      outcome rejected: Assigned -> Rejected select { !passed }
     }
     command audit(passed: Bool) {
       outcome approved: Assigned -> Assigned select { passed } emits Collected
-      outcome denied: Assigned -> Assigned select { not passed } emits Received
+      outcome denied: Assigned -> Assigned select { !passed } emits Received
     }
     kind COLLECT {
       create command openCollect(id: RequestId) { outcome opened: -> Unassigned }
