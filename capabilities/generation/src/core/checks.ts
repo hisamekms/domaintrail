@@ -416,6 +416,21 @@ export class ExprCompiler {
             }
             case 'matches':
                 return bool(`${regex(e.pattern)}.test(${this.compile(e.operand, scope).js})`);
+            case 'match': {
+                // nested conditionals on the discriminator, which TypeScript narrows; a binding reads the variant's field
+                const s = this.compile(e.subject, scope);
+                const u = strip(s.ty);
+                const tag = u.k === 'union' ? u.el.discriminator : 'kind';
+                const arms = e.cases.map((c) => {
+                    const inner: Scope = new Map([...scope, ...c.bindings.map((b): [string, Binding] => [b, { js: `${s.js}.${b}` }])]);
+                    return { test: `${s.js}.${tag} === '${c.variant}'`, js: this.compile(c.body, inner).js };
+                });
+                const last = arms.at(-1)!;
+                return wrapped(
+                    arms.slice(0, -1).reduceRight((rest, a) => `${a.test} ? ${a.js} : ${rest}`, last.js),
+                    true,
+                );
+            }
             case 'call': {
                 // a function of this context by its name, of a shared context through that context
                 const id = this.irNode(e)?.symbol?.id ?? e.name;

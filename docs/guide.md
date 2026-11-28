@@ -543,6 +543,10 @@ context Sales {
       bankCode: String
     }
   }
+  // one case per variant (all of them), reading the variant's fields by name
+  function isPersonal(payer: Payer): Bool {
+    match (payer) { CUSTOMER => true, COMPANY { billingEmail } => billingEmail == null }
+  }
 }
 ```
 
@@ -552,6 +556,8 @@ context Sales {
   Enum`, use the enum itself).
 - In invariants, `payer.kind` compares with `Payer.COMPANY` (or the bound enum's values); variant fields are not
   accessible from outside the union.
+- `match (payer) { CUSTOMER => …, COMPANY { name } => … }` has one case per variant, each once, and gives a value of
+  one type; a case names the fields of its variant it reads.
 - Value objects and unions may be recursive (a tree, an expression) when every value has a finite form: the cycle
   passes through an optional field (`?`), a list that may be empty (`[0..*]`), or a union with a variant out of it
   (`union Expr { lit { value: Int } not { operand: Expr } }`). Otherwise, and for any cycle through an entity or an

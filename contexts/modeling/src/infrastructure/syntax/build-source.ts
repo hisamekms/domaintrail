@@ -14,6 +14,7 @@ import {
     isCallExpr,
     isConditionalExpr,
     isListLiteral,
+    isMatchExpr,
     isContainsExpr,
     isCountExpr,
     isDecimalLiteral,
@@ -171,6 +172,14 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 right: expr(e.right),
                 leftAt: site(e, 'left'),
                 rightAt: site(e, 'right'),
+            };
+        if (isMatchExpr(e))
+            return {
+                ...base,
+                k: 'match',
+                subject: expr(e.subject),
+                subjectAt: site(e, 'subject'),
+                cases: e.cases.map((c) => ({ variant: c.variant, bindings: [...c.bindings], body: expr(c.body), at: site(c), variantAt: site(c, 'variant') })),
             };
         if (isCallExpr(e))
             return {

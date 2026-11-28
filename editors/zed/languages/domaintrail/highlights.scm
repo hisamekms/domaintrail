@@ -112,6 +112,7 @@
   "error"
   "policy"
   "function"
+  "match"
 ] @keyword
 
 [

@@ -15,6 +15,7 @@ import {
     isCallExpr,
     isConditionalExpr,
     isListLiteral,
+    isMatchExpr,
     isExistsExpr,
     isNullLiteral,
     isIntLiteral,
@@ -369,6 +370,12 @@ function exprModel(e: Expression): ExprModel {
     }
     if (isNullLiteral(e)) return { k: 'bool', value: false }; // `null` alone is reported (parse.ts)
     if (isBinaryExpr(e)) return { k: 'binary', op: BINARY_OPS[e.op], left: exprModel(e.left), right: exprModel(e.right) };
+    if (isMatchExpr(e))
+        return {
+            k: 'match',
+            subject: exprModel(e.subject),
+            cases: e.cases.map((c) => ({ variant: c.variant, bindings: [...c.bindings], body: exprModel(c.body) })),
+        };
     if (isCallExpr(e)) return { k: 'call', name: e.function, args: e.args.map(exprModel) };
     if (isListLiteral(e)) return { k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: exprModel(i.value) })) };
     if (isConditionalExpr(e)) return { k: 'conditional', test: exprModel(e.test), ifTrue: exprModel(e.ifTrue), ifFalse: exprModel(e.ifFalse) };

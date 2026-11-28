@@ -7,6 +7,13 @@ context Modeling {
   /// The list methods with a lambda: `.map(x => e)`, `.filter(x => p)`, `.sum(x => e)` (`.sum()` of numbers).
   enum ListMethod { map filter sum }
 
+  /// A case of `match`: the variant, the fields it binds by name, and its value.
+  value MatchCaseModel {
+    variant: String
+    bindings: String[0..*]
+    body: ExprModel
+  }
+
   /// An element of a list literal: a value, or `...xs` (`spread`).
   value ListItem {
     spread: Bool
@@ -46,6 +53,11 @@ context Modeling {
       op: BinaryOp
       left: ExprModel
       right: ExprModel
+    }
+    /// `match (subject) { Variant { fields } => body, … }`: one case per variant of a union, each once.
+    match {
+      subject: ExprModel
+      cases: MatchCaseModel[0..*]
     }
     /// `name(args)`: a call of a function of the context or of a shared context.
     call {

@@ -246,8 +246,13 @@ Primary infers Expression:
     | {infer DecimalLiteral} negative?='-'? value=DECIMAL
     | {infer IntLiteral} negative?='-'? value=INT
     | {infer StringLiteral} value=STRING
+    | {infer MatchExpr} 'match' '(' subject=Expression ')' '{' cases+=MatchCase (',' cases+=MatchCase)* ','? '}'
     | {infer CallExpr} function=ID '(' (args+=Expression (',' args+=Expression)*)? ')'
     | {infer NameRef} name=FeatureName;
+
+// `Variant { field, … } => value`: a case of `match`, with the variant's fields it reads by name
+MatchCase:
+    variant=ValueName ('{' (bindings+=FeatureName (',' bindings+=FeatureName)*)? '}')? '=>' body=Expression;
 
 ListElement:
     spread?='...'? value=Expression;
@@ -264,7 +269,7 @@ FeatureName returns string:
     | 'context' | 'shared' | 'terms' | 'primitive' | 'enum' | 'union' | 'entity' | 'aggregate' | 'state' | 'owns' | 'references' | 'create'
     | 'command' | 'emits' | 'errors' | 'event' | 'error' | 'invariant'
     | 'readonly' | 'initial' | 'kind' | 'on' | 'outcome' | 'select'
-    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains' | 'function';
+    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains' | 'function' | 'match';
 
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never
 // read alone in an expression: it is written after a `.` (`Op.and`).

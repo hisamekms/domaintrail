@@ -35,6 +35,9 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure, typed function of its parameters (a
   predicate when it returns Bool), called as `name(args)` from its context and, from a shared context, from every
   context. No recursion or call cycles (M032). Each becomes an exported TypeScript function.
+- `match (u) { Variant { fields } => value, … }` over a union value: one case per variant, each once (a missing,
+  unknown or repeated variant is an error), each case of one type, reading the variant's fields by name. It compiles
+  to conditionals on the discriminator.
 
 ## Added
 

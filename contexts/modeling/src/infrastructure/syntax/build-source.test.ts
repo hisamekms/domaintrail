@@ -128,6 +128,12 @@ function toExprModel(e: Expr): ExprModel {
             return { k: 'not', operand: toExprModel(e.operand) };
         case 'binary':
             return { k: 'binary', op: OPS[e.op], left: toExprModel(e.left), right: toExprModel(e.right) };
+        case 'match':
+            return {
+                k: 'match',
+                subject: toExprModel(e.subject),
+                cases: e.cases.map((c) => ({ variant: c.variant, bindings: c.bindings, body: toExprModel(c.body) })),
+            };
         case 'call':
             return { k: 'call', name: e.name, args: e.args.map(toExprModel) };
         case 'list':
