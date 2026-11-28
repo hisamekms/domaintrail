@@ -120,18 +120,24 @@ Command:
     |
     (transitions+=Transition (','? transitions+=Transition)*)?
     requirements+=Requirement*
-    ('changes' changes+=ChangedField (',' changes+=ChangedField)*)?
+    ('changes' changes+=Change (',' changes+=Change)*)?
     ('emits' emits+=Emit (',' emits+=Emit)*)?
+    ('ensures' '{' ensures=Expression '}')?
     ('errors' errors+=[ErrorDecl:QualifiedName] (',' errors+=[ErrorDecl:QualifiedName])*)?);
 
 Outcome:
     'outcome' name=FeatureName ':' (from+=[State:ID] ('|' from+=[State:ID])*)? '->' to=[State:ID]
     ('select' (('{' selectExpr=Expression '}') | selectText=STRING) external=ExternalCheck?)?
-    ('changes' changes+=ChangedField (',' changes+=ChangedField)*)?
-    ('emits' emits+=Emit (',' emits+=Emit)*)?;
+    ('changes' changes+=Change (',' changes+=Change)*)?
+    ('emits' emits+=Emit (',' emits+=Emit)*)?
+    ('ensures' '{' ensures=Expression '}')?;
 
 // A field in `changes`. A path into a field (`schedule.plannedDate`) is parsed only to be reported by M021, which
 // says why a field is changed whole and what to write instead.
+// `x` (the field may change; its value is not determined) or `x = expr` (its value), design D of Phase 2
+Change:
+    field=ChangedField ('=' value=Expression)?;
+
 ChangedField returns string:
     FeatureName ('.' ValueName)*;
 
@@ -269,7 +275,7 @@ FeatureName returns string:
     | 'context' | 'shared' | 'terms' | 'primitive' | 'enum' | 'union' | 'entity' | 'aggregate' | 'state' | 'owns' | 'references' | 'create'
     | 'command' | 'emits' | 'errors' | 'event' | 'error' | 'invariant'
     | 'readonly' | 'initial' | 'kind' | 'on' | 'outcome' | 'select'
-    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains' | 'function' | 'match';
+    | 'count' | 'exists' | 'length' | 'matches' | 'all' | 'any' | 'unique' | 'contains' | 'function' | 'match' | 'ensures';
 
 // Names of enum values and union variants (and members after `.`): every word, the keywords included. A value is never
 // read alone in an expression: it is written after a `.` (`Op.and`).

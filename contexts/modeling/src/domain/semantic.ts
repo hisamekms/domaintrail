@@ -20,6 +20,8 @@ import { applicableOutcomes, outcomeFields, outcomesBySource, outcomesOfCommand 
 import { lifecyclesOf } from './lifecycle.js';
 import type { ExpressionFact } from './rules/expressions.js';
 import {
+    changeId,
+    ensuresId,
     enumValueId,
     fieldId,
     functionId,
@@ -490,11 +492,21 @@ const expressionRoots = (model: SourceModel): { expr: Expr; id: string }[] => {
             for (const cmd of commandsOf(el)) {
                 roots.push(...cmd.requirements.flatMap((r) => (r.expr ? [{ expr: r.expr, id: requirementId(cmd.id, r.name) }] : [])));
                 roots.push(...cmd.outcomes.flatMap((o) => (o.select?.expr ? [{ expr: o.select.expr, id: outcomeId(cmd.id, o.name) }] : [])));
+                const contract = (owner: string, o: { changes: { name: string; value?: Expr }[]; ensures?: Expr }) => {
+                    for (const c of o.changes) if (c.value) roots.push({ expr: c.value, id: changeId(owner, c.name) });
+                    if (o.ensures) roots.push({ expr: o.ensures, id: ensuresId(owner) });
+                };
+                for (const o of cmd.outcomes) contract(outcomeId(cmd.id, o.name), o);
+                if (!cmd.outcomes.length) contract(cmd.id, cmd);
                 for (const kind of kindsOf(el))
                     for (const c of kind.cases.filter((x) => x.command.text === cmd.name)) {
                         const ownerId = onCaseId(kindId(el.id, kind.name), cmd.name);
                         roots.push(...c.requirements.flatMap((r) => (r.expr ? [{ expr: r.expr, id: requirementId(ownerId, r.name) }] : [])));
                         roots.push(...c.outcomes.flatMap((o) => (o.select?.expr ? [{ expr: o.select.expr, id: outcomeId(ownerId, o.name) }] : [])));
+                        for (const o of c.outcomes) {
+                            for (const ch of o.changes) if (ch.value) roots.push({ expr: ch.value, id: changeId(outcomeId(ownerId, o.name), ch.name) });
+                            if (o.ensures) roots.push({ expr: o.ensures, id: ensuresId(outcomeId(ownerId, o.name)) });
+                        }
                     }
             }
         }
@@ -799,7 +811,11 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
     const requirements = (owner: string, items: readonly import('./model.js').RequirementModel[]) =>
         items.forEach((item) => item.expr && roots.push({ id: requirementId(owner, item.name), expr: item.expr }));
     const outcomes = (owner: string, items: readonly OutcomeModel[]) =>
-        items.forEach((item) => item.select?.kind === 'expression' && roots.push({ id: outcomeId(owner, item.name), expr: item.select.expr }));
+        items.forEach((item) => {
+            if (item.select?.kind === 'expression') roots.push({ id: outcomeId(owner, item.name), expr: item.select.expr });
+            for (const a of item.assignments) roots.push({ id: changeId(outcomeId(owner, item.name), a.field), expr: a.expr });
+            if (item.ensures) roots.push({ id: ensuresId(outcomeId(owner, item.name)), expr: item.ensures.expr });
+        });
     for (const element of model.elements) {
         if ('invariants' in element) invariants(element.id, element.invariants);
         if (element.kind === 'union') for (const variant of element.variants) invariants(variantId(element.id, variant.name), variant.invariants);
@@ -816,6 +832,10 @@ export function exprModelIndex(ir: SemanticIR, model: DomainModel): Map<ExprMode
         for (const command of element.commands) {
             requirements(command.id, command.requires);
             outcomes(command.id, command.outcomes);
+            if (!command.outcomes.length) {
+                for (const a of command.assignments) roots.push({ id: changeId(command.id, a.field), expr: a.expr });
+                if (command.ensures) roots.push({ id: ensuresId(command.id), expr: command.ensures.expr });
+            }
         }
     }
     for (const context of model.contexts) for (const f of context.functions) roots.push({ id: functionId(context.name, f.name), expr: f.expr });

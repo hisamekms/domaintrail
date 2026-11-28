@@ -38,6 +38,9 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 - `match (u) { Variant { fields } => value, … }` over a union value: one case per variant, each once (a missing,
   unknown or repeated variant is an error), each case of one type, reading the variant's fields by name. It compiles
   to conditionals on the discriminator.
+- Outcome contracts: `changes x = expr` gives a field's value after an outcome (over the parameters and `before.x`),
+  and `ensures { … }` states a relation the result satisfies (over `before.x`, `after.x` and the parameters). A create
+  outcome may list `id`. The generated code does not check them yet (Phase 3).
 
 ## Added
 

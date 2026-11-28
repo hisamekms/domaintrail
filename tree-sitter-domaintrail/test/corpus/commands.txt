@@ -101,8 +101,10 @@ context A {
               (identifier)
               (identifier)))
           (changes_clause
-            (identifier)
-            (identifier))
+            (change
+              (identifier))
+            (change
+              (identifier)))
           (emits_clause
             (emit
               (qualified_name
@@ -168,3 +170,108 @@ context A {
         (command
           (identifier)
           (parameters))))))
+
+================================================================================
+Assigned changes and ensures
+================================================================================
+
+context A {
+  aggregate Rota {
+    create command open(id: RotaId) {
+      outcome opened: -> Draft
+        changes id = id, revision = 0, shifts = []
+    }
+    command addShift(shift: Shift) {
+      outcome added: Draft -> Draft
+        changes shifts = [...before.shifts, shift], revision
+        ensures { after.revision > before.revision }
+    }
+    command touch()
+      Draft -> Draft
+      changes revision = before.revision + 1
+      ensures { after.revision > before.revision }
+  }
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (context
+    (identifier)
+    (aggregate_declaration
+      (identifier)
+      (aggregate_body
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (qualified_name
+                (identifier))))
+          (outcome
+            (identifier)
+            (identifier)
+            (changes_clause
+              (change
+                (identifier)
+                (identifier))
+              (change
+                (identifier)
+                (number
+                  (integer)))
+              (change
+                (identifier)
+                (list)))))
+        (command
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (qualified_name
+                (identifier))))
+          (outcome
+            (identifier)
+            (identifier)
+            (identifier)
+            (changes_clause
+              (change
+                (identifier)
+                (list
+                  (spread
+                    (member_expression
+                      (identifier)
+                      (identifier)))
+                  (identifier)))
+              (change
+                (identifier)))
+            (ensures_clause
+              (binary_expression
+                (member_expression
+                  (identifier)
+                  (identifier))
+                (member_expression
+                  (identifier)
+                  (identifier))))))
+        (command
+          (identifier)
+          (parameters)
+          (transition
+            (identifier)
+            (identifier))
+          (changes_clause
+            (change
+              (identifier)
+              (binary_expression
+                (member_expression
+                  (identifier)
+                  (identifier))
+                (number
+                  (integer)))))
+          (ensures_clause
+            (binary_expression
+              (member_expression
+                (identifier)
+                (identifier))
+              (member_expression
+                (identifier)
+                (identifier)))))))))

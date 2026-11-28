@@ -126,7 +126,8 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                     );
                 else if (!f && !statesOf(agg).some((s) => s.members.some((m) => 'name' in m && m.name === change.name)))
                     rules.error('M028', `Aggregate '${agg.name}' has no field '${change.name}' to change.`, change.at);
-                if (change.name === 'id') rules.error('M028', `Identity field 'id' cannot be changed by outcome '${o.name}'.`, change.at);
+                // a create sets the identity (`changes id = id`, design D); any other outcome keeps it
+                if (change.name === 'id' && !cmd.factory) rules.error('M028', `Identity field 'id' cannot be changed by outcome '${o.name}'.`, change.at);
                 if (f?.readonly) rules.error('M028', `Readonly field '${change.name}' cannot be changed by outcome '${o.name}'.`, change.at);
             }
         };

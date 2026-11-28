@@ -303,7 +303,10 @@ class Layout {
     }
 
     private command(cmd: ast.Command, indent: number): void {
-        if (this.keywords(cmd, '{').length) {
+        // the block form's `{`, not that of a shorthand `ensures { … }`
+        const ensures = this.keywords(cmd, 'ensures')[0];
+        const open = this.keywords(cmd, '{')[0];
+        if (open !== undefined && (ensures === undefined || open < ensures)) {
             this.block(cmd, sorted([...cmd.requirements, ...cmd.outcomes]), indent);
             for (const r of cmd.requirements) this.expressionBody(r, indent + INDENT);
             for (const o of cmd.outcomes) this.outcome(o, indent + INDENT);
@@ -317,7 +320,7 @@ class Layout {
         const clauses = [
             ...cmd.transitions.map((t) => this.first(t)),
             ...cmd.requirements.map((r) => this.first(r)),
-            ...(['changes', 'emits', 'errors'] as const).flatMap((k) => this.keywords(cmd, k)),
+            ...(['changes', 'emits', 'ensures', 'errors'] as const).flatMap((k) => this.keywords(cmd, k)),
         ];
         if (cmd.transitions.length) {
             const from = this.first(cmd.transitions[0]);
@@ -333,7 +336,7 @@ class Layout {
     }
 
     private outcome(o: ast.Outcome, indent: number): void {
-        for (const k of ['select', 'changes', 'emits'] as const) {
+        for (const k of ['select', 'changes', 'emits', 'ensures'] as const) {
             const at = this.keywords(o, k)[0];
             if (at !== undefined) this.set(at, 'line', indent + INDENT);
         }

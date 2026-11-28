@@ -417,7 +417,7 @@ class DomainHoverProvider extends AstNodeHoverProvider {
         const lines = [`**${title}**${label ? ` ${label}` : ''}${owner ? ` — \`${owner}\`` : ''}`];
         if (doc) lines.push(doc);
         if (ast.isInvariant(node) && node.expr) lines.push(`\`\`\`dt\n{ ${cstText(node.expr)} }\n\`\`\``);
-        if (ast.isCommand(node) && node.changes.length) lines.push(`\`\`\`dt\nchanges ${node.changes.join(', ')}\n\`\`\``);
+        if (ast.isCommand(node) && node.changes.length) lines.push(`\`\`\`dt\nchanges ${node.changes.map((c) => c.field).join(', ')}\n\`\`\``);
         if (ast.isCommand(node) && node.emits.length) lines.push(`\`\`\`dt\nemits ${node.emits.map(cstText).join(', ')}\n\`\`\``);
         if (ast.isVerifiedDecl(node)) {
             const errors = node.errors.length ? ` errors ${node.errors.map((e) => e.$refText).join(', ')}` : '';

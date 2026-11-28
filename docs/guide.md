@@ -312,7 +312,7 @@ context Sales { // a bounded context; may be split across files
     command changeNote(note: String?) // one transition per input state: the output depends on the input
       Draft -> Draft
       Confirmed -> Confirmed // one transition per line (`Draft -> Draft, Confirmed -> Confirmed` is allowed too)
-      changes note // the fields it may change; without `changes`, no common field
+      changes note // the fields it may change (`note = note` gives its value); without `changes`, no common field
   }
 
   entity OrderItem {
@@ -767,7 +767,8 @@ context Logistics {
       }
       command changeClosingTime(newClosingTime: String) { // only for this kind
         outcome changed: Active -> Active
-          changes closingTime
+          changes closingTime = newClosingTime // its value: over the parameters and `before.x`
+          ensures { after.closingTime.length > 0 } // a relation the result satisfies (`before.x`, `after.x`)
       }
       on suspend {
         outcome suspended: Active -> Suspended
@@ -865,6 +866,10 @@ the valid states and named outcomes per kind; restored data and migrations remai
 
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
+- Outcome contracts (design D): `changes x` lets an outcome change `x` without saying to what; `changes x = expr`
+  gives its value, over the parameters (bare) and `before.x`; an unlisted field is unchanged. `ensures { … }` after
+  `changes`/`emits` states a relation the result satisfies, over the parameters, `before.x` and `after.x`; an
+  equality that determines a field alone belongs in `changes x = …` (M021). A create has no `before`.
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure function of its parameters, called as
   `name(args)` from the expressions of its context and, when the context is shared, of every context. A function
   cannot call itself, directly or through others (M032).

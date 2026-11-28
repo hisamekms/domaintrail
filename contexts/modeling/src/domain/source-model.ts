@@ -136,8 +136,10 @@ export interface InitialDecl {
 export interface OutcomeDecl extends Declared {
     from: Ref<StateDecl>[];
     to: Ref<StateDecl>;
-    changes: { name: string; at: Site }[];
+    /** `changes x` or `changes x = value`. */
+    changes: { name: string; at: Site; value?: Expr }[];
     emits: EmitDecl[];
+    ensures?: Expr;
     select?: { expr?: Expr; text?: string; externalReason?: string; at: Site };
 }
 
@@ -174,9 +176,10 @@ export interface CommandDecl extends Declared {
     /** The site of each transition as a property of the command (`transitions`, index i). */
     transitionsAt: Site[];
     requirements: RequirementDecl[];
-    /** `changes a, b`: each name as written. */
-    changes: { name: string; at: Site }[];
+    /** `changes a, b = value`: each name as written, with its value when given. */
+    changes: { name: string; at: Site; value?: Expr }[];
     emits: EmitDecl[];
+    ensures?: Expr;
     errors: Ref<ErrorDecl>[];
     outcomes: OutcomeDecl[];
     /** The kind the command is declared in; absent for a common command. */
