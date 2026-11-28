@@ -63,6 +63,20 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   `check<Command>Ensures` the case of the branch's source and target state is chosen at generation. The check of the
   common invariants (`check<Aggregate>Common`) takes the aggregate (`Order`, was `OrderCommon`) when one of them
   matches on `this`.
+- Functions of the aggregate: a function's parameter may be an aggregate of its context, `function isOpen(o: Order):
+  Bool { match (o) { Draft => true, Confirmed => true, Cancelled => false } }`, called as `isOpen(this)` in
+  `requires`, `select { … }` and the aggregate's invariants, and as `isOpen(before)` / `isOpen(after)` in `changes` and
+  `ensures`. In the function the aggregate is in any state, so `match (o)` has a case for every state (or kind); `o.x`
+  reads a common field anywhere and a state's field in its case. The argument must be the aggregate itself, by its name
+  (an ID or another aggregate is M032), and a list or optional aggregate parameter, one of another context or an
+  aggregate result is M032. The generated function takes the aggregate's type (`o: Order`), which every state type is
+  assignable to.
+- The aggregate (`this`, `before`, `after`) is not a value: a case of `match` or a branch of `? :` that gives it is
+  M009 (`match (after) { Cancelled => before }.total` crashed generation before).
+- An optional field read through the aggregate is narrowed by its comparison with null: `before.note == null ||
+  before.note.length > 0`, `after.note != null && …`, `o.note != null && …` (it was M009).
+- A function's name is unique among the functions and the elements of its context, and its parameters' names among
+  them (M002). The Semantic IR declares functions (kind `function`) and their parameters (`Sales.discounted(amount)`).
 - Outcome contracts: `changes x = expr` gives a field's value after an outcome (over the parameters and `before.x`),
   and `ensures { … }` states a relation the result satisfies (over `before.x`, `after.x` and the parameters). A create
   outcome may list `id`. The generated `check<Command>Ensures` checks them (see Added).

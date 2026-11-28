@@ -164,8 +164,8 @@ describe('match over the states of the aggregate', () => {
             ).then((e) => e.filter((x) => !x.includes('M028'))),
         ).toEqual([
             "M001 'this.note': the fields of the aggregate are read by name here. | write 'note'",
-            "M009 'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }'. | read the fields by name, or choose by its state or kind with 'match (this) { … }'",
-            "M009 'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }'. | read the fields by name, or choose by its state or kind with 'match (this) { … }'",
+            "M009 'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }' or as the argument of a function that takes the aggregate. | read the fields by name, or choose by its state or kind with 'match (this) { … }'",
+            "M009 'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }' or as the argument of a function that takes the aggregate. | read the fields by name, or choose by its state or kind with 'match (this) { … }'",
             "M001 'this' is not in scope in an invariant of state 'Held', which holds in that one state: its fields are read by name. | read the fields by name, or write the rule as an invariant of 'Order' with 'match (this) { Held { … } => …, … }'",
             "M001 'this' is not in scope in an invariant of state 'Held', which holds in that one state: its fields are read by name. | write 'holder'",
             "M001 'this' is not in scope in 'changes x = …' and 'ensures', where it would be ambiguous: 'before' is the aggregate before the outcome, 'after' the aggregate after it (in 'ensures'). | write 'before', e.g. 'match (before) { … }'",

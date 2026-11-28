@@ -63,6 +63,13 @@ command's rules or the invariants of one state or kind, and is reserved as a nam
 may name kinds instead, never both in one `match`; the cases follow the (kind, state) pairs the aggregate can be in,
 and `before` and `after` narrow together as one transition. See [Supervisor decisions (2026-11-29)](../plans/formal-verification/language-revision.md#supervisor-decisions-2026-11-29-match-over-the-aggregate).
 
+Amended (2026-11-29, state match B): a function may take the aggregate of its context as a parameter (`function
+isOpen(o: Order): Bool { match (o) { … } }`), the aggregate in any of its states and kinds, so `match (o)` is exhaustive
+over all of them and `o.x` reads the common fields; it is called with `this` (now also a function's argument),
+`before`, `after` or such a parameter, never an ID or another aggregate. A list or optional aggregate parameter, one of
+another context and an aggregate result are rejected. See [Supervisor decisions (2026-11-29): functions of the
+aggregate](../plans/formal-verification/language-revision.md#supervisor-decisions-2026-11-29-functions-of-the-aggregate).
+
 ## Rejected alternatives
 
 - Freeze syntax before the AI trial, which would preempt evidence on the still-open `match` form and quantifier names.

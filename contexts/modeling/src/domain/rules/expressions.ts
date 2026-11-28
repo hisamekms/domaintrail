@@ -40,6 +40,8 @@ import {
     COMPUTED_INT,
     ERROR,
     basePrimitive,
+    cardinality,
+    multiplicityText,
     isBool,
     isDomainPrimitive,
     isNumeric,
@@ -138,13 +140,51 @@ const frameStates = (a: AggregateFrame): StateDecl[] => [...new Set(a.pairs.flat
 const frameKinds = (a: AggregateFrame): KindDecl[] => [...new Set(a.pairs.flatMap((p) => p.kind ?? []))];
 
 /**
- * The aggregate as a `before`, `after` or `this` frame: the common fields and those it has in every one of its pairs
- * (`before.x`), and what `match` on it chooses among.
+ * The aggregate as a `before`, `after` or `this` frame, or as a function's parameter (`param`): the common fields and
+ * those it has in every one of its pairs (`before.x`), and what `match` on it chooses among.
  */
-function aggregateFrameTy(name: 'before' | 'after' | 'this', aggregate: AggregateFrame): Ty {
+function aggregateFrameTy(name: string, aggregate: AggregateFrame, param?: ParamDecl): Ty {
     const own = fieldsInEvery(aggregate.pairs.map((p) => pairFields(p.kind, p[aggregate.side])));
-    return { k: 'frame', name, fields: new Map([...aggregate.common, ...own]), aggregate };
+    return { k: 'frame', name, fields: new Map([...aggregate.common, ...own]), aggregate, ...(param && { param }) };
 }
+
+/** The common fields of an aggregate: its own and those of the field sets it includes. */
+const commonOf = (agg: AggregateDecl): Map<string, FieldDecl | ParamDecl> =>
+    new Map<string, FieldDecl | ParamDecl>([...includedFields(agg).map((x) => x.field), ...commonFields(agg)].map((f) => [f.name, f]));
+
+/** Every (kind, state) pair an aggregate can be in: each kind in its valid states (ADR 0037), or each state. */
+function anyPairsOf(agg: AggregateDecl): AggregatePair[] {
+    const states = statesOf(agg);
+    const kinds = kindsOf(agg);
+    if (!kinds.length) return states.map((from) => ({ from }));
+    const valid = new Map<string, ReadonlySet<string>>(states.length ? lifecyclesOf(agg, true).map((l) => [l.kind, new Set(l.validStates ?? [])]) : []);
+    return kinds.flatMap((kind) => (states.length ? states.filter((s) => valid.get(kind.name)?.has(s.name)).map((from) => ({ kind, from })) : [{ kind }]));
+}
+
+/**
+ * The aggregate in any of its states and kinds, as `this` in its own invariants or as a function's parameter `name`
+ * (`param`): a function does not know where it is called, so `match` on it has a case for each state (or kind).
+ */
+const wholeAggregateTy = (agg: AggregateDecl, name: string, param?: ParamDecl): Ty =>
+    aggregateFrameTy(
+        name,
+        {
+            agg,
+            common: commonOf(agg),
+            pairs: anyPairsOf(agg),
+            side: 'from',
+            group: {},
+            statesWhat: `the states of '${agg.name}'`,
+            kindsWhat: `the kinds of '${agg.name}'`,
+        },
+        param,
+    );
+
+/** The aggregate a parameter's type names (`o: Order`), if it names one. */
+const aggregateOfParam = (p: ParamDecl): AggregateDecl | undefined => {
+    const t = p.type?.decl?.target;
+    return t?.kind === 'aggregate' ? t : undefined;
+};
 
 /**
  * Where `this` is not in scope: in `changes x = …` and `ensures`, which have `before` and `after` (`after` only in
@@ -169,6 +209,23 @@ const THIS_IN_CONTRACT = (where: 'changes' | 'ensures', factory: boolean): Hidde
             memberHint: (m) => `give the value by the parameters, or state it in 'ensures' with 'after.${m}'`,
         };
     return { code: 'M001', message, hint: `write 'before', e.g. 'match (before) { … }'`, memberHint: (m) => `write 'before.${m}'` };
+};
+
+/** In a function: its parameters only; the aggregate is one of them when the function takes it. */
+const THIS_IN_FUNCTION = (f: FunctionDecl, frames: ReadonlyMap<string, Ty>): Hidden => {
+    // the first valid aggregate parameter (one aggregate of the function's context)
+    const first = [...frames.values()][0];
+    const param = first?.k === 'frame' ? first.param : undefined;
+    const agg = first?.k === 'frame' ? first.aggregate?.agg : undefined;
+    return {
+        code: 'M001',
+        message: `'this' is not in scope in function '${f.name}', which reads only its parameters.`,
+        hint: param
+            ? `write '${param.name}', the '${agg!.name}' it takes`
+            : `take the aggregate as a parameter, e.g. 'function ${f.name}(o: <Aggregate>, …)' with 'match (o) { … }', and call it with '${f.name}(this, …)'`,
+        memberHint: (m) =>
+            param ? `write '${param.name}.${m}'` : `take the aggregate as a parameter, e.g. 'function ${f.name}(o: <Aggregate>, …)', and read 'o.${m}'`,
+    };
 };
 
 /** In a create command's requirements and choice rules: no aggregate yet. */
@@ -233,19 +290,56 @@ const returnType = (f: FunctionDecl): Ty =>
         typeAt: f.returnsAt,
     } as ParamDecl);
 
-/** M032: a function's body has its type, and no function calls itself directly or through others. */
+/**
+ * M032: a function's body has its type, and no function calls itself directly or through others. A parameter may be
+ * one aggregate of the function's context (`o: Order`), read as `o.x` and `match (o) { … }` over all its states (or
+ * kinds); a function returns a value, never an aggregate.
+ */
 function checkFunctions(model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
     const fns = model.fragments.flatMap((f) => f.functions);
     for (const f of fns) {
         const fields = new Map<string, FieldDecl | ParamDecl>(f.params.map((p) => [p.name, p]));
+        const frames = new Map<string, Ty>();
+        for (const p of f.params) {
+            const agg = aggregateOfParam(p);
+            if (!agg) continue;
+            if (agg.context !== f.context) {
+                rules.error(
+                    'M032',
+                    `Parameter '${p.name}' of function '${f.name}' is aggregate '${agg.context}.${agg.name}' of another context: a function takes an aggregate of its own context '${f.context}', the one the rules calling it are about.`,
+                    p.typeAt,
+                    `declare the function in context '${agg.context}'`,
+                );
+                continue;
+            }
+            if (p.multiplicity && cardinality(p.multiplicity) !== 'one') {
+                rules.error(
+                    'M032',
+                    `Parameter '${p.name}' of function '${f.name}' is '${agg.name}${multiplicityText(p.multiplicity)}': an aggregate parameter is one '${agg.name}', the aggregate the calling rule is about.`,
+                    p.typeAt,
+                    `write '${p.name}: ${agg.name}', and call the function with 'this', 'before' or 'after'`,
+                );
+                continue;
+            }
+            frames.set(p.name, wholeAggregateTy(agg, p.name, p));
+        }
+        const returned = f.returns?.decl?.target;
+        if (returned?.kind === 'aggregate')
+            rules.error(
+                'M032',
+                `Function '${f.name}' returns aggregate '${returned.name}': a function returns a value, and takes the aggregate only as a parameter.`,
+                f.returnsAt,
+                `return what the caller needs of it, e.g. a Bool or the value of a field`,
+            );
         const rootFact = { owner: f, fields: [], parameters: f.params, lambdas: [] as { name: string; binding: Expr }[] };
         sink?.({ expression: f.expr, scope: rootFact });
         const t = new ExprChecker(model, rules, sink, (name, binding) => rootFact.lambdas.push({ name, binding })).check(f.expr, {
             ctx: f.context,
             fields,
-            hidden: new Map(),
+            hidden: new Map([['this', THIS_IN_FUNCTION(f, frames)]]),
             lambdas: [],
             present: new Set(),
+            ...(frames.size && { frames }),
         });
         const declared = returnType(f);
         if (t.k !== 'error' && declared.k !== 'error' && !assignable(declared, t)) {
@@ -348,7 +442,7 @@ function checkPrimitive(p: DomainPrimitiveDecl, ctx: string, model: SourceModel,
 
 function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rules: RuleSink, sink?: ExpressionFactsSink): void {
     // fields taken from field sets are common fields too
-    const common = new Map<string, FieldDecl | ParamDecl>([...includedFields(agg).map((x) => x.field), ...commonFields(agg)].map((f) => [f.name, f]));
+    const common = commonOf(agg);
     const states = statesOf(agg);
     const stateOnly = (except?: string): Map<string, Hidden> =>
         new Map(
@@ -381,9 +475,6 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
     const kindNamed = (name: string | undefined): KindDecl | undefined => kinds.find((k) => k.name === name);
 
     // `this`, `before` and `after` as `match` subjects: the (kind, state) pairs the aggregate can be in there
-    const validStates = new Map<string, ReadonlySet<string>>(
-        kinds.length && states.length ? lifecyclesOf(agg, true).map((l) => [l.kind, new Set(l.validStates ?? [])]) : [],
-    );
     const frame = (name: 'before' | 'after' | 'this', pairs: readonly AggregatePair[], group: object, statesWhat: string, kindsWhat: string): Ty =>
         aggregateFrameTy(name, {
             agg,
@@ -415,10 +506,7 @@ function checkAggregate(agg: AggregateDecl, ctx: string, model: SourceModel, rul
     });
 
     // Aggregate-level invariants: common fields only, applied to every state.
-    const anyPairs: AggregatePair[] = kinds.length
-        ? kinds.flatMap((kind) => (states.length ? states.filter((s) => validStates.get(kind.name)?.has(s.name)).map((from) => ({ kind, from })) : [{ kind }]))
-        : states.map((from) => ({ from }));
-    const self = frame('this', anyPairs, {}, `the states of '${agg.name}'`, `'${agg.name}'`);
+    const self = wholeAggregateTy(agg, 'this');
     for (const inv of invariantsOf(agg.members)) {
         checkInvariant(
             inv,
@@ -904,6 +992,8 @@ class ExprChecker {
     private readonly comparisons = new WeakMap<Expr, NonNullable<ExpressionFact['comparison']>>();
     /** The subjects of `match`, where `this` may stand. */
     private readonly matchSubjects = new WeakSet<Expr>();
+    /** The arguments of a function's aggregate parameter (`isOpen(this)`), where `this` may stand too. */
+    private readonly aggregateArgs = new WeakSet<Expr>();
     constructor(
         private readonly model: SourceModel,
         private readonly rules: RuleSink,
@@ -1029,7 +1119,7 @@ class ExprChecker {
                 this.matchSubjects.add(e.subject);
                 const subject = this.check(e.subject, scope);
                 if (subject.k === 'error') return ERROR;
-                if (subject.k === 'frame' && subject.aggregate) return this.matchAggregate(e, subject.aggregate, scope);
+                if (subject.k === 'frame' && subject.aggregate) return this.matchAggregate(e, subject, subject.aggregate, scope);
                 if (subject.k !== 'union') {
                     this.rules.error(
                         'M009',
@@ -1080,7 +1170,7 @@ class ExprChecker {
                         lambdas.push([name, f ? memberType(f) : ERROR, c.body]);
                     }
                     const t = this.check(c.body, { ...scope, lambdas });
-                    if (t.k === 'error') continue;
+                    if (t.k === 'error' || this.aggregateResult(t, c.body)) continue;
                     const joined = joinCase(result, t);
                     if (!joined) {
                         this.rules.error(
@@ -1102,6 +1192,9 @@ class ExprChecker {
             case 'call': {
                 // `name(args)`: a function of this context or of a shared context, with arguments of its parameters' types
                 const f = functionNamed(this.model, scope.ctx, e.name);
+                f?.params.forEach((p, i) => {
+                    if (aggregateOfParam(p) && e.args[i]) this.aggregateArgs.add(e.args[i]);
+                });
                 const args = e.args.map((a) => this.check(a, scope));
                 if (!f) {
                     this.rules.error('M032', `No function '${e.name}' in context '${scope.ctx}' or a shared context.`, e.nameAt);
@@ -1113,6 +1206,11 @@ class ExprChecker {
                     return ERROR;
                 }
                 for (const [i, p] of f.params.entries()) {
+                    const agg = aggregateOfParam(p);
+                    if (agg) {
+                        this.aggregateArgument(f, p, agg, e.args[i]!, args[i]!, e.argsAt[i]!);
+                        continue;
+                    }
                     const want = memberType(p);
                     const got = args[i]!;
                     if (got.k !== 'error' && want.k !== 'error' && !assignable(want, got)) {
@@ -1139,6 +1237,7 @@ class ExprChecker {
                         this.rules.error('M009', `'...' spreads a list, but '${item.value.text}' is a '${showType(t)}'.`, item.value.at);
                         return ERROR;
                     }
+                    if (this.aggregateResult(x, item.value)) return ERROR;
                     if (elem && !equatable(elem, x)) {
                         this.rules.error(
                             'M009',
@@ -1199,6 +1298,7 @@ class ExprChecker {
                 const a = branch(e.ifTrue, true);
                 const b = branch(e.ifFalse, false);
                 if (a.k === 'error' || b.k === 'error') return ERROR;
+                if ([this.aggregateResult(a, e.ifTrue), this.aggregateResult(b, e.ifFalse)].some(Boolean)) return ERROR;
                 const base = (t: Ty): Ty => (t.k === 'opt' ? t.inner : t);
                 if (!equatable(base(a), base(b))) {
                     this.rules.error('M009', `'? :' gives '${showType(a)}' or '${showType(b)}': both branches must have the same type.`, e.at);
@@ -1302,6 +1402,97 @@ class ExprChecker {
         }
     }
 
+    /**
+     * M001: `o.x` of a function's aggregate parameter `o` that it has not in every (kind, state) pair it can be in here:
+     * of different types in them, in some of them (read it in a case of `match (o)`), in none of them but in others of
+     * the aggregate (read it in their case), or in none at all.
+     */
+    private paramFieldMissing(e: ExprOf<'member'>, recv: Extract<Ty, { k: 'frame' }>, a: AggregateFrame): void {
+        const m = e.member;
+        const o = recv.name;
+        const label = (p: AggregatePair): string => {
+            const fromState = p.from && fieldsOf(p.from.members).some((x) => x.name === m);
+            return (fromState ? p.from?.name : p.kind?.name) ?? p.from?.name ?? p.kind?.name ?? a.agg.name;
+        };
+        const has = (p: AggregatePair): FieldDecl | ParamDecl | undefined => pairFields(p.kind, p.from).get(m);
+        const now = a.pairs.filter((p) => has(p));
+        const names = (ps: readonly AggregatePair[]): string[] => [...new Set(ps.map(label))];
+        const here = [...new Set(a.pairs.map((p) => p.from?.name ?? p.kind?.name ?? a.agg.name))];
+        if (now.length && now.length === a.pairs.length) {
+            const types = now.map((p) => `'${label(p)}': '${showType(memberType(has(p)!))}'`);
+            this.rules.error(
+                'M001',
+                `'${o}.${m}': the states and kinds '${o}' can be in here have '${m}' of different types (${[...new Set(types)].join(', ')}).`,
+                e.memberAt,
+                `read it in a case of 'match (${o})', where it has one type: 'match (${o}) { ${label(now[0]!)} { ${m} } => … }'`,
+            );
+            return;
+        }
+        if (now.length) {
+            const where = names(now);
+            this.rules.error(
+                'M001',
+                `'${o}.${m}': '${a.agg.name}' has '${m}' in ${quoted(where)} only, not in every state and kind '${o}' can be in here.`,
+                e.memberAt,
+                `read it in a case of 'match (${o})': 'match (${o}) { ${where[0]} { ${m} } => … }'`,
+            );
+            return;
+        }
+        const elsewhere = names(anyPairsOf(a.agg).filter((p) => has(p)));
+        if (elsewhere.length) {
+            this.rules.error(
+                'M001',
+                `'${o}.${m}': '${a.agg.name}' has '${m}' in ${quoted(elsewhere)} only, and '${o}' is in ${quoted(here)} here.`,
+                e.memberAt,
+                `read it in the case ${quoted(elsewhere.slice(0, 1))} of 'match (${o})'`,
+            );
+            return;
+        }
+        this.rules.error('M001', `'${o}.${m}': '${a.agg.name}' has no field '${m}'.`, e.memberAt, didYouMean(m, [...recv.fields.keys()]));
+    }
+
+    /**
+     * M009: the aggregate itself (`this`, `before`, `after`, a function's aggregate parameter) is not a value: no element
+     * of a list, case of `match` or branch of `? :` gives it, so it is passed to a function only by its name. Whether
+     * `t`, the type of `x` there, is the aggregate (reported).
+     */
+    private aggregateResult(t: Ty, x: Expr): boolean {
+        if (t.k !== 'frame') return false;
+        this.rules.error(
+            'M009',
+            `The aggregate itself ('${x.text}') is not a value here: an element of a list, a case of 'match' and a branch of '? :' give values.`,
+            x.at,
+            `give the value of one of its fields ('${x.text}.<field>'), or pass the aggregate to a function by its name`,
+        );
+        return true;
+    }
+
+    /**
+     * M032: the argument of a function's aggregate parameter is that aggregate where the expression is about it: `this`,
+     * `before`, `after` (in any states the caller has narrowed it to), or an aggregate parameter of the calling function;
+     * never one the expression references by ID.
+     */
+    private aggregateArgument(f: FunctionDecl, p: ParamDecl, agg: AggregateDecl, arg: Expr, got: Ty, at: import('../source-model.js').Site): void {
+        if (got.k === 'error') return;
+        if (got.k === 'frame' && got.aggregate?.agg === agg) {
+            if (arg.k === 'name') return;
+            // unreachable from the syntax today (no expression but a name gives the aggregate), kept for the rule
+            this.rules.error(
+                'M032',
+                `Argument '${p.name}' of '${f.name}' is the aggregate '${agg.name}' by its name: 'this', 'before', 'after' or a parameter of type '${agg.name}', not '${arg.text}'.`,
+                at,
+            );
+            return;
+        }
+        const what = got.k === 'frame' && got.aggregate ? `the aggregate '${got.aggregate.agg.name}'` : `a '${showType(got)}'`;
+        this.rules.error(
+            'M032',
+            `Argument '${p.name}' of '${f.name}' is the aggregate '${agg.name}', but '${arg.text}' is ${what}.`,
+            at,
+            `pass the '${agg.name}' the expression is about: 'this' (in 'requires', 'select' and the invariants of '${agg.name}'), 'before' or 'after' (in 'changes' and 'ensures'), or a parameter of type '${agg.name}'; an aggregate it references by ID is out of reach`,
+        );
+    }
+
     /** M021: `this` is the aggregate in `match (this)`, and names no lambda parameter or binding (as `before` / `after` in contracts). */
     private reserved(name: string, at: import('../source-model.js').Site): void {
         if (name === 'this')
@@ -1313,7 +1504,7 @@ class ExprChecker {
      * in there, or for each kind (ADR 0037), never both; a case reads the fields it names (common ones, its state's or
      * its kind's), and in it the subject is in that state or kind, for a `match` inside it.
      */
-    private matchAggregate(e: ExprOf<'match'>, frame: AggregateFrame, scope: Scope): Ty {
+    private matchAggregate(e: ExprOf<'match'>, subjectTy: Extract<Ty, { k: 'frame' }>, frame: AggregateFrame, scope: Scope): Ty {
         const { agg } = frame;
         const subject = e.subject.text;
         const states = statesOf(agg);
@@ -1323,7 +1514,10 @@ class ExprChecker {
                 'M009',
                 `'match (${subject})' chooses by the state or the kind of '${agg.name}', which has neither.`,
                 e.subjectAt,
-                `read the fields of '${agg.name}' by name`,
+                // `this`: its fields are bare; `before`, `after` and a function's parameter read them through the name
+                subjectTy.name === 'this'
+                    ? `read the fields of '${agg.name}' by name`
+                    : `read its fields as '${subjectTy.name}.${[...subjectTy.fields.keys()].find((n) => n !== 'id') ?? [...subjectTy.fields.keys()][0] ?? '<field>'}'`,
             );
             return ERROR;
         }
@@ -1369,16 +1563,20 @@ class ExprChecker {
             // in the case: the pairs of that state or kind, for the subject and the frames that narrow with it
             const keep = (p: AggregatePair): boolean => (by === 'state' ? p[frame.side]?.name === c.variant : p.kind?.name === c.variant);
             const pairs = frame.pairs.filter(keep);
-            const subjectName = e.subject.k === 'name' && (e.subject.name === 'before' || e.subject.name === 'after') ? e.subject.name : 'this';
+            const subjectName = subjectTy.name;
             const where = `where '${subjectName}' is ${by === 'state' ? 'in' : 'of'} ${by} '${c.variant}'`;
-            const narrow = (name: 'before' | 'after' | 'this', a: AggregateFrame, own: boolean): Ty =>
-                aggregateFrameTy(name, {
-                    ...a,
-                    pairs,
-                    statesWhat: own && by === 'state' ? `the states of the case '${c.variant}'` : `${a.statesWhat} ${where}`,
-                    kindsWhat: own && by === 'kind' ? `the kinds of the case '${c.variant}'` : `${a.kindsWhat} ${where}`,
-                });
-            const inner = narrow(subjectName, frame, true);
+            const narrow = (name: string, a: AggregateFrame, own: boolean, param?: ParamDecl): Ty =>
+                aggregateFrameTy(
+                    name,
+                    {
+                        ...a,
+                        pairs,
+                        statesWhat: own && by === 'state' ? `the states of the case '${c.variant}'` : `${a.statesWhat} ${where}`,
+                        kindsWhat: own && by === 'kind' ? `the kinds of the case '${c.variant}'` : `${a.kindsWhat} ${where}`,
+                    },
+                    param,
+                );
+            const inner = narrow(subjectName, frame, true, subjectTy.param);
             const fields = inner.k === 'frame' ? inner.fields : new Map<string, FieldDecl | ParamDecl>();
             const lambdas = [...scope.lambdas];
             for (const name of c.bindings) {
@@ -1409,13 +1607,13 @@ class ExprChecker {
                           name === subjectName
                               ? [name, inner]
                               : ty.k === 'frame' && ty.aggregate?.group === frame.group
-                                ? [name, narrow(ty.name, ty.aggregate, false)]
+                                ? [name, narrow(ty.name, ty.aggregate, false, ty.param)]
                                 : [name, ty],
                       ),
                   )
                 : undefined;
             const t = this.check(c.body, { ...scope, lambdas, ...(frames && { frames }) });
-            if (t.k === 'error') continue;
+            if (t.k === 'error' || this.aggregateResult(t, c.body)) continue;
             const joined = joinCase(result, t);
             if (!joined) {
                 this.rules.error('M009', `The cases of 'match' give '${showType(result!)}' and '${showType(t)}': every case must have the same type.`, c.at);
@@ -1577,13 +1775,20 @@ class ExprChecker {
     private name(name: string, node: Expr, scope: Scope): Ty {
         // a lambda parameter or binding named `this` is reported where it is declared (M021): read it as that
         // (and a field or parameter named `this` where it is declared, M030), outside a `match` subject
-        const declaredThis = name === 'this' && (scope.lambdas.some(([n]) => n === 'this') || (scope.fields.has('this') && !this.matchSubjects.has(node)));
-        const frame = declaredThis ? undefined : scope.frames?.get(name);
+        const selfAt = this.matchSubjects.has(node) || this.aggregateArgs.has(node);
+        const declaredThis = name === 'this' && (scope.lambdas.some(([n]) => n === 'this') || (scope.fields.has('this') && !selfAt));
+        const found = declaredThis ? undefined : scope.frames?.get(name);
+        // a function's aggregate parameter is a parameter: a lambda parameter or binding of its name hides it
+        const frame = found?.k === 'frame' && found.param && scope.lambdas.some(([n]) => n === name) ? undefined : found;
+        if (frame?.k === 'frame' && frame.param) {
+            this.symbols.set(node, { kind: 'parameter', name, declaration: frame.param });
+            return frame;
+        }
         if (frame) {
-            if (name === 'this' && !this.matchSubjects.has(node)) {
+            if (name === 'this' && !selfAt) {
                 this.rules.error(
                     'M009',
-                    `'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }'.`,
+                    `'this' is the aggregate itself, which is read only as the subject of 'match (this) { … }' or as the argument of a function that takes the aggregate.`,
                     node.at,
                     `read the fields by name, or choose by its state or kind with 'match (this) { … }'`,
                 );
@@ -1688,6 +1893,10 @@ class ExprChecker {
             case 'frame': {
                 // `before.x` / `after.x`: a field the aggregate has before / after the outcome
                 const f = recv.fields.get(m);
+                if (!f && recv.param && recv.aggregate) {
+                    this.paramFieldMissing(e, recv, recv.aggregate);
+                    return ERROR;
+                }
                 if (!f) {
                     this.rules.error(
                         'M001',
@@ -1698,7 +1907,8 @@ class ExprChecker {
                     return ERROR;
                 }
                 this.symbols.set(e, { kind: 'field', name: m, declaration: f });
-                return memberType(f);
+                // an optional field compared with null (`o.note != null && o.note.length > 0`), as a value's
+                return narrow(memberType(f), pathOf(e) ?? '', scope);
             }
             case 'ctx': {
                 const el = lookup(this.model, `${recv.name}.${m}`);

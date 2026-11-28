@@ -45,10 +45,19 @@ export type Ty =
     | { k: 'ctx'; name: string }
     /**
      * `before` / `after` in `changes x = …` and `ensures`: the aggregate's fields before and after the outcome; `this`
-     * in `requires`, choice rules and the aggregate's own invariants: the aggregate itself (only a `match` subject).
-     * `aggregate` says which states and kinds it can be in there, for `match`.
+     * in `requires`, choice rules and the aggregate's own invariants: the aggregate itself (only a `match` subject or a
+     * function's argument); a parameter of a function of an aggregate's type (`param`): the aggregate in any of its
+     * states and kinds. `aggregate` says which states and kinds it can be in there, for `match`.
      */
-    | { k: 'frame'; name: 'before' | 'after' | 'this'; fields: ReadonlyMap<string, FieldDecl | ParamDecl>; aggregate?: AggregateFrame }
+    | {
+          k: 'frame';
+          /** `before`, `after`, `this`, or the name of the function's parameter. */
+          name: string;
+          fields: ReadonlyMap<string, FieldDecl | ParamDecl>;
+          aggregate?: AggregateFrame;
+          /** The parameter of a function this frame is (`function isOpen(o: Order)`). */
+          param?: ParamDecl;
+      }
     /** Already reported; suppresses cascading diagnostics. */
     | { k: 'error' };
 
@@ -174,7 +183,8 @@ export function showType(t: Ty): string {
         case 'ctx':
             return `context ${t.name}`;
         case 'frame':
-            return t.name;
+            // a parameter is of its declared aggregate type; `before`, `after` and `this` are named as written
+            return t.param && t.aggregate ? t.aggregate.agg.name : t.name;
         case 'error':
             return '<error>';
     }

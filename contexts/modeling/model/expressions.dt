@@ -55,12 +55,14 @@ context Modeling {
       right: ExprModel
     }
     /// `match (subject) { Variant { fields } => body, … }`: one case per variant of a union, each once; over the
-    /// aggregate (`this`, `before`, `after`), one case per state or per kind it can be in there.
+    /// aggregate (`this`, `before`, `after`, a function's aggregate parameter), one case per state or per kind it can be
+    /// in there.
     match {
       subject: ExprModel
       cases: MatchCaseModel[0..*]
     }
-    /// `name(args)`: a call of a function of the context or of a shared context.
+    /// `name(args)`: a call of a function of the context or of a shared context; the argument of an aggregate
+    /// parameter is the aggregate itself (`this`, `before`, `after`).
     call {
       name: String
       args: ExprModel[0..*]

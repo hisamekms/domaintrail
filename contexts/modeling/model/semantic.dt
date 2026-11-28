@@ -24,6 +24,9 @@ context Modeling {
     variantField
     enumValue
     onCase
+    /// `function name(params): R { expr }` of a context (`Sales.discounted`); its parameters are `parameter`s
+    /// (`Sales.discounted(amount)`).
+    function
   }
   enum SemanticSymbolKind {
     field

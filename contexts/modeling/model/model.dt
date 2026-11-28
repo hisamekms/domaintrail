@@ -17,7 +17,8 @@ context Modeling {
     functions: FunctionModel[0..*]
   }
 
-  /// `function name(params): returns { expr }`: a pure function of its parameters.
+  /// `function name(params): returns { expr }`: a pure function of its parameters, one of which may be an aggregate of
+  /// the context (in any of its states and kinds).
   value FunctionModel with Described {
     name: String
     params: FieldModel[0..*]

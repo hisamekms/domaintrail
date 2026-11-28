@@ -921,15 +921,48 @@ the valid states and named outcomes per kind; restored data and migrations remai
   states of that kind's case (a Store resuming from `Paused`, a Center from `Active`: `match (this) { Store => match
   (this) { Paused { reason } => … }, Center => … }`); in an invariant of the aggregate, each kind is in the states it can
   reach.
-- `this` is only a `match` subject: elsewhere the fields of the aggregate are read by name, and `this.x` is M001
-  (write `x`); `this` alone is M009. It is not in scope in `changes x = …` (write `before`) and `ensures` (write
-  `before` or `after`; a create has only `after`), in the rules of a `create command` (there is no aggregate yet) or in
-  an invariant of one state or kind (it holds in that one; read its fields by name): M001. A binding named like a
-  parameter of the command, which it would hide, is M019. `this` is reserved: no field of an aggregate and no
-  parameter of its commands is named `this` (M030), and no lambda parameter or binding (M021).
+- `this` is only a `match` subject or the argument of a function that takes the aggregate (see below): elsewhere the
+  fields of the aggregate are read by name, and `this.x` is M001 (write `x`); `this` alone is M009. It is not in scope
+  in `changes x = …` (write `before`) and `ensures` (write `before` or `after`; a create has only `after`), in the rules
+  of a `create command` (there is no aggregate yet) or in an invariant of one state or kind (it holds in that one; read
+  its fields by name): M001. A binding named like a parameter of the command, which it would hide, is M019. `this` is
+  reserved: no field of an aggregate and no parameter of its commands is named `this` (M030), and no lambda parameter or
+  binding (M021).
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure function of its parameters, called as
   `name(args)` from the expressions of its context and, when the context is shared, of every context. A function
-  cannot call itself, directly or through others (M032).
+  cannot call itself, directly or through others (M032). Functions are declared in a context, not inside an aggregate.
+- Functions of the aggregate: a parameter may be an aggregate of the function's context (`o: Order`), so that a rule
+  about the aggregate's states is written once and called from wherever the aggregate is in scope:
+  ```dt
+  function isOpen(o: Order): Bool { match (o) { Draft => true, Confirmed => true, Cancelled => false } }
+  aggregate Order {
+    …
+    invariant closedHasNoTotal { isOpen(this) || total == 0 }
+    command cancel(why: String) {
+      requires open { isOpen(this) } else TooLate
+      outcome cancelled: Draft | Confirmed -> Cancelled
+        changes reason = why
+        ensures { isOpen(before) && !isOpen(after) }
+    }
+  }
+  ```
+  The argument is the aggregate itself, by its name: `this` (in `requires`, `select { … }` and the aggregate's own
+  invariants, where it may also be a function's argument), `before` / `after` (in `changes x = …` and `ensures`), or an
+  aggregate parameter of the calling function; never an ID of one it references, a value or another aggregate (M032).
+  The aggregate is not a value: no element of a list, case of `match` or branch of `? :` gives it (M009), so
+  `isOpen(match (after) { … => before })` is written as a `match` around the calls. The caller
+  may have narrowed it to some states (`requires` of a command from `Draft | Confirmed`). In the function, the
+  parameter is the aggregate in any of its states and kinds, since the function does not know where it is called:
+  `match (o) { … }` has a case for every state (or every kind, then nested over the states), with the bindings and
+  narrowing of `match (this)`; `o.x` reads a field every state and kind has (the common ones), anywhere in the body,
+  and a field of some states only in a case of `match (o)` (`o.x` there, or bound: `Confirmed { confirmedAt } => …`);
+  elsewhere it is M001, which names the cases that have it (and says so when every state has it, with different
+  types). An optional field is compared with null first, as any optional value: `o.note != null && o.note.length > 0`
+  (so are `before.x` and `after.x`). `this` is not in scope in a function (M001: write the parameter). An aggregate
+  parameter is one aggregate of the function's context: a list or an optional one, and one of another context, are
+  M032, and so is a function that returns an aggregate. Lambda parameters and bindings may hide it as they hide other
+  parameters, and a `match` binding named like a parameter is M019. A function's name is unique among the functions
+  and the elements of its context, and its parameters' names among them (M002).
 - Lists: `[a, b]` and `[...xs, x]` (values of one type), `c.map(x => value)`, `c.filter(x => condition)`,
   `c.sum(x => number)` and `c.sum()` (an Int, or a Decimal of the values' scale): `total == lines.sum(l => l.price *
   l.quantity)`, `[Status.Open, Status.Held].includes(status)`.
@@ -949,7 +982,8 @@ the valid states and named outcomes per kind; restored data and migrations remai
   parentheses), `??`, `||`, `&&`, `== != < <= > >=`, `x in 1..9`, `+ -`, `* /`, `!`. An implication "if A then B" is
   `!(A) || B`.
 - Optional values: `x != null` (it is present) and `x == null`. `x != null` narrows `x` on the right of `&&`, and
-  `x == null` narrows it on the right of `||`: `note == null || note.length > 0`.
+  `x == null` narrows it on the right of `||`: `note == null || note.length > 0`; a field read through the aggregate
+  too: `before.note == null || before.note.length > 0`.
 - `x?.f` reads a field of an optional `x` and is absent when `x` is: `address?.city` is a `String?`. `a ?? b` is `a`
   when it is present, else `b` (of the same type): `(note ?? "").length`. `address?.city != null` narrows both
   `address` and `address.city`.
@@ -2125,6 +2159,19 @@ the string's `length`, Decimals (carried as strings) and Ints compared as number
 export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrderParams): 'hasItems' | undefined {
     if (!(order.items.length > 0)) return 'hasItems';
     return undefined;
+}
+```
+
+A `function` becomes a function of the module of the same name. An aggregate parameter has the aggregate's type (`o:
+Order`, the union of its state types), so every narrower type of it is assignable, and the checks pass the aggregate
+as they have it: `isOpen(order)` with `order: DraftOrder | ConfirmedOrder` in `check<Command>Requires`, the success
+value's aggregate for `after`. `match (o)` tests `o.state` / `o.kind`, which TypeScript narrows. An invariant of the
+aggregate that passes `this` to a function makes `check<Aggregate>Common` take the aggregate (`Order`), as
+`match (this)` does.
+
+```ts
+export function isOpen(o: Order): boolean {
+    return (o.state === 'Draft' ? true : o.state === 'Confirmed' ? true : false);
 }
 ```
 
@@ -3703,14 +3750,14 @@ storming](#diagnostics-of-a-storming).
 |---|---|
 | SYNTAX | lexer / parser errors (in `.dt` and `.dtes` files) |
 | M001 | types, aggregates and names in invariants and requirements resolve; `this` (the aggregate, a `match` subject) is not in scope in `changes x = …` and `ensures`, a create command's rules and the invariants of one state or kind, and the aggregate's fields are read by name, not as `this.x` |
-| M002 | names are unique in their scope (also across files of one context); a type on `UUID` declares no invariant named `uuid`, the generated one |
+| M002 | names are unique in their scope (also across files of one context; a function among the functions and the elements of its context, and its parameters); a type on `UUID` declares no invariant named `uuid`, the generated one |
 | M003 | an entity is owned by exactly one aggregate (warning when owned by none) |
 | M004 | no ownership across aggregate boundaries (entities need `owns`, aggregates need `references`, …) |
 | M005 | a reference's ID type matches the identity of the target aggregate |
 | M006 | command transitions: states exist; stateful: `create` has one `-> X`, others one or more `A -> B` with sources; a state is the source of one transition per command; stateless: none. `emits … when`: its states are sources / targets of the command, it matches an outcome, a factory selects by target only, stateless: no `when` |
 | M007 | `emits` / `errors` / `else` refer to existing events / errors |
 | M008 | an invariant or requirement is a Bool expression |
-| M009 | operators and operands have compatible types; a Decimal of known scale fits the `Decimal(n)` it is placed in (`x.round(n)` rounds it: a Decimal `x`, an Int literal `n` from 0 to 30); a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length`; `match` has one case for each variant of a union, or for each state (kind) the aggregate can be in there (`this`, `before`, `after`), states and kinds not mixed, and `this` is only a `match` subject |
+| M009 | operators and operands have compatible types; a Decimal of known scale fits the `Decimal(n)` it is placed in (`x.round(n)` rounds it: a Decimal `x`, an Int literal `n` from 0 to 30); a domain primitive compares with the same one, literals, and (over `Int` / `Decimal`) `.length`; `match` has one case for each variant of a union, or for each state (kind) the aggregate can be in there (`this`, `before`, `after`), states and kinds not mixed, and `this` is only a `match` subject or a function's argument |
 | M010 | state-specific fields are used only in their own state's invariants, and in requirements of commands whose every source state has them; a kind's fields only inside its kind |
 | M011 | generated TypeScript names do not collide, including the events of one command (keyed by name) |
 | M012 | the ownership graph has no cycle through an entity or an aggregate; a recursive value object or union has a finite value |
@@ -3732,7 +3779,7 @@ storming](#diagnostics-of-a-storming).
 | M028 | lifecycle declarations: a kind (or, without kinds, the aggregate with named outcomes) has an initial state, outcomes have valid sources and targets and change the fields of their kind, outcome names are unique, and choice and external-check annotations are well formed |
 | M029 | (warning in `dt check`, error in `dt check --for-generation`) a natural-language decision in `select`, `requires` or `invariant` needs an executable expression or a reasoned `@externalCheck`; legacy transitions with multiple targets need named outcomes and choice rules. An annotated external check is reported as an information-level obligation |
 | M030 | the kinds of an aggregate (ADR 0037): a common command has its behaviour in itself or in an `on` case of every kind, never both; an `on` case names a common command that is not a factory; the create commands are the kinds', one per kind; no field is named `kind`; with states, commands name their outcomes; no field of an aggregate and no parameter of its commands is named `this` (the aggregate in `match (this)`) |
-| M032 | a function's body has its declared type; a call names a function of its context or of a shared context, with arguments of the parameters' types; no function calls itself, directly or through others |
+| M032 | a function's body has its declared type; a call names a function of its context or of a shared context, with arguments of the parameters' types (for an aggregate parameter, that aggregate itself: `this`, `before`, `after` or such a parameter); an aggregate parameter is one aggregate of the function's context, and no function returns an aggregate; no function calls itself, directly or through others |
 | M031 | (warning) kinds that declare nothing (a readonly enum field); `on` cases of a common command that are alike in every kind (a common behaviour); a field every kind declares with the same type (a common field); a state no kind reaches; optional fields an aggregate without kinds requires only for some values of an enum field (the fields of kinds) |
 | G001 | (`dt generate ts`) an expression uses a regex construct outside DomainTrail's portable subset or one the TypeScript target cannot reproduce; generation stops before writing files |
 | L001 | (warning) an inline field label disagrees with the term, or context fragments disagree on the context name |
