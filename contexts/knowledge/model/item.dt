@@ -110,12 +110,12 @@ context Knowledge {
     /// 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
     command retire(reason: RetirementReason?, replacedBy: KnowledgeItemId? "置き換え先", proposal: RetirementProposalId? "候補", by: UserName, at: Timestamp) "廃止する"
       Live -> Live
-      requires notRetired "廃止していない" { !exists(retirement) } else AlreadyRetired
+      requires notRetired "廃止していない" { retirement == null } else AlreadyRetired
       requires replacementWhenReplaced "置き換え先は「置き換わった」のときだけ" {
-        !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+        replacedBy == null || (reason != null && reason == RetirementReason.replaced)
       } else ReplacementWithoutReason
       requires notReplacedByItself "自分には置き換わらない" {
-        !(exists(replacedBy)) || replacedBy != id
+        replacedBy == null || replacedBy != id
       } else ReplacedByItself
       changes retirement, updatedAt
       emits KnowledgeItemRetired
@@ -123,7 +123,7 @@ context Knowledge {
     /// 人が廃止を取り消す。
     command unretire(proposal: RetirementProposalId? "候補", by: UserName, at: Timestamp) "廃止を取り消す"
       Live -> Live
-      requires retired "廃止している" { exists(retirement) } else NotRetired
+      requires retired "廃止している" { retirement != null } else NotRetired
       changes retirement, updatedAt
       emits KnowledgeItemUnretired
 

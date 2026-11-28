@@ -1,7 +1,7 @@
 // The AST → model as written mapping (domain/source-model.ts): every declaration with its sites, its expressions as
 // trees and its references resolved to the declarations they name. A site is the range of a node or of one of its
 // properties (`siteOf`), where Modeling's rules report.
-import { methodForm, patternSource } from './methods.js';
+import { methodForm, nullComparison, patternSource } from './methods.js';
 import type { AstNode, Reference } from 'langium';
 import {
     isAggregate,
@@ -28,6 +28,7 @@ import {
     isMemberAccess,
     isNameRef,
     isNotExpr,
+    isNullLiteral,
     isOwnsField,
     isPolicy,
     isPrimitiveDecl,
@@ -140,6 +141,12 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
             if (m.k === 'invalid') return { ...base, k: 'bool', value: false };
             return { ...base, k: 'member', receiver, member: e.member, memberAt: site(e, 'member') };
         }
+        const nullCompared = nullComparison(e);
+        if (nullCompared) {
+            const exists: src.Expr = { ...base, k: 'exists', operand: expr(nullCompared.operand), operandAt: site(nullCompared.operand) };
+            return nullCompared.present ? exists : { ...base, k: 'not', operand: exists };
+        }
+        if (isNullLiteral(e)) return { ...base, k: 'bool', value: false }; // `null` alone is reported (parse.ts)
         if (isNotExpr(e)) return { ...base, k: 'not', operand: expr(e.operand) };
         if (isBinaryExpr(e))
             return {

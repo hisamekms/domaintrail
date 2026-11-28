@@ -1,5 +1,5 @@
 import { AstUtils, type AstNode } from 'langium';
-import { methodForm, patternSource } from './methods.js';
+import { methodForm, nullComparison, patternSource } from './methods.js';
 import type { Location } from '@domaintrail/kernel';
 import {
     isAggregate,
@@ -13,6 +13,7 @@ import {
     isDecimalLiteral,
     isEntity,
     isExistsExpr,
+    isNullLiteral,
     isIntLiteral,
     isLengthExpr,
     isMatchesExpr,
@@ -324,6 +325,12 @@ function exprModel(e: Expression): ExprModel {
         return { k: 'member', receiver: exprModel(e.receiver), member: e.member };
     }
     if (isNotExpr(e)) return { k: 'not', operand: exprModel(e.operand) };
+    const nullCompared = nullComparison(e);
+    if (nullCompared) {
+        const exists: ExprModel = { k: 'exists', operand: exprModel(nullCompared.operand) };
+        return nullCompared.present ? exists : { k: 'not', operand: exists };
+    }
+    if (isNullLiteral(e)) return { k: 'bool', value: false }; // `null` alone is reported (parse.ts)
     if (isBinaryExpr(e)) return { k: 'binary', op: BINARY_OPS[e.op], left: exprModel(e.left), right: exprModel(e.right) };
     if (isRangeExpr(e)) return { k: 'range', operand: exprModel(e.operand), lower: exprModel(e.lower), upper: exprModel(e.upper) };
     if (isCountExpr(e)) return { k: 'count', collection: exprModel(e.collection) };

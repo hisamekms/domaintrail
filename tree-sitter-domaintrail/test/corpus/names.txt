@@ -171,7 +171,7 @@ context A {
     shared: Bool
     terms: Int
     invariant: Int
-    invariant k { !(exists(event)) || errors.length > 0 }
+    invariant k { event == null || errors.length > 0 }
   }
   aggregate G {
     state: Int
@@ -252,11 +252,9 @@ context A {
         (invariant
           (identifier)
           (binary_expression
-            (not_expression
-              (parenthesized_expression
-                (call_expression
-                  (function_name)
-                  (identifier))))
+            (binary_expression
+              (identifier)
+              (null))
             (binary_expression
               (member_expression
                 (identifier)

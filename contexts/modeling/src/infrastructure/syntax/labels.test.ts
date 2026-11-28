@@ -21,7 +21,7 @@ const SALES = `context Sales "販売" {
     state Draft "下書き"
     state Confirmed "確定済み" {
       confirmedAt: Timestamp
-      invariant hasNote "備考あり" { exists(note) }
+      invariant hasNote "備考あり" { note != null }
     }
     command confirm(at: Timestamp "確定する日時") "確定する" Draft -> Confirmed
   }

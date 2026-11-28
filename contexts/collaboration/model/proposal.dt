@@ -100,7 +100,7 @@ context Collaboration {
         approvedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
       requires optionOfProposal "選択肢があれば、そのうちの1つを選ぶ" {
-        (!(content.options.length == 0) || !exists(option)) && (!(content.options.length >= 1) || exists(option) && option < content.options.length)
+        (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
       } else NoSuchOption
       emits ProposalApproved
 

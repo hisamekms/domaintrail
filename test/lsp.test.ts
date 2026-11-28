@@ -251,7 +251,7 @@ describe('dt lsp', () => {
         const client = await start({ 'common.dt': COMMON, 'sales.dt': SALES, 'billing.dt': BILLING });
         await client.until('sales.dt', (d) => d.length === 0);
         // a field of one state used in an invariant of the whole aggregate
-        const edited = SALES.replace('state Placed', 'state Placed { placedAt: Timestamp }').replace('total.amount > 0', 'exists(placedAt)');
+        const edited = SALES.replace('state Placed', 'state Placed { placedAt: Timestamp }').replace('total.amount > 0', 'placedAt != null');
         await client.connection.sendNotification('textDocument/didOpen', {
             textDocument: { uri: client.uri('sales.dt'), languageId: 'domaintrail', version: 1, text: edited },
         });

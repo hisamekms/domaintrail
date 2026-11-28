@@ -168,7 +168,7 @@ context Collaboration {
     command ask(answered: RequestId "答えたメッセージ", question: AskedQuestion "問い", askedAt: Timestamp) "問う"
       Asking -> Asking
       requires stillAwaited "そのメッセージをまだ待っている" {
-        exists(awaiting) && awaiting == answered
+        awaiting != null && awaiting == answered
       } else InterviewMovedOn
       changes awaiting, asked
       emits InterviewQuestionAsked
@@ -177,7 +177,7 @@ context Collaboration {
     command summarize(answered: RequestId "答えたメッセージ", summary: InterviewBrief "要約", briefedAt: Timestamp) "要約を出す"
       Asking -> Briefed
       requires stillAwaited "そのメッセージをまだ待っている" {
-        exists(awaiting) && awaiting == answered
+        awaiting != null && awaiting == answered
       } else InterviewMovedOn
       emits InterviewBriefed
 

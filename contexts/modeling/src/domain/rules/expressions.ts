@@ -516,7 +516,7 @@ class ExprChecker {
                 // Evaluate the operand without narrowing so that `exists(x)` checks the declared optionality.
                 const t = this.check(e.operand, { ...scope, present: new Set() });
                 if (t.k !== 'error' && t.k !== 'opt') {
-                    this.rules.error('M009', `exists() requires an optional value, but '${showType(t)}' is always present.`, e.operandAt);
+                    this.rules.error('M009', `'!= null' and '== null' compare an optional value, but '${showType(t)}' is always present.`, e.operandAt);
                 }
                 return BOOL;
             }
@@ -619,7 +619,7 @@ class ExprChecker {
                 if (coll.k !== 'error' && coll.k !== 'list') {
                     this.rules.error('M009', `'.includes(…)' requires a collection, but got '${showType(coll)}'.`, e.collectionAt);
                 } else if (coll.k === 'list' && coll.elem.k !== 'error' && x.k !== 'error' && !equatable(coll.elem, x)) {
-                    const hint = x.k === 'opt' ? ' Optional values must be guarded with exists(...) first.' : '';
+                    const hint = x.k === 'opt' ? ' Optional values must be compared with null first (x != null && …).' : '';
                     this.rules.error(
                         'M009',
                         `'.includes(…)' cannot compare elements of type '${showType(coll.elem)}' with '${showType(x)}'.${hint}`,
@@ -681,7 +681,7 @@ class ExprChecker {
                 );
                 return BOOL;
             }
-            const hint = l.k === 'opt' || r.k === 'opt' ? ' Optional values must be guarded with exists(...) first.' : '';
+            const hint = l.k === 'opt' || r.k === 'opt' ? ' Optional values must be compared with null first (x != null && …).' : '';
             this.rules.error('M009', `Operator '${op}' cannot be applied to '${showType(l)}' and '${showType(r)}'.${hint}`, e.at);
         }
         return BOOL;
@@ -857,7 +857,7 @@ class ExprChecker {
                 return ERROR;
             }
             case 'opt':
-                this.rules.error('M009', `'${pathOf(e.receiver) ?? 'value'}' is optional; guard the access with exists(...) first.`, e.at);
+                this.rules.error('M009', `'${pathOf(e.receiver) ?? 'value'}' is optional; compare it with null first (x != null && …).`, e.at);
                 return ERROR;
             case 'id':
                 this.rules.error(

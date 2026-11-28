@@ -139,7 +139,7 @@ describe('Semantic IR', () => {
   union TypeExpr { primitive { name: String } ref { ref: String target: String? } }
   value Use {
     context: String event: String? errors: String[0..*] op: BinaryOp type: TypeExpr
-    invariant k { !(op != BinaryOp.and) || exists(event) }
+    invariant k { !(op != BinaryOp.and) || event != null }
     invariant p { type.kind == TypeExpr.primitive || errors.length > 0 }
   }
 }`,
@@ -367,16 +367,16 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 text: `context Fixture {
                   aggregate Item {
                     note: String?
-                    invariant conjunction { exists(note) && note.length > 0 }
-                    invariant implication { !(exists(note)) || note.length > 0 }
-                    invariant disjunction { !exists(note) || note.length > 0 }
+                    invariant conjunction { note != null && note.length > 0 }
+                    invariant implication { note == null || note.length > 0 }
+                    invariant disjunction { note == null || note.length > 0 }
                   }
                 }`,
             },
         ]);
         const ir = semanticIROf(analysis);
         const facts = ir.presence;
-        // `exists(note) && …` holds; `!(exists(note)) || …` and `!exists(note) || …` do not hold on the left
+        // `exists(note) && …` holds; `note == null || …` and `note == null || …` do not hold on the left
         expect(facts.filter((fact) => fact.path === 'note')).toHaveLength(3);
         expect(facts.every((fact) => fact.path === 'note')).toBe(true);
         for (const scope of ir.scopes) {
@@ -476,7 +476,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                     items: Item[0..*]
                     requiredItems: Item[1..*]
                     status: Status
-                    invariant values { exists(item) && items.length >= 0 && requiredItems.length >= 0 && status == Status.Open }
+                    invariant values { item != null && items.length >= 0 && requiredItems.length >= 0 && status == Status.Open }
                   }
                 }`,
             },
@@ -504,7 +504,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
               value Address { city: String }
               entity Customer {
                 address: Address?
-                invariant hasCity { exists(address) && address.city != "" }
+                invariant hasCity { address != null && address.city != "" }
               }
             }`,
             },
@@ -961,7 +961,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                   aggregate Item {
                     id: ItemId
                     owns items: Details[0..*]
-                    invariant notesPresent { items.every(x => !(exists(x.note)) || x.note.length > 0) }
+                    invariant notesPresent { items.every(x => x.note == null || x.note.length > 0) }
                   }
                 }`,
             },

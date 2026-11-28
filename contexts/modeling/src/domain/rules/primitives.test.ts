@@ -98,7 +98,7 @@ describe('domain primitive declarations', () => {
 
 describe('domain primitives in other invariants', () => {
     test('compare with literals and with the same domain primitive', async () => {
-        const a = await withOrder('invariant ok { !(quantity > 0 && quantity <= maxQuantity && quantity in 1..10 && exists(email)) || email.length > 3 }');
+        const a = await withOrder('invariant ok { !(quantity > 0 && quantity <= maxQuantity && quantity in 1..10 && email != null) || email.length > 3 }');
         expect(codes(a)).toEqual([]);
     });
 
@@ -107,7 +107,7 @@ describe('domain primitives in other invariants', () => {
         ['quantity > rawCount', "Operator '>' cannot be applied to 'Quantity' and 'Int'."],
         ['quantity == "1"', "Operator '==' cannot be applied to 'Quantity' and 'String'."],
         ['quantity in 0..rawCount', "Range 'Int..Int' cannot be applied to 'Quantity'."],
-        ['!(exists(email)) || email == notes.length', "Operator '==' cannot be applied to 'Email' and 'Int'."],
+        ['email == null || email == notes.length', "Operator '==' cannot be applied to 'Email' and 'Int'."],
         ['notes.length <= price && price > rawCount', "Operator '>' cannot be applied to 'Price' and 'Int'."],
     ])('M009 %s', async (expr, message) => {
         const a = await withOrder(`invariant i { ${expr} }`);
@@ -123,7 +123,7 @@ describe('domain primitives in other invariants', () => {
             'quantity in 0..notes.length',
             'notes.length in quantity..maxQuantity',
             'title.length <= temperature',
-            '!(exists(email)) || email.length <= quantity',
+            'email == null || email.length <= quantity',
         ];
         const a = await withOrder(exprs.map((x, i) => `invariant i${i} { ${x} }`).join('\n    '));
         expect(codes(a)).toEqual([]);

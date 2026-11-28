@@ -1768,9 +1768,9 @@ export interface RetireKnowledgeItemParams {
  * KnowledgeItem.retire (Live -> Live)
  * 廃止する
  * 人が廃止する（理由は選ばなくてもよい）。中身・出典・版は変えない。候補を承認したときは、その候補を持つ。
- * @requires notRetired (廃止していない) else AlreadyRetired: !exists(retirement)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: !(exists(replacedBy)) || replacedBy != id
+ * @requires notRetired (廃止していない) else AlreadyRetired: retirement == null
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: replacedBy == null || (reason != null && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: replacedBy == null || replacedBy != id
  * @changes retirement, updatedAt
  * @emits KnowledgeItemRetired — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:111
@@ -1788,9 +1788,9 @@ export type RetireKnowledgeItem = (
 /**
  * KnowledgeItem.retire, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires notRetired (廃止していない) else AlreadyRetired: !exists(retirement)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: !(exists(replacedBy)) || replacedBy != id
+ * @requires notRetired (廃止していない) else AlreadyRetired: retirement == null
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else ReplacementWithoutReason: replacedBy == null || (reason != null && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else ReplacedByItself: replacedBy == null || replacedBy != id
  * @changes retirement, updatedAt
  * Live -> Live — set: updatedAt, retirement; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, bookmarked
  * @see contexts/knowledge/model/item.dt:111
@@ -1832,7 +1832,7 @@ export interface UnretireKnowledgeItemParams {
  * KnowledgeItem.unretire (Live -> Live)
  * 廃止を取り消す
  * 人が廃止を取り消す。
- * @requires retired (廃止している) else NotRetired: exists(retirement)
+ * @requires retired (廃止している) else NotRetired: retirement != null
  * @changes retirement, updatedAt
  * @emits KnowledgeItemUnretired — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:124
@@ -1850,7 +1850,7 @@ export type UnretireKnowledgeItem = (
 /**
  * KnowledgeItem.unretire, decided per source state; implement it with `decide(KnowledgeItemShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @requires retired (廃止している) else NotRetired: exists(retirement)
+ * @requires retired (廃止している) else NotRetired: retirement != null
  * @changes retirement, updatedAt
  * Live -> Live — set: updatedAt, retirement; carried over: id, content, sources, version, conflictsWith, createdIn, createdAt, bookmarked
  * @see contexts/knowledge/model/item.dt:124
@@ -2815,7 +2815,7 @@ export type ProposalAction =
 /**
  * 廃止
  * 廃止: 消すのとは別。本文・出典・版はすべて残し、一覧では既定で隠し、AI（回答役・実行役・見直し）には渡さない。
- * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
+ * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): replacedBy == null || (reason != null && reason == RetirementReason.replaced)
  * @see contexts/knowledge/model/retirement.dt:18
  */
 export interface Retirement {
@@ -2948,10 +2948,10 @@ export function equalProposer(a: Proposer, b: Proposer): boolean {
 
 /**
  * Fields shared by every state of 廃止の候補 (RetirementProposal).
- * @invariant retireHasReason (廃止の候補には理由がある): !(action == ProposalAction.retire) || exists(reason)
- * @invariant unretireHasNoReason (取り消しの候補に理由はない): !(action == ProposalAction.unretire) || !exists(reason)
- * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
- * @invariant notReplacedByItself (自分には置き換わらない): !(exists(replacedBy)) || replacedBy != item
+ * @invariant retireHasReason (廃止の候補には理由がある): !(action == ProposalAction.retire) || reason != null
+ * @invariant unretireHasNoReason (取り消しの候補に理由はない): !(action == ProposalAction.unretire) || reason == null
+ * @invariant replacementWhenReplaced (置き換え先は「置き換わった」のときだけ): replacedBy == null || (reason != null && reason == RetirementReason.replaced)
+ * @invariant notReplacedByItself (自分には置き換わらない): replacedBy == null || replacedBy != item
  * @invariant distinctEvidence (根拠は1回): evidence.unique()
  * @see contexts/knowledge/model/retirement.dt:63
  */
@@ -3111,10 +3111,10 @@ export interface ProposeRetirementProposalParams {
  * 候補を出す
  * AI（抽出・見直し）が候補を出す。ナレッジに照らした受け付け（同じ候補が未決にある、前に却下した、AS-IS の知見を付箋の
  * 変更だけで廃止しようとしている、など）はストアが決める。
- * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: !(action == ProposalAction.retire) || exists(reason)
- * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || !exists(reason)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: !(exists(replacedBy)) || replacedBy != item
+ * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: !(action == ProposalAction.retire) || reason != null
+ * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || reason == null
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: replacedBy == null || (reason != null && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: replacedBy == null || replacedBy != item
  * @requires distinctEvidence (根拠は1回) else MalformedProposal: evidence.unique()
  * @emits RetirementProposed — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:98
@@ -3131,10 +3131,10 @@ export type ProposeRetirementProposal = (
 /**
  * RetirementProposal.propose, decided by one function; implement it with `decide(RetirementProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
- * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: !(action == ProposalAction.retire) || exists(reason)
- * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || !exists(reason)
- * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: !(exists(replacedBy)) || (exists(reason) && reason == RetirementReason.replaced)
- * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: !(exists(replacedBy)) || replacedBy != item
+ * @requires retireHasReason (廃止の候補には理由がある) else MalformedProposal: !(action == ProposalAction.retire) || reason != null
+ * @requires unretireHasNoReason (取り消しの候補に理由はない) else MalformedProposal: !(action == ProposalAction.unretire) || reason == null
+ * @requires replacementWhenReplaced (置き換え先は「置き換わった」のときだけ) else MalformedProposal: replacedBy == null || (reason != null && reason == RetirementReason.replaced)
+ * @requires notReplacedByItself (自分には置き換わらない) else MalformedProposal: replacedBy == null || replacedBy != item
  * @requires distinctEvidence (根拠は1回) else MalformedProposal: evidence.unique()
  * new -> Open — set: every field
  * @emits RetirementProposed — exactly once when the command succeeds

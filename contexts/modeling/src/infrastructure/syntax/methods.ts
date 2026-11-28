@@ -1,7 +1,8 @@
 // The method forms of Phase 2's TS-like expressions (`xs.every(x => p)`, `xs.includes(x)`, `xs.unique()`,
 // `text.matches("r")`, `x.length`). The grammar reads every `x.name(…)` as a member access with a call; this tells
 // which expression each one is, for both model builders and for the diagnostics of a call that is none of them.
-import { isStringLiteral, type Expression, type MemberAccess, type StringLiteral } from './generated/ast.js';
+import type { AstNode } from 'langium';
+import { isBinaryExpr, isNullLiteral, isStringLiteral, type Expression, type MemberAccess, type StringLiteral } from './generated/ast.js';
 
 /** What a member access with or without a call is. */
 export type MethodForm =
@@ -49,4 +50,15 @@ export function methodForm(e: MemberAccess): MethodForm {
 export function patternSource(lit: StringLiteral): string {
     const text = lit.$cstNode?.text;
     return text ? text.slice(1, -1).replace(/\\"/g, '"') : lit.value;
+}
+
+/**
+ * `x != null` / `x == null` (either side): the optional `x` and whether it is compared as present. These are the
+ * `exists(x)` and `!exists(x)` of the models, so narrowing, the IR and the generated checks stay as they are.
+ */
+export function nullComparison(e: AstNode | undefined): { operand: Expression; present: boolean } | undefined {
+    if (!isBinaryExpr(e) || (e.op !== '==' && e.op !== '!=')) return undefined;
+    const operand = isNullLiteral(e.right) ? e.left : isNullLiteral(e.left) ? e.right : undefined;
+    if (!operand || isNullLiteral(operand)) return undefined;
+    return { operand, present: e.op === '!=' };
 }

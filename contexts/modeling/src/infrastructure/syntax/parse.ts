@@ -3,7 +3,7 @@
 // not resolve. Modeling's analysis (application/analyze.ts) builds the models on it and runs the rules on the model as
 // written.
 import { LEGACY_SPELLINGS, legacyTokens } from './migrate.js';
-import { methodForm } from './methods.js';
+import { methodForm, nullComparison } from './methods.js';
 import * as path from 'node:path';
 import { AstUtils, URI, isCompositeCstNode, type AstNode, type LangiumDocument } from 'langium';
 import { didYouMean, suggestFrom, type Candidate, type Diagnostic, type SourceFile } from '@domaintrail/kernel';
@@ -18,6 +18,7 @@ import {
     isFieldSet,
     isIdType,
     isMemberAccess,
+    isNullLiteral,
     isPolicy,
     isPrimitiveDecl,
     isUnionDecl,
@@ -137,6 +138,19 @@ export async function parseDomain(sources: readonly SourceFile[]): Promise<Parse
     // a call `x.name(…)` that is none of the method forms
     for (const doc of documents)
         for (const node of AstUtils.streamAst(doc.parseResult.value)) {
+            if (isNullLiteral(node) && node.$cstNode && !nullComparison(node.$container)) {
+                const r = node.$cstNode.range;
+                diagnostics.push({
+                    file: resolveFile(doc.uri.toString()),
+                    start: { line: r.start.line + 1, column: r.start.character + 1 },
+                    end: { line: r.end.line + 1, column: r.end.character + 1 },
+                    severity: 'error',
+                    code: 'M009',
+                    message: "'null' is compared with an optional value: 'x == null' or 'x != null'.",
+                    elementId: elementIdOf(node),
+                });
+                continue;
+            }
             if (!isMemberAccess(node)) continue;
             const m = methodForm(node);
             if (m.k !== 'invalid' || !node.$cstNode) continue;

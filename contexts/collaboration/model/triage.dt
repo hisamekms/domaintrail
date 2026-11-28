@@ -48,7 +48,7 @@ context Collaboration {
     error: Text? "失敗"
     at: Timestamp "日時"
 
-    invariant errorIsUnknown "失敗した段の答えはわからない" { !(exists(error)) || verdict == TriageVerdict.Unknown }
+    invariant errorIsUnknown "失敗した段の答えはわからない" { error == null || verdict == TriageVerdict.Unknown }
   }
 
   /// 仕分けの行き先: AI の回答（メッセージと、回答が読んだリビジョン）、変更案、実行。
@@ -97,10 +97,10 @@ context Collaboration {
 
       invariant known "結論はわからないでない" { kind != TriageVerdict.Unknown }
       invariant answerIsConsultation "回答は相談の行き先" {
-        !((exists(outcome) && outcome.kind == TriageOutcome.Answer)) || kind == TriageVerdict.Consultation
+        !((outcome != null && outcome.kind == TriageOutcome.Answer)) || kind == TriageVerdict.Consultation
       }
       invariant notForAiGoesNowhere "AI 宛てでないメッセージに行き先はない" {
-        !(kind == TriageVerdict.NotForAi) || !exists(outcome)
+        !(kind == TriageVerdict.NotForAi) || outcome == null
       }
     }
 
@@ -140,7 +140,7 @@ context Collaboration {
     command override(step: TriageStep, overriddenAt: Timestamp) "結論を訂正する"
       Decided -> Decided
       requires overridable "訂正できる結論" {
-        (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && !exists(outcome) && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
+        (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && outcome == null && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
       } else TriageNotOverridable
       changes steps, kind, decidedBy, decidedAt
       emits TriageOverridden
@@ -159,7 +159,7 @@ context Collaboration {
     /// 仕分けの行き先（回答・変更案・実行）を記録する。1回だけ。
     command conclude(to: TriageOutcome "行き先", concludedAt: Timestamp) "行き先を記録する"
       Decided -> Decided
-      requires noOutcomeYet "行き先はまだない" { !exists(outcome) } else TriageAlreadyConcluded
+      requires noOutcomeYet "行き先はまだない" { outcome == null } else TriageAlreadyConcluded
       requires outcomeFits "結論に合う行き先" {
         kind != TriageVerdict.NotForAi && (!(to.kind == TriageOutcome.Answer) || kind == TriageVerdict.Consultation)
       } else TriageNotConcludable

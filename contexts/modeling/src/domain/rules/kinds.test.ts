@@ -181,8 +181,8 @@ describe('aggregate kinds (ADR 0037)', () => {
             readonly type: SiteKind
             storeCode: String?
             dockCount: Int?
-            invariant storeHasCode { !(type == SiteKind.STORE) || exists(storeCode) }
-            invariant centerHasDocks { !(type == SiteKind.CENTER) || exists(dockCount) }
+            invariant storeHasCode { !(type == SiteKind.STORE) || storeCode != null }
+            invariant centerHasDocks { !(type == SiteKind.CENTER) || dockCount != null }
             create command make(id: SId, type: SiteKind)
           }`);
         expect(messages(a, 'M031')).toHaveLength(1);
