@@ -668,9 +668,6 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         expect(ir.unspecified.map(({ kind, declaration, field }) => [kind, declaration, field])).toEqual([
             ['changesWithoutExpression', 'Sales.Customer:rename->*', 'name'],
             ['changesWithoutExpression', 'Sales.Customer:changeEmail->*', 'email'],
-            ['changesWithoutExpression', 'Sales.Order:addItem->Draft', 'items'],
-            ['changesWithoutExpression', 'Sales.Order:changeNote->Draft', 'note'],
-            ['changesWithoutExpression', 'Sales.Order:changeNote->Confirmed', 'note'],
         ]);
         const outcomeIds = new Set(ir.aggregates.flatMap((aggregate) => aggregate.outcomes.map((item) => item.id)));
         expect(ir.unspecified.filter((fact) => fact.declaration.includes('->')).every((fact) => outcomeIds.has(fact.declaration))).toBe(true);

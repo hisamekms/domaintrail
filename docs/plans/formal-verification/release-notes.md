@@ -9,6 +9,9 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 
 ## Changed
 
+- Generated contract tests now include T7 for command postconditions: `changes x = …`, fields that must remain
+  unchanged, and `ensures`. Failures report the outcome, kind, field, source text, input and success value.
+
 - A command's generated function type is now `<Command><Aggregate>Command` (for example, `DraftRotationCommand`) so a
   command may share a state's or kind's name. Derived names such as `<Command><Aggregate>Params` and
   `<Command><Aggregate>Decision` are unchanged.

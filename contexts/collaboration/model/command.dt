@@ -110,7 +110,7 @@ context Collaboration {
     /// コマンドを始める。コラボでは誰でも。
     create command start(id: SlashCommandId, session: ActiveSession, kind: SlashCommandKind, startedBy: ParticipantId, opening: RequestId, scope: StormingName?, language: UiLanguage, startedAt: Timestamp, guide: GuideSnapshot?) "コマンドを始める"
       -> Working
-      changes id = id, session = session, kind = kind, startedBy = startedBy, opening = opening, language = language, startedAt = startedAt
+      changes id = id, session = session, kind = kind, startedBy = startedBy, opening = opening, scope = scope, language = language, startedAt = startedAt, guide = guide
       emits SlashCommandStarted
 
     /// AI が候補を挙げる（候補型）。見ているストーミングがなければ、候補なしで。
@@ -122,7 +122,7 @@ context Collaboration {
     /// AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/guide` は、その中身も。
     command answer(answer: RequestId, next: NextAnswer?, answeredAt: Timestamp) "答える"
       Working -> Answered
-      changes answer = answer, answeredAt = answeredAt
+      changes answer = answer, next = next, answeredAt = answeredAt
       emits SlashCommandAnswered
 
     /// ファシリテーターが候補を選んで反映する（誰が始めたコマンドでも。反映が承認になる）。実行の登録と同じ取引で、その
@@ -133,7 +133,7 @@ context Collaboration {
         appliedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
       requires chosenOfList "挙げた候補から選ぶ" { chosen.every(c => c < candidates.length) } else NoSuchCandidate
-      changes chosen = chosen, appliedAt = appliedAt, run = run
+      changes chosen = chosen, appliedBy = appliedBy, appliedAt = appliedAt, run = run
       emits CandidatesApplied
 
     /// 始めた人かファシリテーターがコマンドを中止する（考えているあいだか、候補の選択待ち）。

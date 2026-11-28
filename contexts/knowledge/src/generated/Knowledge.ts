@@ -1269,12 +1269,12 @@ export function checkAddKnowledgeItemRequires(params: AddKnowledgeItemParams): '
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkAddKnowledgeItemEnsures }`.
  * @see contexts/knowledge/model/item.dt:36
  */
-export function checkAddKnowledgeItemEnsures(params: AddKnowledgeItemParams, value: SuccessOf<AddKnowledgeItemCommand>): Postcondition<'Knowledge.KnowledgeItem:add.changes.id' | 'Knowledge.KnowledgeItem:add.changes.content' | 'Knowledge.KnowledgeItem:add.changes.sources' | 'Knowledge.KnowledgeItem:add->Live.unchanged.createdIn' | 'Knowledge.KnowledgeItem:add->Live.unchanged.bookmarked' | 'Knowledge.KnowledgeItem:add->Live.unchanged.retirement'> | undefined {
+export function checkAddKnowledgeItemEnsures(params: AddKnowledgeItemParams, value: SuccessOf<AddKnowledgeItemCommand>): Postcondition<'Knowledge.KnowledgeItem:add.changes.id' | 'Knowledge.KnowledgeItem:add.changes.content' | 'Knowledge.KnowledgeItem:add.changes.sources' | 'Knowledge.KnowledgeItem:add.changes.createdIn' | 'Knowledge.KnowledgeItem:add->Live.unchanged.bookmarked' | 'Knowledge.KnowledgeItem:add->Live.unchanged.retirement'> | undefined {
     if ('Live' in value && value.Live !== undefined) {
         if (value.Live.aggregate.id !== params.id) return { id: 'Knowledge.KnowledgeItem:add.changes.id', outcome: 'Live', kind: 'changes', field: 'id', source: 'id = id' };
         if (!equalItemContent(value.Live.aggregate.content, params.content)) return { id: 'Knowledge.KnowledgeItem:add.changes.content', outcome: 'Live', kind: 'changes', field: 'content', source: 'content = content' };
         if (!sameList(value.Live.aggregate.sources, params.sources, equalSource)) return { id: 'Knowledge.KnowledgeItem:add.changes.sources', outcome: 'Live', kind: 'changes', field: 'sources', source: 'sources = sources' };
-        if (value.Live.aggregate.createdIn !== undefined) return { id: 'Knowledge.KnowledgeItem:add->Live.unchanged.createdIn', outcome: 'Live', kind: 'unchanged', field: 'createdIn', source: 'after.createdIn == null' };
+        if (value.Live.aggregate.createdIn !== params.by.session) return { id: 'Knowledge.KnowledgeItem:add.changes.createdIn', outcome: 'Live', kind: 'changes', field: 'createdIn', source: 'createdIn = by.session' };
         if (value.Live.aggregate.bookmarked !== undefined) return { id: 'Knowledge.KnowledgeItem:add->Live.unchanged.bookmarked', outcome: 'Live', kind: 'unchanged', field: 'bookmarked', source: 'after.bookmarked == null' };
         if (value.Live.aggregate.retirement !== undefined) return { id: 'Knowledge.KnowledgeItem:add->Live.unchanged.retirement', outcome: 'Live', kind: 'unchanged', field: 'retirement', source: 'after.retirement == null' };
     }
@@ -1352,12 +1352,12 @@ export function checkAddConflictingKnowledgeItemRequires(params: AddConflictingK
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkAddConflictingKnowledgeItemEnsures }`.
  * @see contexts/knowledge/model/item.dt:45
  */
-export function checkAddConflictingKnowledgeItemEnsures(params: AddConflictingKnowledgeItemParams, value: SuccessOf<AddConflictingKnowledgeItemCommand>): Postcondition<'Knowledge.KnowledgeItem:addConflicting.changes.id' | 'Knowledge.KnowledgeItem:addConflicting.changes.content' | 'Knowledge.KnowledgeItem:addConflicting.changes.sources' | 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.createdIn' | 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.bookmarked' | 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.retirement'> | undefined {
+export function checkAddConflictingKnowledgeItemEnsures(params: AddConflictingKnowledgeItemParams, value: SuccessOf<AddConflictingKnowledgeItemCommand>): Postcondition<'Knowledge.KnowledgeItem:addConflicting.changes.id' | 'Knowledge.KnowledgeItem:addConflicting.changes.content' | 'Knowledge.KnowledgeItem:addConflicting.changes.sources' | 'Knowledge.KnowledgeItem:addConflicting.changes.createdIn' | 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.bookmarked' | 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.retirement'> | undefined {
     if ('Live' in value && value.Live !== undefined) {
         if (value.Live.aggregate.id !== params.id) return { id: 'Knowledge.KnowledgeItem:addConflicting.changes.id', outcome: 'Live', kind: 'changes', field: 'id', source: 'id = id' };
         if (!equalItemContent(value.Live.aggregate.content, params.content)) return { id: 'Knowledge.KnowledgeItem:addConflicting.changes.content', outcome: 'Live', kind: 'changes', field: 'content', source: 'content = content' };
         if (!sameList(value.Live.aggregate.sources, params.sources, equalSource)) return { id: 'Knowledge.KnowledgeItem:addConflicting.changes.sources', outcome: 'Live', kind: 'changes', field: 'sources', source: 'sources = sources' };
-        if (value.Live.aggregate.createdIn !== undefined) return { id: 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.createdIn', outcome: 'Live', kind: 'unchanged', field: 'createdIn', source: 'after.createdIn == null' };
+        if (value.Live.aggregate.createdIn !== params.by.session) return { id: 'Knowledge.KnowledgeItem:addConflicting.changes.createdIn', outcome: 'Live', kind: 'changes', field: 'createdIn', source: 'createdIn = by.session' };
         if (value.Live.aggregate.bookmarked !== undefined) return { id: 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.bookmarked', outcome: 'Live', kind: 'unchanged', field: 'bookmarked', source: 'after.bookmarked == null' };
         if (value.Live.aggregate.retirement !== undefined) return { id: 'Knowledge.KnowledgeItem:addConflicting->Live.unchanged.retirement', outcome: 'Live', kind: 'unchanged', field: 'retirement', source: 'after.retirement == null' };
     }
@@ -3409,17 +3409,17 @@ export function checkProposeRetirementProposalRequires(params: ProposeRetirement
  * Call it with the command's arguments and its result's `value`, or pass it to `decide` as `{ ensures: checkProposeRetirementProposalEnsures }`.
  * @see contexts/knowledge/model/retirement.dt:98
  */
-export function checkProposeRetirementProposalEnsures(params: ProposeRetirementProposalParams, value: SuccessOf<ProposeRetirementProposalCommand>): Postcondition<'Knowledge.RetirementProposal:propose.changes.id' | 'Knowledge.RetirementProposal:propose.changes.item' | 'Knowledge.RetirementProposal:propose.changes.action' | 'Knowledge.RetirementProposal:propose.changes.explanation' | 'Knowledge.RetirementProposal:propose.changes.evidence' | 'Knowledge.RetirementProposal:propose.changes.proposedBy' | 'Knowledge.RetirementProposal:propose.changes.proposedAt' | 'Knowledge.RetirementProposal:propose->Open.unchanged.reason' | 'Knowledge.RetirementProposal:propose->Open.unchanged.replacedBy'> | undefined {
+export function checkProposeRetirementProposalEnsures(params: ProposeRetirementProposalParams, value: SuccessOf<ProposeRetirementProposalCommand>): Postcondition<'Knowledge.RetirementProposal:propose.changes.id' | 'Knowledge.RetirementProposal:propose.changes.item' | 'Knowledge.RetirementProposal:propose.changes.action' | 'Knowledge.RetirementProposal:propose.changes.reason' | 'Knowledge.RetirementProposal:propose.changes.replacedBy' | 'Knowledge.RetirementProposal:propose.changes.explanation' | 'Knowledge.RetirementProposal:propose.changes.evidence' | 'Knowledge.RetirementProposal:propose.changes.proposedBy' | 'Knowledge.RetirementProposal:propose.changes.proposedAt'> | undefined {
     if ('Open' in value && value.Open !== undefined) {
         if (value.Open.aggregate.id !== params.id) return { id: 'Knowledge.RetirementProposal:propose.changes.id', outcome: 'Open', kind: 'changes', field: 'id', source: 'id = id' };
         if (value.Open.aggregate.item !== params.item) return { id: 'Knowledge.RetirementProposal:propose.changes.item', outcome: 'Open', kind: 'changes', field: 'item', source: 'item = item' };
         if (value.Open.aggregate.action !== params.action) return { id: 'Knowledge.RetirementProposal:propose.changes.action', outcome: 'Open', kind: 'changes', field: 'action', source: 'action = action' };
+        if (value.Open.aggregate.reason !== params.reason) return { id: 'Knowledge.RetirementProposal:propose.changes.reason', outcome: 'Open', kind: 'changes', field: 'reason', source: 'reason = reason' };
+        if (value.Open.aggregate.replacedBy !== params.replacedBy) return { id: 'Knowledge.RetirementProposal:propose.changes.replacedBy', outcome: 'Open', kind: 'changes', field: 'replacedBy', source: 'replacedBy = replacedBy' };
         if (value.Open.aggregate.explanation !== params.explanation) return { id: 'Knowledge.RetirementProposal:propose.changes.explanation', outcome: 'Open', kind: 'changes', field: 'explanation', source: 'explanation = explanation' };
         if (!sameList(value.Open.aggregate.evidence, params.evidence, equalEvidence)) return { id: 'Knowledge.RetirementProposal:propose.changes.evidence', outcome: 'Open', kind: 'changes', field: 'evidence', source: 'evidence = evidence' };
         if (!equalProposer(value.Open.aggregate.proposedBy, params.proposedBy)) return { id: 'Knowledge.RetirementProposal:propose.changes.proposedBy', outcome: 'Open', kind: 'changes', field: 'proposedBy', source: 'proposedBy = proposedBy' };
         if (value.Open.aggregate.proposedAt !== params.proposedAt) return { id: 'Knowledge.RetirementProposal:propose.changes.proposedAt', outcome: 'Open', kind: 'changes', field: 'proposedAt', source: 'proposedAt = proposedAt' };
-        if (value.Open.aggregate.reason !== undefined) return { id: 'Knowledge.RetirementProposal:propose->Open.unchanged.reason', outcome: 'Open', kind: 'unchanged', field: 'reason', source: 'after.reason == null' };
-        if (value.Open.aggregate.replacedBy !== undefined) return { id: 'Knowledge.RetirementProposal:propose->Open.unchanged.replacedBy', outcome: 'Open', kind: 'unchanged', field: 'replacedBy', source: 'after.replacedBy == null' };
     }
     return undefined;
 }

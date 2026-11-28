@@ -1189,7 +1189,7 @@ export function createCollaboration(deps: CollaborationDeps): CollaborationUseCa
                     const at = timestampOf(clock.now());
                     const cancelled = agentRunCommands.cancel(r, { cancelledBy: actor.participant, cancelledByRole: actor.role, cancelledAt: at });
                     if (!cancelled.ok) return cancelled;
-                    const { Cancelled } = cancelled.value;
+                    const Cancelled = 'QueuedCancelled' in cancelled.value ? cancelled.value.QueuedCancelled : cancelled.value.RunningCancelled;
                     stores.runs.save(Cancelled.aggregate);
                     stores.runs.endLease(run, undefined);
                     publish(stores, r.session, Cancelled.events, at);

@@ -346,6 +346,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.add',
                 run: impl.KnowledgeItem.add,
+                ensures: Knowledge.checkAddKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.record({ id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['id', 'content', 'sources', 'by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.add ?? [],
                 factory: true,
@@ -360,6 +361,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.addConflicting',
                 run: impl.KnowledgeItem.addConflicting,
+                ensures: Knowledge.checkAddConflictingKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.record({ id: a.KnowledgeItemId, content: a.ItemContent, sources: testing.many(a.Source, 1), other: a.KnowledgeItemId, by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['id', 'content', 'sources', 'other', 'by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.addConflicting ?? [],
                 factory: true,
@@ -374,6 +376,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.addSource',
                 run: impl.KnowledgeItem.addSource,
+                ensures: Knowledge.checkAddSourceKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ source: a.Source, agreed: testing.cast<boolean>(scalar.Bool), base: a.ItemVersion, by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['source', 'agreed', 'base', 'by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.addSource ?? [],
                 factory: false,
@@ -388,6 +391,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.update',
                 run: impl.KnowledgeItem.update,
+                ensures: Knowledge.checkUpdateKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ revised: a.ItemContent, newSources: testing.many(a.Source, 1), base: a.ItemVersion, by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['revised', 'newSources', 'base', 'by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.update ?? [],
                 factory: false,
@@ -402,6 +406,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.linkConflict',
                 run: impl.KnowledgeItem.linkConflict,
+                ensures: Knowledge.checkLinkConflictKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ other: a.KnowledgeItemId, base: a.ItemVersion, by: a.ExtractionRef, reason: a.Reason, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['other', 'base', 'by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.linkConflict ?? [],
                 factory: false,
@@ -416,6 +421,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.unlinkConflict',
                 run: impl.KnowledgeItem.unlinkConflict,
+                ensures: Knowledge.checkUnlinkConflictKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ other: a.KnowledgeItemId, by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.KnowledgeItem?.commands?.unlinkConflict ?? [],
                 factory: false,
@@ -430,6 +436,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.handOverToHotspot',
                 run: impl.KnowledgeItem.handOverToHotspot,
+                ensures: Knowledge.checkHandOverToHotspotKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ hotspot: a.StickyRef, other: a.KnowledgeItemId, by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.KnowledgeItem?.commands?.handOverToHotspot ?? [],
                 factory: false,
@@ -444,6 +451,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.correct',
                 run: impl.KnowledgeItem.correct,
+                ensures: Knowledge.checkCorrectKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ corrected: a.ItemContent, by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.KnowledgeItem?.commands?.correct ?? [],
                 factory: false,
@@ -457,6 +465,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.setBookmark',
                 run: impl.KnowledgeItem.setBookmark,
+                ensures: Knowledge.checkSetBookmarkKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ bookmarked: testing.cast<boolean>(scalar.Bool), by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.KnowledgeItem?.commands?.setBookmark ?? [],
                 factory: false,
@@ -470,6 +479,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.retire',
                 run: impl.KnowledgeItem.retire,
+                ensures: Knowledge.checkRetireKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, proposal: a.RetirementProposalId, by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.retire ?? [],
                 factory: false,
@@ -484,6 +494,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.unretire',
                 run: impl.KnowledgeItem.unretire,
+                ensures: Knowledge.checkUnretireKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ proposal: a.RetirementProposalId, by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['by', 'at'] })),
                 examples: options.examples?.KnowledgeItem?.commands?.unretire ?? [],
                 factory: false,
@@ -498,6 +509,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.delete',
                 run: impl.KnowledgeItem.delete,
+                ensures: Knowledge.checkDeleteKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.LiveKnowledgeItem), fc.record({ by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.KnowledgeItem?.commands?.delete ?? [],
                 factory: false,
@@ -511,6 +523,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'KnowledgeItem.restore',
                 run: impl.KnowledgeItem.restore,
+                ensures: Knowledge.checkRestoreKnowledgeItemEnsures,
                 input: () => fc.tuple(fc.oneof(a.DeletedKnowledgeItem), fc.record({ by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.KnowledgeItem?.commands?.restore ?? [],
                 factory: false,
@@ -526,6 +539,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'RetirementProposal.propose',
                 run: impl.RetirementProposal.propose,
+                ensures: Knowledge.checkProposeRetirementProposalEnsures,
                 input: () => fc.tuple(fc.record({ id: a.RetirementProposalId, item: a.KnowledgeItemId, action: a.ProposalAction, reason: a.RetirementReason, replacedBy: a.KnowledgeItemId, explanation: a.Reason, evidence: testing.many(a.Evidence, 1), proposedBy: a.Proposer, proposedAt: testing.cast<Timestamp>(scalar.Timestamp) }, { requiredKeys: ['id', 'item', 'action', 'explanation', 'evidence', 'proposedBy', 'proposedAt'] })),
                 examples: options.examples?.RetirementProposal?.commands?.propose ?? [],
                 factory: true,
@@ -540,6 +554,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'RetirementProposal.approve',
                 run: impl.RetirementProposal.approve,
+                ensures: Knowledge.checkApproveRetirementProposalEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenRetirementProposal), fc.record({ by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.RetirementProposal?.commands?.approve ?? [],
                 factory: false,
@@ -553,6 +568,7 @@ export function contract(impl: Implementation, options: Options = {}): testing.S
             ...testing.commandCases({
                 name: 'RetirementProposal.dismiss',
                 run: impl.RetirementProposal.dismiss,
+                ensures: Knowledge.checkDismissRetirementProposalEnsures,
                 input: () => fc.tuple(fc.oneof(a.OpenRetirementProposal), fc.record({ by: a.UserName, at: testing.cast<Timestamp>(scalar.Timestamp) })),
                 examples: options.examples?.RetirementProposal?.commands?.dismiss ?? [],
                 factory: false,

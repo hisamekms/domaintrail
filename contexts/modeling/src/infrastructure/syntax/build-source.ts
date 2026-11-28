@@ -232,7 +232,7 @@ export function buildSourceModel(index: ModelIndex, fileOf: FileResolver): src.S
                 nameAt: site(e, 'function'),
                 argsAt: e.args.map((_, i) => site(e, 'args', i)),
             };
-        if (isListLiteral(e)) return { ...base, k: 'list', items: e.items.map((i) => ({ spread: i.spread, value: expr(i.value) })) };
+        if (isListLiteral(e)) return { ...base, k: 'list', items: e.items.map((i) => ({ at: site(i), spread: i.spread, value: expr(i.value) })) };
         if (isConditionalExpr(e))
             return {
                 ...base,

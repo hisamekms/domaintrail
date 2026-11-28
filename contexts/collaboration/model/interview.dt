@@ -156,7 +156,7 @@ context Collaboration {
     /// 聞き取りを始める。コラボでは誰でも（参加者が始めたら、その人が答え、要約はファシリテーターの承認を待つ）。
     create command start(id: InterviewId, session: ActiveSession, command: InterviewCommand, startedBy: ParticipantId, opening: RequestId, focus: ModelTarget?, language: UiLanguage, startedAt: Timestamp) "聞き取りを始める"
       -> Asking
-      changes id = id, session = session, command = command, startedBy = startedBy, opening = opening, language = language, startedAt = startedAt
+      changes id = id, session = session, command = command, startedBy = startedBy, opening = opening, focus = focus, language = language, startedAt = startedAt, awaiting = opening
       emits InterviewStarted
 
     /// 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
@@ -190,7 +190,7 @@ context Collaboration {
       requires facilitatorConfirms "ファシリテーターが確定する" {
         confirmedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
-      changes brief, edited = edited, confirmedAt = confirmedAt
+      changes brief, edited = edited, confirmedBy = confirmedBy, confirmedAt = confirmedAt, run = run
       emits InterviewConfirmed
 
     /// ファシリテーターが要約を却下する（ひとことを添えてもよい）。聞き取りはそこで終わる。
@@ -199,7 +199,7 @@ context Collaboration {
       requires facilitatorRejects "ファシリテーターが却下する" {
         rejectedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
-      changes rejectedBy = rejectedBy, rejectedAt = rejectedAt
+      changes rejectedBy = rejectedBy, note = note, rejectedAt = rejectedAt
       emits InterviewRejected
 
     /// 始めた人かファシリテーターが聞き取りを中止する。

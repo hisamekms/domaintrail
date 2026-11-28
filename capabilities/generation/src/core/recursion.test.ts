@@ -36,7 +36,7 @@ const MODEL = `context M {
     rule: Rule
     state Open
     create command start(id: DocId, rule: Rule) -> Open changes id = id, rule = rule emits Opened
-    command rename(name: String) Open -> Open
+    command rename(name: String) Open -> Open changes rule
   }
   id NoteId: UUID
   aggregate Note {

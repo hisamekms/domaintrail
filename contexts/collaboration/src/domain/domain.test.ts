@@ -340,7 +340,8 @@ describe('transitions', () => {
         expect(failed).toMatchObject({ state: 'Failed', reason: 'LeaseExpired', finishedAt: later });
         expect('report' in failed).toBe(false);
         expect(
-            value(agentRunCommands.cancel(running, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).Cancelled.aggregate,
+            value(agentRunCommands.cancel(running, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).RunningCancelled
+                .aggregate,
         ).toMatchObject({
             baseRevision: base,
             cancelledBy: facilitator,
@@ -353,7 +354,8 @@ describe('transitions', () => {
         const queued: C.QueuedAgentRun = { ...rest, state: 'Queued' };
         expect(
             'baseRevision' in
-                value(agentRunCommands.cancel(queued, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).Cancelled.aggregate,
+                value(agentRunCommands.cancel(queued, { cancelledBy: facilitator, cancelledByRole: 'Facilitator', cancelledAt: later })).QueuedCancelled
+                    .aggregate,
         ).toBe(false);
         expect(agentRunCommands.cancel(queued, { cancelledBy: guest, cancelledByRole: 'Participant', cancelledAt: later })).toEqual({
             ok: false,

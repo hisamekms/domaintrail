@@ -158,7 +158,7 @@ describe('getting started', () => {
         expect(tsc.exitCode).toBe(0);
         const r = Bun.spawnSync([process.execPath, 'test'], { cwd: dir });
         const output = r.stdout.toString() + r.stderr.toString();
-        expect(output).toContain(' 6 pass');
+        expect(output).toContain(' 8 pass');
         expect(output).toContain(' 0 fail');
         expect(r.exitCode).toBe(0);
     }, 30_000);

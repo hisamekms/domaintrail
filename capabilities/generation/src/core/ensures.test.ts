@@ -87,6 +87,18 @@ describe('postconditions in the generated TypeScript', () => {
         expect(code).toContain("if ('Value' in result && result.Value !== undefined) {");
     });
 
+    test('bare changes on a create generate no check and no T7 hook', async () => {
+        const a = await check({
+            'bare.dt': `context Shop { id CartId: UUID aggregate Cart { id: CartId note: String? state Draft create command start(id: CartId, note: String) -> Draft changes id, note } }`,
+        });
+        expect(a.diagnostics.filter((d) => d.severity === 'error')).toEqual([]);
+        const files = generateFromAnalysis(a);
+        expect(files.find((f) => f.path === 'Shop.ts')!.content).not.toContain('checkStartCartEnsures');
+        expect(files.find((f) => f.path.includes('tests') && f.content.includes("name: 'Cart.start'"))?.content ?? '').not.toContain(
+            'ensures: Shop.checkStartCartEnsures',
+        );
+    });
+
     test('the shorthand form: one branch per target, each with the changes the target has; the IDs of its contract are the command’s', async () => {
         const retitle = fn(await generated(), 'checkRetitleWorkEnsures');
         const draft = retitle.slice(retitle.indexOf("if ('Draft' in value"), retitle.indexOf("if ('Done' in value"));

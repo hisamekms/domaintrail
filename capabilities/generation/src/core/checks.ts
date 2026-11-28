@@ -997,6 +997,19 @@ function ensuresBranches(agg: AggregateModel, c: CommandModel): EnsuresBranch[] 
     );
 }
 
+/** Whether `ensures` below emits a check for this command. Keep test generation tied to the emitter's branches. */
+export function hasEnsuresCheck(agg: AggregateModel, c: CommandModel): boolean {
+    return ensuresBranches(agg, c).some(({ outcome, from, to, kind }) => {
+        const { set, carried } = outcomeFields(agg, c, from, to, outcome, kind);
+        return (
+            outcome.assignments.some((a) => [...set, ...carried].some((f) => f.name === a.field)) ||
+            carried.length > 0 ||
+            set.some((f) => f.cardinality === 'optional' && !outcome.changes.includes(f.name)) ||
+            !!outcome.ensures
+        );
+    });
+}
+
 /**
  * Whether two values of type `t` (and `u`) are equal exactly when they are `===`: scalars other than Decimals (whose
  * text may differ in trailing zeros), present or absent.

@@ -4,12 +4,20 @@
 import { Billing, decide, ok } from '../../generated/domain/index.js';
 
 export const invoiceCommands: Billing.InvoiceCommands = {
-    issue: decide<Billing.IssueInvoiceDecision>(Billing.InvoiceShape, ({ id, order, billedAmount }) =>
-        ok({ Open: { set: { id, order, billedAmount }, events: {} } }),
+    issue: decide<Billing.IssueInvoiceDecision>(
+        Billing.InvoiceShape,
+        ({ id, order, billedAmount }) => ok({ Open: { set: { id, order, billedAmount }, events: {} } }),
+        {},
+        { ensures: Billing.checkIssueInvoiceEnsures },
     ),
 
-    pay: decide<Billing.PayInvoiceDecision>(Billing.InvoiceShape, {
-        Open: (invoice, { paidAt }) =>
-            ok({ Paid: { set: { paidAt }, events: { 'Billing.InvoicePaid': { type: 'Billing.InvoicePaid', invoiceId: invoice.id, paidAt } } } }),
-    }),
+    pay: decide<Billing.PayInvoiceDecision>(
+        Billing.InvoiceShape,
+        {
+            Open: (invoice, { paidAt }) =>
+                ok({ Paid: { set: { paidAt }, events: { 'Billing.InvoicePaid': { type: 'Billing.InvoicePaid', invoiceId: invoice.id, paidAt } } } }),
+        },
+        {},
+        { ensures: Billing.checkPayInvoiceEnsures },
+    ),
 };

@@ -264,54 +264,77 @@ export function proposalsToForget(
 }
 
 export const retirementProposalCommands: Knowledge.RetirementProposalCommands = {
-    propose: decide<Knowledge.ProposeRetirementProposalDecision>(Knowledge.RetirementProposalShape, (params) => {
-        if (Knowledge.checkProposeRetirementProposalRequires(params) !== undefined) return err({ type: 'Knowledge.MalformedProposal' });
-        const { id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt } = params;
-        return ok({
-            Open: {
-                set: { id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt },
-                events: {
-                    'Knowledge.RetirementProposed': { type: 'Knowledge.RetirementProposed', proposalId: id, item, action, proposedBy, explanation, proposedAt },
-                },
-            },
-        });
-    }),
-
-    approve: decide<Knowledge.ApproveRetirementProposalDecision>(Knowledge.RetirementProposalShape, {
-        Open: (proposal, { by, at }) =>
-            ok({
-                Approved: {
-                    set: { decidedBy: by, decidedAt: at },
+    propose: decide<Knowledge.ProposeRetirementProposalDecision>(
+        Knowledge.RetirementProposalShape,
+        (params) => {
+            if (Knowledge.checkProposeRetirementProposalRequires(params) !== undefined) return err({ type: 'Knowledge.MalformedProposal' });
+            const { id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt } = params;
+            return ok({
+                Open: {
+                    set: { id, item, action, reason, replacedBy, explanation, evidence, proposedBy, proposedAt },
                     events: {
-                        'Knowledge.RetirementProposalApproved': {
-                            type: 'Knowledge.RetirementProposalApproved',
-                            proposalId: proposal.id,
-                            item: proposal.item,
-                            action: proposal.action,
-                            by,
-                            at,
+                        'Knowledge.RetirementProposed': {
+                            type: 'Knowledge.RetirementProposed',
+                            proposalId: id,
+                            item,
+                            action,
+                            proposedBy,
+                            explanation,
+                            proposedAt,
                         },
                     },
                 },
-            }),
-    }),
+            });
+        },
+        {},
+        { ensures: Knowledge.checkProposeRetirementProposalEnsures },
+    ),
 
-    dismiss: decide<Knowledge.DismissRetirementProposalDecision>(Knowledge.RetirementProposalShape, {
-        Open: (proposal, { by, at }) =>
-            ok({
-                Dismissed: {
-                    set: { decidedBy: by, decidedAt: at },
-                    events: {
-                        'Knowledge.RetirementProposalDismissed': {
-                            type: 'Knowledge.RetirementProposalDismissed',
-                            proposalId: proposal.id,
-                            item: proposal.item,
-                            action: proposal.action,
-                            by,
-                            at,
+    approve: decide<Knowledge.ApproveRetirementProposalDecision>(
+        Knowledge.RetirementProposalShape,
+        {
+            Open: (proposal, { by, at }) =>
+                ok({
+                    Approved: {
+                        set: { decidedBy: by, decidedAt: at },
+                        events: {
+                            'Knowledge.RetirementProposalApproved': {
+                                type: 'Knowledge.RetirementProposalApproved',
+                                proposalId: proposal.id,
+                                item: proposal.item,
+                                action: proposal.action,
+                                by,
+                                at,
+                            },
                         },
                     },
-                },
-            }),
-    }),
+                }),
+        },
+        {},
+        { ensures: Knowledge.checkApproveRetirementProposalEnsures },
+    ),
+
+    dismiss: decide<Knowledge.DismissRetirementProposalDecision>(
+        Knowledge.RetirementProposalShape,
+        {
+            Open: (proposal, { by, at }) =>
+                ok({
+                    Dismissed: {
+                        set: { decidedBy: by, decidedAt: at },
+                        events: {
+                            'Knowledge.RetirementProposalDismissed': {
+                                type: 'Knowledge.RetirementProposalDismissed',
+                                proposalId: proposal.id,
+                                item: proposal.item,
+                                action: proposal.action,
+                                by,
+                                at,
+                            },
+                        },
+                    },
+                }),
+        },
+        {},
+        { ensures: Knowledge.checkDismissRetirementProposalEnsures },
+    ),
 };

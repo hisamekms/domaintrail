@@ -47,7 +47,7 @@ context Sales {
       requires sameCurrency "既存の明細と同じ通貨" {
         items.every(i => i.unitPrice.currency == item.unitPrice.currency)
       } else CurrencyMismatch
-      changes items
+      changes items = [... before.items, item]
 
     command confirm(at: Timestamp) "注文を確定する"
       Draft -> Confirmed
@@ -69,7 +69,7 @@ context Sales {
     command changeNote(note: String?) "備考を変更する"
       Draft -> Draft
       Confirmed -> Confirmed
-      changes note
+      changes note = note
       emits NoteChanged?
   }
 
