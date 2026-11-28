@@ -190,7 +190,7 @@ async function init(dir: string, phase: 'pilot' | 'main', seed: number): Promise
         guides: manifest,
         guide_files: guideFiles,
         guide_template_version: '1',
-        packet: { version: '1', sha256: sha256(tasks), requirements: requirementsOf(tasks) },
+        packet: { version: '2', sha256: sha256(tasks), requirements: requirementsOf(tasks) },
         prompt: { version: PROMPT_VERSION, first: FIRST_PROMPT, repair: repairPrompt('<the text of dt check>') },
         models: MODELS,
         pinned_at: new Date().toISOString(),

@@ -49,7 +49,7 @@ previous one. A published rota cannot be edited.
 
 A timesheet is opened for one worker and one pay period with no entries and no approval. An entry is either hourly work,
 which records a task, Decimal hours (scale 2), and Decimal hourly rate (scale 2), or fixed-fee work, which records a
-task and Decimal amount (scale 2). Amounts use two decimal places and half-even rounding. A supervisor can approve only
+task and Decimal amount (scale 2). Entries are added to an open timesheet one at a time. Amounts use two decimal places and half-even rounding. A supervisor can approve only
 when there is at least one entry, every hourly entry has positive hours and a nonnegative rate, and every fixed fee is
 nonnegative. The approved total is the sum of each entry's amount: hourly hours multiplied by rate, or its fixed fee.
 Approval records the approving supervisor and calculated total. Entries cannot change after approval.
@@ -109,7 +109,8 @@ re-decided. The worker, dates, and reason never change.
 ### Business requirements
 
 A rotation has a service and starts as a draft with no assignments. At creation, the coordinator may supply an optional
-backup contact. An assignment names an ISO calendar week and is either a named primary responder or a vacant role.
+backup contact. An assignment names an ISO calendar week and is either a named primary responder or a vacant role,
+which names the role still to be filled.
 Assignments are added to the draft. A week may appear more than once in a draft, but activation is allowed only when
 there is at least one assignment and every assignment has a distinct week. A rotation with any vacant week can be
 activated only if it has a backup contact. Activation records the supplied start date. The service, assignments, and
