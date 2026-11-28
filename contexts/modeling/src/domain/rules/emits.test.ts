@@ -18,9 +18,10 @@ const WORK = `context Tasks {
     state Completed { completedAt: Timestamp }
     state Cancelled
 
-    create command open(id: WorkId) -> Draft emits WorkOpened, ItemAdded[0..*]
+    create command open(id: WorkId) -> Draft changes id = id emits WorkOpened, ItemAdded[0..*]
     command progress(at: Timestamp)
       InProgress -> InProgress | Completed
+      changes completedAt
       emits StepRecorded,
             WorkCompleted when -> Completed
       errors NotReady
@@ -120,9 +121,9 @@ describe('emits in the DSL', () => {
   id OrderId: UUID
   aggregate Order {
     id: OrderId
-    create command place(note: String)
-    create command import(id: OrderId)
-    create command maybe(id: OrderId?)
+    create command place(note: String) changes id
+    create command import(id: OrderId) changes id = id
+    create command maybe(id: OrderId?) changes id = id
   }`);
         expect(only(a, 'M020').map((d) => [d.severity, d.message, d.hint])).toEqual([
             [

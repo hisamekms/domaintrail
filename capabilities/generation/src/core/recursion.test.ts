@@ -35,14 +35,14 @@ const MODEL = `context M {
     id: DocId
     rule: Rule
     state Open
-    create command start(id: DocId, rule: Rule) -> Open emits Opened
+    create command start(id: DocId, rule: Rule) -> Open changes id = id, rule = rule emits Opened
     command rename(name: String) Open -> Open
   }
   id NoteId: UUID
   aggregate Note {
     id: NoteId
     text: String
-    create command write(id: NoteId, text: String)
+    create command write(id: NoteId, text: String) changes id = id, text = text
     command touch(expr: Expr, chain: Chain)
   }
   event Opened { docId: DocId  rule: Rule }

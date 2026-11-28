@@ -17,7 +17,7 @@ const BEFORE = `
     state Open
     state Done
     state Held
-    create command place(id: OrderId) -> Open emits Placed
+    create command place(id: OrderId) -> Open changes id = id, note emits Placed
     command close() Open -> Done
     command hold() Open -> Held
     command annotate(note: String) Open -> Open
@@ -31,7 +31,7 @@ const AFTER = `
     memo: String?
     state Open
     state Done
-    create command place(id: OrderId) -> Open emits Placed
+    create command place(id: OrderId) -> Open changes id = id, note emits Placed
     command close() Open -> Done
     command annotate(note: String) Open -> Open
   }`;

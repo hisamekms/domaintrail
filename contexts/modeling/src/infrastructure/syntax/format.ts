@@ -56,6 +56,7 @@ const FUNCTIONS = new Set(['count', 'exists', 'length', 'matches', 'unique', 'co
 
 /** The whitespace between two tokens on one line. */
 function inlineSep(a: Token, b: Token): 'none' | 'space' {
+    if (b.text === '[' && ast.isListLiteral(b.leaf.astNode) && !['(', '['].includes(a.text)) return 'space'; // `= [a]`, `&& [x]`
     if ([')', ',', ']', '?', '.', '..', ':', '::', '['].includes(b.text)) return 'none';
     if (['(', '[', '.', '..', '::'].includes(a.text)) return 'none';
     if (a.text === '!' && ast.isNotExpr(a.leaf.astNode)) return 'none'; // `!x`, `!(p)`: the prefix sticks

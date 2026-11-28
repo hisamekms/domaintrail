@@ -91,11 +91,13 @@ context Collaboration {
       requires facilitatorMarksSteps "区切りを済みにするのはファシリテーター" {
         !(sign.kind == MarkSign.Done) || role == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      changes id = id, session = session, participant = participant, target = target, sign = sign, placedAt = placedAt
       emits MarkPlaced
 
     /// 締め切られた票は外せない（対象を付け外しできると確かめてから外す）。
     command remove(open: OpenMarkTarget, removedAt: Timestamp) "印を外す"
       Placed -> Removed
+      changes removedAt = removedAt
       emits MarkRemoved
   }
 

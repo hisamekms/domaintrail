@@ -35,7 +35,7 @@ const SALES = `context Sales {
     id: OrderId
     at: Location
     line: Line
-    create command place(id: OrderId, at: Location, line: Line)
+    create command place(id: OrderId, at: Location, line: Line) changes id = id, at = at, line = line
     command move(at: Location)
   }
 }`;

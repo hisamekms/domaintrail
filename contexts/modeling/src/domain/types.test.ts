@@ -28,7 +28,7 @@ const SOURCES = {
   id NId: UUID
   union U { M { n: Int } }
   aggregate X { id: XId  owns ns: N[0..*]  references other: XId -> X  u: U?  o: O
-    create command make(id: XId, v: W, e: E[0..*], loose: Undefined) }
+    create command make(id: XId, v: W, e: E[0..*], loose: Undefined) changes id = id, ns, other, o }
 }
 `,
 };

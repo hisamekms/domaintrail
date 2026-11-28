@@ -107,6 +107,7 @@ context Collaboration {
     /// AI 宛てのメッセージの仕分けを始める（送ったとき、またはファシリテーターが AI に送ったとき）。
     create command open(id: TriageId, session: ActiveSession, request: AddressableRequest, addressedBy: AddressedBy, addressedByParticipant: ParticipantId, openedAt: Timestamp) "仕分けを始める"
       -> Pending
+      changes id = id, session = session, request = request, addressedBy = addressedBy, addressedByParticipant = addressedByParticipant, steps, openedAt = openedAt
       emits TriageOpened
 
     /// カスケードの段（機械的な判定・Clef・軽いモデル）の答えを記録する。答えが決まれば仕分け済み、わからなければ仕分け中のまま
@@ -131,7 +132,7 @@ context Collaboration {
         select {
           step.verdict != TriageVerdict.Unknown || step.stage == TriageStage.Model
         }
-        changes steps
+        changes steps, kind, decidedBy, decidedAt
         emits TriageStepRecorded,
               TriageDecided
     }

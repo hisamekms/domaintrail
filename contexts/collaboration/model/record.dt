@@ -139,6 +139,7 @@ context Collaboration {
 
     create command write(id: SessionRecordId, session: ActiveSession, by: ParticipantId?, fact: RecordFact, replyTo: RequestId?, at: Timestamp) "記録する"
       -> Written
+      changes id = id, session = session, fact = fact, at = at
       emits RecordWritten
 
     /// 記録を書き足す: 済みの付け外しを続けてまとめる、お願いに行方を書く。どう書き足すかはコード（`domain/records.ts`）が決める。

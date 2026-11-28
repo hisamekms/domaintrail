@@ -51,6 +51,7 @@ const SALES = `context Sales {
 
     create command place(id: OrderId)
       -> Draft
+      changes id = id
 
     command confirm()
       Draft -> Confirmed
@@ -279,7 +280,7 @@ describe('agent runs', () => {
         const a = value(await s.use.claimNextRun({ session: id, owner: 'agent', leaseMs: 30_000 }));
         expect(a.run.id).toBe(first.id);
         value(await s.use.startRun({ run: first.id, token: a.lease.token }));
-        await s.write('sales/sales.dt', SALES.replace('id: OrderId\n\n    state', 'id: OrderId\n    total: Money\n\n    state'));
+        await s.write('sales/sales.dt', SALES.replace('id: OrderId\n\n    state', 'id: OrderId\n    total: Money?\n\n    state'));
         await s.write('stormings/returns.dtes', 'storming Returns {');
         const failed = value(await s.use.finishRun({ run: first.id, token: a.lease.token, facts }));
         expect(failed.run).toMatchObject({ state: 'Failed', reason: 'RuleNotMet', report: { newDtErrors: 1, unparsedDtes: 1 } });
@@ -944,7 +945,7 @@ describe('revisions', () => {
         expect(sales).toEqual({
             kind: 'diff',
             unified: [
-                '@@ -6,11 +6,12 @@',
+                '@@ -6,12 +6,13 @@',
                 ' ',
                 '     state Draft',
                 '     state Confirmed',
@@ -952,6 +953,7 @@ describe('revisions', () => {
                 ' ',
                 '     create command place(id: OrderId)',
                 '       -> Draft',
+                '       changes id = id',
                 ' ',
                 '     command confirm()',
                 '-      Draft -> Confirmed',

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { check, only, element } from '../../test-helpers.js';
+import { check, only as onlyCode, element } from '../../test-helpers.js';
 import { formatDomain } from '../../infrastructure/syntax/format.js';
 
 /**
@@ -29,7 +29,7 @@ ${commands}
     id: TagId
     name: String
     color: String
-    create command make(id: TagId, name: String, color: String)
+    create command make(id: TagId, name: String, color: String) changes id = id, name = name, color = color
     command recolor(color: String) changes color
   }
   ${extra}
@@ -37,16 +37,19 @@ ${commands}
 `,
     });
 
+/** The diagnostics of a code, without design D's listing of the fields an outcome makes exist (completeness.test.ts). */
+const only = (a: Awaited<ReturnType<typeof check>>, code: string) => onlyCode(a, code).filter((d) => !d.message.includes("does not list it in 'changes'"));
+
 const COMMANDS = `
-    create command open(id: WorkId, title: String) -> Draft
+    create command open(id: WorkId, title: String) -> Draft changes id = id, title = title, tags = [], draftNo = 0
     command rename(newTitle: String, at: Timestamp)
       Draft -> Draft, Review -> Review
       requires named { newTitle != "" } else NotReady
       changes title, updatedAt
       emits Renamed
-    command submit(reviewer: String) Draft -> Review
+    command submit(reviewer: String) Draft -> Review changes reviewer = reviewer
     command renumber(n: Int) Draft -> Draft, Review -> Review changes draftNo
-    command finish(at: Timestamp) Review -> Done
+    command finish(at: Timestamp) Review -> Done changes doneAt = at
     command archive() Done -> Archived
     command clearNote() Draft -> Draft changes note
     command touch() Draft -> Draft`;
@@ -59,7 +62,8 @@ describe('changes in the DSL', () => {
         expect(cmd('rename').changes).toEqual(['title', 'updatedAt']);
         expect(cmd('rename').emits.map((e) => e.event)).toEqual(['Tasks.Renamed']);
         expect(cmd('renumber').changes).toEqual(['draftNo']);
-        expect(cmd('submit').changes).toEqual([]);
+        expect(cmd('submit').changes).toEqual(['reviewer']);
+        expect(cmd('touch').changes).toEqual([]);
         expect(element(a.model, 'Tasks.Tag').commands![1].changes).toEqual(['color']);
     });
 
@@ -84,7 +88,7 @@ describe('changes in the DSL', () => {
         expect(element(a.model, 'Sales.Order').commands![0].changes).toEqual(['changes']);
     });
 
-    test('M021: a field the command can change; not on a factory, not the identity', async () => {
+    test('M021: a field the command can change, a factory lists the fields it sets, not the identity', async () => {
         const a = await work(`
     create command make(id: WorkId) -> Draft changes title
     command a() Draft -> Draft changes titel
@@ -94,25 +98,14 @@ describe('changes in the DSL', () => {
     command e() Done -> Archived changes reviewer
     command f() Draft -> Draft, Review -> Review changes reviewer
     command g() Draft | Review -> Review changes draftNo, reviewer`);
-        // not reported: f (Review -> Review carries `reviewer` over), g (Review -> Review carries both; Draft -> Review sets `reviewer` anyway)
+        // not reported: make (a factory lists the fields it sets, design D), c and e (they end in a state that has the field),
+        // f (Review -> Review carries `reviewer` over), g (Review -> Review carries both; Draft -> Review sets `reviewer`)
         expect(only(a, 'M021').map((d) => [d.message, d.hint])).toEqual([
-            [
-                "Factory command 'make' sets every field of the new 'Work'; 'changes' does not apply to it.",
-                "remove 'changes title'; the decision of 'make' gives every field",
-            ],
             ["'Work' has no field 'titel'.", "did you mean 'title'?"],
             ["Field 'id' is the identity of 'Work' and never changes.", "remove 'id' from 'changes'"],
             [
-                "Field 'reviewer' is in state 'Review', 'Done', 'Archived' only, and no transition of 'c' carries it over (from a state that has it to one that has it, with the same type), so 'changes' cannot apply to it.",
-                "every outcome of 'c' that ends in 'Review' sets 'reviewer' anyway; remove it from 'changes'",
-            ],
-            [
-                "Field 'doneAt' is in state 'Done' only, and no transition of 'd' carries it over (from a state that has it to one that has it, with the same type), so 'changes' cannot apply to it.",
-                "'d' never ends in 'Done', so 'doneAt' is not kept; remove it from 'changes'",
-            ],
-            [
-                "Field 'reviewer' is in state 'Review', 'Done', 'Archived' only, and no transition of 'e' carries it over (from a state that has it to one that has it, with the same type), so 'changes' cannot apply to it.",
-                "every outcome of 'e' that ends in 'Archived' sets 'reviewer' anyway; remove it from 'changes'",
+                "Field 'doneAt' is in state 'Done' only, and 'd' neither keeps it nor ends in a state that has it, so 'changes' cannot apply to it.",
+                "'d' never ends in 'Done'; remove 'doneAt' from 'changes'",
             ],
         ]);
     });

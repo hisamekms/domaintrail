@@ -10,6 +10,7 @@ context Sales {
     email: EmailAddress
 
     create command register(id: CustomerId, name: String, email: AvailableEmail) "顧客を登録する"
+      changes id = id, name = name, email = email
       emits CustomerRegistered
 
     command rename(name: String) "氏名を変更する" changes name

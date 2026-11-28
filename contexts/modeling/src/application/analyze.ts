@@ -1,4 +1,5 @@
 import { buildModel } from '../infrastructure/syntax/build.js';
+import { checkCompleteness } from '../domain/rules/completeness.js';
 import { buildSourceModel } from '../infrastructure/syntax/build-source.js';
 import type { FileResolver } from '../infrastructure/syntax/site.js';
 import type { ModelIndex } from '../infrastructure/syntax/model-index.js';
@@ -75,6 +76,7 @@ export async function analyzeDomain(sources: readonly SourceFile[]): Promise<Dom
         checkKinds(sourceModel, rules);
         checkFactoryIds(sourceModel, rules);
         checkChanges(sourceModel, rules);
+        checkCompleteness(sourceModel, rules);
         checkEventIds(sourceModel, rules);
         checkPayloadNames(sourceModel, rules);
         checkPolicies(sourceModel, rules);

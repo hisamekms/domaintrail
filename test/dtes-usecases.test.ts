@@ -167,6 +167,7 @@ const MODEL = {
 
     create command reserve(id: ReservationId, bike: BikeId)
       -> Reserved
+      changes id = id, bike = bike
       emits BikeReserved
     command expire()
       Reserved -> Expired
@@ -194,6 +195,7 @@ const MODEL = {
 
     create command pickUp(id: LoanId, bike: BikeId)
       -> Lent
+      changes id = id, bike = bike
       emits BikePickedUp
     command giveBack()
       Lent -> Returned
@@ -215,7 +217,7 @@ const MODEL = {
     id: LateFeeId
     loan: Fleet.LoanId
 
-    create command charge(id: LateFeeId, loan: Fleet.LoanId) emits LateFeeCharged
+    create command charge(id: LateFeeId, loan: Fleet.LoanId) changes id = id, loan = loan emits LateFeeCharged
   }
 
   event LateFeeCharged {

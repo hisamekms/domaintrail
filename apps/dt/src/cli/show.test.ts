@@ -16,11 +16,11 @@ test('dt show exposes kind-specific named outcomes and selection obligations', a
         command finish()
         kind COLLECT "回収" {
           depot: String
-          create command openCollect(id: RequestId, depot: String) { outcome opened: -> Unassigned }
+          create command openCollect(id: RequestId, depot: String) { outcome opened: -> Unassigned changes id = id, depot = depot }
           on finish { outcome collected: Unassigned -> Done emits Collected }
         }
         kind DROP_OFF {
-          create command openDropOff(id: RequestId) { outcome opened: -> Unassigned }
+          create command openDropOff(id: RequestId) { outcome opened: -> Unassigned changes id = id }
           on finish { outcome delivered: Unassigned -> Done select "carrier confirmed" @externalCheck("carrier service") emits Delivered }
         }
       }
@@ -57,7 +57,7 @@ describe('policy declarations', () => {
         id: OrderId
         state Draft
         state Confirmed
-        create command place(id: OrderId) -> Draft emits OrderPlaced
+        create command place(id: OrderId) -> Draft changes id = id emits OrderPlaced
         command confirm(at: Timestamp)
           Draft -> Confirmed
           emits OrderConfirmed
@@ -81,8 +81,8 @@ describe('policy declarations', () => {
         state Sent {
           sentAt: Timestamp
         }
-        create command issue(id: InvoiceId, order: Sales.OrderId, total: Money, note: String?) -> Open
-        command send(sentAt: Timestamp, lines: Amount[1..3]) Open -> Sent
+        create command issue(id: InvoiceId, order: Sales.OrderId, total: Money, note: String?) -> Open changes id = id, order = order
+        command send(sentAt: Timestamp, lines: Amount[1..3]) Open -> Sent changes sentAt = sentAt
       }
       /// 確定した注文は請求する。
       policy BillConfirmedOrder "請求する" when Sales.OrderConfirmed -> Invoice.issue

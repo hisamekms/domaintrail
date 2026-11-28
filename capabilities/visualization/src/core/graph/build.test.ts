@@ -63,11 +63,11 @@ describe('State View graph', () => {
             state Holding
             command finish()
             kind COLLECT {
-              create command startCollect(id: AId) { outcome started: -> Open }
+              create command startCollect(id: AId) { outcome started: -> Open changes id = id }
               on finish { outcome collected: Open -> Collected }
             }
             kind DROP_OFF {
-              create command startDropOff(id: AId) { outcome started: -> Open }
+              create command startDropOff(id: AId) { outcome started: -> Open changes id = id }
               on finish { outcome holding: Open -> Holding select "confirmed" @externalCheck("carrier") }
             }
           }
@@ -158,7 +158,7 @@ describe('State View graph', () => {
     state Open
     state Held
     state Closed
-    create command open() -> Open | Held
+    create command open() -> Open | Held changes id
     command keep() Open -> Open, Held -> Held
     command step()
       Open -> Held
@@ -223,7 +223,7 @@ const MULTI = `context S {
   event Held "保留" { id: AId }
   aggregate A {
     id: AId
-    create command open() -> Open
+    create command open() -> Open changes id
     state Open
     state Held
     state Closed

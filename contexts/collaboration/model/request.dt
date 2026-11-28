@@ -131,6 +131,7 @@ context Collaboration {
       } else WorkspaceTarget
       requires atMostTwentyMentions "言及する人は20人まで" { mentions.length <= 20 } else TooManyMentions
       requires distinctMentions "同じ人の言及は1回" { mentions.unique() } else DuplicateMention
+      changes id = id, session = session, author = author, targets = targets, body = body, sentAt = sentAt, mentions = mentions
       emits RequestSent
 
     /// ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
@@ -139,11 +140,13 @@ context Collaboration {
       requires facilitatorReverts "ファシリテーターが打ち消す" {
         authorRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      changes id = id, session = session, author = author, targets, body = body, sentAt = sentAt, mentions
       emits RequestSent
 
     /// 参加者が付箋を直した（ADR 0033）。誰でも直せる。対象も言及もなく、本文は何を直したかの一文。
     create command recordEdit(id: RequestId, session: ActiveSession, author: ParticipantId, body: Text, sentAt: Timestamp, edit: StickyEdit) "付箋の手直しを記録する"
       -> Sent
+      changes id = id, session = session, author = author, targets, body = body, sentAt = sentAt, mentions
       emits RequestSent
 
     /// 読むだけの AI（回答役）が、相談のメッセージに答える。書き手は AI（`ai`）で、答えたメッセージへの返信。対象も言及もない。
@@ -151,6 +154,7 @@ context Collaboration {
     /// 答えるメッセージがなく、返信にならない。
     create command answer(id: RequestId, session: ActiveSession, answers: RequestId? "答えるメッセージ", body: Text, sentAt: Timestamp, journeyNote: JourneyNote?) "AI が答える"
       -> Sent
+      changes id = id, session = session, author, targets, body = body, sentAt = sentAt, mentions
       emits RequestSent
 
     /// 本文を墨消しする: 個人のデータを消すため（消したナレッジの出典だったメッセージ、ADR 0031 の 7）。本文を決まった文に

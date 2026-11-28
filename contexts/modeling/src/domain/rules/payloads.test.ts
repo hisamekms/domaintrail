@@ -82,7 +82,7 @@ describe('M022: event and error fields named after their source', () => {
   value Item { sku: Sku code: Sku }
   aggregate Order {
     id: OrderId
-    create command place(id: OrderId, item: Item) emits Placed, Noted
+    create command place(id: OrderId, item: Item) changes id = id emits Placed, Noted
   }
   event Placed { orderId: OrderId sku: Sku }
   event Noted { orderId: OrderId productCode: Sku }`;
@@ -111,7 +111,7 @@ describe('M022: event and error fields named after their source', () => {
   fields Owned { owner: StaffId }
   aggregate Order with Owned {
     id: OrderId
-    create command place(id: OrderId, owner: StaffId) emits Placed
+    create command place(id: OrderId, owner: StaffId) changes owner = owner, id = id emits Placed
   }
   event Placed with Performed { orderId: OrderId owner: StaffId }`;
         expect(await m022(body)).toEqual([

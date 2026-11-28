@@ -246,6 +246,7 @@ context Booking "会議室予約" {
 
     create command request(id: ReservationId, room: RoomId, slot: Slot, attendees: Headcount) "申し込む"
       -> Requested
+      changes id = id, room = room, slot = slot, attendees = attendees
       emits ReservationRequested
   }
 
@@ -292,10 +293,12 @@ context Booking "会議室予約" {
 
     create command request(id: ReservationId, room: RoomId, slot: Slot, attendees: Headcount) "申し込む"
       -> Requested
+      changes id = id, room = room, slot = slot, attendees = attendees
       emits ReservationRequested
     command confirm(capacity: Headcount, at: Timestamp) "確定する"
       Requested -> Confirmed
       requires roomFits "部屋に収まる" { attendees <= capacity } else RoomTooSmall
+      changes confirmedAt = at
       emits ReservationConfirmed
   }
 

@@ -23,7 +23,9 @@ ${extra ? `  ${extra}\n` : ''}
     id: CustomerId
     email: EmailAddress
     spent: Decimal
-    create command register(id: CustomerId, email: AvailableEmail) emits CustomerRegistered
+    create command register(id: CustomerId, email: AvailableEmail)
+      changes id = id, email = email, spent = 0, contact = email
+      emits CustomerRegistered
     command changeEmail(newEmail: AvailableEmail)
       requires changed { newEmail != email } else Unchanged
       changes email

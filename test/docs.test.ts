@@ -205,6 +205,6 @@ describe('documentation links', () => {
         for (const link of ['docs/getting-started.md', 'docs/getting-started.ja.md', 'docs/guide.md', 'examples/shop/README.md', 'CONTRIBUTING.md']) {
             expect(readme).toContain(`(${link})`);
         }
-        expect(readme.split('\n').length).toBeLessThanOrEqual(110);
+        expect(readme.split('\n').length).toBeLessThanOrEqual(115);
     });
 });

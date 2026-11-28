@@ -2,7 +2,16 @@ import { readFile, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import * as path from 'node:path';
 import { Command, InvalidArgumentError, Option } from 'commander';
-import { semanticIROf, contextNames, formatDomain, generationGateDiagnostics, hasExternalObligations, migrateDomain } from '@domaintrail/modeling';
+import {
+    analyzeDomain,
+    completeChanges,
+    semanticIROf,
+    contextNames,
+    formatDomain,
+    generationGateDiagnostics,
+    hasExternalObligations,
+    migrateDomain,
+} from '@domaintrail/modeling';
 import { declarations, formatStorming, isStormingFile, migrateStorming, openGaps } from '@domaintrail/storming';
 import { generateTypeScript, policyModes, staysInside, targetCapabilityDiagnostics, testsWarnings } from '@domaintrail/generation';
 import { type Analysis, analyze } from '@domaintrail/analysis';
@@ -643,8 +652,10 @@ Examples:
             let rewritten = 0;
             let changed = 0;
             let unparsed = 0;
+            const migrated = new Map<string, string>();
             for (const e of entries) {
                 const m = migrateDomain(await readFile(e.file, 'utf8'));
+                if (m.parsed) migrated.set(e.file, m.text);
                 if (!m.parsed) {
                     unparsed++;
                     io.err(`${e.path} - not migrated: it does not parse (\`dt check\` shows why)`);
@@ -656,9 +667,28 @@ Examples:
                 changed++;
                 if (!opts.dryRun) await writeFile(e.file, m.text);
             }
-            io.out(
-                `${entries.length} file(s): ${rewritten} construct(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'} in ${changed} file(s), ${unparsed} not parsed.`,
+            // design D: every outcome lists the non-optional fields it makes exist, read with the rest of the workspace
+            const dtFiles = [...new Set([...all.filter((e) => !isStormingFile(e.path)).map((e) => e.file), ...entries.map((e) => e.file)])];
+            const sources = await Promise.all(
+                dtFiles.map(async (file) => ({ path: path.relative(cfg.root, file), text: migrated.get(file) ?? (await readFile(file, 'utf8')) })),
             );
+            const chosen = new Set(entries.map((e) => e.path));
+            let listed = 0;
+            for (const done of completeChanges(await analyzeDomain(sources))) {
+                if (!chosen.has(done.path)) continue;
+                for (const a of done.added) io.out(`${done.path}:${a.line} - outcome ${a.outcome}: changes ${a.changes}`);
+                listed += done.added.length;
+                if (
+                    !migrated.has(path.join(cfg.root, done.path)) ||
+                    migrated.get(path.join(cfg.root, done.path)) === (await readFile(path.join(cfg.root, done.path), 'utf8'))
+                )
+                    changed++;
+                if (!opts.dryRun) await writeFile(path.join(cfg.root, done.path), done.text);
+            }
+            io.out(
+                `${entries.length} file(s): ${rewritten} construct(s) ${opts.dryRun ? 'to rewrite' : 'rewritten'}, ${listed} outcome(s) ${opts.dryRun ? 'to complete' : 'completed'} in 'changes', in ${changed} file(s), ${unparsed} not parsed.`,
+            );
+            if (listed) io.out("A bare 'changes f' leaves the field's value open: write 'changes f = …' where the model decides it.");
             exitCode = unparsed ? 1 : 0;
         });
 

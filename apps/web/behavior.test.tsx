@@ -205,7 +205,7 @@ describe('changes in the DSL', () => {
         id: TagId
         name: String
         color: String
-        create command make(id: TagId, name: String, color: String)
+        create command make(id: TagId, name: String, color: String) changes id = id, name = name, color = color
         command recolor(color: String) changes color
       }
       ${extra}
@@ -214,15 +214,15 @@ describe('changes in the DSL', () => {
         });
 
     const COMMANDS = `
-        create command open(id: WorkId, title: String) -> Draft
+        create command open(id: WorkId, title: String) -> Draft changes id = id, title = title, tags = [], draftNo = 0
         command rename(newTitle: String, at: Timestamp)
           Draft -> Draft, Review -> Review
           requires named { newTitle != "" } else NotReady
           changes title, updatedAt
           emits Renamed
-        command submit(reviewer: String) Draft -> Review
+        command submit(reviewer: String) Draft -> Review changes reviewer = reviewer
         command renumber(n: Int) Draft -> Draft, Review -> Review changes draftNo
-        command finish(at: Timestamp) Review -> Done
+        command finish(at: Timestamp) Review -> Done changes doneAt = at
         command archive() Done -> Archived
         command clearNote() Draft -> Draft changes note
         command touch() Draft -> Draft`;
@@ -244,6 +244,6 @@ describe('changes in the DSL', () => {
         expect(card('rename')).toContain(
             `<div class="bcard-caption">${MESSAGES.ja.changedFields}</div><div class="bcard-changes"><code class="bcard-change">title</code><code class="bcard-change">updatedAt</code></div>`,
         );
-        expect(card('submit')).not.toContain('bcard-changes');
+        expect(card('touch')).not.toContain('bcard-changes');
     });
 });

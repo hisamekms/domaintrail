@@ -128,7 +128,7 @@ export function checkLifecycles(model: SourceModel, rules: RuleSink): void {
                     rules.error('M028', `Aggregate '${agg.name}' has no field '${change.name}' to change.`, change.at);
                 // a create sets the identity (`changes id = id`, design D); any other outcome keeps it
                 if (change.name === 'id' && !cmd.factory) rules.error('M028', `Identity field 'id' cannot be changed by outcome '${o.name}'.`, change.at);
-                if (f?.readonly) rules.error('M028', `Readonly field '${change.name}' cannot be changed by outcome '${o.name}'.`, change.at);
+                if (f?.readonly && !cmd.factory) rules.error('M028', `Readonly field '${change.name}' cannot be changed by outcome '${o.name}'.`, change.at);
             }
         };
         for (const cmd of commands) {

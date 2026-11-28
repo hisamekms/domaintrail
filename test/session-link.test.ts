@@ -27,7 +27,7 @@ const DT = `context Shop {
 
     state Open
 
-    create command start(id: OrderId) -> Open
+    create command start(id: OrderId) -> Open changes id = id
   }
 }
 `;

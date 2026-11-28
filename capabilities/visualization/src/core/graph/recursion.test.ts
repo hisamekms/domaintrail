@@ -18,7 +18,7 @@ const MODEL = `context M {
     id: DocId
     owns rule: Rule
     state Open { draft: Expr? }
-    create command start(id: DocId, rule: Rule) -> Open
+    create command start(id: DocId, rule: Rule) -> Open changes id = id, rule = rule
   }
 }
 context N {

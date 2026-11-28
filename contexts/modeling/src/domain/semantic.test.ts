@@ -187,10 +187,10 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
     kind P {
       w: V
       invariant pw { w.level > n && w.x > 0 && level > 0 }
-      create command mkP(id: AId, n: Int, w: V, level: Int, o: V) { outcome made: -> Open }
+      create command mkP(id: AId, n: Int, w: V, level: Int, o: V) { outcome made: -> Open changes level = level, id = id, n = n, w = w, o = o }
       command fin() { outcome f: Open -> Done requires q { w.level > 0 && o.level > 0 } else Bad }
     }
-    kind Q { create command mkQ(id: AId, n: Int, level: Int, o: V) { outcome made: -> Open } }
+    kind Q { create command mkQ(id: AId, n: Int, level: Int, o: V) { outcome made: -> Open changes level = level, id = id, n = n, o = o } }
   }
   error Bad
 }`,
@@ -292,14 +292,14 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             ['carried', 'items'],
             ['carried', 'customer'],
             ['carried', 'note'],
-            ['unspecified', 'reason'],
+            ['parameter', 'reason'],
         ]);
         expect(confirmedCancel.some((fact) => fact.field === 'confirmedAt')).toBe(false);
-        expect(provenance.filter((fact) => fact.declaration === 'Sales.Order:place->Draft' && fact.kind === 'unspecified').map((fact) => fact.field)).toEqual([
-            'id',
-            'items',
-            'customer',
-            'note',
+        // `changes id = id, items = [], customer = customer`; `note` is optional and starts as null
+        expect(provenance.filter((fact) => fact.declaration === 'Sales.Order:place->Draft' && fact.field).map(({ kind, field }) => [kind, field])).toEqual([
+            ['parameter', 'id'],
+            ['explicitAssignment', 'items'],
+            ['parameter', 'customer'],
         ]);
         const choiceAnalysis = await analyzeDomain([
             {
@@ -603,21 +603,21 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         );
         expect(outcomes).toEqual({
             'Billing.Invoice': {
-                'Billing.Invoice:issue': [{ from: [], to: 'Billing.Invoice#Open', changes: [] }],
-                'Billing.Invoice:pay': [{ from: ['Billing.Invoice#Open'], to: 'Billing.Invoice#Paid', changes: [] }],
+                'Billing.Invoice:issue': [{ from: [], to: 'Billing.Invoice#Open', changes: ['id', 'order', 'billedAmount'] }],
+                'Billing.Invoice:pay': [{ from: ['Billing.Invoice#Open'], to: 'Billing.Invoice#Paid', changes: ['paidAt'] }],
             },
             'Sales.Customer': {
-                'Sales.Customer:register': [{ from: [], to: undefined, changes: [] }],
+                'Sales.Customer:register': [{ from: [], to: undefined, changes: ['id', 'name', 'email'] }],
                 'Sales.Customer:rename': [{ from: [], to: undefined, changes: ['name'] }],
                 'Sales.Customer:changeEmail': [{ from: [], to: undefined, changes: ['email'] }],
             },
             'Sales.Order': {
-                'Sales.Order:place': [{ from: [], to: 'Sales.Order#Draft', changes: [] }],
+                'Sales.Order:place': [{ from: [], to: 'Sales.Order#Draft', changes: ['id', 'items', 'customer'] }],
                 'Sales.Order:addItem': [{ from: ['Sales.Order#Draft'], to: 'Sales.Order#Draft', changes: ['items'] }],
-                'Sales.Order:confirm': [{ from: ['Sales.Order#Draft'], to: 'Sales.Order#Confirmed', changes: [] }],
+                'Sales.Order:confirm': [{ from: ['Sales.Order#Draft'], to: 'Sales.Order#Confirmed', changes: ['confirmedAt'] }],
                 'Sales.Order:cancel': [
-                    { from: ['Sales.Order#Draft'], to: 'Sales.Order#Cancelled', changes: [] },
-                    { from: ['Sales.Order#Confirmed'], to: 'Sales.Order#Cancelled', changes: [] },
+                    { from: ['Sales.Order#Draft'], to: 'Sales.Order#Cancelled', changes: ['reason'] },
+                    { from: ['Sales.Order#Confirmed'], to: 'Sales.Order#Cancelled', changes: ['reason'] },
                 ],
                 'Sales.Order:changeNote': [
                     { from: ['Sales.Order#Draft'], to: 'Sales.Order#Draft', changes: ['note'] },
@@ -625,32 +625,24 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                 ],
             },
         });
+        // design D: what each outcome lists with a value is given; only `changes x` without one is left open
         expect(ir.unspecified.map(({ kind, declaration, field }) => [kind, declaration, field])).toEqual([
-            ['createField', 'Billing.Invoice:issue->Open', 'id'],
-            ['createField', 'Billing.Invoice:issue->Open', 'order'],
-            ['createField', 'Billing.Invoice:issue->Open', 'billedAmount'],
-            ['targetOnlyField', 'Billing.Invoice:pay->Paid', 'paidAt'],
-            ['createField', 'Sales.Customer:register->*', 'id'],
-            ['createField', 'Sales.Customer:register->*', 'name'],
-            ['createField', 'Sales.Customer:register->*', 'email'],
             ['changesWithoutExpression', 'Sales.Customer:rename->*', 'name'],
             ['changesWithoutExpression', 'Sales.Customer:changeEmail->*', 'email'],
-            ['createField', 'Sales.Order:place->Draft', 'id'],
-            ['createField', 'Sales.Order:place->Draft', 'items'],
-            ['createField', 'Sales.Order:place->Draft', 'customer'],
-            ['createField', 'Sales.Order:place->Draft', 'note'],
             ['changesWithoutExpression', 'Sales.Order:addItem->Draft', 'items'],
-            ['targetOnlyField', 'Sales.Order:confirm->Confirmed', 'confirmedAt'],
-            ['targetOnlyField', 'Sales.Order:cancel->Cancelled', 'reason'],
-            ['targetOnlyField', 'Sales.Order:cancel->Cancelled', 'reason'],
             ['changesWithoutExpression', 'Sales.Order:changeNote->Draft', 'note'],
             ['changesWithoutExpression', 'Sales.Order:changeNote->Confirmed', 'note'],
         ]);
         const outcomeIds = new Set(ir.aggregates.flatMap((aggregate) => aggregate.outcomes.map((item) => item.id)));
         expect(ir.unspecified.filter((fact) => fact.declaration.includes('->')).every((fact) => outcomeIds.has(fact.declaration))).toBe(true);
         expect(
-            ir.unspecified.filter((fact) => fact.declaration === 'Sales.Order:cancel->Cancelled' && fact.field === 'reason').map(({ source }) => source),
-        ).toEqual(['Sales.Order#Draft', 'Sales.Order#Confirmed']);
+            ir.provenance
+                .filter((fact) => fact.declaration === 'Sales.Order:cancel->Cancelled' && fact.field === 'reason')
+                .map(({ kind, source }) => [kind, source]),
+        ).toEqual([
+            ['parameter', 'Sales.Order#Draft'],
+            ['parameter', 'Sales.Order#Confirmed'],
+        ]);
     });
 
     test('projects a kind on-case outcome from the Typed Model', async () => {
@@ -701,7 +693,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
             kind Retail {
               on finish {
                 requires ready "order is ready" else NotReady
-                outcome completed: Draft -> Done changes note
+                outcome completed: Draft -> Done changes note, marker
               }
             }
           }
@@ -716,7 +708,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         expect(ir.unspecified.map(({ kind, declaration, field, source }) => [kind, declaration, field, source])).toEqual([
             ['expressionFreeRequirement', 'Sales.Order/Retail:on:finish.requires.ready', undefined, undefined],
             ['changesWithoutExpression', 'Sales.Order/Retail:on:finish->completed', 'note', 'Sales.Order#Draft'],
-            ['targetOnlyField', 'Sales.Order/Retail:on:finish->completed', 'marker', 'Sales.Order#Draft'],
+            ['changesWithoutExpression', 'Sales.Order/Retail:on:finish->completed', 'marker', 'Sales.Order#Draft'],
         ]);
         for (const id of ['Sales.Order/Retail:on:finish->completed', 'Sales.Order/Retail:on:finish.requires.ready']) {
             expect(aggregate.outcomes.filter((item) => item.id === id)).toHaveLength(id.endsWith('completed') ? 1 : 0);
@@ -769,7 +761,7 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
                     }
                     initial A
                     command finish()
-                      A | B -> Done
+                      A | B -> Done changes added
                   }
                 }`,
             },
@@ -909,19 +901,20 @@ context Shop { id CustomerId: UUID aggregate Customer { id: CustomerId balance: 
         expect(new Set(obligations.map((item) => item.declaration)).size).toBe(obligations.length);
     });
 
-    test('marks create fields from a field set as unspecified', async () => {
+    test('a create field from a field set, listed without a value, is unspecified', async () => {
         const analysis = await analyzeDomain([
             {
                 path: 'sales.dt',
                 text: `context Sales {
               id ItemId: UUID
               fields Audited { createdAt: Timestamp }
-              aggregate Item with Audited { id: ItemId state Ready create command create(id: ItemId) -> Ready }
+              aggregate Item with Audited { id: ItemId state Ready create command create(id: ItemId) -> Ready changes createdAt, id = id }
             }`,
             },
         ]);
         const ir = semanticIROf(analysis);
-        expect(ir.unspecified.filter((fact) => fact.kind === 'createField').map((fact) => fact.field)).toContain('createdAt');
+        expect(ir.unspecified.filter((fact) => fact.kind === 'changesWithoutExpression').map((fact) => fact.field)).toEqual(['createdAt']);
+        expect(ir.provenance.filter((fact) => fact.field === 'id').map((fact) => fact.kind)).toEqual(['parameter']);
     });
 
     test('declares enum values, primitive constraints and on-cases, resolving requirement errors', async () => {

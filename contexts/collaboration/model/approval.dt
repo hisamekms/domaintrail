@@ -30,6 +30,7 @@ context Collaboration {
       requires facilitatorApproves "ファシリテーターが承認する" {
         approvedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      changes id = id, session = session, assumption = assumption, approvedBy = approvedBy, approvedAt = approvedAt
       emits AssumptionApproved
   }
 

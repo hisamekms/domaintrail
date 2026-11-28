@@ -46,9 +46,10 @@ const WORK = `context Tasks {
     state Completed { completedAt: Timestamp }
     state Cancelled
 
-    create command open(id: WorkId) -> Draft emits WorkOpened, ItemAdded[0..*]
+    create command open(id: WorkId) -> Draft changes id = id emits WorkOpened, ItemAdded[0..*]
     command progress(at: Timestamp)
       InProgress -> InProgress | Completed
+      changes completedAt
       emits StepRecorded,
             WorkCompleted when -> Completed
       errors NotReady

@@ -45,6 +45,7 @@ context Collaboration {
 
     create command start(id: SessionId, facilitator: ParticipantId, name: DisplayName, mode: SessionMode, startedAt: Timestamp) "セッションを始める"
       -> Open
+      changes id = id, facilitator = facilitator, mode = mode, participants, startedAt = startedAt
       emits SessionStarted
 
     /// 認証された人が初めて参加する。同じ人が開き直しても参加し直しにはならない。ひとりのセッションにはほかの人は参加しない。
@@ -78,6 +79,7 @@ context Collaboration {
       requires facilitatorCloses "ファシリテーターが終える" {
         closedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      changes closedAt = closedAt
       emits SessionClosed
   }
 

@@ -24,7 +24,7 @@ const BEFORE = `
     total: Int
     state Open
     state Done
-    create command place(id: OrderId) -> Open emits Placed
+    create command place(id: OrderId) -> Open changes id = id, note, total emits Placed
     command close() Open -> Done errors Closed
     command drop() Open -> Done
   }`;
@@ -38,7 +38,7 @@ const AFTER = `
     memo: String?
     state Open
     state Done
-    create command place(id: OrderId) -> Open emits Placed
+    create command place(id: OrderId) -> Open changes id = id, total emits Placed
     command close(reason: String) Open -> Done
     command reopen() Done -> Open
   }`;

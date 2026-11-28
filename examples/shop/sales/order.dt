@@ -25,6 +25,7 @@ context Sales {
 
     create command place(id: OrderId, customer: CustomerId) "注文する"
       -> Draft
+      changes id = id, items = [], customer = customer
       emits OrderPlaced
 
     state Draft "下書き"
@@ -51,6 +52,7 @@ context Sales {
     command confirm(at: Timestamp) "注文を確定する"
       Draft -> Confirmed
       requires hasItems "明細が1件以上" { items.length > 0 } else EmptyOrder
+      changes confirmedAt = at
       emits OrderConfirmed
 
     command cancel(reason: CancelReason) "注文を取り消す"
@@ -58,6 +60,7 @@ context Sales {
       requires noteForOther "その他の取消には備考が必要" {
         !(reason == CancelReason.Other) || note != null
       } else NoteRequired
+      changes reason = reason
       emits OrderCancelled,
             RefundRequested when Confirmed -> // 確定済みの注文を取り消したときだけ
 

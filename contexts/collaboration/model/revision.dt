@@ -71,6 +71,7 @@ context Collaboration {
       requires notRestored "復元でない" { origin.kind != RevisionOrigin.Restored } else RestoreNeedsCheck
       /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
       requires hashMatchesFiles "内容ハッシュがファイルと合う" @externalCheck("内容ハッシュをファイル内容から再計算して照合する") else ContentHashMismatch
+      changes id = id, session = session, origin = origin, contentHash = contentHash, files = files, validation = validation, takenAt = takenAt
       emits RevisionRecorded
 
     /// 復元前のスナップショットを取ったあとで、過去のリビジョンの内容を書き戻し、新しいリビジョンとして記録する。
@@ -82,6 +83,7 @@ context Collaboration {
       } else FacilitatorOnly
       /// 内容ハッシュは、ファイルのパスと内容ハッシュの並び（パス順）から決まる。
       requires hashMatchesFiles "内容ハッシュがファイルと合う" @externalCheck("内容ハッシュをファイル内容から再計算して照合する") else ContentHashMismatch
+      changes id = id, session = session, origin, contentHash = contentHash, files = files, validation = validation, takenAt = takenAt
       emits RevisionRestored
   }
 

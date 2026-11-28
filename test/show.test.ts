@@ -37,7 +37,7 @@ describe('dt show', () => {
         expect(r.out).toContain('  references customer: CustomerId -> Customer "顧客" (from type)');
         expect(r.out).toContain('  note: String? "備考" (from term)');
         expect(r.out).toContain('  invariant distinctSkus "商品コードは明細ごとに一意" { items.unique(item => item.sku) }');
-        expect(r.out).toContain('  state Cancelled "取消済み"  // sales/order.dt:37');
+        expect(r.out).toContain('  state Cancelled "取消済み"  // sales/order.dt:38');
         expect(r.out).toContain('    reason: CancelReason "取消理由" (from term)');
         expect(r.out).toContain(
             '  create command place(id: OrderId "注文ID" (from type), customer: CustomerId "顧客ID" (from type)) "注文する"  // sales/order.dt:26',
@@ -73,29 +73,30 @@ describe('dt show', () => {
         const r = await shop('Order.confirm');
         expect(r.code).toBe(0);
         expect(r.out).toEqual([
-            'command Sales.Order.confirm(at: Timestamp "日時" (from term)) "注文を確定する"  // sales/order.dt:51',
+            'command Sales.Order.confirm(at: Timestamp "日時" (from term)) "注文を確定する"  // sales/order.dt:52',
             '  Draft -> Confirmed',
             '  requires hasItems "明細が1件以上" { items.length > 0 } else EmptyOrder',
+            '  changes confirmedAt',
             '  emits OrderConfirmed',
             '  outcomes',
             '    Draft -> Confirmed: emits OrderConfirmed',
             '      sets confirmedAt; carries id, items, customer, note',
             '  events',
-            '    OrderConfirmed "注文確定" { orderId: OrderId "注文ID" (from term), confirmedAt: Timestamp "確定日時" (from term) }  // sales/order.dt:84',
+            '    OrderConfirmed "注文確定" { orderId: OrderId "注文ID" (from term), confirmedAt: Timestamp "確定日時" (from term) }  // sales/order.dt:87',
             '  errors',
-            '    EmptyOrder "明細なし"  // sales/order.dt:105',
+            '    EmptyOrder "明細なし"  // sales/order.dt:108',
         ]);
         const cancel = await shop('Sales.Order.cancel');
         expect(cancel.out).toContain('    Draft -> Cancelled: emits OrderCancelled');
         expect(cancel.out).toContain('      sets reason; carries id, items, customer, note; drops confirmedAt');
-        expect(cancel.out).toContain('    NoteRequired "備考なし"  // sales/order.dt:116');
+        expect(cancel.out).toContain('    NoteRequired "備考なし"  // sales/order.dt:119');
     });
 
     test('a state: its fields, invariants and the commands that enter and leave it', async () => {
         const r = await shop('Sales.Order.Confirmed');
         expect(r.code).toBe(0);
         expect(r.out).toEqual([
-            'state Sales.Order.Confirmed "確定済み"  // sales/order.dt:32',
+            'state Sales.Order.Confirmed "確定済み"  // sales/order.dt:33',
             '  /// 顧客が注文を確定した日時。キャンセル可否の判定に使う。',
             '  confirmedAt: Timestamp "確定日時" (from term)',
             '  invariant hasItems "明細が1件以上" { items.length > 0 }',
@@ -114,7 +115,7 @@ describe('dt show', () => {
             '  policy BillConfirmedOrder "確定した注文に請求する" when Sales.OrderConfirmed -> Invoice.issue  // billing/context.dt:9',
             '  id InvoiceId "請求書ID": UUID  // billing/invoice.dt:2',
             '  aggregate Invoice "請求書" (states Open, Paid)  // billing/invoice.dt:4',
-            '  persistent event InvoicePaid "支払完了"  // billing/invoice.dt:22',
+            '  persistent event InvoicePaid "支払完了"  // billing/invoice.dt:25',
         ]);
     });
 
@@ -215,7 +216,7 @@ describe('dt show --format json', () => {
         expect(doc.show).toBe('element');
         expect(doc.modelErrors).toBeUndefined();
         expect(doc.element.id).toBe('Sales.Order');
-        expect(doc.element.location).toEqual({ file: 'sales/order.dt', line: 13, endLine: 71 });
+        expect(doc.element.location).toEqual({ file: 'sales/order.dt', line: 13, endLine: 74 });
         expect(doc.element.fields.find((f: { name: string }) => f.name === 'note')).toMatchObject({ label: '備考', labelSource: 'term', multiplicity: '?' });
         const cancel = doc.element.commands.find((c: { name: string }) => c.name === 'cancel');
         expect(cancel.outcomes).toEqual([

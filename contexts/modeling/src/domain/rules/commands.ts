@@ -268,26 +268,17 @@ export function checkChanges(model: SourceModel, rules: RuleSink): void {
             if (!cmd.changes.length) continue;
             // a kind's command also changes the fields of its kind (ADR 0037)
             const own = [...common, ...kinds.filter((k) => k.name === cmd.ofKind).flatMap(kindFields)];
-            if (cmd.factory) {
-                const hint = `remove 'changes ${cmd.changes.map((c) => c.name).join(', ')}'; the decision of '${cmd.name}' gives every field`;
-                rules.error(
-                    'M021',
-                    `Factory command '${cmd.name}' sets every field of the new '${agg.name}'; 'changes' does not apply to it.`,
-                    cmd.changes[0]!.at,
-                    hint,
-                );
-                continue;
-            }
             const outcomes = cmd.transitions.flatMap((t) => t.from.flatMap((f) => t.to.map((to) => ({ from: f.target, to: to.target }))));
             for (const { name, at } of cmd.changes) {
                 if (checkChangedPath(agg, name, at, rules)) continue;
-                if (name === identity) {
+                // a create sets the fields of the new aggregate, its identity and readonly fields included (design D)
+                if (name === identity && !cmd.factory) {
                     rules.error('M021', `Field '${name}' is the identity of '${agg.name}' and never changes.`, at, `remove '${name}' from 'changes'`);
                     continue;
                 }
                 const field = own.find((f) => f.name === name);
                 if (field) {
-                    if (field.readonly)
+                    if (field.readonly && !cmd.factory)
                         rules.error('M021', `Readonly field '${name}' cannot be changed by command '${cmd.name}'.`, at, `remove '${name}' from 'changes'`);
                     continue;
                 }
@@ -317,15 +308,16 @@ export function checkChanges(model: SourceModel, rules: RuleSink): void {
                     })
                 )
                     continue;
-                const entered = outcomes.filter(({ to }) => fieldIn(to, name)).map(({ to }) => to!.name);
-                const hint = entered.length
-                    ? `every outcome of '${cmd.name}' that ends in ${quotedList([...new Set(entered)])} sets '${name}' anyway; remove it from 'changes'`
-                    : `'${cmd.name}' never ends in ${quotedList(where)}, so '${name}' is not kept; remove it from 'changes'`;
+                // a field new in a target state is listed to say what it starts as (design D)
+                const entered = [...cmd.transitions.flatMap((t) => t.to.map((r) => r.target)), ...(cmd.factory ? states : [])].filter((to) =>
+                    fieldIn(to, name),
+                );
+                if (entered.length) continue;
                 rules.error(
                     'M021',
-                    `Field '${name}' is in state ${quotedList(where)} only, and no transition of '${cmd.name}' carries it over (from a state that has it to one that has it, with the same type), so 'changes' cannot apply to it.`,
+                    `Field '${name}' is in state ${quotedList(where)} only, and '${cmd.name}' neither keeps it nor ends in a state that has it, so 'changes' cannot apply to it.`,
                     at,
-                    hint,
+                    `'${cmd.name}' never ends in ${quotedList(where)}; remove '${name}' from 'changes'`,
                 );
             }
         }

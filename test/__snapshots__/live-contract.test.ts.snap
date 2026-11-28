@@ -49,9 +49,9 @@ exports[`the Live View server pushes the same payload shape as /api/state, with 
 
 exports[`dt generate ts writes the same files with the same contents for the example 1`] = `
 {
-  "Billing.ts": "174ac7e2cbd02ba745bff3ac894d485c8535ee572627287e0334ae4428aee116",
+  "Billing.ts": "21490b351a5635e65fe5cd91aa32d94f0c4f73d4bfb0c7c1f6614c8fa464662d",
   "Common.ts": "6cba68498f51825d62771aac8829906c9b3eadedd97da537dad31dc4a2ef7d05",
-  "Sales.ts": "28c87792b53b9c7eb219dbf9206a38b22891a4b877ab2b1193b7d88a59c3823b",
+  "Sales.ts": "74fa30740ab438102ea53e3cf949d6d94b06c3ce3eb7c878ac2427d00cc8e749",
   "_runtime.ts": "7731c3b430398d8e81f5207636356a35f4f690ae741d0acb56fe5af0eec900d0",
   "index.ts": "4d3e88b042004cc4639047a0b4d04eef324ade013e3303a74d8497a3049c2baa",
   "tests/Billing.ts": "3ffbba3beb52f50aa189db3349d27f913a80ce9cbea363dab09fafc9edcac3e2",

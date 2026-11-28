@@ -29,7 +29,7 @@ const SALES = `context Sales "販売" {
       confirmedAt: Timestamp
       invariant hasNote "備考あり" { note != null }
     }
-    command confirm(at: Timestamp "確定する日時") "確定する" Draft -> Confirmed
+    command confirm(at: Timestamp "確定する日時") "確定する" Draft -> Confirmed changes confirmedAt
   }
 }`;
 

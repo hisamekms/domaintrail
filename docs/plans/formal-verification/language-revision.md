@@ -25,6 +25,14 @@ parameters are bare, fields use `before.x`, and `after` is unavailable. `ensures
 lone equality such as `after.x == e` is diagnosed and moved to `changes x = e`. Keep parameter restrictions and
 placement after `emits`.
 
+Decision 3a (maintainer, 2026-11-28) completes design D: an outcome lists in `changes` every non-optional field it
+makes exist, and the value stays optional. A create lists every field of the new aggregate (`id` included; the
+common fields, its kind's and its target state's), a transition the fields new in its target state; an optional field
+not listed starts as `null`. A bare `changes f` keeps meaning "set, value left open". The listing favours a reader
+(human or AI) who sees on the outcome every field it gives, and a change that adds a field is reported at each outcome
+that must now give it. `dt migrate domain` writes `f = f` where the command has a parameter of that name and `f`
+otherwise. `changes` on a create and a target state's field on a transition into it are therefore allowed.
+
 Decision 4 adopts list literals `[]` and `[a, b]`, spread `[...xs, x]`, and `.map(f)`, `.filter(p)`, and `.sum(f)`;
 trial task (b) is a task in the trial domain (not shop) that needs `.sum`, such as a total over line items. Decision 5
 includes pure user-defined typed, expression-bodied predicates and functions, with no

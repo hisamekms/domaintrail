@@ -43,7 +43,7 @@ const SOURCES = {
     id: OrderId
     qty: Qty?
     invariant ok { qty == qty }
-    create command place(id: OrderId, unit: Unit) -> Open
+    create command place(id: OrderId, unit: Unit) -> Open changes by, at, note, id = id, since
     state Open { since: Timestamp  invariant fresh { qty != null } }
     command close(qty: Qty[1..*]) Open -> Open
   }

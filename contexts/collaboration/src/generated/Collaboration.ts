@@ -1141,7 +1141,7 @@ export function checkQueueAgentRunRequires(params: QueueAgentRunParams): 'facili
 
 /**
  * The parameters of AgentRun.recordEdit, by name.
- * @see contexts/collaboration/model/agent-run.dt:394
+ * @see contexts/collaboration/model/agent-run.dt:395
  */
 export interface RecordEditAgentRunParams {
     /** エージェント実行ID */
@@ -1172,7 +1172,7 @@ export interface RecordEditAgentRunParams {
  * @requires editInputCoversRequests (入力は束ねた記録の写し) else InputMismatch: input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
  * @requires editChanges (手直しはファイルを変える) else ChangedMismatch: resultRevision != baseRevision
  * @emits RunEdited — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:394
+ * @see contexts/collaboration/model/agent-run.dt:395
  */
 export type RecordEditAgentRun = (
     params: RecordEditAgentRunParams,
@@ -1191,7 +1191,7 @@ export type RecordEditAgentRun = (
  * @requires editChanges (手直しはファイルを変える) else ChangedMismatch: resultRevision != baseRevision
  * new -> Edited — set: every field
  * @emits RunEdited — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:394
+ * @see contexts/collaboration/model/agent-run.dt:395
  */
 export type RecordEditAgentRunDecision = (
     params: RecordEditAgentRunParams,
@@ -1204,7 +1204,7 @@ export type RecordEditAgentRunDecision = (
 
 /**
  * The first requirement of AgentRun.recordEdit that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:394
+ * @see contexts/collaboration/model/agent-run.dt:395
  */
 export function checkRecordEditAgentRunRequires(params: RecordEditAgentRunParams): 'inputEdits' | 'editInputCoversRequests' | 'editChanges' | undefined {
     if (!(params.input.requests.every((r) => r.edit !== undefined))) return 'inputEdits';
@@ -1215,7 +1215,7 @@ export function checkRecordEditAgentRunRequires(params: RecordEditAgentRunParams
 
 /**
  * The parameters of AgentRun.nameHotspot, by name.
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export interface NameHotspotAgentRunParams {
     /** AI が付けた名前 */
@@ -1232,7 +1232,7 @@ export interface NameHotspotAgentRunParams {
  * @requires renamedChanges (手直しはファイルを変える) else ChangedMismatch: renamed != baseRevision
  * @changes hotspotName, resultRevision
  * @emits RunHotspotNamed — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export type NameHotspotAgentRun = (
     agentRun: EditedAgentRun,
@@ -1250,7 +1250,7 @@ export type NameHotspotAgentRun = (
  * @requires renamedChanges (手直しはファイルを変える) else ChangedMismatch: renamed != baseRevision
  * @changes hotspotName, resultRevision
  * Edited -> Edited — set: resultRevision, hotspotName; carried over: id, session, input, queuedBy, queuedAt, baseRevision, finishedAt, reapplies, conflict
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export type NameHotspotAgentRunDecision = {
     /** @emits RunHotspotNamed — exactly once when the command succeeds */
@@ -1264,7 +1264,7 @@ export type NameHotspotAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.nameHotspot that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export function checkNameHotspotAgentRunRequires(agentRun: EditedAgentRun, params: NameHotspotAgentRunParams): 'renamedChanges' | undefined {
     if (!(!(params.renamed === agentRun.baseRevision))) return 'renamedChanges';
@@ -1273,7 +1273,7 @@ export function checkNameHotspotAgentRunRequires(agentRun: EditedAgentRun, param
 
 /**
  * The parameters of AgentRun.noteConflict, by name.
- * @see contexts/collaboration/model/agent-run.dt:412
+ * @see contexts/collaboration/model/agent-run.dt:414
  */
 export interface NoteConflictAgentRunParams {
     /** 食い違い */
@@ -1286,7 +1286,7 @@ export interface NoteConflictAgentRunParams {
  * 手直しとあとの AI の作業の食い違いを記す、または人が選んだ印を付ける。
  * @changes conflict
  * @emits RunEditConflicted — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:412
+ * @see contexts/collaboration/model/agent-run.dt:414
  */
 export type NoteConflictAgentRun = (
     agentRun: EditedAgentRun,
@@ -1303,7 +1303,7 @@ export type NoteConflictAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes conflict
  * Edited -> Edited — set: conflict; carried over: id, session, input, queuedBy, queuedAt, baseRevision, resultRevision, finishedAt, reapplies, hotspotName
- * @see contexts/collaboration/model/agent-run.dt:412
+ * @see contexts/collaboration/model/agent-run.dt:414
  */
 export type NoteConflictAgentRunDecision = {
     /** @emits RunEditConflicted — exactly once when the command succeeds */
@@ -1317,7 +1317,7 @@ export type NoteConflictAgentRunDecision = {
 
 /**
  * The parameters of AgentRun.revert, by name.
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export interface RevertAgentRunParams {
     /** 基準リビジョン */
@@ -1335,9 +1335,9 @@ export interface RevertAgentRunParams {
  * 順が来た打ち消しの実行を、サーバーがエージェントを使わずに機械的に打ち消した（または、打ち消すものがもうなかった）。
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => (r.reverts != null))
  * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
- * @changes none — the command changes no common field
+ * @changes baseRevision, resultRevision, changed, finishedAt
  * @emits RunReverted — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export type RevertAgentRun = (
     agentRun: QueuedAgentRun,
@@ -1354,9 +1354,9 @@ export type RevertAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => (r.reverts != null))
  * @requires changedMatchesResult (変更の有無が結果リビジョンと合う) else ChangedMismatch: (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
- * @changes none — the command changes no common field
- * Queued -> Reverted — set: baseRevision (new in Reverted), resultRevision (new in Reverted), changed (new in Reverted), finishedAt (new in Reverted); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @changes baseRevision, resultRevision, changed, finishedAt
+ * Queued -> Reverted — set: baseRevision, resultRevision, changed, finishedAt; carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export type RevertAgentRunDecision = {
     /** @emits RunReverted — exactly once when the command succeeds */
@@ -1370,7 +1370,7 @@ export type RevertAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.revert that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export function checkRevertAgentRunRequires(agentRun: QueuedAgentRun, params: RevertAgentRunParams): 'inputReverts' | 'changedMatchesResult' | undefined {
     if (!(agentRun.input.requests.every((r) => r.reverts !== undefined))) return 'inputReverts';
@@ -1380,7 +1380,7 @@ export function checkRevertAgentRunRequires(agentRun: QueuedAgentRun, params: Re
 
 /**
  * The parameters of AgentRun.leaveToAgent, by name.
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export interface LeaveToAgentAgentRunParams {
     /** わけ */
@@ -1394,7 +1394,7 @@ export interface LeaveToAgentAgentRunParams {
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => (r.reverts != null))
  * @changes revertObstacle
  * @emits RevertLeftToAgent — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export type LeaveToAgentAgentRun = (
     agentRun: QueuedAgentRun,
@@ -1412,7 +1412,7 @@ export type LeaveToAgentAgentRun = (
  * @requires inputReverts (入力は打ち消しの依頼) else InputMismatch: input.requests.every(r => (r.reverts != null))
  * @changes revertObstacle
  * Queued -> Queued — set: revertObstacle; carried over: id, session, input, queuedBy, queuedAt
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export type LeaveToAgentAgentRunDecision = {
     /** @emits RevertLeftToAgent — exactly once when the command succeeds */
@@ -1426,7 +1426,7 @@ export type LeaveToAgentAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.leaveToAgent that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export function checkLeaveToAgentAgentRunRequires(agentRun: QueuedAgentRun, _params: LeaveToAgentAgentRunParams): 'inputReverts' | undefined {
     if (!(agentRun.input.requests.every((r) => r.reverts !== undefined))) return 'inputReverts';
@@ -1435,7 +1435,7 @@ export function checkLeaveToAgentAgentRunRequires(agentRun: QueuedAgentRun, _par
 
 /**
  * The parameters of AgentRun.start, by name.
- * @see contexts/collaboration/model/agent-run.dt:434
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export interface StartAgentRunParams {
     /** リビジョンID */
@@ -1447,9 +1447,9 @@ export interface StartAgentRunParams {
  * AgentRun.start (Queued -> Running)
  * 実行を始める
  * 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
- * @changes none — the command changes no common field
+ * @changes baseRevision, startedAt
  * @emits RunStarted — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:434
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export type StartAgentRun = (
     agentRun: QueuedAgentRun,
@@ -1464,9 +1464,9 @@ export type StartAgentRun = (
 /**
  * AgentRun.start, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes none — the command changes no common field
- * Queued -> Running — set: baseRevision (new in Running), startedAt (new in Running); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
- * @see contexts/collaboration/model/agent-run.dt:434
+ * @changes baseRevision, startedAt
+ * Queued -> Running — set: baseRevision, startedAt; carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export type StartAgentRunDecision = {
     /** @emits RunStarted — exactly once when the command succeeds */
@@ -1480,7 +1480,7 @@ export type StartAgentRunDecision = {
 
 /**
  * The parameters of AgentRun.finish, by name.
- * @see contexts/collaboration/model/agent-run.dt:441
+ * @see contexts/collaboration/model/agent-run.dt:445
  */
 export interface FinishAgentRunParams {
     /** 実行の報告 */
@@ -1506,7 +1506,7 @@ export interface FinishAgentRunParams {
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
  * @outcome Completed: Running -> Completed; select expression
  * @outcome Failed: Running -> Failed; select expression
- * @see contexts/collaboration/model/agent-run.dt:441
+ * @see contexts/collaboration/model/agent-run.dt:445
  */
 export type FinishAgentRun = (
     agentRun: RunningAgentRun,
@@ -1532,7 +1532,7 @@ export type FinishAgentRun = (
 /**
  * Decision of AgentRun.finish; each named outcome gives only its set fields and events.
  * Use decideNamed with an outcome-to-target map to form the aggregate, and `{ availability: AgentRunAvailability, command: 'finish' }` to check the source states.
- * @see contexts/collaboration/model/agent-run.dt:441
+ * @see contexts/collaboration/model/agent-run.dt:445
  */
 export type FinishAgentRunDecision = (
     agentRun: RunningAgentRun,
@@ -1570,7 +1570,7 @@ export function checkFinishAgentRunChoice(checks: FinishAgentRunChoiceChecks): (
 
 /**
  * The parameters of AgentRun.askClarification, by name.
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export interface AskClarificationAgentRunParams {
     /** 文章 */
@@ -1587,9 +1587,9 @@ export interface AskClarificationAgentRunParams {
  * 確認を求める
  * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: reply == null || reply.questions.length >= 1
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
- * @changes none — the command changes no common field
+ * @changes question, resultRevision, finishedAt
  * @emits RunNeedsClarification — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export type AskClarificationAgentRun = (
     agentRun: RunningAgentRun,
@@ -1606,9 +1606,9 @@ export type AskClarificationAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires replyAsks (確認待ちの返答には問いがある) else InvalidReply: reply == null || reply.questions.length >= 1
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
- * @changes none — the command changes no common field
- * Running -> NeedsClarification — set: question (new in NeedsClarification), reply (new in NeedsClarification), resultRevision (new in NeedsClarification), finishedAt (new in NeedsClarification); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @changes question, resultRevision, finishedAt
+ * Running -> NeedsClarification — set: question, reply (new in NeedsClarification), resultRevision, finishedAt; carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export type AskClarificationAgentRunDecision = {
     /** @emits RunNeedsClarification — exactly once when the command succeeds */
@@ -1622,7 +1622,7 @@ export type AskClarificationAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.askClarification that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun, params: AskClarificationAgentRunParams): 'replyAsks' | 'replyAboutInput' | undefined {
     if (params.reply !== undefined && !(params.reply.questions.length >= 1)) return 'replyAsks';
@@ -1632,7 +1632,7 @@ export function checkAskClarificationAgentRunRequires(agentRun: RunningAgentRun,
 
 /**
  * The parameters of AgentRun.decline, by name.
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export interface DeclineAgentRunParams {
     /** エージェントの返答 */
@@ -1648,9 +1648,9 @@ export interface DeclineAgentRunParams {
  * エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
  * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: reply.questions.length == 0
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
- * @changes none — the command changes no common field
+ * @changes reply, resultRevision, finishedAt
  * @emits RunDeclined — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export type DeclineAgentRun = (
     agentRun: RunningAgentRun,
@@ -1667,9 +1667,9 @@ export type DeclineAgentRun = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires replyAsksNothing (辞退の返答に問いはない) else InvalidReply: reply.questions.length == 0
  * @requires replyAboutInput (返答の依頼は実行の依頼) else InvalidReply: (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
- * @changes none — the command changes no common field
- * Running -> Declined — set: reply (new in Declined), resultRevision (new in Declined), finishedAt (new in Declined); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @changes reply, resultRevision, finishedAt
+ * Running -> Declined — set: reply, resultRevision, finishedAt; carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export type DeclineAgentRunDecision = {
     /** @emits RunDeclined — exactly once when the command succeeds */
@@ -1683,7 +1683,7 @@ export type DeclineAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.decline that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, params: DeclineAgentRunParams): 'replyAsksNothing' | 'replyAboutInput' | undefined {
     if (!(params.reply.questions.length === 0)) return 'replyAsksNothing';
@@ -1693,7 +1693,7 @@ export function checkDeclineAgentRunRequires(agentRun: RunningAgentRun, params: 
 
 /**
  * The parameters of AgentRun.fail, by name.
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export interface FailAgentRunParams {
     /** 失敗の理由 */
@@ -1706,9 +1706,9 @@ export interface FailAgentRunParams {
  * 実行を失敗にする
  * 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断、除外が多すぎて読み取り範囲を守れない）。
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
- * @changes none — the command changes no common field
+ * @changes reason, finishedAt
  * @emits RunFailed — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export type FailAgentRun = (
     agentRun: RunningAgentRun,
@@ -1724,9 +1724,9 @@ export type FailAgentRun = (
  * AgentRun.fail, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires abnormal (報告のない失敗) else ReportRequired: reason != FailureReason.RuleNotMet
- * @changes none — the command changes no common field
- * Running -> Failed — set: reason (new in Failed), report (new in Failed), resultRevision (new in Failed), finishedAt (new in Failed); carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @changes reason, finishedAt
+ * Running -> Failed — set: reason, report (new in Failed), resultRevision (new in Failed), finishedAt; carried over: id, session, input, queuedBy, queuedAt, baseRevision, startedAt
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export type FailAgentRunDecision = {
     /** @emits RunFailed — exactly once when the command succeeds */
@@ -1740,7 +1740,7 @@ export type FailAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.fail that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, params: FailAgentRunParams): 'abnormal' | undefined {
     if (!(!(params.reason === 'RuleNotMet'))) return 'abnormal';
@@ -1749,7 +1749,7 @@ export function checkFailAgentRunRequires(_agentRun: RunningAgentRun, params: Fa
 
 /**
  * The parameters of AgentRun.cancel, by name.
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export interface CancelAgentRunParams {
     /** 参加者ID */
@@ -1764,9 +1764,9 @@ export interface CancelAgentRunParams {
  * 実行を中止する
  * 中止するのはファシリテーター。
  * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
+ * @changes cancelledBy, cancelledAt
  * @emits RunCancelled — exactly once when the command succeeds
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export type CancelAgentRun = (
     agentRun: QueuedAgentRun | RunningAgentRun,
@@ -1782,10 +1782,10 @@ export type CancelAgentRun = (
  * AgentRun.cancel, decided per source state; implement it with `decide(AgentRunShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorCancels (ファシリテーターが中止する) else FacilitatorOnly: cancelledByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
- * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy (new in Cancelled), cancelledAt (new in Cancelled); carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @changes cancelledBy, cancelledAt
+ * Queued -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy, cancelledAt; carried over: id, session, input, queuedBy, queuedAt; dropped: revertObstacle
+ * Running -> Cancelled — set: baseRevision (new in Cancelled), cancelledBy, cancelledAt; carried over: id, session, input, queuedBy, queuedAt; dropped: baseRevision, startedAt
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export type CancelAgentRunDecision = {
     /** @emits RunCancelled — exactly once when the command succeeds */
@@ -1806,7 +1806,7 @@ export type CancelAgentRunDecision = {
 
 /**
  * The first requirement of AgentRun.cancel that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export function checkCancelAgentRunRequires(_agentRun: QueuedAgentRun | RunningAgentRun, params: CancelAgentRunParams): 'facilitatorCancels' | undefined {
     if (!(params.cancelledByRole === 'Facilitator')) return 'facilitatorCancels';
@@ -1874,19 +1874,19 @@ export const AgentRunAvailability: Availability = {
 
 /**
  * Whether AgentRun.nameHotspot can be called on the agentRun in its state (Edited).
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export const canNameHotspotAgentRun = (agentRun: AgentRun): agentRun is EditedAgentRun => isAvailable(AgentRunAvailability, 'nameHotspot', agentRun);
 
 /**
  * The error of AgentRun.nameHotspot called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export type NameHotspotAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'nameHotspot', 'Queued' | 'Running' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted', 'Edited'>;
 
 /**
  * AgentRun.nameHotspot for the agentRun in any state: the command in a source state (Edited), and `NameHotspotAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:405
+ * @see contexts/collaboration/model/agent-run.dt:407
  */
 export type NameHotspotAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -1895,19 +1895,19 @@ export type NameHotspotAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.noteConflict can be called on the agentRun in its state (Edited).
- * @see contexts/collaboration/model/agent-run.dt:412
+ * @see contexts/collaboration/model/agent-run.dt:414
  */
 export const canNoteConflictAgentRun = (agentRun: AgentRun): agentRun is EditedAgentRun => isAvailable(AgentRunAvailability, 'noteConflict', agentRun);
 
 /**
  * The error of AgentRun.noteConflict called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:412
+ * @see contexts/collaboration/model/agent-run.dt:414
  */
 export type NoteConflictAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'noteConflict', 'Queued' | 'Running' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted', 'Edited'>;
 
 /**
  * AgentRun.noteConflict for the agentRun in any state: the command in a source state (Edited), and `NoteConflictAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:412
+ * @see contexts/collaboration/model/agent-run.dt:414
  */
 export type NoteConflictAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -1916,19 +1916,19 @@ export type NoteConflictAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.revert can be called on the agentRun in its state (Queued).
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export const canRevertAgentRun = (agentRun: AgentRun): agentRun is QueuedAgentRun => isAvailable(AgentRunAvailability, 'revert', agentRun);
 
 /**
  * The error of AgentRun.revert called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export type RevertAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'revert', 'Running' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Queued'>;
 
 /**
  * AgentRun.revert for the agentRun in any state: the command in a source state (Queued), and `RevertAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:418
+ * @see contexts/collaboration/model/agent-run.dt:420
  */
 export type RevertAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -1937,19 +1937,19 @@ export type RevertAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.leaveToAgent can be called on the agentRun in its state (Queued).
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export const canLeaveToAgentAgentRun = (agentRun: AgentRun): agentRun is QueuedAgentRun => isAvailable(AgentRunAvailability, 'leaveToAgent', agentRun);
 
 /**
  * The error of AgentRun.leaveToAgent called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export type LeaveToAgentAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'leaveToAgent', 'Running' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Queued'>;
 
 /**
  * AgentRun.leaveToAgent for the agentRun in any state: the command in a source state (Queued), and `LeaveToAgentAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:427
+ * @see contexts/collaboration/model/agent-run.dt:430
  */
 export type LeaveToAgentAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -1958,19 +1958,19 @@ export type LeaveToAgentAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.start can be called on the agentRun in its state (Queued).
- * @see contexts/collaboration/model/agent-run.dt:434
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export const canStartAgentRun = (agentRun: AgentRun): agentRun is QueuedAgentRun => isAvailable(AgentRunAvailability, 'start', agentRun);
 
 /**
  * The error of AgentRun.start called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:434
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export type StartAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'start', 'Running' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Queued'>;
 
 /**
  * AgentRun.start for the agentRun in any state: the command in a source state (Queued), and `StartAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:434
+ * @see contexts/collaboration/model/agent-run.dt:437
  */
 export type StartAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -1979,19 +1979,19 @@ export type StartAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.finish can be called on the agentRun in its state (Running).
- * @see contexts/collaboration/model/agent-run.dt:441
+ * @see contexts/collaboration/model/agent-run.dt:445
  */
 export const canFinishAgentRun = (agentRun: AgentRun): agentRun is RunningAgentRun => isAvailable(AgentRunAvailability, 'finish', agentRun);
 
 /**
  * The error of AgentRun.finish called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:441
+ * @see contexts/collaboration/model/agent-run.dt:445
  */
 export type FinishAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'finish', 'Queued' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Running'>;
 
 /**
  * AgentRun.finish for the agentRun in any state: the command in a source state (Running), and `FinishAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:441
+ * @see contexts/collaboration/model/agent-run.dt:445
  */
 export type FinishAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -2000,19 +2000,19 @@ export type FinishAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.askClarification can be called on the agentRun in its state (Running).
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export const canAskClarificationAgentRun = (agentRun: AgentRun): agentRun is RunningAgentRun => isAvailable(AgentRunAvailability, 'askClarification', agentRun);
 
 /**
  * The error of AgentRun.askClarification called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export type AskClarificationAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'askClarification', 'Queued' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Running'>;
 
 /**
  * AgentRun.askClarification for the agentRun in any state: the command in a source state (Running), and `AskClarificationAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:463
+ * @see contexts/collaboration/model/agent-run.dt:469
  */
 export type AskClarificationAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -2021,19 +2021,19 @@ export type AskClarificationAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.decline can be called on the agentRun in its state (Running).
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export const canDeclineAgentRun = (agentRun: AgentRun): agentRun is RunningAgentRun => isAvailable(AgentRunAvailability, 'decline', agentRun);
 
 /**
  * The error of AgentRun.decline called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export type DeclineAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'decline', 'Queued' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Running'>;
 
 /**
  * AgentRun.decline for the agentRun in any state: the command in a source state (Running), and `DeclineAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:474
+ * @see contexts/collaboration/model/agent-run.dt:481
  */
 export type DeclineAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -2042,19 +2042,19 @@ export type DeclineAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.fail can be called on the agentRun in its state (Running).
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export const canFailAgentRun = (agentRun: AgentRun): agentRun is RunningAgentRun => isAvailable(AgentRunAvailability, 'fail', agentRun);
 
 /**
  * The error of AgentRun.fail called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export type FailAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'fail', 'Queued' | 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Running'>;
 
 /**
  * AgentRun.fail for the agentRun in any state: the command in a source state (Running), and `FailAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:483
+ * @see contexts/collaboration/model/agent-run.dt:491
  */
 export type FailAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -2063,19 +2063,19 @@ export type FailAgentRunFromAnyState = (
 
 /**
  * Whether AgentRun.cancel can be called on the agentRun in its state (Queued | Running).
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export const canCancelAgentRun = (agentRun: AgentRun): agentRun is QueuedAgentRun | RunningAgentRun => isAvailable(AgentRunAvailability, 'cancel', agentRun);
 
 /**
  * The error of AgentRun.cancel called through `anyStateAgentRunCommands` on the agentRun when its state is not one of its source states.
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export type CancelAgentRunUnavailable = CommandUnavailable<'Collaboration.AgentRun', 'cancel', 'Completed' | 'NeedsClarification' | 'Declined' | 'Failed' | 'Cancelled' | 'Reverted' | 'Edited', 'Queued' | 'Running'>;
 
 /**
  * AgentRun.cancel for the agentRun in any state: the command in a source state (Queued | Running), and `CancelAgentRunUnavailable` in another.
- * @see contexts/collaboration/model/agent-run.dt:489
+ * @see contexts/collaboration/model/agent-run.dt:498
  */
 export type CancelAgentRunFromAnyState = (
     agentRun: AgentRun,
@@ -2124,7 +2124,7 @@ export const availableAgentRunCommands = (agentRun: AgentRun): (keyof AgentRunCo
 /**
  * 実行登録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:497
+ * @see contexts/collaboration/model/agent-run.dt:507
  */
 export interface RunQueued {
     readonly type: 'Collaboration.RunQueued';
@@ -2142,7 +2142,7 @@ export interface RunQueued {
 /**
  * 打ち消し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:505
+ * @see contexts/collaboration/model/agent-run.dt:515
  */
 export interface RunReverted {
     readonly type: 'Collaboration.RunReverted';
@@ -2160,7 +2160,7 @@ export interface RunReverted {
 /**
  * 人の手直し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:513
+ * @see contexts/collaboration/model/agent-run.dt:523
  */
 export interface RunEdited {
     readonly type: 'Collaboration.RunEdited';
@@ -2184,7 +2184,7 @@ export interface RunEdited {
 /**
  * ホットスポットの名前
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:524
+ * @see contexts/collaboration/model/agent-run.dt:534
  */
 export interface RunHotspotNamed {
     readonly type: 'Collaboration.RunHotspotNamed';
@@ -2199,7 +2199,7 @@ export interface RunHotspotNamed {
 /**
  * 手直しの食い違い
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:530
+ * @see contexts/collaboration/model/agent-run.dt:540
  */
 export interface RunEditConflicted {
     readonly type: 'Collaboration.RunEditConflicted';
@@ -2212,7 +2212,7 @@ export interface RunEditConflicted {
 /**
  * AI に任せた打ち消し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:535
+ * @see contexts/collaboration/model/agent-run.dt:545
  */
 export interface RevertLeftToAgent {
     readonly type: 'Collaboration.RevertLeftToAgent';
@@ -2225,7 +2225,7 @@ export interface RevertLeftToAgent {
 /**
  * 実行開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:540
+ * @see contexts/collaboration/model/agent-run.dt:550
  */
 export interface RunStarted {
     readonly type: 'Collaboration.RunStarted';
@@ -2239,7 +2239,7 @@ export interface RunStarted {
 /**
  * 実行完了
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:546
+ * @see contexts/collaboration/model/agent-run.dt:556
  */
 export interface RunCompleted {
     readonly type: 'Collaboration.RunCompleted';
@@ -2254,7 +2254,7 @@ export interface RunCompleted {
 /**
  * 確認依頼
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:553
+ * @see contexts/collaboration/model/agent-run.dt:563
  */
 export interface RunNeedsClarification {
     readonly type: 'Collaboration.RunNeedsClarification';
@@ -2270,7 +2270,7 @@ export interface RunNeedsClarification {
 /**
  * 実行辞退
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:560
+ * @see contexts/collaboration/model/agent-run.dt:570
  */
 export interface RunDeclined {
     readonly type: 'Collaboration.RunDeclined';
@@ -2284,7 +2284,7 @@ export interface RunDeclined {
 /**
  * 実行失敗
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:566
+ * @see contexts/collaboration/model/agent-run.dt:576
  */
 export interface RunFailed {
     readonly type: 'Collaboration.RunFailed';
@@ -2298,7 +2298,7 @@ export interface RunFailed {
 /**
  * 実行中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/agent-run.dt:572
+ * @see contexts/collaboration/model/agent-run.dt:582
  */
 export interface RunCancelled {
     readonly type: 'Collaboration.RunCancelled';
@@ -2312,7 +2312,7 @@ export interface RunCancelled {
 /**
  * 依頼の重複
  * 同じ依頼を2回束ねた。
- * @see contexts/collaboration/model/agent-run.dt:579
+ * @see contexts/collaboration/model/agent-run.dt:589
  */
 export interface DuplicateRequest {
     readonly type: 'Collaboration.DuplicateRequest';
@@ -2321,7 +2321,7 @@ export interface DuplicateRequest {
 /**
  * 入力の不一致
  * 凍結した入力が、束ねた依頼と合わない。
- * @see contexts/collaboration/model/agent-run.dt:582
+ * @see contexts/collaboration/model/agent-run.dt:592
  */
 export interface InputMismatch {
     readonly type: 'Collaboration.InputMismatch';
@@ -2330,7 +2330,7 @@ export interface InputMismatch {
 /**
  * 変更の有無の不一致
  * 変更ありなのに結果が基準リビジョンのまま、または変更なしなのに結果が基準リビジョンと違う。
- * @see contexts/collaboration/model/agent-run.dt:585
+ * @see contexts/collaboration/model/agent-run.dt:595
  */
 export interface ChangedMismatch {
     readonly type: 'Collaboration.ChangedMismatch';
@@ -2339,7 +2339,7 @@ export interface ChangedMismatch {
 /**
  * 報告が必要
  * 成功の条件を満たさない失敗は、報告とともに finish で終える。
- * @see contexts/collaboration/model/agent-run.dt:588
+ * @see contexts/collaboration/model/agent-run.dt:598
  */
 export interface ReportRequired {
     readonly type: 'Collaboration.ReportRequired';
@@ -2348,7 +2348,7 @@ export interface ReportRequired {
 /**
  * 別案を選べない実行
  * 別案を選んだ実行は、完了していないか、返答に前提がない（別案を選べるのは前提のある完了の実行）。
- * @see contexts/collaboration/model/agent-run.dt:591
+ * @see contexts/collaboration/model/agent-run.dt:601
  */
 export interface RunNotPickable {
     readonly type: 'Collaboration.RunNotPickable';
@@ -2359,7 +2359,7 @@ export interface RunNotPickable {
 /**
  * 返答にない別案
  * 選んだ前提の番号または別案のキーが、その実行の返答にない。
- * @see contexts/collaboration/model/agent-run.dt:596
+ * @see contexts/collaboration/model/agent-run.dt:606
  */
 export interface AlternativeNotFound {
     readonly type: 'Collaboration.AlternativeNotFound';
@@ -2370,7 +2370,7 @@ export interface AlternativeNotFound {
 /**
  * 選んだ実行と依頼の不一致
  * 別案を選んでやり直す実行の依頼が、選んだ実行の依頼と同じでない。
- * @see contexts/collaboration/model/agent-run.dt:601
+ * @see contexts/collaboration/model/agent-run.dt:611
  */
 export interface PickMismatch {
     readonly type: 'Collaboration.PickMismatch';
@@ -2381,7 +2381,7 @@ export interface PickMismatch {
 /**
  * 返答の不整合
  * エージェントの返答が、終わり方（完了・確認待ち・辞退）や実行の依頼と合わない。
- * @see contexts/collaboration/model/agent-run.dt:606
+ * @see contexts/collaboration/model/agent-run.dt:616
  */
 export interface InvalidReply {
     readonly type: 'Collaboration.InvalidReply';
@@ -2614,7 +2614,7 @@ export type AssumptionApprovalEvent = AssumptionApproved;
 /**
  * 前提を承認した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/approval.dt:36
+ * @see contexts/collaboration/model/approval.dt:37
  */
 export interface AssumptionApproved {
     readonly type: 'Collaboration.AssumptionApproved';
@@ -2632,7 +2632,7 @@ export interface AssumptionApproved {
 /**
  * 前提を承認できない実行
  * 承認する前提の実行は、完了していないか、返答に前提がない（承認できるのは前提のある完了の実行）。
- * @see contexts/collaboration/model/approval.dt:45
+ * @see contexts/collaboration/model/approval.dt:46
  */
 export interface RunNotApprovable {
     readonly type: 'Collaboration.RunNotApprovable';
@@ -2643,7 +2643,7 @@ export interface RunNotApprovable {
 /**
  * 返答にない前提
  * 前提の番号が、その実行の返答にない。
- * @see contexts/collaboration/model/approval.dt:50
+ * @see contexts/collaboration/model/approval.dt:51
  */
 export interface AssumptionNotFound {
     readonly type: 'Collaboration.AssumptionNotFound';
@@ -2654,7 +2654,7 @@ export interface AssumptionNotFound {
 /**
  * 決まった前提
  * 前提はもう決まっている（承認した・別案を選んだ・あとの実行がその実行の依頼を引き継いだ・その実行を打ち消した）。
- * @see contexts/collaboration/model/approval.dt:55
+ * @see contexts/collaboration/model/approval.dt:56
  */
 export interface AssumptionClosed {
     readonly type: 'Collaboration.AssumptionClosed';
@@ -3116,7 +3116,7 @@ export type StartSlashCommandDecision = (
 
 /**
  * The parameters of SlashCommand.list, by name.
- * @see contexts/collaboration/model/command.dt:116
+ * @see contexts/collaboration/model/command.dt:117
  */
 export interface ListSlashCommandParams {
     /** 候補 */
@@ -3128,9 +3128,9 @@ export interface ListSlashCommandParams {
  * SlashCommand.list (Working -> Listed)
  * 候補を挙げる
  * AI が候補を挙げる（候補型）。見ているストーミングがなければ、候補なしで。
- * @changes none — the command changes no common field
+ * @changes candidates, listedAt
  * @emits CandidatesListed — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:116
+ * @see contexts/collaboration/model/command.dt:117
  */
 export type ListSlashCommand = (
     slashCommand: WorkingSlashCommand,
@@ -3145,9 +3145,9 @@ export type ListSlashCommand = (
 /**
  * SlashCommand.list, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes none — the command changes no common field
- * Working -> Listed — set: candidates (new in Listed), listedAt (new in Listed); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
- * @see contexts/collaboration/model/command.dt:116
+ * @changes candidates, listedAt
+ * Working -> Listed — set: candidates, listedAt; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
+ * @see contexts/collaboration/model/command.dt:117
  */
 export type ListSlashCommandDecision = {
     /** @emits CandidatesListed — exactly once when the command succeeds */
@@ -3161,7 +3161,7 @@ export type ListSlashCommandDecision = {
 
 /**
  * The parameters of SlashCommand.answer, by name.
- * @see contexts/collaboration/model/command.dt:121
+ * @see contexts/collaboration/model/command.dt:123
  */
 export interface AnswerSlashCommandParams {
     /** 依頼ID */
@@ -3175,9 +3175,9 @@ export interface AnswerSlashCommandParams {
  * SlashCommand.answer (Working -> Answered)
  * 答える
  * AI が答える（答え型）。始めのメッセージに応える AI のメッセージとして。`/guide` は、その中身も。
- * @changes none — the command changes no common field
+ * @changes answer, answeredAt
  * @emits SlashCommandAnswered — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:121
+ * @see contexts/collaboration/model/command.dt:123
  */
 export type AnswerSlashCommand = (
     slashCommand: WorkingSlashCommand,
@@ -3192,9 +3192,9 @@ export type AnswerSlashCommand = (
 /**
  * SlashCommand.answer, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes none — the command changes no common field
- * Working -> Answered — set: answer (new in Answered), next (new in Answered), answeredAt (new in Answered); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
- * @see contexts/collaboration/model/command.dt:121
+ * @changes answer, answeredAt
+ * Working -> Answered — set: answer, next (new in Answered), answeredAt; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
+ * @see contexts/collaboration/model/command.dt:123
  */
 export type AnswerSlashCommandDecision = {
     /** @emits SlashCommandAnswered — exactly once when the command succeeds */
@@ -3208,7 +3208,7 @@ export type AnswerSlashCommandDecision = {
 
 /**
  * The parameters of SlashCommand.apply, by name.
- * @see contexts/collaboration/model/command.dt:127
+ * @see contexts/collaboration/model/command.dt:130
  */
 export interface ApplySlashCommandParams {
     /** 参加者ID */
@@ -3229,9 +3229,9 @@ export interface ApplySlashCommandParams {
  * 実行を記録する。
  * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: chosen.every(c => c < candidates.length)
- * @changes none — the command changes no common field
+ * @changes chosen, appliedAt, run
  * @emits CandidatesApplied — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:127
+ * @see contexts/collaboration/model/command.dt:130
  */
 export type ApplySlashCommand = (
     slashCommand: ListedSlashCommand,
@@ -3248,9 +3248,9 @@ export type ApplySlashCommand = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApplies (ファシリテーターが反映する) else FacilitatorOnly: appliedByRole == ParticipantRole.Facilitator
  * @requires chosenOfList (挙げた候補から選ぶ) else NoSuchCandidate: chosen.every(c => c < candidates.length)
- * @changes none — the command changes no common field
- * Listed -> Applied — set: chosen (new in Applied), appliedBy (new in Applied), appliedAt (new in Applied), run (new in Applied); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide, candidates; dropped: listedAt
- * @see contexts/collaboration/model/command.dt:127
+ * @changes chosen, appliedAt, run
+ * Listed -> Applied — set: chosen, appliedBy (new in Applied), appliedAt, run; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide, candidates; dropped: listedAt
+ * @see contexts/collaboration/model/command.dt:130
  */
 export type ApplySlashCommandDecision = {
     /** @emits CandidatesApplied — exactly once when the command succeeds */
@@ -3264,7 +3264,7 @@ export type ApplySlashCommandDecision = {
 
 /**
  * The first requirement of SlashCommand.apply that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:127
+ * @see contexts/collaboration/model/command.dt:130
  */
 export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand, params: ApplySlashCommandParams): 'facilitatorApplies' | 'chosenOfList' | undefined {
     if (!(params.appliedByRole === 'Facilitator')) return 'facilitatorApplies';
@@ -3274,7 +3274,7 @@ export function checkApplySlashCommandRequires(slashCommand: ListedSlashCommand,
 
 /**
  * The parameters of SlashCommand.stop, by name.
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:140
  */
 export interface StopSlashCommandParams {
     /** 参加者ID */
@@ -3289,9 +3289,9 @@ export interface StopSlashCommandParams {
  * コマンドを中止する
  * 始めた人かファシリテーターがコマンドを中止する（考えているあいだか、候補の選択待ち）。
  * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
+ * @changes stoppedBy, stoppedAt
  * @emits SlashCommandStopped — exactly once when the command succeeds
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:140
  */
 export type StopSlashCommand = (
     slashCommand: WorkingSlashCommand | ListedSlashCommand,
@@ -3307,10 +3307,10 @@ export type StopSlashCommand = (
  * SlashCommand.stop, decided per source state; implement it with `decide(SlashCommandShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheStarter: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Working -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
- * Listed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide; dropped: candidates, listedAt
- * @see contexts/collaboration/model/command.dt:136
+ * @changes stoppedBy, stoppedAt
+ * Working -> Stopped — set: stoppedBy, stoppedAt; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide
+ * Listed -> Stopped — set: stoppedBy, stoppedAt; carried over: id, session, kind, startedBy, opening, scope, language, startedAt, guide; dropped: candidates, listedAt
+ * @see contexts/collaboration/model/command.dt:140
  */
 export type StopSlashCommandDecision = {
     /** @emits SlashCommandStopped — exactly once when the command succeeds */
@@ -3331,7 +3331,7 @@ export type StopSlashCommandDecision = {
 
 /**
  * The first requirement of SlashCommand.stop that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:140
  */
 export function checkStopSlashCommandRequires(slashCommand: WorkingSlashCommand | ListedSlashCommand, params: StopSlashCommandParams): 'starterOrFacilitatorStops' | undefined {
     if (!((params.stoppedBy === slashCommand.startedBy) || (params.stoppedByRole === 'Facilitator'))) return 'starterOrFacilitatorStops';
@@ -3379,19 +3379,19 @@ export const SlashCommandAvailability: Availability = {
 
 /**
  * Whether SlashCommand.list can be called on the slashCommand in its state (Working).
- * @see contexts/collaboration/model/command.dt:116
+ * @see contexts/collaboration/model/command.dt:117
  */
 export const canListSlashCommand = (slashCommand: SlashCommand): slashCommand is WorkingSlashCommand => isAvailable(SlashCommandAvailability, 'list', slashCommand);
 
 /**
  * The error of SlashCommand.list called through `anyStateSlashCommandCommands` on the slashCommand when its state is not one of its source states.
- * @see contexts/collaboration/model/command.dt:116
+ * @see contexts/collaboration/model/command.dt:117
  */
 export type ListSlashCommandUnavailable = CommandUnavailable<'Collaboration.SlashCommand', 'list', 'Listed' | 'Applied' | 'Answered' | 'Stopped', 'Working'>;
 
 /**
  * SlashCommand.list for the slashCommand in any state: the command in a source state (Working), and `ListSlashCommandUnavailable` in another.
- * @see contexts/collaboration/model/command.dt:116
+ * @see contexts/collaboration/model/command.dt:117
  */
 export type ListSlashCommandFromAnyState = (
     slashCommand: SlashCommand,
@@ -3400,19 +3400,19 @@ export type ListSlashCommandFromAnyState = (
 
 /**
  * Whether SlashCommand.answer can be called on the slashCommand in its state (Working).
- * @see contexts/collaboration/model/command.dt:121
+ * @see contexts/collaboration/model/command.dt:123
  */
 export const canAnswerSlashCommand = (slashCommand: SlashCommand): slashCommand is WorkingSlashCommand => isAvailable(SlashCommandAvailability, 'answer', slashCommand);
 
 /**
  * The error of SlashCommand.answer called through `anyStateSlashCommandCommands` on the slashCommand when its state is not one of its source states.
- * @see contexts/collaboration/model/command.dt:121
+ * @see contexts/collaboration/model/command.dt:123
  */
 export type AnswerSlashCommandUnavailable = CommandUnavailable<'Collaboration.SlashCommand', 'answer', 'Listed' | 'Applied' | 'Answered' | 'Stopped', 'Working'>;
 
 /**
  * SlashCommand.answer for the slashCommand in any state: the command in a source state (Working), and `AnswerSlashCommandUnavailable` in another.
- * @see contexts/collaboration/model/command.dt:121
+ * @see contexts/collaboration/model/command.dt:123
  */
 export type AnswerSlashCommandFromAnyState = (
     slashCommand: SlashCommand,
@@ -3421,19 +3421,19 @@ export type AnswerSlashCommandFromAnyState = (
 
 /**
  * Whether SlashCommand.apply can be called on the slashCommand in its state (Listed).
- * @see contexts/collaboration/model/command.dt:127
+ * @see contexts/collaboration/model/command.dt:130
  */
 export const canApplySlashCommand = (slashCommand: SlashCommand): slashCommand is ListedSlashCommand => isAvailable(SlashCommandAvailability, 'apply', slashCommand);
 
 /**
  * The error of SlashCommand.apply called through `anyStateSlashCommandCommands` on the slashCommand when its state is not one of its source states.
- * @see contexts/collaboration/model/command.dt:127
+ * @see contexts/collaboration/model/command.dt:130
  */
 export type ApplySlashCommandUnavailable = CommandUnavailable<'Collaboration.SlashCommand', 'apply', 'Working' | 'Applied' | 'Answered' | 'Stopped', 'Listed'>;
 
 /**
  * SlashCommand.apply for the slashCommand in any state: the command in a source state (Listed), and `ApplySlashCommandUnavailable` in another.
- * @see contexts/collaboration/model/command.dt:127
+ * @see contexts/collaboration/model/command.dt:130
  */
 export type ApplySlashCommandFromAnyState = (
     slashCommand: SlashCommand,
@@ -3442,19 +3442,19 @@ export type ApplySlashCommandFromAnyState = (
 
 /**
  * Whether SlashCommand.stop can be called on the slashCommand in its state (Working | Listed).
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:140
  */
 export const canStopSlashCommand = (slashCommand: SlashCommand): slashCommand is WorkingSlashCommand | ListedSlashCommand => isAvailable(SlashCommandAvailability, 'stop', slashCommand);
 
 /**
  * The error of SlashCommand.stop called through `anyStateSlashCommandCommands` on the slashCommand when its state is not one of its source states.
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:140
  */
 export type StopSlashCommandUnavailable = CommandUnavailable<'Collaboration.SlashCommand', 'stop', 'Applied' | 'Answered' | 'Stopped', 'Working' | 'Listed'>;
 
 /**
  * SlashCommand.stop for the slashCommand in any state: the command in a source state (Working | Listed), and `StopSlashCommandUnavailable` in another.
- * @see contexts/collaboration/model/command.dt:136
+ * @see contexts/collaboration/model/command.dt:140
  */
 export type StopSlashCommandFromAnyState = (
     slashCommand: SlashCommand,
@@ -3491,7 +3491,7 @@ export const availableSlashCommandCommands = (slashCommand: SlashCommand): (keyo
 /**
  * コマンドの開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:144
+ * @see contexts/collaboration/model/command.dt:149
  */
 export interface SlashCommandStarted {
     readonly type: 'Collaboration.SlashCommandStarted';
@@ -3517,7 +3517,7 @@ export interface SlashCommandStarted {
 /**
  * 候補を挙げた
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:156
+ * @see contexts/collaboration/model/command.dt:161
  */
 export interface CandidatesListed {
     readonly type: 'Collaboration.CandidatesListed';
@@ -3531,7 +3531,7 @@ export interface CandidatesListed {
 /**
  * コマンドの答え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:162
+ * @see contexts/collaboration/model/command.dt:167
  */
 export interface SlashCommandAnswered {
     readonly type: 'Collaboration.SlashCommandAnswered';
@@ -3547,7 +3547,7 @@ export interface SlashCommandAnswered {
 /**
  * 候補の反映
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:169
+ * @see contexts/collaboration/model/command.dt:174
  */
 export interface CandidatesApplied {
     readonly type: 'Collaboration.CandidatesApplied';
@@ -3565,7 +3565,7 @@ export interface CandidatesApplied {
 /**
  * コマンドの中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/command.dt:178
+ * @see contexts/collaboration/model/command.dt:183
  */
 export interface SlashCommandStopped {
     readonly type: 'Collaboration.SlashCommandStopped';
@@ -3579,7 +3579,7 @@ export interface SlashCommandStopped {
 /**
  * コマンドを始めた人でない
  * コマンドを中止できるのは、始めた人かファシリテーターだけ。
- * @see contexts/collaboration/model/command.dt:185
+ * @see contexts/collaboration/model/command.dt:190
  */
 export interface NotTheStarter {
     readonly type: 'Collaboration.NotTheStarter';
@@ -3588,7 +3588,7 @@ export interface NotTheStarter {
 /**
  * そんな候補はない
  * 採用した候補の番号が、挙げた候補にない。
- * @see contexts/collaboration/model/command.dt:188
+ * @see contexts/collaboration/model/command.dt:193
  */
 export interface NoSuchCandidate {
     readonly type: 'Collaboration.NoSuchCandidate';
@@ -3597,7 +3597,7 @@ export interface NoSuchCandidate {
 /**
  * 同じコマンドが走っている
  * セッションには、同じコマンドで走っているものがある（考えているか、候補の選択待ち）。
- * @see contexts/collaboration/model/command.dt:191
+ * @see contexts/collaboration/model/command.dt:196
  */
 export interface CommandAlreadyRunning {
     readonly type: 'Collaboration.CommandAlreadyRunning';
@@ -4942,7 +4942,7 @@ export type StartInterviewDecision = (
 
 /**
  * The parameters of Interview.hear, by name.
- * @see contexts/collaboration/model/interview.dt:162
+ * @see contexts/collaboration/model/interview.dt:163
  */
 export interface HearInterviewParams {
     /** 依頼ID */
@@ -4956,7 +4956,7 @@ export interface HearInterviewParams {
  * 始めた人のメッセージが聞き取りに入る（答え、または要約への注文: 要約は取り下げて聞き取りに戻る）。
  * @changes awaiting, asked
  * @emits InterviewAnswered — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:162
+ * @see contexts/collaboration/model/interview.dt:163
  */
 export type HearInterview = (
     interview: AskingInterview | BriefedInterview,
@@ -4974,7 +4974,7 @@ export type HearInterview = (
  * @changes awaiting, asked
  * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
  * Briefed -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:162
+ * @see contexts/collaboration/model/interview.dt:163
  */
 export type HearInterviewDecision = {
     /** @emits InterviewAnswered — exactly once when the command succeeds */
@@ -4995,7 +4995,7 @@ export type HearInterviewDecision = {
 
 /**
  * The parameters of Interview.ask, by name.
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export interface AskInterviewParams {
     /** 答えたメッセージ */
@@ -5012,7 +5012,7 @@ export interface AskInterviewParams {
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: awaiting != null && awaiting == answered
  * @changes awaiting, asked
  * @emits InterviewQuestionAsked — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export type AskInterview = (
     interview: AskingInterview,
@@ -5030,7 +5030,7 @@ export type AskInterview = (
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: awaiting != null && awaiting == answered
  * @changes awaiting, asked
  * Asking -> Asking — set: awaiting, asked; carried over: id, session, command, startedBy, opening, focus, language, startedAt
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export type AskInterviewDecision = {
     /** @emits InterviewQuestionAsked — exactly once when the command succeeds */
@@ -5044,7 +5044,7 @@ export type AskInterviewDecision = {
 
 /**
  * The first requirement of Interview.ask that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export function checkAskInterviewRequires(interview: AskingInterview, params: AskInterviewParams): 'stillAwaited' | undefined {
     if (!((interview.awaiting !== undefined) && (interview.awaiting === params.answered))) return 'stillAwaited';
@@ -5053,7 +5053,7 @@ export function checkAskInterviewRequires(interview: AskingInterview, params: As
 
 /**
  * The parameters of Interview.summarize, by name.
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export interface SummarizeInterviewParams {
     /** 答えたメッセージ */
@@ -5068,9 +5068,9 @@ export interface SummarizeInterviewParams {
  * 要約を出す
  * AI が要約を出す。ファシリテーターが確定（承認）・編集して確定・却下を選ぶ。始めた人は中止もできる。
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: awaiting != null && awaiting == answered
- * @changes none — the command changes no common field
+ * @changes brief, answered, briefedAt
  * @emits InterviewBriefed — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export type SummarizeInterview = (
     interview: AskingInterview,
@@ -5086,9 +5086,9 @@ export type SummarizeInterview = (
  * Interview.summarize, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires stillAwaited (そのメッセージをまだ待っている) else InterviewMovedOn: awaiting != null && awaiting == answered
- * @changes none — the command changes no common field
- * Asking -> Briefed — set: brief (new in Briefed), answered (new in Briefed), briefedAt (new in Briefed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
- * @see contexts/collaboration/model/interview.dt:177
+ * @changes brief, answered, briefedAt
+ * Asking -> Briefed — set: brief, answered, briefedAt; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export type SummarizeInterviewDecision = {
     /** @emits InterviewBriefed — exactly once when the command succeeds */
@@ -5102,7 +5102,7 @@ export type SummarizeInterviewDecision = {
 
 /**
  * The first requirement of Interview.summarize that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export function checkSummarizeInterviewRequires(interview: AskingInterview, params: SummarizeInterviewParams): 'stillAwaited' | undefined {
     if (!((interview.awaiting !== undefined) && (interview.awaiting === params.answered))) return 'stillAwaited';
@@ -5111,7 +5111,7 @@ export function checkSummarizeInterviewRequires(interview: AskingInterview, para
 
 /**
  * The parameters of Interview.confirm, by name.
- * @see contexts/collaboration/model/interview.dt:186
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export interface ConfirmInterviewParams {
     /** 参加者ID */
@@ -5132,9 +5132,9 @@ export interface ConfirmInterviewParams {
  * ファシリテーターが要約を確定する（編集してもよい）。参加者が始めた聞き取りでは、それが承認になる。新しいストーミング
  * では、実行の登録と同じ取引で、その実行を記録する。
  * @requires facilitatorConfirms (ファシリテーターが確定する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
- * @changes brief
+ * @changes brief, edited, confirmedAt
  * @emits InterviewConfirmed — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:186
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export type ConfirmInterview = (
     interview: BriefedInterview,
@@ -5150,9 +5150,9 @@ export type ConfirmInterview = (
  * Interview.confirm, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorConfirms (ファシリテーターが確定する) else FacilitatorOnly: confirmedByRole == ParticipantRole.Facilitator
- * @changes brief
- * Briefed -> Confirmed — set: brief, edited (new in Confirmed), confirmedBy (new in Confirmed), confirmedAt (new in Confirmed), run (new in Confirmed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:186
+ * @changes brief, edited, confirmedAt
+ * Briefed -> Confirmed — set: brief, edited, confirmedBy (new in Confirmed), confirmedAt, run (new in Confirmed); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: answered, briefedAt
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export type ConfirmInterviewDecision = {
     /** @emits InterviewConfirmed — exactly once when the command succeeds */
@@ -5166,7 +5166,7 @@ export type ConfirmInterviewDecision = {
 
 /**
  * The first requirement of Interview.confirm that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:186
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export function checkConfirmInterviewRequires(_interview: BriefedInterview, params: ConfirmInterviewParams): 'facilitatorConfirms' | undefined {
     if (!(params.confirmedByRole === 'Facilitator')) return 'facilitatorConfirms';
@@ -5175,7 +5175,7 @@ export function checkConfirmInterviewRequires(_interview: BriefedInterview, para
 
 /**
  * The parameters of Interview.reject, by name.
- * @see contexts/collaboration/model/interview.dt:195
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export interface RejectInterviewParams {
     /** 参加者ID */
@@ -5192,9 +5192,9 @@ export interface RejectInterviewParams {
  * 要約を却下する
  * ファシリテーターが要約を却下する（ひとことを添えてもよい）。聞き取りはそこで終わる。
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
+ * @changes rejectedBy, rejectedAt
  * @emits InterviewRejected — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:195
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export type RejectInterview = (
     interview: BriefedInterview,
@@ -5210,9 +5210,9 @@ export type RejectInterview = (
  * Interview.reject, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Briefed -> Rejected — set: rejectedBy (new in Rejected), note (new in Rejected), rejectedAt (new in Rejected); carried over: id, session, command, startedBy, opening, focus, language, startedAt, brief; dropped: answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:195
+ * @changes rejectedBy, rejectedAt
+ * Briefed -> Rejected — set: rejectedBy, note (new in Rejected), rejectedAt; carried over: id, session, command, startedBy, opening, focus, language, startedAt, brief; dropped: answered, briefedAt
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export type RejectInterviewDecision = {
     /** @emits InterviewRejected — exactly once when the command succeeds */
@@ -5226,7 +5226,7 @@ export type RejectInterviewDecision = {
 
 /**
  * The first requirement of Interview.reject that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:195
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export function checkRejectInterviewRequires(_interview: BriefedInterview, params: RejectInterviewParams): 'facilitatorRejects' | undefined {
     if (!(params.rejectedByRole === 'Facilitator')) return 'facilitatorRejects';
@@ -5235,7 +5235,7 @@ export function checkRejectInterviewRequires(_interview: BriefedInterview, param
 
 /**
  * The parameters of Interview.stop, by name.
- * @see contexts/collaboration/model/interview.dt:203
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export interface StopInterviewParams {
     /** 参加者ID */
@@ -5250,9 +5250,9 @@ export interface StopInterviewParams {
  * 聞き取りを中止する
  * 始めた人かファシリテーターが聞き取りを中止する。
  * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
+ * @changes stoppedBy, stoppedAt
  * @emits InterviewStopped — exactly once when the command succeeds
- * @see contexts/collaboration/model/interview.dt:203
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export type StopInterview = (
     interview: AskingInterview | BriefedInterview,
@@ -5268,10 +5268,10 @@ export type StopInterview = (
  * Interview.stop, decided per source state; implement it with `decide(InterviewShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires starterOrFacilitatorStops (始めた人かファシリテーターが中止する) else NotTheInterviewer: stoppedBy == startedBy || stoppedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Asking -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
- * Briefed -> Stopped — set: stoppedBy (new in Stopped), stoppedAt (new in Stopped); carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
- * @see contexts/collaboration/model/interview.dt:203
+ * @changes stoppedBy, stoppedAt
+ * Asking -> Stopped — set: stoppedBy, stoppedAt; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: awaiting, asked
+ * Briefed -> Stopped — set: stoppedBy, stoppedAt; carried over: id, session, command, startedBy, opening, focus, language, startedAt; dropped: brief, answered, briefedAt
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export type StopInterviewDecision = {
     /** @emits InterviewStopped — exactly once when the command succeeds */
@@ -5292,7 +5292,7 @@ export type StopInterviewDecision = {
 
 /**
  * The first requirement of Interview.stop that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/interview.dt:203
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export function checkStopInterviewRequires(interview: AskingInterview | BriefedInterview, params: StopInterviewParams): 'starterOrFacilitatorStops' | undefined {
     if (!((params.stoppedBy === interview.startedBy) || (params.stoppedByRole === 'Facilitator'))) return 'starterOrFacilitatorStops';
@@ -5346,19 +5346,19 @@ export const InterviewAvailability: Availability = {
 
 /**
  * Whether Interview.hear can be called on the interview in its state (Asking | Briefed).
- * @see contexts/collaboration/model/interview.dt:162
+ * @see contexts/collaboration/model/interview.dt:163
  */
 export const canHearInterview = (interview: Interview): interview is AskingInterview | BriefedInterview => isAvailable(InterviewAvailability, 'hear', interview);
 
 /**
  * The error of Interview.hear called through `anyStateInterviewCommands` on the interview when its state is not one of its source states.
- * @see contexts/collaboration/model/interview.dt:162
+ * @see contexts/collaboration/model/interview.dt:163
  */
 export type HearInterviewUnavailable = CommandUnavailable<'Collaboration.Interview', 'hear', 'Confirmed' | 'Stopped' | 'Rejected', 'Asking' | 'Briefed'>;
 
 /**
  * Interview.hear for the interview in any state: the command in a source state (Asking | Briefed), and `HearInterviewUnavailable` in another.
- * @see contexts/collaboration/model/interview.dt:162
+ * @see contexts/collaboration/model/interview.dt:163
  */
 export type HearInterviewFromAnyState = (
     interview: Interview,
@@ -5367,19 +5367,19 @@ export type HearInterviewFromAnyState = (
 
 /**
  * Whether Interview.ask can be called on the interview in its state (Asking).
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export const canAskInterview = (interview: Interview): interview is AskingInterview => isAvailable(InterviewAvailability, 'ask', interview);
 
 /**
  * The error of Interview.ask called through `anyStateInterviewCommands` on the interview when its state is not one of its source states.
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export type AskInterviewUnavailable = CommandUnavailable<'Collaboration.Interview', 'ask', 'Briefed' | 'Confirmed' | 'Stopped' | 'Rejected', 'Asking'>;
 
 /**
  * Interview.ask for the interview in any state: the command in a source state (Asking), and `AskInterviewUnavailable` in another.
- * @see contexts/collaboration/model/interview.dt:168
+ * @see contexts/collaboration/model/interview.dt:169
  */
 export type AskInterviewFromAnyState = (
     interview: Interview,
@@ -5388,19 +5388,19 @@ export type AskInterviewFromAnyState = (
 
 /**
  * Whether Interview.summarize can be called on the interview in its state (Asking).
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export const canSummarizeInterview = (interview: Interview): interview is AskingInterview => isAvailable(InterviewAvailability, 'summarize', interview);
 
 /**
  * The error of Interview.summarize called through `anyStateInterviewCommands` on the interview when its state is not one of its source states.
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export type SummarizeInterviewUnavailable = CommandUnavailable<'Collaboration.Interview', 'summarize', 'Briefed' | 'Confirmed' | 'Stopped' | 'Rejected', 'Asking'>;
 
 /**
  * Interview.summarize for the interview in any state: the command in a source state (Asking), and `SummarizeInterviewUnavailable` in another.
- * @see contexts/collaboration/model/interview.dt:177
+ * @see contexts/collaboration/model/interview.dt:178
  */
 export type SummarizeInterviewFromAnyState = (
     interview: Interview,
@@ -5409,19 +5409,19 @@ export type SummarizeInterviewFromAnyState = (
 
 /**
  * Whether Interview.confirm can be called on the interview in its state (Briefed).
- * @see contexts/collaboration/model/interview.dt:186
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export const canConfirmInterview = (interview: Interview): interview is BriefedInterview => isAvailable(InterviewAvailability, 'confirm', interview);
 
 /**
  * The error of Interview.confirm called through `anyStateInterviewCommands` on the interview when its state is not one of its source states.
- * @see contexts/collaboration/model/interview.dt:186
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export type ConfirmInterviewUnavailable = CommandUnavailable<'Collaboration.Interview', 'confirm', 'Asking' | 'Confirmed' | 'Stopped' | 'Rejected', 'Briefed'>;
 
 /**
  * Interview.confirm for the interview in any state: the command in a source state (Briefed), and `ConfirmInterviewUnavailable` in another.
- * @see contexts/collaboration/model/interview.dt:186
+ * @see contexts/collaboration/model/interview.dt:188
  */
 export type ConfirmInterviewFromAnyState = (
     interview: Interview,
@@ -5430,19 +5430,19 @@ export type ConfirmInterviewFromAnyState = (
 
 /**
  * Whether Interview.reject can be called on the interview in its state (Briefed).
- * @see contexts/collaboration/model/interview.dt:195
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export const canRejectInterview = (interview: Interview): interview is BriefedInterview => isAvailable(InterviewAvailability, 'reject', interview);
 
 /**
  * The error of Interview.reject called through `anyStateInterviewCommands` on the interview when its state is not one of its source states.
- * @see contexts/collaboration/model/interview.dt:195
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export type RejectInterviewUnavailable = CommandUnavailable<'Collaboration.Interview', 'reject', 'Asking' | 'Confirmed' | 'Stopped' | 'Rejected', 'Briefed'>;
 
 /**
  * Interview.reject for the interview in any state: the command in a source state (Briefed), and `RejectInterviewUnavailable` in another.
- * @see contexts/collaboration/model/interview.dt:195
+ * @see contexts/collaboration/model/interview.dt:197
  */
 export type RejectInterviewFromAnyState = (
     interview: Interview,
@@ -5451,19 +5451,19 @@ export type RejectInterviewFromAnyState = (
 
 /**
  * Whether Interview.stop can be called on the interview in its state (Asking | Briefed).
- * @see contexts/collaboration/model/interview.dt:203
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export const canStopInterview = (interview: Interview): interview is AskingInterview | BriefedInterview => isAvailable(InterviewAvailability, 'stop', interview);
 
 /**
  * The error of Interview.stop called through `anyStateInterviewCommands` on the interview when its state is not one of its source states.
- * @see contexts/collaboration/model/interview.dt:203
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export type StopInterviewUnavailable = CommandUnavailable<'Collaboration.Interview', 'stop', 'Confirmed' | 'Stopped' | 'Rejected', 'Asking' | 'Briefed'>;
 
 /**
  * Interview.stop for the interview in any state: the command in a source state (Asking | Briefed), and `StopInterviewUnavailable` in another.
- * @see contexts/collaboration/model/interview.dt:203
+ * @see contexts/collaboration/model/interview.dt:206
  */
 export type StopInterviewFromAnyState = (
     interview: Interview,
@@ -5504,7 +5504,7 @@ export const availableInterviewCommands = (interview: Interview): (keyof Intervi
 /**
  * 聞き取りの開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:211
+ * @see contexts/collaboration/model/interview.dt:215
  */
 export interface InterviewStarted {
     readonly type: 'Collaboration.InterviewStarted';
@@ -5528,7 +5528,7 @@ export interface InterviewStarted {
 /**
  * 聞き取りへの答え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:222
+ * @see contexts/collaboration/model/interview.dt:226
  */
 export interface InterviewAnswered {
     readonly type: 'Collaboration.InterviewAnswered';
@@ -5542,7 +5542,7 @@ export interface InterviewAnswered {
 /**
  * 聞き取りの問い
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:228
+ * @see contexts/collaboration/model/interview.dt:232
  */
 export interface InterviewQuestionAsked {
     readonly type: 'Collaboration.InterviewQuestionAsked';
@@ -5559,7 +5559,7 @@ export interface InterviewQuestionAsked {
 /**
  * 聞き取りの要約
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:237
+ * @see contexts/collaboration/model/interview.dt:241
  */
 export interface InterviewBriefed {
     readonly type: 'Collaboration.InterviewBriefed';
@@ -5575,7 +5575,7 @@ export interface InterviewBriefed {
 /**
  * 聞き取りの確定
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:244
+ * @see contexts/collaboration/model/interview.dt:248
  */
 export interface InterviewConfirmed {
     readonly type: 'Collaboration.InterviewConfirmed';
@@ -5594,7 +5594,7 @@ export interface InterviewConfirmed {
 /**
  * 聞き取りの中止
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:255
+ * @see contexts/collaboration/model/interview.dt:259
  */
 export interface InterviewStopped {
     readonly type: 'Collaboration.InterviewStopped';
@@ -5608,7 +5608,7 @@ export interface InterviewStopped {
 /**
  * 聞き取りの要約の却下
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/interview.dt:261
+ * @see contexts/collaboration/model/interview.dt:265
  */
 export interface InterviewRejected {
     readonly type: 'Collaboration.InterviewRejected';
@@ -5624,7 +5624,7 @@ export interface InterviewRejected {
 /**
  * 聞き取りを始めた人でない
  * 聞き取りを中止できるのは、始めた人かファシリテーターだけ。
- * @see contexts/collaboration/model/interview.dt:269
+ * @see contexts/collaboration/model/interview.dt:273
  */
 export interface NotTheInterviewer {
     readonly type: 'Collaboration.NotTheInterviewer';
@@ -5633,7 +5633,7 @@ export interface NotTheInterviewer {
 /**
  * 聞き取りは先に進んだ
  * AI の問いや要約が答えたメッセージを、聞き取りはもう待っていない（そのあいだに始めた人が続けて書いた）。
- * @see contexts/collaboration/model/interview.dt:272
+ * @see contexts/collaboration/model/interview.dt:276
  */
 export interface InterviewMovedOn {
     readonly type: 'Collaboration.InterviewMovedOn';
@@ -5642,7 +5642,7 @@ export interface InterviewMovedOn {
 /**
  * 走っている聞き取りがある
  * セッションには走っている聞き取りがある（1つまで）。
- * @see contexts/collaboration/model/interview.dt:275
+ * @see contexts/collaboration/model/interview.dt:279
  */
 export interface InterviewAlreadyRunning {
     readonly type: 'Collaboration.InterviewAlreadyRunning';
@@ -6075,7 +6075,7 @@ export function checkPlaceMarkRequires(params: PlaceMarkParams): 'fitsTarget' | 
 
 /**
  * The parameters of Mark.remove, by name.
- * @see contexts/collaboration/model/mark.dt:97
+ * @see contexts/collaboration/model/mark.dt:98
  */
 export interface RemoveMarkParams {
     /** 付け外しできる対象 */
@@ -6087,9 +6087,9 @@ export interface RemoveMarkParams {
  * Mark.remove (Placed -> Removed)
  * 印を外す
  * 締め切られた票は外せない（対象を付け外しできると確かめてから外す）。
- * @changes none — the command changes no common field
+ * @changes removedAt
  * @emits MarkRemoved — exactly once when the command succeeds
- * @see contexts/collaboration/model/mark.dt:97
+ * @see contexts/collaboration/model/mark.dt:98
  */
 export type RemoveMark = (
     mark: PlacedMark,
@@ -6104,9 +6104,9 @@ export type RemoveMark = (
 /**
  * Mark.remove, decided per source state; implement it with `decide(MarkShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
- * @changes none — the command changes no common field
- * Placed -> Removed — set: removedAt (new in Removed); carried over: id, session, participant, target, sign, placedAt
- * @see contexts/collaboration/model/mark.dt:97
+ * @changes removedAt
+ * Placed -> Removed — set: removedAt; carried over: id, session, participant, target, sign, placedAt
+ * @see contexts/collaboration/model/mark.dt:98
  */
 export type RemoveMarkDecision = {
     /** @emits MarkRemoved — exactly once when the command succeeds */
@@ -6150,19 +6150,19 @@ export const MarkAvailability: Availability = {
 
 /**
  * Whether Mark.remove can be called on the mark in its state (Placed).
- * @see contexts/collaboration/model/mark.dt:97
+ * @see contexts/collaboration/model/mark.dt:98
  */
 export const canRemoveMark = (mark: Mark): mark is PlacedMark => isAvailable(MarkAvailability, 'remove', mark);
 
 /**
  * The error of Mark.remove called through `anyStateMarkCommands` on the mark when its state is not one of its source states.
- * @see contexts/collaboration/model/mark.dt:97
+ * @see contexts/collaboration/model/mark.dt:98
  */
 export type RemoveMarkUnavailable = CommandUnavailable<'Collaboration.Mark', 'remove', 'Removed', 'Placed'>;
 
 /**
  * Mark.remove for the mark in any state: the command in a source state (Placed), and `RemoveMarkUnavailable` in another.
- * @see contexts/collaboration/model/mark.dt:97
+ * @see contexts/collaboration/model/mark.dt:98
  */
 export type RemoveMarkFromAnyState = (
     mark: Mark,
@@ -6193,7 +6193,7 @@ export const availableMarkCommands = (mark: Mark): (keyof MarkCommandsFromAnySta
 /**
  * 印を付けた
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/mark.dt:102
+ * @see contexts/collaboration/model/mark.dt:104
  */
 export interface MarkPlaced {
     readonly type: 'Collaboration.MarkPlaced';
@@ -6213,7 +6213,7 @@ export interface MarkPlaced {
 /**
  * 印を外した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/mark.dt:111
+ * @see contexts/collaboration/model/mark.dt:113
  */
 export interface MarkRemoved {
     readonly type: 'Collaboration.MarkRemoved';
@@ -6231,7 +6231,7 @@ export interface MarkRemoved {
 /**
  * 印の対象なし
  * 印の対象がセッションにない（メッセージ・実行・問い・選択肢・前提・別案・人が済みにする区切りのどれか）。
- * @see contexts/collaboration/model/mark.dt:120
+ * @see contexts/collaboration/model/mark.dt:122
  */
 export interface MarkTargetNotFound {
     readonly type: 'Collaboration.MarkTargetNotFound';
@@ -6240,7 +6240,7 @@ export interface MarkTargetNotFound {
 /**
  * 締め切られた票
  * 票が締め切られている（回答した・別案を選んだ・あとの実行が同じ依頼を扱った・実行が確認待ちでない）。
- * @see contexts/collaboration/model/mark.dt:123
+ * @see contexts/collaboration/model/mark.dt:125
  */
 export interface MarkTargetClosed {
     readonly type: 'Collaboration.MarkTargetClosed';
@@ -6249,7 +6249,7 @@ export interface MarkTargetClosed {
 /**
  * 対象に合わない印
  * 印の種類が対象に合わない（票は選択肢と前提に、反応はメッセージとターンに、済みはガイドの区切りに）。
- * @see contexts/collaboration/model/mark.dt:126
+ * @see contexts/collaboration/model/mark.dt:128
  */
 export interface MarkNotForTarget {
     readonly type: 'Collaboration.MarkNotForTarget';
@@ -6258,7 +6258,7 @@ export interface MarkNotForTarget {
 /**
  * ファシリテーターの票
  * ファシリテーターは票を入れない。
- * @see contexts/collaboration/model/mark.dt:129
+ * @see contexts/collaboration/model/mark.dt:131
  */
 export interface FacilitatorDoesNotVote {
     readonly type: 'Collaboration.FacilitatorDoesNotVote';
@@ -6268,7 +6268,7 @@ export interface FacilitatorDoesNotVote {
  * 反応の種類の上限
  * 1つの対象（メッセージ・AI のターン）に付く絵文字の種類は上限まで（`domain/marks.ts` の `MAX_REACTION_EMOJI`）。
  * 付いている絵文字を付けるのは上限に関わらずできる。
- * @see contexts/collaboration/model/mark.dt:133
+ * @see contexts/collaboration/model/mark.dt:135
  */
 export interface ReactionLimitReached {
     readonly type: 'Collaboration.ReactionLimitReached';
@@ -6773,7 +6773,7 @@ export type ProposeChangeProposalDecision = (
 
 /**
  * The parameters of ChangeProposal.approve, by name.
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export interface ApproveChangeProposalParams {
     /** 参加者ID */
@@ -6796,9 +6796,9 @@ export interface ApproveChangeProposalParams {
  * 実行を記録する。
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
  * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
- * @changes none — the command changes no common field
+ * @changes approvedBy, approvedAt, run
  * @emits ProposalApproved — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export type ApproveChangeProposal = (
     changeProposal: OpenChangeProposal,
@@ -6815,9 +6815,9 @@ export type ApproveChangeProposal = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorApproves (ファシリテーターが承認する) else FacilitatorOnly: approvedByRole == ParticipantRole.Facilitator
  * @requires optionOfProposal (選択肢があれば、そのうちの1つを選ぶ) else NoSuchOption: (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
- * @changes none — the command changes no common field
- * Open -> Approved — set: approvedBy (new in Approved), approvedAt (new in Approved), option (new in Approved), editedHow (new in Approved), run (new in Approved); carried over: id, session, triage, request, requestedBy, content, proposedAt
- * @see contexts/collaboration/model/proposal.dt:97
+ * @changes approvedBy, approvedAt, run
+ * Open -> Approved — set: approvedBy, approvedAt, option (new in Approved), editedHow (new in Approved), run; carried over: id, session, triage, request, requestedBy, content, proposedAt
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export type ApproveChangeProposalDecision = {
     /** @emits ProposalApproved — exactly once when the command succeeds */
@@ -6831,7 +6831,7 @@ export type ApproveChangeProposalDecision = {
 
 /**
  * The first requirement of ChangeProposal.approve that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export function checkApproveChangeProposalRequires(changeProposal: OpenChangeProposal, params: ApproveChangeProposalParams): 'facilitatorApproves' | 'optionOfProposal' | undefined {
     if (!(params.approvedByRole === 'Facilitator')) return 'facilitatorApproves';
@@ -6841,7 +6841,7 @@ export function checkApproveChangeProposalRequires(changeProposal: OpenChangePro
 
 /**
  * The parameters of ChangeProposal.reject, by name.
- * @see contexts/collaboration/model/proposal.dt:108
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export interface RejectChangeProposalParams {
     /** 参加者ID */
@@ -6858,9 +6858,9 @@ export interface RejectChangeProposalParams {
  * 変更案を却下する
  * ファシリテーターが却下する（ひとことを添えてもよい）。
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
+ * @changes rejectedBy, rejectedAt
  * @emits ProposalRejected — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:108
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export type RejectChangeProposal = (
     changeProposal: OpenChangeProposal,
@@ -6876,9 +6876,9 @@ export type RejectChangeProposal = (
  * ChangeProposal.reject, decided per source state; implement it with `decide(ChangeProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorRejects (ファシリテーターが却下する) else FacilitatorOnly: rejectedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Open -> Rejected — set: rejectedBy (new in Rejected), rejectedAt (new in Rejected), note (new in Rejected); carried over: id, session, triage, request, requestedBy, content, proposedAt
- * @see contexts/collaboration/model/proposal.dt:108
+ * @changes rejectedBy, rejectedAt
+ * Open -> Rejected — set: rejectedBy, rejectedAt, note (new in Rejected); carried over: id, session, triage, request, requestedBy, content, proposedAt
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export type RejectChangeProposalDecision = {
     /** @emits ProposalRejected — exactly once when the command succeeds */
@@ -6892,7 +6892,7 @@ export type RejectChangeProposalDecision = {
 
 /**
  * The first requirement of ChangeProposal.reject that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/proposal.dt:108
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export function checkRejectChangeProposalRequires(_changeProposal: OpenChangeProposal, params: RejectChangeProposalParams): 'facilitatorRejects' | undefined {
     if (!(params.rejectedByRole === 'Facilitator')) return 'facilitatorRejects';
@@ -6901,7 +6901,7 @@ export function checkRejectChangeProposalRequires(_changeProposal: OpenChangePro
 
 /**
  * The parameters of ChangeProposal.withdraw, by name.
- * @see contexts/collaboration/model/proposal.dt:116
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export interface WithdrawChangeProposalParams {
     /** 参加者ID */
@@ -6914,9 +6914,9 @@ export interface WithdrawChangeProposalParams {
  * 変更案を取り下げる
  * 依頼した参加者が、承認待ちのあいだに取り下げる。
  * @requires requesterWithdraws (依頼した人が取り下げる) else NotTheRequester: withdrawnBy == requestedBy
- * @changes none — the command changes no common field
+ * @changes withdrawnAt
  * @emits ProposalWithdrawn — exactly once when the command succeeds
- * @see contexts/collaboration/model/proposal.dt:116
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export type WithdrawChangeProposal = (
     changeProposal: OpenChangeProposal,
@@ -6932,9 +6932,9 @@ export type WithdrawChangeProposal = (
  * ChangeProposal.withdraw, decided per source state; implement it with `decide(ChangeProposalShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires requesterWithdraws (依頼した人が取り下げる) else NotTheRequester: withdrawnBy == requestedBy
- * @changes none — the command changes no common field
- * Open -> Withdrawn — set: withdrawnAt (new in Withdrawn); carried over: id, session, triage, request, requestedBy, content, proposedAt
- * @see contexts/collaboration/model/proposal.dt:116
+ * @changes withdrawnAt
+ * Open -> Withdrawn — set: withdrawnAt; carried over: id, session, triage, request, requestedBy, content, proposedAt
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export type WithdrawChangeProposalDecision = {
     /** @emits ProposalWithdrawn — exactly once when the command succeeds */
@@ -6948,7 +6948,7 @@ export type WithdrawChangeProposalDecision = {
 
 /**
  * The first requirement of ChangeProposal.withdraw that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/proposal.dt:116
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export function checkWithdrawChangeProposalRequires(changeProposal: OpenChangeProposal, params: WithdrawChangeProposalParams): 'requesterWithdraws' | undefined {
     if (!(params.withdrawnBy === changeProposal.requestedBy)) return 'requesterWithdraws';
@@ -6993,19 +6993,19 @@ export const ChangeProposalAvailability: Availability = {
 
 /**
  * Whether ChangeProposal.approve can be called on the changeProposal in its state (Open).
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export const canApproveChangeProposal = (changeProposal: ChangeProposal): changeProposal is OpenChangeProposal => isAvailable(ChangeProposalAvailability, 'approve', changeProposal);
 
 /**
  * The error of ChangeProposal.approve called through `anyStateChangeProposalCommands` on the changeProposal when its state is not one of its source states.
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export type ApproveChangeProposalUnavailable = CommandUnavailable<'Collaboration.ChangeProposal', 'approve', 'Approved' | 'Rejected' | 'Withdrawn', 'Open'>;
 
 /**
  * ChangeProposal.approve for the changeProposal in any state: the command in a source state (Open), and `ApproveChangeProposalUnavailable` in another.
- * @see contexts/collaboration/model/proposal.dt:97
+ * @see contexts/collaboration/model/proposal.dt:98
  */
 export type ApproveChangeProposalFromAnyState = (
     changeProposal: ChangeProposal,
@@ -7014,19 +7014,19 @@ export type ApproveChangeProposalFromAnyState = (
 
 /**
  * Whether ChangeProposal.reject can be called on the changeProposal in its state (Open).
- * @see contexts/collaboration/model/proposal.dt:108
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export const canRejectChangeProposal = (changeProposal: ChangeProposal): changeProposal is OpenChangeProposal => isAvailable(ChangeProposalAvailability, 'reject', changeProposal);
 
 /**
  * The error of ChangeProposal.reject called through `anyStateChangeProposalCommands` on the changeProposal when its state is not one of its source states.
- * @see contexts/collaboration/model/proposal.dt:108
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export type RejectChangeProposalUnavailable = CommandUnavailable<'Collaboration.ChangeProposal', 'reject', 'Approved' | 'Rejected' | 'Withdrawn', 'Open'>;
 
 /**
  * ChangeProposal.reject for the changeProposal in any state: the command in a source state (Open), and `RejectChangeProposalUnavailable` in another.
- * @see contexts/collaboration/model/proposal.dt:108
+ * @see contexts/collaboration/model/proposal.dt:110
  */
 export type RejectChangeProposalFromAnyState = (
     changeProposal: ChangeProposal,
@@ -7035,19 +7035,19 @@ export type RejectChangeProposalFromAnyState = (
 
 /**
  * Whether ChangeProposal.withdraw can be called on the changeProposal in its state (Open).
- * @see contexts/collaboration/model/proposal.dt:116
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export const canWithdrawChangeProposal = (changeProposal: ChangeProposal): changeProposal is OpenChangeProposal => isAvailable(ChangeProposalAvailability, 'withdraw', changeProposal);
 
 /**
  * The error of ChangeProposal.withdraw called through `anyStateChangeProposalCommands` on the changeProposal when its state is not one of its source states.
- * @see contexts/collaboration/model/proposal.dt:116
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export type WithdrawChangeProposalUnavailable = CommandUnavailable<'Collaboration.ChangeProposal', 'withdraw', 'Approved' | 'Rejected' | 'Withdrawn', 'Open'>;
 
 /**
  * ChangeProposal.withdraw for the changeProposal in any state: the command in a source state (Open), and `WithdrawChangeProposalUnavailable` in another.
- * @see contexts/collaboration/model/proposal.dt:116
+ * @see contexts/collaboration/model/proposal.dt:119
  */
 export type WithdrawChangeProposalFromAnyState = (
     changeProposal: ChangeProposal,
@@ -7082,7 +7082,7 @@ export const availableChangeProposalCommands = (changeProposal: ChangeProposal):
 /**
  * 変更案の提案
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:122
+ * @see contexts/collaboration/model/proposal.dt:126
  */
 export interface ChangeProposed {
     readonly type: 'Collaboration.ChangeProposed';
@@ -7104,7 +7104,7 @@ export interface ChangeProposed {
 /**
  * 変更案の承認
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:132
+ * @see contexts/collaboration/model/proposal.dt:136
  */
 export interface ProposalApproved {
     readonly type: 'Collaboration.ProposalApproved';
@@ -7124,7 +7124,7 @@ export interface ProposalApproved {
 /**
  * 変更案の却下
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:141
+ * @see contexts/collaboration/model/proposal.dt:145
  */
 export interface ProposalRejected {
     readonly type: 'Collaboration.ProposalRejected';
@@ -7140,7 +7140,7 @@ export interface ProposalRejected {
 /**
  * 変更案の取り下げ
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/proposal.dt:148
+ * @see contexts/collaboration/model/proposal.dt:152
  */
 export interface ProposalWithdrawn {
     readonly type: 'Collaboration.ProposalWithdrawn';
@@ -7154,7 +7154,7 @@ export interface ProposalWithdrawn {
 /**
  * 依頼した人でない
  * 変更案を取り下げられるのは、依頼した参加者だけ。
- * @see contexts/collaboration/model/proposal.dt:155
+ * @see contexts/collaboration/model/proposal.dt:159
  */
 export interface NotTheRequester {
     readonly type: 'Collaboration.NotTheRequester';
@@ -7163,7 +7163,7 @@ export interface NotTheRequester {
 /**
  * 変更案にない選択肢
  * 承認で選んだ選択肢が変更案にない（選択肢のある変更案で選ばなかった、選択肢のない変更案で選んだ、を含む）。
- * @see contexts/collaboration/model/proposal.dt:158
+ * @see contexts/collaboration/model/proposal.dt:162
  */
 export interface NoSuchOption {
     readonly type: 'Collaboration.NoSuchOption';
@@ -7742,7 +7742,7 @@ export type WriteSessionRecordDecision = (
 
 /**
  * The parameters of SessionRecord.revise, by name.
- * @see contexts/collaboration/model/record.dt:145
+ * @see contexts/collaboration/model/record.dt:146
  */
 export interface ReviseSessionRecordParams {
     /** 記録したこと */
@@ -7756,7 +7756,7 @@ export interface ReviseSessionRecordParams {
  * 記録を書き足す: 済みの付け外しを続けてまとめる、お願いに行方を書く。どう書き足すかはコード（`domain/records.ts`）が決める。
  * @changes fact, revisedAt
  * @emits RecordRevised — exactly once when the command succeeds
- * @see contexts/collaboration/model/record.dt:145
+ * @see contexts/collaboration/model/record.dt:146
  */
 export type ReviseSessionRecord = (
     sessionRecord: WrittenSessionRecord,
@@ -7773,7 +7773,7 @@ export type ReviseSessionRecord = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @changes fact, revisedAt
  * Written -> Written — set: fact, revisedAt; carried over: id, session, by, replyTo, at
- * @see contexts/collaboration/model/record.dt:145
+ * @see contexts/collaboration/model/record.dt:146
  */
 export type ReviseSessionRecordDecision = {
     /** @emits RecordRevised — exactly once when the command succeeds */
@@ -7817,19 +7817,19 @@ export const SessionRecordAvailability: Availability = {
 
 /**
  * Whether SessionRecord.revise can be called on the sessionRecord in its state (Written).
- * @see contexts/collaboration/model/record.dt:145
+ * @see contexts/collaboration/model/record.dt:146
  */
 export const canReviseSessionRecord = (sessionRecord: SessionRecord): sessionRecord is WrittenSessionRecord => isAvailable(SessionRecordAvailability, 'revise', sessionRecord);
 
 /**
  * The error of SessionRecord.revise called through `anyStateSessionRecordCommands` on the sessionRecord when its state is not one of its source states.
- * @see contexts/collaboration/model/record.dt:145
+ * @see contexts/collaboration/model/record.dt:146
  */
 export type ReviseSessionRecordUnavailable = never;
 
 /**
  * SessionRecord.revise for the sessionRecord in any state: the command in a source state (Written), and `ReviseSessionRecordUnavailable` in another.
- * @see contexts/collaboration/model/record.dt:145
+ * @see contexts/collaboration/model/record.dt:146
  */
 export type ReviseSessionRecordFromAnyState = (
     sessionRecord: SessionRecord,
@@ -7860,7 +7860,7 @@ export const availableSessionRecordCommands = (sessionRecord: SessionRecord): (k
 /**
  * 記録した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/record.dt:151
+ * @see contexts/collaboration/model/record.dt:152
  */
 export interface RecordWritten {
     readonly type: 'Collaboration.RecordWritten';
@@ -7880,7 +7880,7 @@ export interface RecordWritten {
 /**
  * 記録を書き足した
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/record.dt:160
+ * @see contexts/collaboration/model/record.dt:161
  */
 export interface RecordRevised {
     readonly type: 'Collaboration.RecordRevised';
@@ -8396,7 +8396,7 @@ export function checkSendRequestRequires(params: SendRequestParams): 'atMostTwen
 
 /**
  * The parameters of Request.requestRevert, by name.
- * @see contexts/collaboration/model/request.dt:137
+ * @see contexts/collaboration/model/request.dt:138
  */
 export interface RequestRevertRequestParams {
     /** 依頼ID */
@@ -8420,7 +8420,7 @@ export interface RequestRevertRequestParams {
  * ファシリテーターが、ある作業（実行）の変更の打ち消しを頼む。対象も言及もない、ワークスペース全体についての依頼。
  * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:137
+ * @see contexts/collaboration/model/request.dt:138
  */
 export type RequestRevertRequest = (
     params: RequestRevertRequestParams,
@@ -8437,7 +8437,7 @@ export type RequestRevertRequest = (
  * @requires facilitatorReverts (ファシリテーターが打ち消す) else FacilitatorOnly: authorRole == ParticipantRole.Facilitator
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:137
+ * @see contexts/collaboration/model/request.dt:138
  */
 export type RequestRevertRequestDecision = (
     params: RequestRevertRequestParams,
@@ -8450,7 +8450,7 @@ export type RequestRevertRequestDecision = (
 
 /**
  * The first requirement of Request.requestRevert that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/request.dt:137
+ * @see contexts/collaboration/model/request.dt:138
  */
 export function checkRequestRevertRequestRequires(params: RequestRevertRequestParams): 'facilitatorReverts' | undefined {
     if (!(params.authorRole === 'Facilitator')) return 'facilitatorReverts';
@@ -8459,7 +8459,7 @@ export function checkRequestRevertRequestRequires(params: RequestRevertRequestPa
 
 /**
  * The parameters of Request.recordEdit, by name.
- * @see contexts/collaboration/model/request.dt:145
+ * @see contexts/collaboration/model/request.dt:147
  */
 export interface RecordEditRequestParams {
     /** 依頼ID */
@@ -8480,7 +8480,7 @@ export interface RecordEditRequestParams {
  * 付箋の手直しを記録する
  * 参加者が付箋を直した（ADR 0033）。誰でも直せる。対象も言及もなく、本文は何を直したかの一文。
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:145
+ * @see contexts/collaboration/model/request.dt:147
  */
 export type RecordEditRequest = (
     params: RecordEditRequestParams,
@@ -8496,7 +8496,7 @@ export type RecordEditRequest = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:145
+ * @see contexts/collaboration/model/request.dt:147
  */
 export type RecordEditRequestDecision = (
     params: RecordEditRequestParams,
@@ -8509,7 +8509,7 @@ export type RecordEditRequestDecision = (
 
 /**
  * The parameters of Request.answer, by name.
- * @see contexts/collaboration/model/request.dt:152
+ * @see contexts/collaboration/model/request.dt:155
  */
 export interface AnswerRequestParams {
     /** 依頼ID */
@@ -8532,7 +8532,7 @@ export interface AnswerRequestParams {
  * 聞き取りを確定したあとの dt のお知らせも、これで AI の名で書く（`journeyNote` を添える）。道のりを完了にしたあとのお知らせは
  * 答えるメッセージがなく、返信にならない。
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:152
+ * @see contexts/collaboration/model/request.dt:155
  */
 export type AnswerRequest = (
     params: AnswerRequestParams,
@@ -8548,7 +8548,7 @@ export type AnswerRequest = (
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate from them.
  * new -> Sent — set: every field
  * @emits RequestSent — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:152
+ * @see contexts/collaboration/model/request.dt:155
  */
 export type AnswerRequestDecision = (
     params: AnswerRequestParams,
@@ -8561,7 +8561,7 @@ export type AnswerRequestDecision = (
 
 /**
  * The parameters of Request.redact, by name.
- * @see contexts/collaboration/model/request.dt:158
+ * @see contexts/collaboration/model/request.dt:162
  */
 export interface RedactRequestParams {
     /** 置き換える本文 */
@@ -8576,7 +8576,7 @@ export interface RedactRequestParams {
  * 置き換え、ほかは残す。もう墨消ししたメッセージは変えない（日時もそのまま）。
  * @changes body, redactedAt
  * @emits RequestRedacted — exactly once when the command succeeds
- * @see contexts/collaboration/model/request.dt:158
+ * @see contexts/collaboration/model/request.dt:162
  */
 export type RedactRequest = <S extends SentRequest | DismissedRequest>(
     request: S,
@@ -8604,7 +8604,7 @@ export type RedactRequest = <S extends SentRequest | DismissedRequest>(
  * @changes body, redactedAt
  * Sent -> Sent — set: body, redactedAt; carried over: id, session, author, targets, sentAt, replyTo, mentions, reverts, viewedAt, journeyNote, edit
  * Dismissed -> Dismissed — set: body, redactedAt; carried over: id, session, author, targets, sentAt, replyTo, mentions, reverts, viewedAt, journeyNote, edit, dismissedBy, dismissedAt
- * @see contexts/collaboration/model/request.dt:158
+ * @see contexts/collaboration/model/request.dt:162
  */
 export type RedactRequestDecision = {
     /** @emits RequestRedacted — exactly once when the command succeeds */
@@ -8661,19 +8661,19 @@ export const RequestAvailability: Availability = {
 
 /**
  * Whether Request.redact can be called on the request in its state (Sent | Dismissed).
- * @see contexts/collaboration/model/request.dt:158
+ * @see contexts/collaboration/model/request.dt:162
  */
 export const canRedactRequest = (request: Request): request is SentRequest | DismissedRequest => isAvailable(RequestAvailability, 'redact', request);
 
 /**
  * The error of Request.redact called through `anyStateRequestCommands` on the request when its state is not one of its source states.
- * @see contexts/collaboration/model/request.dt:158
+ * @see contexts/collaboration/model/request.dt:162
  */
 export type RedactRequestUnavailable = never;
 
 /**
  * Request.redact for the request in any state: the command in a source state (Sent | Dismissed), and `RedactRequestUnavailable` in another.
- * @see contexts/collaboration/model/request.dt:158
+ * @see contexts/collaboration/model/request.dt:162
  */
 export type RedactRequestFromAnyState = (
     request: Request,
@@ -8704,7 +8704,7 @@ export const availableRequestCommands = (request: Request): (keyof RequestComman
 /**
  * 依頼送信
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/request.dt:165
+ * @see contexts/collaboration/model/request.dt:169
  */
 export interface RequestSent {
     readonly type: 'Collaboration.RequestSent';
@@ -8737,7 +8737,7 @@ export interface RequestSent {
  * 墨消し
  * 本文を墨消しした。ページには状態を送り直して伝える（アウトボックスには残さない: 残せば本文の代わりに墨消しの記録が
  * 増えるだけで、送ったときの `RequestSent` はアウトボックスの中で墨消しする）。
- * @see contexts/collaboration/model/request.dt:185
+ * @see contexts/collaboration/model/request.dt:189
  */
 export interface RequestRedacted {
     readonly type: 'Collaboration.RequestRedacted';
@@ -8750,7 +8750,7 @@ export interface RequestRedacted {
  * 依頼見送り
  * 以前のセッションのアウトボックスに残る見送り。いまは発行しないが、読み直し（再生）のために残す。
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/request.dt:191
+ * @see contexts/collaboration/model/request.dt:195
  */
 export interface RequestDismissed {
     readonly type: 'Collaboration.RequestDismissed';
@@ -8764,7 +8764,7 @@ export interface RequestDismissed {
 /**
  * 依頼なし
  * 指定した依頼がない。
- * @see contexts/collaboration/model/request.dt:198
+ * @see contexts/collaboration/model/request.dt:202
  */
 export interface RequestNotFound {
     readonly type: 'Collaboration.RequestNotFound';
@@ -8775,7 +8775,7 @@ export interface RequestNotFound {
 /**
  * 別のセッションの依頼
  * 依頼は別のセッションのもの。
- * @see contexts/collaboration/model/request.dt:203
+ * @see contexts/collaboration/model/request.dt:207
  */
 export interface RequestOfAnotherSession {
     readonly type: 'Collaboration.RequestOfAnotherSession';
@@ -8786,7 +8786,7 @@ export interface RequestOfAnotherSession {
 /**
  * 見送り済みの依頼
  * 依頼はすでに見送られている。
- * @see contexts/collaboration/model/request.dt:208
+ * @see contexts/collaboration/model/request.dt:212
  */
 export interface RequestAlreadyDismissed {
     readonly type: 'Collaboration.RequestAlreadyDismissed';
@@ -8797,7 +8797,7 @@ export interface RequestAlreadyDismissed {
 /**
  * 参加者でない人の言及
  * 言及した人は、そのセッションの参加者ではない。
- * @see contexts/collaboration/model/request.dt:213
+ * @see contexts/collaboration/model/request.dt:217
  */
 export interface MentionedNotAParticipant {
     readonly type: 'Collaboration.MentionedNotAParticipant';
@@ -8808,7 +8808,7 @@ export interface MentionedNotAParticipant {
 /**
  * 実行なし
  * 返信先の実行がない。
- * @see contexts/collaboration/model/request.dt:218
+ * @see contexts/collaboration/model/request.dt:222
  */
 export interface RunNotFound {
     readonly type: 'Collaboration.RunNotFound';
@@ -8819,7 +8819,7 @@ export interface RunNotFound {
 /**
  * 別のセッションの実行
  * 返信先の実行は別のセッションのもの。
- * @see contexts/collaboration/model/request.dt:223
+ * @see contexts/collaboration/model/request.dt:227
  */
 export interface RunOfAnotherSession {
     readonly type: 'Collaboration.RunOfAnotherSession';
@@ -8830,7 +8830,7 @@ export interface RunOfAnotherSession {
 /**
  * 返信できない実行
  * 返信先の実行は、まだ終わっていないか確認待ち（返信できるのは完了・失敗・辞退・中止・打ち消しの実行）。
- * @see contexts/collaboration/model/request.dt:228
+ * @see contexts/collaboration/model/request.dt:232
  */
 export interface RunNotReplyable {
     readonly type: 'Collaboration.RunNotReplyable';
@@ -8841,7 +8841,7 @@ export interface RunNotReplyable {
 /**
  * 打ち消せない実行
  * 打ち消す実行は、ファイルの変更を記録していない（変更のない実行、結果のない実行）か、もう打ち消された・打ち消しの待ちや最中。
- * @see contexts/collaboration/model/request.dt:233
+ * @see contexts/collaboration/model/request.dt:237
  */
 export interface RunNotRevertable {
     readonly type: 'Collaboration.RunNotRevertable';
@@ -8852,7 +8852,7 @@ export interface RunNotRevertable {
 /**
  * 言及する人が多すぎる
  * 本文で言及する人が20人を超える。
- * @see contexts/collaboration/model/request.dt:238
+ * @see contexts/collaboration/model/request.dt:242
  */
 export interface TooManyMentions {
     readonly type: 'Collaboration.TooManyMentions';
@@ -8861,7 +8861,7 @@ export interface TooManyMentions {
 /**
  * 言及する人の重複
  * 本文で同じ人を2回言及している。
- * @see contexts/collaboration/model/request.dt:241
+ * @see contexts/collaboration/model/request.dt:245
  */
 export interface DuplicateMention {
     readonly type: 'Collaboration.DuplicateMention';
@@ -8870,7 +8870,7 @@ export interface DuplicateMention {
 /**
  * 対象が多すぎる
  * 依頼の対象が20件を超える。
- * @see contexts/collaboration/model/request.dt:244
+ * @see contexts/collaboration/model/request.dt:248
  */
 export interface TooManyTargets {
     readonly type: 'Collaboration.TooManyTargets';
@@ -8879,7 +8879,7 @@ export interface TooManyTargets {
 /**
  * 対象の重複
  * 依頼の対象に同じものが2回ある。
- * @see contexts/collaboration/model/request.dt:247
+ * @see contexts/collaboration/model/request.dt:251
  */
 export interface DuplicateTarget {
     readonly type: 'Collaboration.DuplicateTarget';
@@ -8888,7 +8888,7 @@ export interface DuplicateTarget {
 /**
  * 対象にワークスペース全体
  * 依頼の対象にワークスペース全体がある（ワークスペース全体は、対象を挙げないことで表す）。
- * @see contexts/collaboration/model/request.dt:250
+ * @see contexts/collaboration/model/request.dt:254
  */
 export interface WorkspaceTarget {
     readonly type: 'Collaboration.WorkspaceTarget';
@@ -9272,7 +9272,7 @@ export function checkTakeRevisionRequiresWith(checks: TakeRevisionDeclaredRequir
 
 /**
  * The parameters of Revision.restore, by name.
- * @see contexts/collaboration/model/revision.dt:78
+ * @see contexts/collaboration/model/revision.dt:79
  */
 export interface RestoreRevisionParams {
     /** リビジョンID */
@@ -9302,7 +9302,7 @@ export interface RestoreRevisionParams {
  * @requires facilitatorRestores (ファシリテーターが復元する) else FacilitatorOnly: restoredByRole == ParticipantRole.Facilitator
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:78
+ * @see contexts/collaboration/model/revision.dt:79
  */
 export type RestoreRevision = (
     params: RestoreRevisionParams,
@@ -9320,7 +9320,7 @@ export type RestoreRevision = (
  * @requires hashMatchesFiles (内容ハッシュがファイルと合う) else ContentHashMismatch: not expressed in the DSL
  * new -> Recorded — set: every field
  * @emits RevisionRestored — exactly once when the command succeeds
- * @see contexts/collaboration/model/revision.dt:78
+ * @see contexts/collaboration/model/revision.dt:79
  */
 export type RestoreRevisionDecision = (
     params: RestoreRevisionParams,
@@ -9333,13 +9333,13 @@ export type RestoreRevisionDecision = (
 
 /**
  * The requirements of Revision.restore that the DSL does not express: implement them in your code and pass them to `checkRestoreRevisionRequiresWith`.
- * @see contexts/collaboration/model/revision.dt:78
+ * @see contexts/collaboration/model/revision.dt:79
  */
 export type RestoreRevisionDeclaredRequires = { readonly hashMatchesFiles: (params: RestoreRevisionParams) => boolean };
 
 /**
  * The first requirement of Revision.restore that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/revision.dt:78
+ * @see contexts/collaboration/model/revision.dt:79
  */
 export function checkRestoreRevisionRequiresWith(checks: RestoreRevisionDeclaredRequires): (params: RestoreRevisionParams) => 'facilitatorRestores' | 'hashMatchesFiles' | undefined {
     return (params) => {
@@ -9370,7 +9370,7 @@ export type RevisionEvent = RevisionRecorded | RevisionRestored;
 /**
  * リビジョン記録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/revision.dt:88
+ * @see contexts/collaboration/model/revision.dt:90
  */
 export interface RevisionRecorded {
     readonly type: 'Collaboration.RevisionRecorded';
@@ -9390,7 +9390,7 @@ export interface RevisionRecorded {
 /**
  * リビジョン復元
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/revision.dt:97
+ * @see contexts/collaboration/model/revision.dt:99
  */
 export interface RevisionRestored {
     readonly type: 'Collaboration.RevisionRestored';
@@ -9412,7 +9412,7 @@ export interface RevisionRestored {
 /**
  * リビジョンなし
  * 指定したリビジョンがない。
- * @see contexts/collaboration/model/revision.dt:108
+ * @see contexts/collaboration/model/revision.dt:110
  */
 export interface RevisionNotFound {
     readonly type: 'Collaboration.RevisionNotFound';
@@ -9423,7 +9423,7 @@ export interface RevisionNotFound {
 /**
  * 別のセッションのリビジョン
  * リビジョンは別のセッションのもの。
- * @see contexts/collaboration/model/revision.dt:113
+ * @see contexts/collaboration/model/revision.dt:115
  */
 export interface RevisionOfAnotherSession {
     readonly type: 'Collaboration.RevisionOfAnotherSession';
@@ -9434,7 +9434,7 @@ export interface RevisionOfAnotherSession {
 /**
  * シンボリックリンク
  * ワークスペースのソースのパスにシンボリックリンクがある。
- * @see contexts/collaboration/model/revision.dt:118
+ * @see contexts/collaboration/model/revision.dt:120
  */
 export interface SymlinkInWorkspace {
     readonly type: 'Collaboration.SymlinkInWorkspace';
@@ -9445,7 +9445,7 @@ export interface SymlinkInWorkspace {
 /**
  * ルートの外のパス
  * リビジョンのパスがワークスペースのルートの外を指す。
- * @see contexts/collaboration/model/revision.dt:123
+ * @see contexts/collaboration/model/revision.dt:125
  */
 export interface PathOutsideRoot {
     readonly type: 'Collaboration.PathOutsideRoot';
@@ -9455,7 +9455,7 @@ export interface PathOutsideRoot {
 /**
  * 外部での変更
  * 最後のスナップショットのあとで、ワークスペースのソースが外部で変わった。
- * @see contexts/collaboration/model/revision.dt:128
+ * @see contexts/collaboration/model/revision.dt:130
  */
 export interface ExternalChangesSinceSnapshot {
     readonly type: 'Collaboration.ExternalChangesSinceSnapshot';
@@ -9466,7 +9466,7 @@ export interface ExternalChangesSinceSnapshot {
 /**
  * 内容ハッシュの不一致
  * 内容ハッシュが、ファイルのパスと内容ハッシュから決まるものと合わない。
- * @see contexts/collaboration/model/revision.dt:133
+ * @see contexts/collaboration/model/revision.dt:135
  */
 export interface ContentHashMismatch {
     readonly type: 'Collaboration.ContentHashMismatch';
@@ -9475,7 +9475,7 @@ export interface ContentHashMismatch {
 /**
  * 復元は確認が必要
  * 復元の由来のリビジョンは、復元できると確かめてから restore で記録する。
- * @see contexts/collaboration/model/revision.dt:136
+ * @see contexts/collaboration/model/revision.dt:138
  */
 export interface RestoreNeedsCheck {
     readonly type: 'Collaboration.RestoreNeedsCheck';
@@ -9806,7 +9806,7 @@ export type StartSessionDecision = (
 
 /**
  * The parameters of Session.join, by name.
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export interface JoinSessionParams {
     /** 参加者 */
@@ -9824,7 +9824,7 @@ export interface JoinSessionParams {
  * @requires collaborative (共同編集のセッション) else SoloSession: mode == SessionMode.Collab
  * @changes participants
  * @emits ParticipantJoined — exactly once when the command succeeds
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export type JoinSession = (
     session: OpenSession,
@@ -9843,7 +9843,7 @@ export type JoinSession = (
  * @requires collaborative (共同編集のセッション) else SoloSession: mode == SessionMode.Collab
  * @changes participants
  * Open -> Open — set: participants; carried over: id, facilitator, mode, startedAt, currentJourney
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export type JoinSessionDecision = {
     /** @emits ParticipantJoined — exactly once when the command succeeds */
@@ -9857,7 +9857,7 @@ export type JoinSessionDecision = {
 
 /**
  * The first requirement of Session.join that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export function checkJoinSessionRequires(session: OpenSession, params: JoinSessionParams): 'newcomer' | 'collaborative' | undefined {
     if (!(session.participants.every((p) => !(p.id === params.participant)))) return 'newcomer';
@@ -9867,7 +9867,7 @@ export function checkJoinSessionRequires(session: OpenSession, params: JoinSessi
 
 /**
  * The parameters of Session.collaborate, by name.
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export interface CollaborateSessionParams {
     readonly collaboratedAt: Timestamp;
@@ -9880,7 +9880,7 @@ export interface CollaborateSessionParams {
  * @requires solo (ひとりのセッション) else NotSolo: mode == SessionMode.Solo
  * @changes mode
  * @emits SessionCollaborated — exactly once when the command succeeds
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export type CollaborateSession = (
     session: OpenSession,
@@ -9898,7 +9898,7 @@ export type CollaborateSession = (
  * @requires solo (ひとりのセッション) else NotSolo: mode == SessionMode.Solo
  * @changes mode
  * Open -> Open — set: mode; carried over: id, facilitator, participants, startedAt, currentJourney
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export type CollaborateSessionDecision = {
     /** @emits SessionCollaborated — exactly once when the command succeeds */
@@ -9912,7 +9912,7 @@ export type CollaborateSessionDecision = {
 
 /**
  * The first requirement of Session.collaborate that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export function checkCollaborateSessionRequires(session: OpenSession, _params: CollaborateSessionParams): 'solo' | undefined {
     if (!(session.mode === 'Solo')) return 'solo';
@@ -9921,7 +9921,7 @@ export function checkCollaborateSessionRequires(session: OpenSession, _params: C
 
 /**
  * The parameters of Session.chooseJourney, by name.
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export interface ChooseJourneySessionParams {
     /** 道のり */
@@ -9939,7 +9939,7 @@ export interface ChooseJourneySessionParams {
  * @requires facilitatorChooses (ファシリテーターが決める) else FacilitatorOnly: chosenByRole == ParticipantRole.Facilitator
  * @changes currentJourney
  * @emits JourneyChosen — exactly once when the command succeeds
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export type ChooseJourneySession = (
     session: OpenSession,
@@ -9957,7 +9957,7 @@ export type ChooseJourneySession = (
  * @requires facilitatorChooses (ファシリテーターが決める) else FacilitatorOnly: chosenByRole == ParticipantRole.Facilitator
  * @changes currentJourney
  * Open -> Open — set: currentJourney; carried over: id, facilitator, mode, participants, startedAt
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export type ChooseJourneySessionDecision = {
     /** @emits JourneyChosen — exactly once when the command succeeds */
@@ -9971,7 +9971,7 @@ export type ChooseJourneySessionDecision = {
 
 /**
  * The first requirement of Session.chooseJourney that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export function checkChooseJourneySessionRequires(_session: OpenSession, params: ChooseJourneySessionParams): 'facilitatorChooses' | undefined {
     if (!(params.chosenByRole === 'Facilitator')) return 'facilitatorChooses';
@@ -9980,7 +9980,7 @@ export function checkChooseJourneySessionRequires(_session: OpenSession, params:
 
 /**
  * The parameters of Session.close, by name.
- * @see contexts/collaboration/model/session.dt:76
+ * @see contexts/collaboration/model/session.dt:77
  */
 export interface CloseSessionParams {
     /** 役割 */
@@ -9993,9 +9993,9 @@ export interface CloseSessionParams {
  * セッションを終える
  * セッションを終えるのはファシリテーター。
  * @requires facilitatorCloses (ファシリテーターが終える) else FacilitatorOnly: closedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
+ * @changes closedAt
  * @emits SessionClosed — exactly once when the command succeeds
- * @see contexts/collaboration/model/session.dt:76
+ * @see contexts/collaboration/model/session.dt:77
  */
 export type CloseSession = (
     session: OpenSession,
@@ -10011,9 +10011,9 @@ export type CloseSession = (
  * Session.close, decided per source state; implement it with `decide(SessionShape, …)` from the runtime.
  * Each outcome gives the fields of `set`, and `decide` makes the aggregate, taking the other fields from the input.
  * @requires facilitatorCloses (ファシリテーターが終える) else FacilitatorOnly: closedByRole == ParticipantRole.Facilitator
- * @changes none — the command changes no common field
- * Open -> Closed — set: closedAt (new in Closed); carried over: id, facilitator, mode, participants, startedAt, currentJourney
- * @see contexts/collaboration/model/session.dt:76
+ * @changes closedAt
+ * Open -> Closed — set: closedAt; carried over: id, facilitator, mode, participants, startedAt, currentJourney
+ * @see contexts/collaboration/model/session.dt:77
  */
 export type CloseSessionDecision = {
     /** @emits SessionClosed — exactly once when the command succeeds */
@@ -10027,7 +10027,7 @@ export type CloseSessionDecision = {
 
 /**
  * The first requirement of Session.close that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/session.dt:76
+ * @see contexts/collaboration/model/session.dt:77
  */
 export function checkCloseSessionRequires(_session: OpenSession, params: CloseSessionParams): 'facilitatorCloses' | undefined {
     if (!(params.closedByRole === 'Facilitator')) return 'facilitatorCloses';
@@ -10075,19 +10075,19 @@ export const SessionAvailability: Availability = {
 
 /**
  * Whether Session.join can be called on the session in its state (Open).
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export const canJoinSession = (session: Session): session is OpenSession => isAvailable(SessionAvailability, 'join', session);
 
 /**
  * The error of Session.join called through `anyStateSessionCommands` on the session when its state is not one of its source states.
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export type JoinSessionUnavailable = CommandUnavailable<'Collaboration.Session', 'join', 'Closed', 'Open'>;
 
 /**
  * Session.join for the session in any state: the command in a source state (Open), and `JoinSessionUnavailable` in another.
- * @see contexts/collaboration/model/session.dt:51
+ * @see contexts/collaboration/model/session.dt:52
  */
 export type JoinSessionFromAnyState = (
     session: Session,
@@ -10096,19 +10096,19 @@ export type JoinSessionFromAnyState = (
 
 /**
  * Whether Session.collaborate can be called on the session in its state (Open).
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export const canCollaborateSession = (session: Session): session is OpenSession => isAvailable(SessionAvailability, 'collaborate', session);
 
 /**
  * The error of Session.collaborate called through `anyStateSessionCommands` on the session when its state is not one of its source states.
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export type CollaborateSessionUnavailable = CommandUnavailable<'Collaboration.Session', 'collaborate', 'Closed', 'Open'>;
 
 /**
  * Session.collaborate for the session in any state: the command in a source state (Open), and `CollaborateSessionUnavailable` in another.
- * @see contexts/collaboration/model/session.dt:59
+ * @see contexts/collaboration/model/session.dt:60
  */
 export type CollaborateSessionFromAnyState = (
     session: Session,
@@ -10117,19 +10117,19 @@ export type CollaborateSessionFromAnyState = (
 
 /**
  * Whether Session.chooseJourney can be called on the session in its state (Open).
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export const canChooseJourneySession = (session: Session): session is OpenSession => isAvailable(SessionAvailability, 'chooseJourney', session);
 
 /**
  * The error of Session.chooseJourney called through `anyStateSessionCommands` on the session when its state is not one of its source states.
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export type ChooseJourneySessionUnavailable = CommandUnavailable<'Collaboration.Session', 'chooseJourney', 'Closed', 'Open'>;
 
 /**
  * Session.chooseJourney for the session in any state: the command in a source state (Open), and `ChooseJourneySessionUnavailable` in another.
- * @see contexts/collaboration/model/session.dt:67
+ * @see contexts/collaboration/model/session.dt:68
  */
 export type ChooseJourneySessionFromAnyState = (
     session: Session,
@@ -10138,19 +10138,19 @@ export type ChooseJourneySessionFromAnyState = (
 
 /**
  * Whether Session.close can be called on the session in its state (Open).
- * @see contexts/collaboration/model/session.dt:76
+ * @see contexts/collaboration/model/session.dt:77
  */
 export const canCloseSession = (session: Session): session is OpenSession => isAvailable(SessionAvailability, 'close', session);
 
 /**
  * The error of Session.close called through `anyStateSessionCommands` on the session when its state is not one of its source states.
- * @see contexts/collaboration/model/session.dt:76
+ * @see contexts/collaboration/model/session.dt:77
  */
 export type CloseSessionUnavailable = CommandUnavailable<'Collaboration.Session', 'close', 'Closed', 'Open'>;
 
 /**
  * Session.close for the session in any state: the command in a source state (Open), and `CloseSessionUnavailable` in another.
- * @see contexts/collaboration/model/session.dt:76
+ * @see contexts/collaboration/model/session.dt:77
  */
 export type CloseSessionFromAnyState = (
     session: Session,
@@ -10186,7 +10186,7 @@ export const availableSessionCommands = (session: Session): (keyof SessionComman
 
 /**
  * 参加者
- * @see contexts/collaboration/model/session.dt:84
+ * @see contexts/collaboration/model/session.dt:86
  */
 export interface Participant {
     /** 参加者ID */
@@ -10201,7 +10201,7 @@ export interface Participant {
 
 /**
  * Whether two Participant are the same entity: by `id` (ADR 0016).
- * @see contexts/collaboration/model/session.dt:84
+ * @see contexts/collaboration/model/session.dt:86
  */
 export function equalParticipant(a: Participant, b: Participant): boolean {
     return a.id === b.id;
@@ -10210,7 +10210,7 @@ export function equalParticipant(a: Participant, b: Participant): boolean {
 /**
  * セッション開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/session.dt:91
+ * @see contexts/collaboration/model/session.dt:93
  */
 export interface SessionStarted {
     readonly type: 'Collaboration.SessionStarted';
@@ -10228,7 +10228,7 @@ export interface SessionStarted {
 /**
  * 共同編集に切り替え
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/session.dt:99
+ * @see contexts/collaboration/model/session.dt:101
  */
 export interface SessionCollaborated {
     readonly type: 'Collaboration.SessionCollaborated';
@@ -10240,7 +10240,7 @@ export interface SessionCollaborated {
 /**
  * 参加
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/session.dt:104
+ * @see contexts/collaboration/model/session.dt:106
  */
 export interface ParticipantJoined {
     readonly type: 'Collaboration.ParticipantJoined';
@@ -10256,7 +10256,7 @@ export interface ParticipantJoined {
 /**
  * いまの道のりを決めた
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/session.dt:111
+ * @see contexts/collaboration/model/session.dt:113
  */
 export interface JourneyChosen {
     readonly type: 'Collaboration.JourneyChosen';
@@ -10270,7 +10270,7 @@ export interface JourneyChosen {
 /**
  * セッション終了
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/session.dt:117
+ * @see contexts/collaboration/model/session.dt:119
  */
 export interface SessionClosed {
     readonly type: 'Collaboration.SessionClosed';
@@ -10282,7 +10282,7 @@ export interface SessionClosed {
 /**
  * 参加済み
  * その参加者はすでにセッションに参加している。
- * @see contexts/collaboration/model/session.dt:123
+ * @see contexts/collaboration/model/session.dt:125
  */
 export interface AlreadyJoined {
     readonly type: 'Collaboration.AlreadyJoined';
@@ -10293,7 +10293,7 @@ export interface AlreadyJoined {
 /**
  * ひとりのセッション
  * ひとりのセッションには、ほかの人は参加しない（共同編集に切り替えてから）。
- * @see contexts/collaboration/model/session.dt:128
+ * @see contexts/collaboration/model/session.dt:130
  */
 export interface SoloSession {
     readonly type: 'Collaboration.SoloSession';
@@ -10302,7 +10302,7 @@ export interface SoloSession {
 /**
  * ひとりのセッションでない
  * セッションはひとりのセッションでない（共同編集にはもうなっている）。
- * @see contexts/collaboration/model/session.dt:131
+ * @see contexts/collaboration/model/session.dt:133
  */
 export interface NotSolo {
     readonly type: 'Collaboration.NotSolo';
@@ -10312,7 +10312,7 @@ export interface NotSolo {
  * 共同編集のセッションが開いている
  * 共同編集のセッションが開いているワークスペースでは、ひとりのセッション（`dt open`）を開かない。`dt collab` で続けるか、
  * 共同編集のメニューから終える。
- * @see contexts/collaboration/model/session.dt:135
+ * @see contexts/collaboration/model/session.dt:137
  */
 export interface CollabSessionOpen {
     readonly type: 'Collaboration.CollabSessionOpen';
@@ -10321,7 +10321,7 @@ export interface CollabSessionOpen {
 /**
  * ファシリテーターだけの操作
  * ファシリテーターだけができる操作（実行の登録と中止・打ち消し、スナップショット、リビジョンの復元、変更案の承認と却下、聞き取りの要約の確定と却下、コマンドの候補の反映、AI への送り直し、セッションの終了）を、参加者が求めた。
- * @see contexts/collaboration/model/session.dt:138
+ * @see contexts/collaboration/model/session.dt:140
  */
 export interface FacilitatorOnly {
     readonly type: 'Collaboration.FacilitatorOnly';
@@ -10330,7 +10330,7 @@ export interface FacilitatorOnly {
 /**
  * セッションなし
  * 指定したセッションがない。
- * @see contexts/collaboration/model/session.dt:141
+ * @see contexts/collaboration/model/session.dt:143
  */
 export interface SessionNotFound {
     readonly type: 'Collaboration.SessionNotFound';
@@ -10339,7 +10339,7 @@ export interface SessionNotFound {
 /**
  * セッション終了済み
  * セッションはすでに終わっている。
- * @see contexts/collaboration/model/session.dt:144
+ * @see contexts/collaboration/model/session.dt:146
  */
 export interface SessionAlreadyClosed {
     readonly type: 'Collaboration.SessionAlreadyClosed';
@@ -11260,7 +11260,7 @@ export type OpenTriageDecision = (
 
 /**
  * The parameters of Triage.record, by name.
- * @see contexts/collaboration/model/triage.dt:114
+ * @see contexts/collaboration/model/triage.dt:115
  */
 export interface RecordTriageParams {
     /** 段の記録 */
@@ -11278,7 +11278,7 @@ export interface RecordTriageParams {
  * @requires inOrder (段の順) else TriageStepOutOfOrder: not expressed in the DSL
  * @outcome Pending: Pending -> Pending; select expression
  * @outcome Decided: Pending -> Decided; select expression
- * @see contexts/collaboration/model/triage.dt:114
+ * @see contexts/collaboration/model/triage.dt:115
  */
 export type RecordTriage = (
     triage: PendingTriage,
@@ -11304,7 +11304,7 @@ export type RecordTriage = (
 /**
  * Decision of Triage.record; each named outcome gives only its set fields and events.
  * Use decideNamed with an outcome-to-target map to form the aggregate, and `{ availability: TriageAvailability, command: 'record' }` to check the source states.
- * @see contexts/collaboration/model/triage.dt:114
+ * @see contexts/collaboration/model/triage.dt:115
  */
 export type RecordTriageDecision = (
     triage: PendingTriage,
@@ -11346,7 +11346,7 @@ export function checkRecordTriageChoice(checks: RecordTriageChoiceChecks): (tria
 
 /**
  * The parameters of Triage.override, by name.
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export interface OverrideTriageParams {
     /** 段の記録 */
@@ -11361,7 +11361,7 @@ export interface OverrideTriageParams {
  * @requires overridable (訂正できる結論) else TriageNotOverridable: (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && outcome == null && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
  * @changes steps, kind, decidedBy, decidedAt
  * @emits TriageOverridden — exactly once when the command succeeds
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export type OverrideTriage = (
     triage: DecidedTriage,
@@ -11379,7 +11379,7 @@ export type OverrideTriage = (
  * @requires overridable (訂正できる結論) else TriageNotOverridable: (step.stage == TriageStage.Answerer && kind == TriageVerdict.Consultation && outcome == null && (step.verdict == TriageVerdict.ChangeRequest || step.verdict == TriageVerdict.NotForAi)) || (step.stage == TriageStage.Runner && kind == TriageVerdict.ChangeRequest && step.verdict == TriageVerdict.Consultation)
  * @changes steps, kind, decidedBy, decidedAt
  * Decided -> Decided — set: steps, kind, decidedBy, decidedAt; carried over: id, session, request, addressedBy, addressedByParticipant, openedAt, outcome
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export type OverrideTriageDecision = {
     /** @emits TriageOverridden — exactly once when the command succeeds */
@@ -11393,7 +11393,7 @@ export type OverrideTriageDecision = {
 
 /**
  * The first requirement of Triage.override that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export function checkOverrideTriageRequires(triage: DecidedTriage, params: OverrideTriageParams): 'overridable' | undefined {
     if (!(((((params.step.stage === 'Answerer') && (triage.kind === 'Consultation')) && !(triage.outcome !== undefined)) && ((params.step.verdict === 'ChangeRequest') || (params.step.verdict === 'NotForAi'))) || (((params.step.stage === 'Runner') && (triage.kind === 'ChangeRequest')) && (params.step.verdict === 'Consultation')))) return 'overridable';
@@ -11402,7 +11402,7 @@ export function checkOverrideTriageRequires(triage: DecidedTriage, params: Overr
 
 /**
  * The parameters of Triage.readdress, by name.
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export interface ReaddressTriageParams {
     /** 参加者ID */
@@ -11421,7 +11421,7 @@ export interface ReaddressTriageParams {
  * @requires decidedNotForAi (AI 宛てでないと決まった) else RequestAlreadyAddressed: kind == TriageVerdict.NotForAi
  * @changes addressedBy, addressedByParticipant, steps, kind, decidedBy, decidedAt
  * @emits TriageReaddressed — exactly once when the command succeeds
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export type ReaddressTriage = (
     triage: DecidedTriage,
@@ -11440,7 +11440,7 @@ export type ReaddressTriage = (
  * @requires decidedNotForAi (AI 宛てでないと決まった) else RequestAlreadyAddressed: kind == TriageVerdict.NotForAi
  * @changes addressedBy, addressedByParticipant, steps, kind, decidedBy, decidedAt
  * Decided -> Decided — set: addressedBy, addressedByParticipant, steps, kind, decidedBy, decidedAt; carried over: id, session, request, openedAt, outcome
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export type ReaddressTriageDecision = {
     /** @emits TriageReaddressed — exactly once when the command succeeds */
@@ -11454,7 +11454,7 @@ export type ReaddressTriageDecision = {
 
 /**
  * The first requirement of Triage.readdress that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export function checkReaddressTriageRequires(triage: DecidedTriage, params: ReaddressTriageParams): 'facilitatorReaddresses' | 'decidedNotForAi' | undefined {
     if (!(params.byRole === 'Facilitator')) return 'facilitatorReaddresses';
@@ -11464,7 +11464,7 @@ export function checkReaddressTriageRequires(triage: DecidedTriage, params: Read
 
 /**
  * The parameters of Triage.conclude, by name.
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export interface ConcludeTriageParams {
     /** 行き先 */
@@ -11480,7 +11480,7 @@ export interface ConcludeTriageParams {
  * @requires outcomeFits (結論に合う行き先) else TriageNotConcludable: kind != TriageVerdict.NotForAi && (!(to.kind == TriageOutcome.Answer) || kind == TriageVerdict.Consultation)
  * @changes outcome
  * @emits TriageConcluded — exactly once when the command succeeds
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export type ConcludeTriage = (
     triage: DecidedTriage,
@@ -11499,7 +11499,7 @@ export type ConcludeTriage = (
  * @requires outcomeFits (結論に合う行き先) else TriageNotConcludable: kind != TriageVerdict.NotForAi && (!(to.kind == TriageOutcome.Answer) || kind == TriageVerdict.Consultation)
  * @changes outcome
  * Decided -> Decided — set: outcome; carried over: id, session, request, addressedBy, addressedByParticipant, steps, openedAt, kind, decidedBy, decidedAt
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export type ConcludeTriageDecision = {
     /** @emits TriageConcluded — exactly once when the command succeeds */
@@ -11513,7 +11513,7 @@ export type ConcludeTriageDecision = {
 
 /**
  * The first requirement of Triage.conclude that does not hold, in declaration order; `undefined` when all hold.
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export function checkConcludeTriageRequires(triage: DecidedTriage, params: ConcludeTriageParams): 'noOutcomeYet' | 'outcomeFits' | undefined {
     if (!(!(triage.outcome !== undefined))) return 'noOutcomeYet';
@@ -11562,19 +11562,19 @@ export const TriageAvailability: Availability = {
 
 /**
  * Whether Triage.record can be called on the triage in its state (Pending).
- * @see contexts/collaboration/model/triage.dt:114
+ * @see contexts/collaboration/model/triage.dt:115
  */
 export const canRecordTriage = (triage: Triage): triage is PendingTriage => isAvailable(TriageAvailability, 'record', triage);
 
 /**
  * The error of Triage.record called through `anyStateTriageCommands` on the triage when its state is not one of its source states.
- * @see contexts/collaboration/model/triage.dt:114
+ * @see contexts/collaboration/model/triage.dt:115
  */
 export type RecordTriageUnavailable = CommandUnavailable<'Collaboration.Triage', 'record', 'Decided', 'Pending'>;
 
 /**
  * Triage.record for the triage in any state: the command in a source state (Pending), and `RecordTriageUnavailable` in another.
- * @see contexts/collaboration/model/triage.dt:114
+ * @see contexts/collaboration/model/triage.dt:115
  */
 export type RecordTriageFromAnyState = (
     triage: Triage,
@@ -11583,19 +11583,19 @@ export type RecordTriageFromAnyState = (
 
 /**
  * Whether Triage.override can be called on the triage in its state (Decided).
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export const canOverrideTriage = (triage: Triage): triage is DecidedTriage => isAvailable(TriageAvailability, 'override', triage);
 
 /**
  * The error of Triage.override called through `anyStateTriageCommands` on the triage when its state is not one of its source states.
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export type OverrideTriageUnavailable = CommandUnavailable<'Collaboration.Triage', 'override', 'Pending', 'Decided'>;
 
 /**
  * Triage.override for the triage in any state: the command in a source state (Decided), and `OverrideTriageUnavailable` in another.
- * @see contexts/collaboration/model/triage.dt:140
+ * @see contexts/collaboration/model/triage.dt:141
  */
 export type OverrideTriageFromAnyState = (
     triage: Triage,
@@ -11604,19 +11604,19 @@ export type OverrideTriageFromAnyState = (
 
 /**
  * Whether Triage.readdress can be called on the triage in its state (Decided).
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export const canReaddressTriage = (triage: Triage): triage is DecidedTriage => isAvailable(TriageAvailability, 'readdress', triage);
 
 /**
  * The error of Triage.readdress called through `anyStateTriageCommands` on the triage when its state is not one of its source states.
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export type ReaddressTriageUnavailable = CommandUnavailable<'Collaboration.Triage', 'readdress', 'Pending', 'Decided'>;
 
 /**
  * Triage.readdress for the triage in any state: the command in a source state (Decided), and `ReaddressTriageUnavailable` in another.
- * @see contexts/collaboration/model/triage.dt:150
+ * @see contexts/collaboration/model/triage.dt:151
  */
 export type ReaddressTriageFromAnyState = (
     triage: Triage,
@@ -11625,19 +11625,19 @@ export type ReaddressTriageFromAnyState = (
 
 /**
  * Whether Triage.conclude can be called on the triage in its state (Decided).
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export const canConcludeTriage = (triage: Triage): triage is DecidedTriage => isAvailable(TriageAvailability, 'conclude', triage);
 
 /**
  * The error of Triage.conclude called through `anyStateTriageCommands` on the triage when its state is not one of its source states.
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export type ConcludeTriageUnavailable = CommandUnavailable<'Collaboration.Triage', 'conclude', 'Pending', 'Decided'>;
 
 /**
  * Triage.conclude for the triage in any state: the command in a source state (Decided), and `ConcludeTriageUnavailable` in another.
- * @see contexts/collaboration/model/triage.dt:160
+ * @see contexts/collaboration/model/triage.dt:161
  */
 export type ConcludeTriageFromAnyState = (
     triage: Triage,
@@ -11674,7 +11674,7 @@ export const availableTriageCommands = (triage: Triage): (keyof TriageCommandsFr
 /**
  * 仕分け開始
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/triage.dt:170
+ * @see contexts/collaboration/model/triage.dt:171
  */
 export interface TriageOpened {
     readonly type: 'Collaboration.TriageOpened';
@@ -11694,7 +11694,7 @@ export interface TriageOpened {
 /**
  * 段の答えの記録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/triage.dt:179
+ * @see contexts/collaboration/model/triage.dt:180
  */
 export interface TriageStepRecorded {
     readonly type: 'Collaboration.TriageStepRecorded';
@@ -11707,7 +11707,7 @@ export interface TriageStepRecorded {
 /**
  * 仕分けの結論
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/triage.dt:184
+ * @see contexts/collaboration/model/triage.dt:185
  */
 export interface TriageDecided {
     readonly type: 'Collaboration.TriageDecided';
@@ -11723,7 +11723,7 @@ export interface TriageDecided {
 /**
  * 結論の訂正
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/triage.dt:191
+ * @see contexts/collaboration/model/triage.dt:192
  */
 export interface TriageOverridden {
     readonly type: 'Collaboration.TriageOverridden';
@@ -11738,7 +11738,7 @@ export interface TriageOverridden {
 /**
  * 送り直し
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/triage.dt:197
+ * @see contexts/collaboration/model/triage.dt:198
  */
 export interface TriageReaddressed {
     readonly type: 'Collaboration.TriageReaddressed';
@@ -11752,7 +11752,7 @@ export interface TriageReaddressed {
 /**
  * 行き先の記録
  * @persistent Persisted: storing this event is part of its contract.
- * @see contexts/collaboration/model/triage.dt:203
+ * @see contexts/collaboration/model/triage.dt:204
  */
 export interface TriageConcluded {
     readonly type: 'Collaboration.TriageConcluded';
@@ -11766,7 +11766,7 @@ export interface TriageConcluded {
 /**
  * 段の記録の不整合
  * 段の記録が、その操作の段でない（カスケードの段でない・訂正の段でない）か、機械的な判定が相談か依頼を決めようとした。
- * @see contexts/collaboration/model/triage.dt:210
+ * @see contexts/collaboration/model/triage.dt:211
  */
 export interface InvalidTriageStep {
     readonly type: 'Collaboration.InvalidTriageStep';
@@ -11775,7 +11775,7 @@ export interface InvalidTriageStep {
 /**
  * 段の順の違い
  * 段が前の段より前か、同じ段が2回。
- * @see contexts/collaboration/model/triage.dt:213
+ * @see contexts/collaboration/model/triage.dt:214
  */
 export interface TriageStepOutOfOrder {
     readonly type: 'Collaboration.TriageStepOutOfOrder';
@@ -11784,7 +11784,7 @@ export interface TriageStepOutOfOrder {
 /**
  * 訂正できない結論
  * 結論を、その段からは訂正できない（回答役は相談だけを、実行役は変更依頼だけを訂正する）。
- * @see contexts/collaboration/model/triage.dt:216
+ * @see contexts/collaboration/model/triage.dt:217
  */
 export interface TriageNotOverridable {
     readonly type: 'Collaboration.TriageNotOverridable';
@@ -11793,7 +11793,7 @@ export interface TriageNotOverridable {
 /**
  * 行き先は記録済み
  * 仕分けの行き先はもう記録されている。
- * @see contexts/collaboration/model/triage.dt:219
+ * @see contexts/collaboration/model/triage.dt:220
  */
 export interface TriageAlreadyConcluded {
     readonly type: 'Collaboration.TriageAlreadyConcluded';
@@ -11802,7 +11802,7 @@ export interface TriageAlreadyConcluded {
 /**
  * 結論に合わない行き先
  * 行き先が結論に合わない（AI 宛てでないものに行き先はなく、回答は相談の行き先）。
- * @see contexts/collaboration/model/triage.dt:222
+ * @see contexts/collaboration/model/triage.dt:223
  */
 export interface TriageNotConcludable {
     readonly type: 'Collaboration.TriageNotConcludable';
@@ -11811,7 +11811,7 @@ export interface TriageNotConcludable {
 /**
  * AI 宛てにできないメッセージ
  * メッセージは AI 宛てにできない（AI の回答や打ち消しの依頼）。
- * @see contexts/collaboration/model/triage.dt:225
+ * @see contexts/collaboration/model/triage.dt:226
  */
 export interface RequestNotAddressable {
     readonly type: 'Collaboration.RequestNotAddressable';
@@ -11822,7 +11822,7 @@ export interface RequestNotAddressable {
 /**
  * AI 宛て済みのメッセージ
  * メッセージはもう AI 宛てになっている（仕分けがある）。AI 宛てでないと決まったものは、ファシリテーターが送り直せる。
- * @see contexts/collaboration/model/triage.dt:230
+ * @see contexts/collaboration/model/triage.dt:231
  */
 export interface RequestAlreadyAddressed {
     readonly type: 'Collaboration.RequestAlreadyAddressed';
@@ -11833,7 +11833,7 @@ export interface RequestAlreadyAddressed {
 /**
  * 仕分けなし
  * 指定した仕分けがない。
- * @see contexts/collaboration/model/triage.dt:235
+ * @see contexts/collaboration/model/triage.dt:236
  */
 export interface TriageNotFound {
     readonly type: 'Collaboration.TriageNotFound';
@@ -11844,7 +11844,7 @@ export interface TriageNotFound {
 /**
  * 別のセッションの仕分け
  * 仕分けは別のセッションのもの。
- * @see contexts/collaboration/model/triage.dt:240
+ * @see contexts/collaboration/model/triage.dt:241
  */
 export interface TriageOfAnotherSession {
     readonly type: 'Collaboration.TriageOfAnotherSession';
@@ -11855,7 +11855,7 @@ export interface TriageOfAnotherSession {
 /**
  * 変更案にできない仕分け
  * 仕分けは変更案にできない（変更依頼と決まっていない、行き先がある、またはファシリテーターの依頼で変更案を経ない）。
- * @see contexts/collaboration/model/triage.dt:245
+ * @see contexts/collaboration/model/triage.dt:246
  */
 export interface TriageNotProposable {
     readonly type: 'Collaboration.TriageNotProposable';

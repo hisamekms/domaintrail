@@ -79,7 +79,7 @@ context Sales {
       invariant otherNeedsNote { !(reason == Reason.Other) || note != null }
       invariant audited "監査済み"
     }
-    create command place(id: OrderId) -> Draft
+    create command place(id: OrderId) -> Draft changes id = id, lines, prices
     command add(line: Line, total: Decimal)
       Draft -> Draft
       requires newSku { lines.every(x => x.sku != line.sku) } else Duplicate
@@ -87,7 +87,7 @@ context Sales {
       requires small { total < 100.5 } else TooLarge
       requires priced { prices.includes(line.price) } else Unpriced
       changes lines
-    command cancel(reason: Reason) Draft -> Cancelled
+    command cancel(reason: Reason) Draft -> Cancelled changes reason = reason
   }
   id TicketId: UUID
   aggregate Ticket {
@@ -297,7 +297,7 @@ context Names {
     invariant pair { items.unique(item => item.name) }
     invariant quoted { items.every(checks => checks.name != "it's \\"q\\"\\\\") }
     state Open
-    create command make(id: BoxId) -> Open
+    create command make(id: BoxId) -> Open changes id = id, items = []
     command add(item: Item, item2: Item?) Open -> Open
       requires fresh { items.every(item => item.name != "x") } else Dup
       requires counted { item2 == null || item2.count > 0 } else Dup
