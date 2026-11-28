@@ -129,4 +129,6 @@ reach a session.
 - [Tasks and scoring packets](tasks.md): four workforce scheduling tasks with requirements, normalized semantic
   checklists, and executable scenario cases.
 - [Result record schema](result-schema.json): JSON Schema for one attempt.
-- `results.csv`: one-row-per-attempt reporting template; preserve nested reviewer details in JSON records.
+- `results.csv`: one row per attempt of the main run; nested reviewer details stay in the run's JSON records.
+- [Pilot and main-run notes](pilot-notes.md) and the [main-run analysis](main-analysis.md): the decision (A0 stays
+  adopted) and the findings for the language.

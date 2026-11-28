@@ -3,7 +3,7 @@
 //   bun scripts/trial/score.ts prepare <run-dir>   normalized dumps and comment-free generated code, under blind labels
 //   bun scripts/trial/score.ts map <run-dir>       blind scenario mapping of each label to its generated contracts
 //   bun scripts/trial/score.ts review <run-dir>    two blind reviewers per label; a third on every disagreement
-//   bun scripts/trial/score.ts report <run-dir>    attempt records, results.csv rows and the pairwise analysis
+//   bun scripts/trial/score.ts report <run-dir>    attempt records (results.json) and the pairwise analysis
 //
 // Reviewers and mappers see a random label, the task's hidden checklist and scenarios, and the attempt's normalized
 // dump (no source text, spans, comments or docs) or generated code without comments — never the arm, the model or the
