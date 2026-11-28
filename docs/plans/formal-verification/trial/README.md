@@ -95,6 +95,35 @@ matched variant; `v` alone is an error.
 and each guide's SHA-256 and the lines each arm changes. It fails if a parameter does not apply exactly once, changes
 the line count or a line outside it, or if a guide's examples do not check under its arm.
 
+## Harness
+
+`scripts/trial/run.ts` runs the attempts and `scripts/trial/score.ts` scores them; a run lives in its own directory
+outside any repository (`~/.local/share/domaintrail-trial/<run>`), so no project instructions, memory or other files
+reach a session.
+
+- `run.ts init <dir> --phase pilot|main --seed N` freezes the build (this checkout's `dist`, its commit and lockfile
+  hash), renders the four guides, takes each packet's business requirements from [tasks.md](tasks.md), records the
+  prompts, models and settings, and fixes the order: within each model block a seeded shuffle of the arms and packets.
+  The pilot has 3 attempts per arm and packet (24 Claude, 24 Codex), the main run 6 + 6.
+- An attempt is a fresh session in an empty directory holding `REQUIREMENTS.md`; `dt guide` (the arm's guide) is the
+  only command. Turn 1 asks for the model. The harness then runs `dt check` and, while it reports errors, sends its
+  report in a new turn of the same session, at most 5 times (the documented repair loop). First syntax and type-check
+  success come from the check after turn 1; a repair cycle is a changed model after a report; turn 1's tokens are the
+  first submission's, the later turns' the repairs'. Exhausted: errors remain after the last repair. Every model,
+  report and turn output is kept.
+- Models: Claude `claude-sonnet-5-5` (`claude -p`, project settings only, no MCP, tools `Read Write Edit Glob Grep`,
+  `Bash(dt guide:*)`, `Bash(ls:*)`), Codex `gpt-6.2-sol` (`codex exec`, reasoning effort medium, workspace-write
+  sandbox, user config and rules ignored). Maintainer decision (2026-11-28).
+- `score.ts prepare` gives each attempt a label and, for a model that checks, a normalized dump (Typed Model and
+  Semantic IR without source text, positions, comments or docs) and the generated TypeScript without comments; it warns
+  if an arm's spelling is left in them. `map` has a blind mapper (Claude Sonnet) name, for each scenario, the generated
+  declarations that decide it and the outcome they give. The generated code does not implement `changes x = expr` or
+  `ensures` yet (Phase 3), so scenarios are mapped onto the contracts rather than executed: a scenario that depends only
+  on a value the contracts leave typed is `uncertain`. `review` has two blind reviewers (Claude Sonnet, Codex Sol)
+  judge the dump against the hidden checklist and the mapped outcomes, and a third (Claude Opus) decide every
+  disagreement. A model that does not check is a semantic `fail`. `report` writes `results.json` and `analysis.md`:
+  the three pairwise comparisons per packet and family, and the decision rule.
+
 ## Packet inventory
 
 - [Tasks and scoring packets](tasks.md): four workforce scheduling tasks with requirements, normalized semantic
