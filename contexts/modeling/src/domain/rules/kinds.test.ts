@@ -20,6 +20,7 @@ const SITE = `
       closingTime: String
       create command registerStore(id: SiteId, name: String, storeCode: StoreCode, closingTime: String) {
         outcome registered: -> Active
+          changes id = id, name = name, storeCode = storeCode, closingTime = closingTime
           emits Registered
       }
       command changeClosingTime(newClosingTime: String) {
@@ -37,6 +38,7 @@ const SITE = `
       invariant docksPositive { dockCount > 0 }
       create command registerCenter(id: SiteId, name: String, dockCount: Int) {
         outcome registered: -> Active
+          changes id = id, name = name, dockCount = dockCount
           emits Registered
       }
       on suspend {
@@ -113,6 +115,7 @@ describe('aggregate kinds (ADR 0037)', () => {
             SITE.replace(
                 `      create command registerCenter(id: SiteId, name: String, dockCount: Int) {
         outcome registered: -> Active
+          changes id = id, name = name, dockCount = dockCount
           emits Registered
       }`,
                 '',
@@ -139,8 +142,8 @@ describe('aggregate kinds (ADR 0037)', () => {
             id: CardId
             label: String
             command rename(newLabel: String) changes label
-            kind Gift { amount: Int create command makeGift(id: CardId, label: String, amount: Int) command topUp(more: Int) changes amount }
-            kind Member { level: Int create command makeMember(id: CardId, label: String, level: Int) }
+            kind Gift { amount: Int create command makeGift(id: CardId, label: String, amount: Int) changes id = id, label = label, amount = amount command topUp(more: Int) changes amount }
+            kind Member { level: Int create command makeMember(id: CardId, label: String, level: Int) changes id = id, label = label, level = level }
           }`);
         expect(a.diagnostics).toEqual([]);
         const wrong = await checkSales(`
@@ -149,8 +152,8 @@ describe('aggregate kinds (ADR 0037)', () => {
             id: CardId
             label: String
             command rename(newLabel: String) changes amount
-            kind Gift { amount: Int create command makeGift(id: CardId, label: String, amount: Int) }
-            kind Member { level: Int create command makeMember(id: CardId, label: String, level: Int) }
+            kind Gift { amount: Int create command makeGift(id: CardId, label: String, amount: Int) changes id = id, label = label, amount = amount }
+            kind Member { level: Int create command makeMember(id: CardId, label: String, level: Int) changes id = id, label = label, level = level }
           }`);
         expect(messages(wrong, 'M021')).toEqual(["Field 'amount' exists only in kind 'Gift', and 'rename' is a common command."]);
     });
@@ -183,7 +186,7 @@ describe('aggregate kinds (ADR 0037)', () => {
             dockCount: Int?
             invariant storeHasCode { !(type == SiteKind.STORE) || storeCode != null }
             invariant centerHasDocks { !(type == SiteKind.CENTER) || dockCount != null }
-            create command make(id: SId, type: SiteKind)
+            create command make(id: SId, type: SiteKind) changes id = id, type = type
           }`);
         expect(messages(a, 'M031')).toHaveLength(1);
         expect(messages(a, 'M031')[0]).toContain("only for some values of 'type'");

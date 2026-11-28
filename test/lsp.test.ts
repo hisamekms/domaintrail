@@ -428,7 +428,7 @@ describe('dt lsp', () => {
     });
 
     test('policies: hover, outline, and renaming the event or the command updates them', async () => {
-        const billing = BILLING.replace('    state Open\n', '    state Open\n    create command issue(id: InvoiceId) -> Open\n').replace(
+        const billing = BILLING.replace('    state Open\n', '    state Open\n    create command issue(id: InvoiceId) -> Open changes id = id, order\n').replace(
             '  id InvoiceId: UUID\n',
             '  id InvoiceId: UUID\n  /// Bill what is placed.\n  policy BillPlaced "請求する" when Sales.OrderPlaced -> Invoice.issue\n',
         );
@@ -440,7 +440,7 @@ describe('dt lsp', () => {
             '**policy `BillPlaced`** 請求する — `Billing.BillPlaced`\n\nBill what is placed.\n\n```dt\nwhen Sales.OrderPlaced -> Invoice.issue\n```\n\nAfter the event, the command is run — eventually, by any mechanism.',
         );
         expect(await hover('billing.dt', at(billing, 'command issue', 'command '.length))).toBe(
-            '**create command `issue`** — `Billing.Invoice:issue`\n\nRun by policy `Billing.BillPlaced` (when Sales.OrderPlaced)',
+            '**create command `issue`** — `Billing.Invoice:issue`\n\n```dt\nchanges id, order\n```\n\nRun by policy `Billing.BillPlaced` (when Sales.OrderPlaced)',
         );
         expect(await hover('sales.dt', at(SALES, 'event OrderPlaced', 'event '.length))).toBe(
             '**event `OrderPlaced`** — `Sales.OrderPlaced`\n\nReacted to by policy `Billing.BillPlaced` (-> Invoice.issue)',

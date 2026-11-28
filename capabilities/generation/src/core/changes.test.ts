@@ -33,7 +33,7 @@ ${commands}
     id: TagId
     name: String
     color: String
-    create command make(id: TagId, name: String, color: String)
+    create command make(id: TagId, name: String, color: String) changes id = id, name = name, color = color
     command recolor(color: String) changes color
   }
   ${extra}
@@ -42,15 +42,15 @@ ${commands}
     });
 
 const COMMANDS = `
-    create command open(id: WorkId, title: String) -> Draft
+    create command open(id: WorkId, title: String) -> Draft changes id = id, title = title, tags = [], draftNo = 0
     command rename(newTitle: String, at: Timestamp)
       Draft -> Draft, Review -> Review
       requires named { newTitle != "" } else NotReady
       changes title, updatedAt
       emits Renamed
-    command submit(reviewer: String) Draft -> Review
+    command submit(reviewer: String) Draft -> Review changes reviewer = reviewer
     command renumber(n: Int) Draft -> Draft, Review -> Review changes draftNo
-    command finish(at: Timestamp) Review -> Done
+    command finish(at: Timestamp) Review -> Done changes doneAt = at
     command archive() Done -> Archived
     command clearNote() Draft -> Draft changes note
     command touch() Draft -> Draft`;
@@ -121,7 +121,7 @@ describe('changes in the generated TypeScript', () => {
 export type RenameWorkDecision = {`,
         );
         expect(code).toContain(
-            ' * @changes none — the command changes no common field\n * Review -> Done — set: doneAt (new in Done); carried over: updatedAt, id, title, note, tags, reviewer; dropped: draftNo\n',
+            ' * @changes doneAt\n * Review -> Done — set: doneAt; carried over: updatedAt, id, title, note, tags, reviewer; dropped: draftNo\n',
         );
         expect(code).toContain(
             ' * Done -> Archived — set: reviewer (new in Archived); carried over: updatedAt, id, title, note, tags; dropped: reviewer, doneAt\n',
@@ -130,7 +130,7 @@ export type RenameWorkDecision = {`,
         expect(code).toContain(' * @changes color\n * Tag — set: color; carried over: id, name\n');
         // the contract says it too
         expect(code).toContain(
-            ' * Work.submit (Draft -> Review)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWork = ',
+            ' * Work.submit (Draft -> Review)\n * @changes reviewer\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWork = ',
         );
         expect(code).toContain("export const TagShape: Shape = { fields: ['id', 'name', 'color'] };");
         expect(code).toContain(

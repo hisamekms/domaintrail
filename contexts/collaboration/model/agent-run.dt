@@ -388,6 +388,7 @@ context Collaboration {
       requires inputCoversRequests "入力は束ねた依頼の写し" {
         input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
       } else InputMismatch
+      changes id = id, session = session, input = input, queuedBy = queuedBy, queuedAt = queuedAt
       emits RunQueued
 
     /// 参加者が付箋を直した（誰でも直せる）。待ちに入らず、dt が書いた記録として作る。
@@ -398,6 +399,7 @@ context Collaboration {
         input.requests.length == requests.length && requests.every(r => input.requests.some(i => i.request == r))
       } else InputMismatch
       requires editChanges "手直しはファイルを変える" { resultRevision != baseRevision } else ChangedMismatch
+      changes id = id, session = session, input = input, queuedBy = queuedBy, queuedAt = queuedAt, baseRevision = baseRevision, resultRevision = resultRevision, finishedAt = finishedAt
       emits RunEdited
 
     /// 付けたホットスポットの仮の名前を、AI が付けた名前に書き換えた（ほかに何も変わっていないときだけ）。同じ手直しの記録に
@@ -421,6 +423,7 @@ context Collaboration {
       requires changedMatchesResult "変更の有無が結果リビジョンと合う" {
         (!(changed == true) || resultRevision != baseRevision) && (!(changed == false) || resultRevision == baseRevision)
       } else ChangedMismatch
+      changes baseRevision = baseRevision, resultRevision = resultRevision, changed = changed, finishedAt = finishedAt
       emits RunReverted
 
     /// 順が来た打ち消しの実行を、サーバーが機械的に打ち消せなかった: 待ちのまま、わけを添えてエージェントに任せる。
@@ -433,6 +436,7 @@ context Collaboration {
     /// 開始の前に取ったワークスペースのスナップショットが基準リビジョンになる。
     command start(baseRevision: RevisionId, startedAt: Timestamp) "実行を始める"
       Queued -> Running
+      changes baseRevision = baseRevision, startedAt = startedAt
       emits RunStarted
 
     /// 報告が成功の条件を満たせば完了、満たさなければ失敗（RuleNotMet）。成功の条件は変更の有無による（変えなかった実行は
@@ -452,11 +456,13 @@ context Collaboration {
         select {
           report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran))
         }
+        changes report = report, resultRevision = resultRevision, changed = changed, finishedAt = finishedAt
         emits RunCompleted
       outcome Failed: Running -> Failed
         select {
           !(report.exitCode == 0 && report.newDtErrors == 0 && report.unparsedDtes == 0 && report.formatted != ToolOutcome.Failed && report.checked != ToolOutcome.Failed && (!(changed == true) || (report.formatted == ToolOutcome.Ran && report.checked == ToolOutcome.Ran)))
         }
+        changes reason, finishedAt = finishedAt
         emits RunFailed
     }
 
@@ -468,6 +474,7 @@ context Collaboration {
       requires replyAboutInput "返答の依頼は実行の依頼" {
         reply == null || (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       } else InvalidReply
+      changes question = question, resultRevision = resultRevision, finishedAt = finishedAt
       emits RunNeedsClarification
 
     /// エージェントが依頼を断った。ファイルを変えていても、事実（結果リビジョン）はそのまま残す。
@@ -477,12 +484,14 @@ context Collaboration {
       requires replyAboutInput "返答の依頼は実行の依頼" {
         (reply.requests.every(r => input.requests.some(i => i.request == r.request)) && reply.questions.every(q => q.requests.every(x => input.requests.some(i => i.request == x))) && reply.assumptions.every(a => a.requests.every(x => input.requests.some(i => i.request == x))))
       } else InvalidReply
+      changes reply = reply, resultRevision = resultRevision, finishedAt = finishedAt
       emits RunDeclined
 
     /// 報告の得られない失敗（エージェントの異常終了、応答の途絶、再起動による中断、除外が多すぎて読み取り範囲を守れない）。
     command fail(reason: FailureReason, finishedAt: Timestamp) "実行を失敗にする"
       Running -> Failed
       requires abnormal "報告のない失敗" { reason != FailureReason.RuleNotMet } else ReportRequired
+      changes reason = reason, finishedAt = finishedAt
       emits RunFailed
 
     /// 中止するのはファシリテーター。
@@ -491,6 +500,7 @@ context Collaboration {
       requires facilitatorCancels "ファシリテーターが中止する" {
         cancelledByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      changes cancelledBy = cancelledBy, cancelledAt = cancelledAt
       emits RunCancelled
   }
 

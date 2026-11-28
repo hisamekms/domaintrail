@@ -34,6 +34,7 @@ describe('requires in the generated TypeScript', () => {
       Escalated -> Escalated | Accepted
       requires authorizedApprover "承認者である" { policy.approvers.includes(person) } else NotApprover
       requires noOpenBlocker "未解決の阻害がない" else Blocked
+      changes acceptedBy = person
       errors Blocked, Conflict`);
         expect(a.diagnostics).toEqual([]);
         const code = generateFromAnalysis(a).find((f) => f.path === 'Review.ts')!.content;
@@ -41,7 +42,7 @@ describe('requires in the generated TypeScript', () => {
             ' * @requires authorizedApprover (承認者である) else NotApprover: policy.approvers.includes(person)',
             ' * @requires noOpenBlocker (未解決の阻害がない) else Blocked: not expressed in the DSL',
         ].join('\n');
-        const changes = ' * @changes none — the command changes no common field';
+        const changes = ' * @changes acceptedBy';
         expect(code).toContain(
             `/**\n * Review.accept (Reviewing -> Accepted; Escalated -> Escalated | Accepted)\n * 受入\n${lines}\n${changes}\n * @emits nothing\n * @see review.dt:13\n */\nexport type AcceptReview = `,
         );

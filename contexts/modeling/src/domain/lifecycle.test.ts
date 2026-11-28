@@ -31,8 +31,8 @@ describe('lifecyclesOf', () => {
         expect(
             await lifecycle(`aggregate A {
               id: String state First state FirstDone state Second state SecondDone
-              kind ONE { create command makeOne() { outcome made: -> First } on finish { outcome finished: First -> FirstDone } }
-              kind TWO { create command makeTwo() { outcome made: -> Second } on finish { outcome finished: Second -> SecondDone } }
+              kind ONE { create command makeOne() { outcome made: -> First changes id } on finish { outcome finished: First -> FirstDone } }
+              kind TWO { create command makeTwo() { outcome made: -> Second changes id } on finish { outcome finished: Second -> SecondDone } }
               command finish()
             }`),
         ).toEqual([

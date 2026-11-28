@@ -72,7 +72,7 @@ ${commands}
     id: TagId
     name: String
     color: String
-    create command make(id: TagId, name: String, color: String)
+    create command make(id: TagId, name: String, color: String) changes id = id, name = name, color = color
     command recolor(color: String) changes color
   }
   ${extra}

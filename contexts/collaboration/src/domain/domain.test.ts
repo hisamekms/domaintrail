@@ -178,7 +178,7 @@ describe('target staleness', () => {
     state Draft
     state Confirmed
     create command place(id: OrderId)
-      -> Draft
+      -> Draft changes id = id
     command confirm()
       Draft -> Confirmed
   }

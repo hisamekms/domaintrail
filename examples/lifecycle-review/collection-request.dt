@@ -57,6 +57,7 @@ context Collection {
     kind COLLECT "回収のみ" {
       create command requestCollect(id: CollectionRequestId) "回収を依頼する" {
         outcome requested: -> Unassigned
+          changes id = id
           emits CollectionRequested
       }
 
@@ -69,6 +70,7 @@ context Collection {
     kind DROP_OFF "納入あり" {
       create command requestDropOff(id: CollectionRequestId) "納入ありで依頼する" {
         outcome requested: -> Unassigned
+          changes id = id
           emits CollectionRequested
       }
 

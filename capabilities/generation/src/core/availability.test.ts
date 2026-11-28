@@ -55,9 +55,10 @@ const PLAIN = `context Delivery {
     state Delivered
     state Cancelled
     initial Unassigned
-    create command open(id: RequestId, onHold: Bool) { outcome opened: -> Unassigned }
+    create command open(id: RequestId, onHold: Bool) { outcome opened: -> Unassigned changes id = id, onHold = onHold }
     command assign(courier: String) {
       outcome assigned: Unassigned -> Assigned
+        changes courier = courier
         emits RequestAssigned
     }
     command cancel(reason: String) "依頼を取り消す" {
@@ -157,11 +158,11 @@ const KINDS = `context Delivery {
     command assign() { outcome assigned: Unassigned -> Assigned }
     command complete()
     kind COLLECT {
-      create command openCollect(id: RequestId) { outcome opened: -> Unassigned }
+      create command openCollect(id: RequestId) { outcome opened: -> Unassigned changes id = id }
       on complete { outcome collected: Assigned -> CollectDone }
     }
     kind DROP_OFF {
-      create command openDropOff(id: RequestId) { outcome opened: -> Unassigned }
+      create command openDropOff(id: RequestId) { outcome opened: -> Unassigned changes id = id }
       on complete {
         outcome received: Assigned -> Holding select { true }
         outcome delivered: Holding -> Delivered select { true }
@@ -342,7 +343,7 @@ const LEGACY = `context Tasks {
     state Review
     state Done
     initial Draft
-    create command open(id: WorkId) -> Draft
+    create command open(id: WorkId) -> Draft changes id = id
     command touch() Draft -> Draft, Review -> Review
     command submit() Draft -> Review
     command finish() Review -> Done

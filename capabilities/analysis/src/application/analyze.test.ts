@@ -135,7 +135,7 @@ const ORDER = `
     owns lines: Line[0..*]
     state Draft
     state Done { doneAt: Timestamp }
-    command finish(at: Timestamp) Draft -> Done
+    command finish(at: Timestamp) Draft -> Done changes doneAt
   }
   entity Line { id: LineId  quantity: Int }
 `;

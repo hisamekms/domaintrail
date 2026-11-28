@@ -204,7 +204,7 @@ describe('commands with several transitions', () => {
     state Completed { completedAt: Timestamp }
     state Cancelled
 
-    create command open(id: WorkId, title: Title) -> Draft
+    create command open(id: WorkId, title: Title) -> Draft changes id = id, title = title
     command change(title: Title)
       Draft -> Draft
       InProgress -> InProgress
@@ -212,8 +212,8 @@ describe('commands with several transitions', () => {
       emits WorkChanged
     command start() Draft -> InProgress
     command cancel() Draft -> Cancelled, InProgress -> Cancelled
-    command review(at: Timestamp) InProgress -> InProgress | Completed, Draft -> Draft errors NotReady
-    command step() Draft -> InProgress, InProgress -> Completed, Completed | Cancelled -> Cancelled
+    command review(at: Timestamp) InProgress -> InProgress | Completed, Draft -> Draft changes completedAt errors NotReady
+    command step() Draft -> InProgress, InProgress -> Completed, Completed | Cancelled -> Cancelled changes completedAt
   }
 }
 `;

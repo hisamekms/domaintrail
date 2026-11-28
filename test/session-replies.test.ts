@@ -52,7 +52,7 @@ const SALES = `context Sales {
     state Confirmed
 
     create command place(id: OrderId)
-      -> Draft
+      -> Draft changes id = id
 
     command confirm()
       Draft -> Confirmed
@@ -315,7 +315,7 @@ const DT = `context Shop {
 
     state Open
 
-    create command start(id: OrderId) -> Open
+    create command start(id: OrderId) -> Open changes id = id
   }
 }
 `;

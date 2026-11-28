@@ -52,7 +52,7 @@ describe('changes x = expr and ensures', () => {
             (
                 await errors(`    create command open(id: RotaId) {
       outcome opened: -> Draft
-        changes id = id, revision = before.revision
+        changes id = id, revision = before.revision, shifts = []
     }
     command addShift(shift: Shift) {
       outcome added: Draft -> Draft

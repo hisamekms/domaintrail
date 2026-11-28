@@ -80,6 +80,7 @@ context Shop {
 
     create command start(id: CartId)
       -> Open
+      changes id = id, lines
       emits Opened
 
     command add(line: Line, limit: Int)
@@ -92,7 +93,7 @@ context Shop {
 
     command close()
       Open -> Closed
-      requires notEmpty { lines.length > 0 } else Empty
+      requires notEmpty { lines.length > 0 } else Empty changes total
   }
 
   event Opened {

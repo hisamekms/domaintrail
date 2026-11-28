@@ -25,7 +25,7 @@ const MODEL = `context Model {
     id: GId
     event: String
     state S
-    create command command(id: GId, event: String, error: String) -> S
+    create command command(id: GId, event: String, error: String) -> S changes id = id, event = event
     command emits(errors: Int) S -> S
       requires few { errors < 3 } else TooMany
   }

@@ -23,7 +23,7 @@ const DT = `context Shop {
     state Open
     state Placed
 
-    create command start(id: OrderId) -> Open
+    create command start(id: OrderId) -> Open changes id = id
 
     command place()
       Open -> Placed

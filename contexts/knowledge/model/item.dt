@@ -38,6 +38,7 @@ context Knowledge {
       requires distinctSources "出典のメッセージは1回" {
         sources.unique(s => s.session, s.message)
       } else DuplicateSource
+      changes id = id, content = content, sources = sources, version, conflictsWith, createdAt, updatedAt
       emits KnowledgeItemAdded
 
     /// 抽出が、前のナレッジと食い違う発見を足す（前のナレッジには `linkConflict` でつなぐ）。
@@ -47,6 +48,7 @@ context Knowledge {
         sources.unique(s => s.session, s.message)
       } else DuplicateSource
       requires notItself "自分とは食い違わない" { other != id } else ConflictWithItself
+      changes id = id, content = content, sources = sources, version, conflictsWith, createdAt, updatedAt
       emits KnowledgeItemAdded
 
     /// 同じ発見がまた言われた: 出典を1つ足す。合意（話がそのまま進んだ）なら、発言を合意に上げる（ほかの出どころは変えない）。
@@ -130,7 +132,7 @@ context Knowledge {
     /// 人が消す。
     command delete(by: UserName, at: Timestamp) "消す"
       Live -> Deleted
-      changes bookmarked
+      changes bookmarked, deletedBy, deletedAt
       emits KnowledgeItemDeleted
 
     /// 人が、掃除の前に消したのを取り消す（元に戻す）。

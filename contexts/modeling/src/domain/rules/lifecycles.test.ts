@@ -24,13 +24,13 @@ const BASE = `
     command complete()
     kind COLLECT {
       create command openCollect(id: RequestId) {
-        outcome opened: -> Unassigned
+        outcome opened: -> Unassigned changes id = id
       }
       on complete { outcome collected: Assigned -> CollectDone emits Collected }
     }
     kind DROP_OFF {
       create command openDropOff(id: RequestId) {
-        outcome opened: -> Unassigned
+        outcome opened: -> Unassigned changes id = id
       }
       on complete {
         outcome received: Assigned -> Holding emits Received
@@ -59,7 +59,7 @@ describe('kind-specific lifecycle', () => {
     test('keeps M028 create reachability unchanged when there are no declared initials', async () => {
         const a = await checkSales(`id ItemId: UUID aggregate Item {
           id: ItemId state Draft state Done
-          create command open(id: ItemId) { outcome made: -> Draft }
+          create command open(id: ItemId) { outcome made: -> Draft changes id = id }
           command finish() { outcome finished: Draft -> Done }
         }`);
         expect(a.diagnostics.filter((d) => d.code === 'M028').map((d) => d.message)).toEqual([
@@ -72,7 +72,7 @@ describe('kind-specific lifecycle', () => {
     test('a factory target does not replace a declared initial for M028', async () => {
         const a = await checkSales(`id ItemId: UUID aggregate Item {
           id: ItemId state Draft state Done initial Draft
-          create command open(id: ItemId) { outcome made: -> Done }
+          create command open(id: ItemId) { outcome made: -> Done changes id = id }
         }`);
         expect(a.diagnostics.filter((d) => d.code === 'M028').map((d) => d.message)).toEqual([
             "Create outcome 'made' must end at an initial state for kind '*'.",
@@ -80,7 +80,7 @@ describe('kind-specific lifecycle', () => {
     });
 
     test('keeps a stateless create command in the legacy command model', async () => {
-        const a = await checkSales('id TokenId: UUID aggregate Token { id: TokenId create command make(id: TokenId) }');
+        const a = await checkSales('id TokenId: UUID aggregate Token { id: TokenId create command make(id: TokenId) changes id = id }');
         expect(codes(a)).toEqual([]);
         const aggregate = a.model!.elements.find((e) => e.kind === 'aggregate')!;
         if (aggregate.kind !== 'aggregate') throw new Error('aggregate missing');
@@ -153,7 +153,7 @@ describe('kind-specific lifecycle', () => {
         const source = `context Sales {
           id RId: UUID
           aggregate R { id: RId state S command go()
-            kind A { create command makeA(id: RId) { outcome made: -> S } on go { outcome same: S -> S select "human" @externalCheck("external policy") } }
+            kind A { create command makeA(id: RId) { outcome made: -> S changes id = id } on go { outcome same: S -> S select "human" @externalCheck("external policy") } }
           }
         }`;
         const a = await check({ 'model.dt': source });

@@ -13,7 +13,7 @@ const SALES = `context Sales {
     id: OrderId
     state Draft
     state Confirmed
-    create command place(id: OrderId) -> Draft emits OrderPlaced
+    create command place(id: OrderId) -> Draft changes id = id emits OrderPlaced
     command confirm(at: Timestamp)
       Draft -> Confirmed
       emits OrderConfirmed
@@ -37,8 +37,8 @@ const BILLING = `context Billing {
     state Sent {
       sentAt: Timestamp
     }
-    create command issue(id: InvoiceId, order: Sales.OrderId, total: Money, note: String?) -> Open
-    command send(sentAt: Timestamp, lines: Amount[1..3]) Open -> Sent
+    create command issue(id: InvoiceId, order: Sales.OrderId, total: Money, note: String?) -> Open changes id = id, order = order
+    command send(sentAt: Timestamp, lines: Amount[1..3]) Open -> Sent changes sentAt = sentAt
   }
   /// 確定した注文は請求する。
   policy BillConfirmedOrder "請求する" when Sales.OrderConfirmed -> Invoice.issue

@@ -14,7 +14,7 @@ const review = (commands: string, extra = '') =>
     policy: Policy
     state Reviewing { blockers: Int reviewer: PersonId note: String? }
     state Escalated { blockers: Int reviewer: String }
-    state Accepted { acceptedBy: PersonId }
+    state Accepted { acceptedBy: PersonId? }
     ${commands}
   }
   error NotApprover
@@ -90,7 +90,7 @@ describe('requires', () => {
 
     test('M002 requirement names are unique within the command', async () => {
         const a = await review(`
-    command accept() Reviewing -> Accepted requires x { true } else Blocked requires x { false } else Blocked
+    command accept() Reviewing -> Accepted requires x { true } else Blocked requires x { false } else Blocked changes acceptedBy
     command reject() Reviewing -> Accepted requires x { true } else Blocked`);
         expect(errors(a)).toEqual([['M002', "Requirement 'x' is declared more than once in command 'accept'."]]);
     });
@@ -155,7 +155,8 @@ describe('scope of requires', () => {
         const a = await review(`
     create command open(person: PersonId, policy: Policy) -> Reviewing
       requires x { policy.approvers.includes(person) } else NotApprover
-      requires y { auditedBy != null || blockers > 0 } else Blocked`);
+      requires y { auditedBy != null || blockers > 0 } else Blocked
+      changes id, policy = policy, blockers = 0, reviewer = person`);
         expect(errors(a)).toEqual([
             ['M010', "Field 'auditedBy' of 'Review' is not in scope: the requirements of a 'create command' see only its parameters."],
             ['M010', "Field 'blockers' of 'Review' is not in scope: the requirements of a 'create command' see only its parameters."],
@@ -178,9 +179,9 @@ describe('scope of requires', () => {
     test('M019 a parameter is not named like a field its requirements see', async () => {
         const a = await review(`
     command accept(policy: Policy, blockers: Int, note: String) Reviewing | Escalated -> Accepted
-      requires x { blockers == 0 } else Blocked
-    command reject(policy: Policy) Reviewing -> Accepted
-    create command open(policy: Policy) -> Reviewing requires x { policy.approvers.length > 0 } else NotApprover`);
+      requires x { blockers == 0 } else Blocked changes acceptedBy
+    command reject(policy: Policy) Reviewing -> Accepted changes acceptedBy
+    create command open(policy: Policy) -> Reviewing requires x { policy.approvers.length > 0 } else NotApprover changes id, policy = policy, blockers = 0, reviewer`);
         // `note` is a field of Reviewing only, so it is not seen by the requirements of `accept`
         expect(errors(a)).toEqual([
             ['M019', "Parameter 'policy' of command 'accept' has the name of a field of 'Review' that its requirements see."],

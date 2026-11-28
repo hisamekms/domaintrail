@@ -42,6 +42,12 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   and `ensures { … }` states a relation the result satisfies (over `before.x`, `after.x` and the parameters). A create
   outcome may list `id`. The generated code does not check them yet (Phase 3).
 
+- An outcome lists in `changes` every non-optional field it makes exist: a create every field of the new aggregate
+  (`id` included; its common fields, its kind's and its target state's), a transition the fields new in its target
+  state. The value stays optional: `changes f` says the field is set without saying to what, `changes f = expr` gives
+  it. An optional field not listed starts as null. `changes` on a create command is no longer an error, and a field
+  of the target state may be listed on a transition into it. `dt check` reports a missing field (M021).
+
 ## Added
 
 - `dt migrate domain [files...] [--dry-run]` rewrites `.dt` files to the new syntax: `and` → `&&`, `or` → `||`,
@@ -49,6 +55,9 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
   layout stay, and a second run changes nothing. It also rewrites `count(xs)` and `length(s)` to `.length`,
   `all`/`any` to `.every`/`.some`, `contains(xs, x)` to `xs.includes(x)`, `unique(xs, …)` to `xs.unique(…)`, and
   `matches(t, "r")` to `t.matches("r")`, and `exists(x)` / `!exists(x)` to `x != null` / `x == null`.
+- `dt migrate domain` also completes `changes`: it adds each field an outcome makes exist and does not list, as
+  `f = f` when the command has a parameter of that name and as `f` (value left open) otherwise, and prints each
+  outcome it completed. Review the bare entries: write `f = …` where the model decides the value.
 
 ## Upgrading
 

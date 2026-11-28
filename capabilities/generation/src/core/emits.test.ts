@@ -23,9 +23,10 @@ const WORK = `context Tasks {
     state Completed { completedAt: Timestamp }
     state Cancelled
 
-    create command open(id: WorkId) -> Draft emits WorkOpened, ItemAdded[0..*]
+    create command open(id: WorkId) -> Draft changes id = id emits WorkOpened, ItemAdded[0..*]
     command progress(at: Timestamp)
       InProgress -> InProgress | Completed
+      changes completedAt = at
       emits StepRecorded,
             WorkCompleted when -> Completed
       errors NotReady
@@ -126,7 +127,7 @@ describe('emits in the generated TypeScript', () => {
         expect(code).toContain(
             `/**
  * Work.progress (InProgress -> InProgress | Completed)
- * @changes none — the command changes no common field
+ * @changes completedAt
  * @emits StepRecorded — exactly once when the command succeeds
  * @emits WorkCompleted — exactly once when it ends in Completed
  * @see tasks.dt:19
@@ -166,7 +167,7 @@ export type ProgressWork = (
 
     test('events that depend on the source state make the contract generic, documented per source state', () => {
         expect(code).toContain(
-            ' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:24\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(',
+            ' * @emits RefundRequested — exactly once when it comes from InProgress\n * @see tasks.dt:25\n */\nexport type CancelWork = <S extends DraftWork | InProgressWork>(',
         );
         expect(code).toContain(
             `) => {

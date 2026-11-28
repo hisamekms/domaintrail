@@ -29,14 +29,14 @@ const SOURCE = `context Sales {
       outcome denied: Assigned -> Assigned select { !passed } emits Received
     }
     kind COLLECT {
-      create command openCollect(id: RequestId) { outcome opened: -> Unassigned }
+      create command openCollect(id: RequestId) { outcome opened: -> Unassigned changes id = id, ready }
       on complete {
         requires canCollect { ready } else Invalid
         outcome collected: Assigned -> CollectDone emits Collected
       }
     }
     kind DROP_OFF {
-      create command openDropOff(id: RequestId) { outcome opened: -> Unassigned }
+      create command openDropOff(id: RequestId) { outcome opened: -> Unassigned changes id = id, ready }
       on complete { outcome received: Assigned -> Holding emits Received }
     }
   }
@@ -181,8 +181,8 @@ test('a factory of a kind fixes the produced kind, named in its set', async () =
       aggregate Task {
         id: TaskId
         state Start
-        kind A { create command openA(id: TaskId) { outcome openedA: -> Start } }
-        kind B { create command openB(id: TaskId) { outcome openedB: -> Start } }
+        kind A { create command openA(id: TaskId) { outcome openedA: -> Start changes id = id } }
+        kind B { create command openB(id: TaskId) { outcome openedB: -> Start changes id = id } }
       }
     }`,
     });
@@ -255,7 +255,7 @@ test('named requirement and choice expressions resolve fields of their source st
         state Running { baseRevision: String }
         state Done { baseRevision: String resultRevision: String }
         initial Running
-        create command open(id: RunId, revision: String) { outcome opened: -> Running }
+        create command open(id: RunId, revision: String) { outcome opened: -> Running changes id = id, baseRevision }
         command finish(resultRevision: String) "Complete run" {
           requires changed { resultRevision != baseRevision } else Invalid
           outcome finished: Running -> Done select { resultRevision != baseRevision } changes resultRevision

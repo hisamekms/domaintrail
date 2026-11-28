@@ -21,7 +21,9 @@ ${extra ? `  ${extra}\n` : ''}
     id: CustomerId
     email: EmailAddress
     spent: Decimal
-    create command register(id: CustomerId, email: AvailableEmail) emits CustomerRegistered
+    create command register(id: CustomerId, email: AvailableEmail)
+      changes id = id, email = email, spent = 0, contact = email
+      emits CustomerRegistered
     command changeEmail(newEmail: AvailableEmail)
       requires changed { newEmail != email } else Unchanged
       changes email
@@ -108,7 +110,8 @@ describe('verified types: the checker', () => {
                 "store the base type 'EmailAddress'",
             ]),
         );
-        expect(codes(a).filter((c) => c !== 'M024' && c !== 'M006')).toEqual([]); // no M004 on top
+        // no M004 on top (M021: the new fields are not listed by `register`)
+        expect(codes(a).filter((c) => c !== 'M024' && c !== 'M006' && c !== 'M021')).toEqual([]);
     });
 
     test('M024: the base and the context are value types; a context is not verified; no cycle', async () => {

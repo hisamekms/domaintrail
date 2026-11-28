@@ -63,6 +63,7 @@ context Logistics {
       create command registerStore(id: PickupSiteId, name: String, storeCode: String, closingTime: Int) {
         requires validHour { closingTime >= 0 && closingTime < 24 } else InvalidHour
         outcome registered: -> Active
+          changes id = id, name = name, storeCode = storeCode, closingTime = closingTime
           emits Registered
       }
       command changeClosingTime(newClosingTime: Int) {
@@ -81,6 +82,7 @@ context Logistics {
       create command registerCenter(id: PickupSiteId, name: String, dockCount: Int) {
         requires someDocks { dockCount > 0 } else NoDocks
         outcome registered: -> Active
+          changes id = id, name = name, dockCount = dockCount
           emits Registered
       }
       on suspend {
@@ -99,7 +101,7 @@ context Logistics {
       amount: Int
       invariant nonNegative { amount >= 0 }
       create command makeGift(id: CardId, label: String, amount: Int)
-        requires nonNegativeAmount { amount >= 0 } else Negative
+        requires nonNegativeAmount { amount >= 0 } else Negative changes id = id, label = label, amount = amount
       command topUp(more: Int)
         requires nonNegativeMore { more >= 0 } else Negative
         changes amount
@@ -107,7 +109,7 @@ context Logistics {
     }
     kind Member {
       level: Int
-      create command makeMember(id: CardId, label: String, level: Int)
+      create command makeMember(id: CardId, label: String, level: Int) changes id = id, label = label, level = level
     }
   }
 }

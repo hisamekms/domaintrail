@@ -199,6 +199,7 @@ context Sales {
     state Draft
     state Confirmed
     create command place(id: OrderId) -> Draft
+      changes id = id
       emits OrderPlaced
     command confirm() Draft -> Confirmed
     invariant something "何か" { true }

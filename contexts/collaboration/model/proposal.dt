@@ -90,6 +90,7 @@ context Collaboration {
     /// 回答役が、参加者の変更依頼について変更案を書く。
     create command propose(id: ChangeProposalId, session: ActiveSession, triage: ProposableTriage, request: RequestId, requestedBy: ParticipantId, content: ProposalContent, proposedAt: Timestamp) "変更案を書く"
       -> Open
+      changes id = id, session = session, triage = triage, request = request, requestedBy = requestedBy, content = content, proposedAt = proposedAt
       emits ChangeProposed
 
     /// ファシリテーターが承認する（選択肢があれば1つ選び、その「どう」を編集してもよい）。実行の登録と同じ取引で、その
@@ -102,6 +103,7 @@ context Collaboration {
       requires optionOfProposal "選択肢があれば、そのうちの1つを選ぶ" {
         (!(content.options.length == 0) || option == null) && (!(content.options.length >= 1) || option != null && option < content.options.length)
       } else NoSuchOption
+      changes approvedBy = approvedBy, approvedAt = approvedAt, run = run
       emits ProposalApproved
 
     /// ファシリテーターが却下する（ひとことを添えてもよい）。
@@ -110,12 +112,14 @@ context Collaboration {
       requires facilitatorRejects "ファシリテーターが却下する" {
         rejectedByRole == ParticipantRole.Facilitator
       } else FacilitatorOnly
+      changes rejectedBy = rejectedBy, rejectedAt = rejectedAt
       emits ProposalRejected
 
     /// 依頼した参加者が、承認待ちのあいだに取り下げる。
     command withdraw(withdrawnBy: ParticipantId, withdrawnAt: Timestamp) "変更案を取り下げる"
       Open -> Withdrawn
       requires requesterWithdraws "依頼した人が取り下げる" { withdrawnBy == requestedBy } else NotTheRequester
+      changes withdrawnAt = withdrawnAt
       emits ProposalWithdrawn
   }
 

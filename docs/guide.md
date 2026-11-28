@@ -40,6 +40,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
     }
     create command lend(id: LoanId, book: BookId, period: Period) "貸し出す"
       -> Lent
+      changes id = id, book = book, period = period, renewals
       emits BookLent
     command renew(extension: Period)
       Lent -> Lent
@@ -49,6 +50,7 @@ context Library "図書館" { // a bounded context; "…" is a label (表示名)
     command markOverdue() Lent -> Overdue
     command giveBack(at: Timestamp)
       Lent | Overdue -> Returned
+      changes returnedAt
       emits BookReturned,
             FeeCharged? when Overdue ->
       errors BookDamaged
@@ -235,10 +237,12 @@ context Rental "レンタル" { // a bounded context; "…" is a label (表示�
     }
     create command start(id: LeaseId, member: MemberId, fee: Fee) // takes the new ID
       -> Active
+      changes id = id, member = member, fee = fee
       emits LeaseStarted
     command close(closedAt: Timestamp)
       Active -> Closed
       requires settled { discount == null } else DiscountPending
+      changes closedAt = closedAt
       emits LeaseClosed
   }
 
@@ -287,6 +291,7 @@ context Sales { // a bounded context; may be split across files
 
     create command place(id: OrderId, customer: CustomerId)
       -> Draft
+      changes id = id, items, customer = customer
       emits OrderPlaced // factory: `-> State`, no source
 
     state Draft
@@ -302,10 +307,12 @@ context Sales { // a bounded context; may be split across files
     command confirm(at: Timestamp)
       Draft -> Confirmed // a transition: source state(s) -> target state(s)
       requires hasItems { items.length > 0 } else EmptyOrder // accepted only if; otherwise returns EmptyOrder
+      changes confirmedAt = at
       emits OrderConfirmed // exactly one OrderConfirmed whenever it succeeds
 
     command cancel(reason: CancelReason)
       Draft | Confirmed -> Cancelled // from either
+      changes reason = reason
       emits OrderCancelled,
             RefundRequested when Confirmed -> // only when it comes from Confirmed
 
@@ -468,7 +475,8 @@ context Booking {
     invariant ordered { startTime < endTime } // values of one type compare
     invariant opensAtSix { startTime >= "06:00" } // a literal is a value of the type it is compared with
     create command request(id: ReservationId, visitDate: Date, startTime: Time, endTime: Time, billingMonth: YearMonth, requestedAt: Timestamp, today: Date)
-      requires notPast { visitDate >= today } else PastDate // "today" is a parameter: commands are pure
+      requires notPast { visitDate >= today } else PastDate
+      changes id = id, visitDate = visitDate, startTime = startTime, endTime = endTime, billingMonth = billingMonth, requestedAt = requestedAt // "today" is a parameter: commands are pure
   }
 }
 ```
@@ -502,6 +510,7 @@ context Booking {
     remindAt: DateTime? "リマインド（各参加者の現地時刻）" // no time zone: each reads it in their own
     invariant ordered { startsAt < endsAt } // by instant
     create command schedule(id: MeetingId, startsAt: ZonedDateTime, endsAt: ZonedDateTime)
+      changes id = id, startsAt = startsAt, endsAt = endsAt
   }
   aggregate Shop "店舗" {
     id: ShopId
@@ -509,6 +518,7 @@ context Booking {
     opensAt: Time "開店時刻"
     closedOn: Date[0..*] "定休日"
     create command open(id: ShopId, zone: TimeZone, opensAt: Time)
+      changes id = id, zone = zone, opensAt = opensAt, closedOn
   }
 }
 ```
@@ -621,6 +631,7 @@ context Expenses "経費" {
     invariant notSelfApproved "申請者は承認できない" { approver == null || approver != applicant }
 
     create command submit(id: ExpenseId, applicant: StaffId "申請者", performedBy: StaffId "実施者") "申請する" // by proxy, too
+      changes id = id, applicant = applicant, tenant // a field it makes exist; its value left open
       emits ExpenseSubmitted
     command approve(approver: StaffId "承認者", approvedAt: Timestamp "承認日時") "承認する"
       changes approver
@@ -703,9 +714,12 @@ context Billing { // other files open the context without a name
       paidAt: Timestamp // → 支払日時 (from terms)
     }
     invariant positive "金額が正" { amount.amount > 0 }
-    create command issue(id: InvoiceId, order: Sales.OrderId, amount: Money) "請求書を発行する" -> Open
+    create command issue(id: InvoiceId, order: Sales.OrderId, amount: Money) "請求書を発行する"
+      -> Open
+      changes id = id, order = order, amount = amount
     command pay(at: Timestamp "支払日時") "支払う"
       Open -> Paid
+      changes paidAt
       emits InvoicePaid
   }
   enum InvoiceKind "請求区分" { Regular "通常" Refund "返金" }
@@ -763,6 +777,7 @@ context Logistics {
       closingTime: String
       create command registerStore(id: PickupSiteId, name: String, storeCode: StoreCode, closingTime: String) {
         outcome registered: -> Active
+          changes id = id, name = name, storeCode = storeCode, closingTime = closingTime
           emits StoreRegistered
       }
       command changeClosingTime(newClosingTime: String) { // only for this kind
@@ -781,6 +796,7 @@ context Logistics {
       invariant fewDocks { dockCount <= 100 } // sees the common fields and this kind's
       create command registerCenter(id: PickupSiteId, name: String, dockCount: DockCount) {
         outcome registered: -> Active
+          changes id = id, name = name, dockCount = dockCount
           emits CenterRegistered
       }
       on suspend {
@@ -867,7 +883,9 @@ the valid states and named outcomes per kind; restored data and migrations remai
 - Literals: `true`, `false`, `42`, `-1`, `3.14`, `"text"`; enum values `CancelReason.Other`.
 - Field paths: `note`, `item.quantity`, `amount.amount`.
 - Outcome contracts (design D): `changes x` lets an outcome change `x` without saying to what; `changes x = expr`
-  gives its value, over the parameters (bare) and `before.x`; an unlisted field is unchanged. `ensures { … }` after
+  gives its value, over the parameters (bare) and `before.x`; an unlisted field is unchanged. An outcome lists every
+  non-optional field it makes exist (all of them on create, those new in its target state on a transition), with or
+  without a value (M021). `ensures { … }` after
   `changes`/`emits` states a relation the result satisfies, over the parameters, `before.x` and `after.x`; an
   equality that determines a field alone belongs in `changes x = …` (M021). A create has no `before`.
 - Functions: `function name(p: T, …): R { expr }` in a context is a pure function of its parameters, called as
@@ -949,6 +967,7 @@ context Review {
       requires noOpenBlocker "未解決の阻害がない" { openBlockers == 0 } else Blocked
       /// The reviewer's own sign-off is recorded outside this model.
       requires signedOff "本人の承認が記録済み" else NotSignedOff // not expressed in the DSL
+      changes acceptedBy
       errors Conflict
   }
 
@@ -1022,7 +1041,9 @@ context Purchasing {
       invariant enoughApprovals { approvedBy.length >= policy.requiredApprovals }
     }
 
-    create command submit(id: RequestId, policy: ApprovalPolicy) -> Pending
+    create command submit(id: RequestId, policy: ApprovalPolicy)
+      -> Pending
+      changes id = id, policy = policy, approvedBy
     command approve(person: PersonId)
       Pending -> Pending | Approved
       changes approvedBy
@@ -1133,7 +1154,9 @@ context Tickets {
       closedAt: Timestamp
     }
 
-    create command report(id: TicketId, title: String) -> Open // a factory sets every field
+    create command report(id: TicketId, title: String)
+      -> Open
+      changes id = id, title = title // a create lists every non-optional field; note starts as null
     command retitle(title: String, note: String?)
       Open -> Open
       InProgress -> InProgress
@@ -1141,8 +1164,12 @@ context Tickets {
     command assign(assignee: PersonId?)
       Open -> Open
       changes assignee // carried over from Open to Open, so listed to be changed
-    command start(assignee: PersonId, at: Timestamp) Open -> InProgress // no `changes`: sets InProgress's assignee and startedAt, keeps the rest
-    command close(at: Timestamp) Open | InProgress -> Closed // sets closedAt; assignee and startedAt are dropped
+    command start(assignee: PersonId, at: Timestamp)
+      Open -> InProgress
+      changes assignee = assignee, startedAt = at // new in InProgress, so listed; the rest is kept
+    command close(at: Timestamp)
+      Open | InProgress -> Closed
+      changes closedAt = at // new in Closed; assignee and startedAt are dropped
   }
 }
 ```
@@ -1151,9 +1178,11 @@ context Tickets {
 2. A state-specific field that both the source and the target state have, with the same name and type, is **carried
    over**: it keeps its value, unless it is listed in `changes`. `assignee` is carried over by `assign`
    (`Open -> Open`), not by `start`: it is `PersonId?` in Open and `PersonId` in InProgress.
-3. The target state's other own fields are new, and the command always sets them, without `changes` (`startedAt`,
-   and `assignee` in `start`). The source state's own fields that the target does not carry over are dropped.
-4. A `create command` sets every field; `changes` on it is an error.
+3. The target state's other own fields are new: the outcome lists each non-optional one in `changes` (`startedAt`,
+   and `assignee` in `start`), and an optional one it does not list starts as null. The source state's own fields
+   that the target does not carry over are dropped.
+4. A `create command` lists every non-optional field of the new aggregate in `changes`, `id` included: the common
+   fields, those of its kind and those of its target state. `dt migrate domain` adds the missing ones.
 5. Without states, a command changes only the fields in `changes`.
 6. A field in `changes` is **given every time**: there is no "absent = keep". An optional field is cleared by giving
    `undefined`. A command that changes a field only in some cases gives the old value in the others.
@@ -1212,6 +1241,7 @@ context Work {
 
     create command open(id: WorkId)
       -> Draft
+      changes id = id
       emits WorkOpened // the new ID is a parameter
     command plan(steps: StepId[1..*])
       Draft -> Draft
@@ -1222,6 +1252,7 @@ context Work {
     command start() Draft -> InProgress
     command progress(step: StepId, at: Timestamp)
       InProgress -> InProgress | Completed
+      changes completedAt
       emits StepRecorded,
             WorkCompleted when -> Completed // only when it ends in Completed
   }
@@ -1322,7 +1353,9 @@ context Purchasing {
     state Draft
     state Placed
 
-    create command open(id: PurchaseOrderId, spend: Spend) -> Draft
+    create command open(id: PurchaseOrderId, spend: Spend)
+      -> Draft
+      changes id = id, spend = spend
     command place(spend: ApprovedSpend) // both checks were made
       Draft -> Placed
       changes spend

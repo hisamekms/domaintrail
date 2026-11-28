@@ -10,7 +10,7 @@ const ORDER = `
     owns lines: Line[0..*]
     state Draft
     state Done { doneAt: Timestamp }
-    command finish(at: Timestamp) Draft -> Done
+    command finish(at: Timestamp) Draft -> Done changes doneAt
   }
   entity Line { id: LineId  quantity: Int }
 `;
@@ -115,7 +115,7 @@ describe('keywords as names', () => {
     id: GId
     state: Int
     state S
-    create command command(id: GId, state: Int, error: String) -> S
+    create command command(id: GId, state: Int, error: String) -> S changes id = id, state = state
     command emits(errors: Int) S -> S
   }
 }`,
@@ -233,7 +233,7 @@ describe('commands (M006, M007)', () => {
     state Completed
     state Cancelled
 
-    create command open(id: WorkId) -> Draft
+    create command open(id: WorkId) -> Draft changes id = id
 
     command change()
       Draft -> Draft
@@ -293,10 +293,10 @@ describe('commands (M006, M007)', () => {
                 'command finish(at: Timestamp) Draft -> Done',
                 `command finish(at: Timestamp) Draft -> Done
     command none()
-    command noSource() -> Done
-    command mixed() Draft -> Done, -> Draft
-    create command make() Draft -> Draft
-    create command make2()
+    command noSource() -> Done changes doneAt
+    command mixed() Draft -> Done, -> Draft changes doneAt
+    create command make() Draft -> Draft changes id, lines
+    create command make2() changes id, lines
     create command make3() -> Draft, -> Done`,
             ),
         );

@@ -32,10 +32,13 @@ context Booking "会議室予約" {
       confirmedAt: Timestamp
     }
 
-    create command request(id: ReservationId, attendees: Headcount) -> Requested
+    create command request(id: ReservationId, attendees: Headcount)
+      -> Requested
+      changes id = id, attendees = attendees
     command confirm(capacity: Headcount, at: Timestamp)
       Requested -> Confirmed
       requires roomFits { attendees <= capacity } else RoomTooSmall
+      changes confirmedAt = at
       emits ReservationConfirmed
   }
 

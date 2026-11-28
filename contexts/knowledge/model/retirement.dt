@@ -110,16 +110,19 @@ context Knowledge {
         replacedBy == null || replacedBy != item
       } else MalformedProposal
       requires distinctEvidence "根拠は1回" { evidence.unique() } else MalformedProposal
+      changes id = id, item = item, action = action, explanation = explanation, evidence = evidence, proposedBy = proposedBy, proposedAt = proposedAt
       emits RetirementProposed
 
     /// 人が承認する（ストアはナレッジを廃止する、または廃止を取り消す）。
     command approve(by: UserName, at: Timestamp) "承認する"
       Open -> Approved
+      changes decidedBy, decidedAt
       emits RetirementProposalApproved
 
     /// 人が却下する。
     command dismiss(by: UserName, at: Timestamp) "却下する"
       Open -> Dismissed
+      changes decidedBy, decidedAt
       emits RetirementProposalDismissed
   }
 

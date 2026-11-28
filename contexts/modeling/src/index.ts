@@ -163,6 +163,7 @@ export { generationGateDiagnostics } from './domain/rules/generation-gate.js';
 
 // ---- use cases: Modeling's analysis of the `.dt` sources -------------------------------------------------------
 export { analyzeDomain, type DomainAnalysis } from './application/analyze.js';
+export { completeChanges, type CompletedChanges } from './infrastructure/syntax/complete-changes.js';
 
 // ---- use cases: formatting -------------------------------------------------------------------------------------
 export { formatDomain, FormatError } from './infrastructure/syntax/format.js';

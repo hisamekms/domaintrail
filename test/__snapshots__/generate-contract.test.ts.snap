@@ -209,7 +209,7 @@ export type IssueInvoiceDecision = (
 
 /**
  * The parameters of Invoice.pay, by name.
- * @see billing/invoice.dt:16
+ * @see billing/invoice.dt:18
  */
 export interface PayInvoiceParams {
     /** 支払日時 */
@@ -219,9 +219,9 @@ export interface PayInvoiceParams {
 /**
  * Invoice.pay (Open -> Paid)
  * 支払う
- * @changes none — the command changes no common field
+ * @changes paidAt
  * @emits InvoicePaid — exactly once when the command succeeds
- * @see billing/invoice.dt:16
+ * @see billing/invoice.dt:18
  */
 export type PayInvoice = (
     invoice: OpenInvoice,
@@ -236,9 +236,9 @@ export type PayInvoice = (
 /**
  * Invoice.pay, decided per source state; implement it with \`decide(InvoiceShape, …)\` from the runtime.
  * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
- * @changes none — the command changes no common field
- * Open -> Paid — set: paidAt (new in Paid); carried over: id, order, billedAmount
- * @see billing/invoice.dt:16
+ * @changes paidAt
+ * Open -> Paid — set: paidAt; carried over: id, order, billedAmount
+ * @see billing/invoice.dt:18
  */
 export type PayInvoiceDecision = {
     /** @emits InvoicePaid — exactly once when the command succeeds */
@@ -282,19 +282,19 @@ export const InvoiceAvailability: Availability = {
 
 /**
  * Whether Invoice.pay can be called on the invoice in its state (Open).
- * @see billing/invoice.dt:16
+ * @see billing/invoice.dt:18
  */
 export const canPayInvoice = (invoice: Invoice): invoice is OpenInvoice => isAvailable(InvoiceAvailability, 'pay', invoice);
 
 /**
  * The error of Invoice.pay called through \`anyStateInvoiceCommands\` on the invoice when its state is not one of its source states.
- * @see billing/invoice.dt:16
+ * @see billing/invoice.dt:18
  */
 export type PayInvoiceUnavailable = CommandUnavailable<'Billing.Invoice', 'pay', 'Paid', 'Open'>;
 
 /**
  * Invoice.pay for the invoice in any state: the command in a source state (Open), and \`PayInvoiceUnavailable\` in another.
- * @see billing/invoice.dt:16
+ * @see billing/invoice.dt:18
  */
 export type PayInvoiceFromAnyState = (
     invoice: Invoice,
@@ -326,7 +326,7 @@ export const availableInvoiceCommands = (invoice: Invoice): (keyof InvoiceComman
  * 支払完了
  * 入金の記録として残す。
  * @persistent Persisted: storing this event is part of its contract.
- * @see billing/invoice.dt:22
+ * @see billing/invoice.dt:25
  */
 export interface InvoicePaid {
     readonly type: 'Billing.InvoicePaid';
@@ -628,7 +628,7 @@ export type RegisterCustomerDecision = (
 
 /**
  * The parameters of Customer.rename, by name.
- * @see sales/customer.dt:15
+ * @see sales/customer.dt:16
  */
 export interface RenameCustomerParams {
     /** 氏名 */
@@ -640,7 +640,7 @@ export interface RenameCustomerParams {
  * 氏名を変更する
  * @changes name
  * @emits nothing
- * @see sales/customer.dt:15
+ * @see sales/customer.dt:16
  */
 export type RenameCustomer = (
     customer: Customer,
@@ -658,7 +658,7 @@ export type RenameCustomer = (
  * @changes name
  * Customer — set: name; carried over: id, email
  * @emits nothing
- * @see sales/customer.dt:15
+ * @see sales/customer.dt:16
  */
 export type RenameCustomerDecision = (
     customer: Customer,
@@ -672,7 +672,7 @@ export type RenameCustomerDecision = (
 
 /**
  * The parameters of Customer.changeEmail, by name.
- * @see sales/customer.dt:17
+ * @see sales/customer.dt:18
  */
 export interface ChangeEmailCustomerParams {
     /** 未使用のメールアドレス */
@@ -684,7 +684,7 @@ export interface ChangeEmailCustomerParams {
  * メールアドレスを変更する
  * @changes email
  * @emits nothing
- * @see sales/customer.dt:17
+ * @see sales/customer.dt:18
  */
 export type ChangeEmailCustomer = (
     customer: Customer,
@@ -702,7 +702,7 @@ export type ChangeEmailCustomer = (
  * @changes email
  * Customer — set: email; carried over: id, name
  * @emits nothing
- * @see sales/customer.dt:17
+ * @see sales/customer.dt:18
  */
 export type ChangeEmailCustomerDecision = (
     customer: Customer,
@@ -736,7 +736,7 @@ export type CustomerEvent = CustomerRegistered;
 
 /**
  * 顧客登録
- * @see sales/customer.dt:20
+ * @see sales/customer.dt:21
  */
 export interface CustomerRegistered {
     readonly type: 'Sales.CustomerRegistered';
@@ -747,7 +747,7 @@ export interface CustomerRegistered {
 /**
  * 使用済みのメールアドレス
  * ほかの顧客がすでに使っているメールアドレス。
- * @see sales/customer.dt:25
+ * @see sales/customer.dt:26
  */
 export interface EmailTaken {
     readonly type: 'Sales.EmailTaken';
@@ -967,7 +967,7 @@ export interface OrderCommon {
 
 /**
  * 下書き
- * @see sales/order.dt:30
+ * @see sales/order.dt:31
  */
 export interface DraftOrder extends OrderCommon {
     readonly state: 'Draft';
@@ -976,7 +976,7 @@ export interface DraftOrder extends OrderCommon {
 /**
  * 確定済み
  * @invariant hasItems (明細が1件以上): items.length > 0
- * @see sales/order.dt:32
+ * @see sales/order.dt:33
  */
 export interface ConfirmedOrder extends OrderCommon {
     readonly state: 'Confirmed';
@@ -987,7 +987,7 @@ export interface ConfirmedOrder extends OrderCommon {
 /**
  * 取消済み
  * @invariant otherNeedsNote (その他の取消には備考が必要): !(reason == CancelReason.Other) || note != null
- * @see sales/order.dt:37
+ * @see sales/order.dt:38
  */
 export interface CancelledOrder extends OrderCommon {
     readonly state: 'Cancelled';
@@ -1032,7 +1032,7 @@ export function checkOrderCommon(order: OrderCommon): readonly ('quantitiesPosit
 
 /**
  * The invariants of Order in state Draft (the aggregate's, by \`checkOrderCommon\`, and the state's) that an aggregate violates, in declaration order.
- * @see sales/order.dt:30
+ * @see sales/order.dt:31
  */
 export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency')[] {
     return checkOrderCommon(order);
@@ -1040,7 +1040,7 @@ export function checkDraftOrder(order: DraftOrder): readonly ('quantitiesPositiv
 
 /**
  * The invariants of Order in state Confirmed (the aggregate's, by \`checkOrderCommon\`, and the state's) that an aggregate violates, in declaration order.
- * @see sales/order.dt:32
+ * @see sales/order.dt:33
  */
 export function checkConfirmedOrder(order: ConfirmedOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] {
     const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'hasItems')[] = [...checkOrderCommon(order)];
@@ -1050,7 +1050,7 @@ export function checkConfirmedOrder(order: ConfirmedOrder): readonly ('quantitie
 
 /**
  * The invariants of Order in state Cancelled (the aggregate's, by \`checkOrderCommon\`, and the state's) that an aggregate violates, in declaration order.
- * @see sales/order.dt:37
+ * @see sales/order.dt:38
  */
 export function checkCancelledOrder(order: CancelledOrder): readonly ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] {
     const violated: ('quantitiesPositive' | 'distinctSkus' | 'singleCurrency' | 'otherNeedsNote')[] = [...checkOrderCommon(order)];
@@ -1114,7 +1114,7 @@ export type PlaceOrderDecision = (
 
 /**
  * The parameters of Order.addItem, by name.
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export interface AddItemOrderParams {
     /** 追加する明細 */
@@ -1128,7 +1128,7 @@ export interface AddItemOrderParams {
  * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: items.every(i => i.unitPrice.currency == item.unitPrice.currency)
  * @changes items
  * @emits nothing
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export type AddItemOrder = (
     order: DraftOrder,
@@ -1147,7 +1147,7 @@ export type AddItemOrder = (
  * @requires sameCurrency (既存の明細と同じ通貨) else CurrencyMismatch: items.every(i => i.unitPrice.currency == item.unitPrice.currency)
  * @changes items
  * Draft -> Draft — set: items; carried over: id, customer, note
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export type AddItemOrderDecision = {
     /** @emits nothing */
@@ -1161,7 +1161,7 @@ export type AddItemOrderDecision = {
 
 /**
  * The first requirement of Order.addItem that does not hold, in declaration order; \`undefined\` when all hold.
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export function checkAddItemOrderRequires(order: DraftOrder, params: AddItemOrderParams): 'newSku' | 'sameCurrency' | undefined {
     if (!(order.items.every((i) => !(i.sku === params.item.sku)))) return 'newSku';
@@ -1171,7 +1171,7 @@ export function checkAddItemOrderRequires(order: DraftOrder, params: AddItemOrde
 
 /**
  * The parameters of Order.confirm, by name.
- * @see sales/order.dt:51
+ * @see sales/order.dt:52
  */
 export interface ConfirmOrderParams {
     /** 日時 */
@@ -1182,9 +1182,9 @@ export interface ConfirmOrderParams {
  * Order.confirm (Draft -> Confirmed)
  * 注文を確定する
  * @requires hasItems (明細が1件以上) else EmptyOrder: items.length > 0
- * @changes none — the command changes no common field
+ * @changes confirmedAt
  * @emits OrderConfirmed — exactly once when the command succeeds
- * @see sales/order.dt:51
+ * @see sales/order.dt:52
  */
 export type ConfirmOrder = (
     order: DraftOrder,
@@ -1200,9 +1200,9 @@ export type ConfirmOrder = (
  * Order.confirm, decided per source state; implement it with \`decide(OrderShape, …)\` from the runtime.
  * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
  * @requires hasItems (明細が1件以上) else EmptyOrder: items.length > 0
- * @changes none — the command changes no common field
- * Draft -> Confirmed — set: confirmedAt (new in Confirmed); carried over: id, items, customer, note
- * @see sales/order.dt:51
+ * @changes confirmedAt
+ * Draft -> Confirmed — set: confirmedAt; carried over: id, items, customer, note
+ * @see sales/order.dt:52
  */
 export type ConfirmOrderDecision = {
     /** @emits OrderConfirmed — exactly once when the command succeeds */
@@ -1216,7 +1216,7 @@ export type ConfirmOrderDecision = {
 
 /**
  * The first requirement of Order.confirm that does not hold, in declaration order; \`undefined\` when all hold.
- * @see sales/order.dt:51
+ * @see sales/order.dt:52
  */
 export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrderParams): 'hasItems' | undefined {
     if (!(order.items.length > 0)) return 'hasItems';
@@ -1225,7 +1225,7 @@ export function checkConfirmOrderRequires(order: DraftOrder, _params: ConfirmOrd
 
 /**
  * The parameters of Order.cancel, by name.
- * @see sales/order.dt:56
+ * @see sales/order.dt:58
  */
 export interface CancelOrderParams {
     /** 取消理由 */
@@ -1236,10 +1236,10 @@ export interface CancelOrderParams {
  * Order.cancel (Draft | Confirmed -> Cancelled)
  * 注文を取り消す
  * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: !(reason == CancelReason.Other) || note != null
- * @changes none — the command changes no common field
+ * @changes reason
  * @emits OrderCancelled — exactly once when the command succeeds
  * @emits RefundRequested — exactly once when it comes from Confirmed
- * @see sales/order.dt:56
+ * @see sales/order.dt:58
  */
 export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
@@ -1268,10 +1268,10 @@ export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
  * Order.cancel, decided per source state; implement it with \`decide(OrderShape, …)\` from the runtime.
  * Each outcome gives the fields of \`set\`, and \`decide\` makes the aggregate, taking the other fields from the input.
  * @requires noteForOther (その他の取消には備考が必要) else NoteRequired: !(reason == CancelReason.Other) || note != null
- * @changes none — the command changes no common field
- * Draft -> Cancelled — set: reason (new in Cancelled); carried over: id, items, customer, note
- * Confirmed -> Cancelled — set: reason (new in Cancelled); carried over: id, items, customer, note; dropped: confirmedAt
- * @see sales/order.dt:56
+ * @changes reason
+ * Draft -> Cancelled — set: reason; carried over: id, items, customer, note
+ * Confirmed -> Cancelled — set: reason; carried over: id, items, customer, note; dropped: confirmedAt
+ * @see sales/order.dt:58
  */
 export type CancelOrderDecision = {
     /** @emits OrderCancelled — exactly once when the command succeeds */
@@ -1295,7 +1295,7 @@ export type CancelOrderDecision = {
 
 /**
  * The first requirement of Order.cancel that does not hold, in declaration order; \`undefined\` when all hold.
- * @see sales/order.dt:56
+ * @see sales/order.dt:58
  */
 export function checkCancelOrderRequires(order: DraftOrder | ConfirmedOrder, params: CancelOrderParams): 'noteForOther' | undefined {
     if (params.reason === 'Other' && !(order.note !== undefined)) return 'noteForOther';
@@ -1304,7 +1304,7 @@ export function checkCancelOrderRequires(order: DraftOrder | ConfirmedOrder, par
 
 /**
  * The parameters of Order.changeNote, by name.
- * @see sales/order.dt:66
+ * @see sales/order.dt:69
  */
 export interface ChangeNoteOrderParams {
     /** 備考 */
@@ -1318,7 +1318,7 @@ export interface ChangeNoteOrderParams {
  * 備考が変わらなければイベントは発生しない。
  * @changes note
  * @emits NoteChanged? — at most once when the command succeeds
- * @see sales/order.dt:66
+ * @see sales/order.dt:69
  */
 export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
@@ -1346,7 +1346,7 @@ export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
  * @changes note
  * Draft -> Draft — set: note; carried over: id, items, customer
  * Confirmed -> Confirmed — set: note; carried over: id, items, customer, confirmedAt
- * @see sales/order.dt:66
+ * @see sales/order.dt:69
  */
 export type ChangeNoteOrderDecision = {
     /** @emits NoteChanged? — at most once when the command succeeds */
@@ -1406,19 +1406,19 @@ export const OrderAvailability: Availability = {
 
 /**
  * Whether Order.addItem can be called on the order in its state (Draft).
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export const canAddItemOrder = (order: Order): order is DraftOrder => isAvailable(OrderAvailability, 'addItem', order);
 
 /**
  * The error of Order.addItem called through \`anyStateOrderCommands\` on the order when its state is not one of its source states.
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export type AddItemOrderUnavailable = CommandUnavailable<'Sales.Order', 'addItem', 'Confirmed' | 'Cancelled', 'Draft'>;
 
 /**
  * Order.addItem for the order in any state: the command in a source state (Draft), and \`AddItemOrderUnavailable\` in another.
- * @see sales/order.dt:43
+ * @see sales/order.dt:44
  */
 export type AddItemOrderFromAnyState = (
     order: Order,
@@ -1427,19 +1427,19 @@ export type AddItemOrderFromAnyState = (
 
 /**
  * Whether Order.confirm can be called on the order in its state (Draft).
- * @see sales/order.dt:51
+ * @see sales/order.dt:52
  */
 export const canConfirmOrder = (order: Order): order is DraftOrder => isAvailable(OrderAvailability, 'confirm', order);
 
 /**
  * The error of Order.confirm called through \`anyStateOrderCommands\` on the order when its state is not one of its source states.
- * @see sales/order.dt:51
+ * @see sales/order.dt:52
  */
 export type ConfirmOrderUnavailable = CommandUnavailable<'Sales.Order', 'confirm', 'Confirmed' | 'Cancelled', 'Draft'>;
 
 /**
  * Order.confirm for the order in any state: the command in a source state (Draft), and \`ConfirmOrderUnavailable\` in another.
- * @see sales/order.dt:51
+ * @see sales/order.dt:52
  */
 export type ConfirmOrderFromAnyState = (
     order: Order,
@@ -1448,19 +1448,19 @@ export type ConfirmOrderFromAnyState = (
 
 /**
  * Whether Order.cancel can be called on the order in its state (Draft | Confirmed).
- * @see sales/order.dt:56
+ * @see sales/order.dt:58
  */
 export const canCancelOrder = (order: Order): order is DraftOrder | ConfirmedOrder => isAvailable(OrderAvailability, 'cancel', order);
 
 /**
  * The error of Order.cancel called through \`anyStateOrderCommands\` on the order when its state is not one of its source states.
- * @see sales/order.dt:56
+ * @see sales/order.dt:58
  */
 export type CancelOrderUnavailable = CommandUnavailable<'Sales.Order', 'cancel', 'Cancelled', 'Draft' | 'Confirmed'>;
 
 /**
  * Order.cancel for the order in any state: the command in a source state (Draft | Confirmed), and \`CancelOrderUnavailable\` in another.
- * @see sales/order.dt:56
+ * @see sales/order.dt:58
  */
 export type CancelOrderFromAnyState = (
     order: Order,
@@ -1469,19 +1469,19 @@ export type CancelOrderFromAnyState = (
 
 /**
  * Whether Order.changeNote can be called on the order in its state (Draft | Confirmed).
- * @see sales/order.dt:66
+ * @see sales/order.dt:69
  */
 export const canChangeNoteOrder = (order: Order): order is DraftOrder | ConfirmedOrder => isAvailable(OrderAvailability, 'changeNote', order);
 
 /**
  * The error of Order.changeNote called through \`anyStateOrderCommands\` on the order when its state is not one of its source states.
- * @see sales/order.dt:66
+ * @see sales/order.dt:69
  */
 export type ChangeNoteOrderUnavailable = CommandUnavailable<'Sales.Order', 'changeNote', 'Cancelled', 'Draft' | 'Confirmed'>;
 
 /**
  * Order.changeNote for the order in any state: the command in a source state (Draft | Confirmed), and \`ChangeNoteOrderUnavailable\` in another.
- * @see sales/order.dt:66
+ * @see sales/order.dt:69
  */
 export type ChangeNoteOrderFromAnyState = (
     order: Order,
@@ -1517,7 +1517,7 @@ export const availableOrderCommands = (order: Order): (keyof OrderCommandsFromAn
 
 /**
  * 注文明細
- * @see sales/order.dt:73
+ * @see sales/order.dt:76
  */
 export interface OrderItem {
     /** 注文明細ID */
@@ -1532,7 +1532,7 @@ export interface OrderItem {
 
 /**
  * Whether two OrderItem are the same entity: by \`id\` (ADR 0016).
- * @see sales/order.dt:73
+ * @see sales/order.dt:76
  */
 export function equalOrderItem(a: OrderItem, b: OrderItem): boolean {
     return a.id === b.id;
@@ -1541,7 +1541,7 @@ export function equalOrderItem(a: OrderItem, b: OrderItem): boolean {
 /**
  * 注文受付
  * @persistent Persisted: storing this event is part of its contract.
- * @see sales/order.dt:80
+ * @see sales/order.dt:83
  */
 export interface OrderPlaced {
     readonly type: 'Sales.OrderPlaced';
@@ -1552,7 +1552,7 @@ export interface OrderPlaced {
 /**
  * 注文確定
  * @persistent Persisted: storing this event is part of its contract.
- * @see sales/order.dt:84
+ * @see sales/order.dt:87
  */
 export interface OrderConfirmed {
     readonly type: 'Sales.OrderConfirmed';
@@ -1564,7 +1564,7 @@ export interface OrderConfirmed {
 
 /**
  * 注文取消
- * @see sales/order.dt:89
+ * @see sales/order.dt:92
  */
 export interface OrderCancelled {
     readonly type: 'Sales.OrderCancelled';
@@ -1577,7 +1577,7 @@ export interface OrderCancelled {
 /**
  * 返金依頼
  * 確定済みの注文の取消により、支払いの払い戻しが必要になった。
- * @see sales/order.dt:95
+ * @see sales/order.dt:98
  */
 export interface RefundRequested {
     readonly type: 'Sales.RefundRequested';
@@ -1587,7 +1587,7 @@ export interface RefundRequested {
 
 /**
  * 備考変更
- * @see sales/order.dt:99
+ * @see sales/order.dt:102
  */
 export interface NoteChanged {
     readonly type: 'Sales.NoteChanged';
@@ -1600,7 +1600,7 @@ export interface NoteChanged {
 /**
  * 明細なし
  * 明細が1件もない注文は確定できない。
- * @see sales/order.dt:105
+ * @see sales/order.dt:108
  */
 export interface EmptyOrder {
     readonly type: 'Sales.EmptyOrder';
@@ -1609,7 +1609,7 @@ export interface EmptyOrder {
 /**
  * 商品コードの重複
  * 追加しようとした明細と同じ商品コードの明細が、すでに注文にある。
- * @see sales/order.dt:108
+ * @see sales/order.dt:111
  */
 export interface DuplicateSku {
     readonly type: 'Sales.DuplicateSku';
@@ -1620,7 +1620,7 @@ export interface DuplicateSku {
 /**
  * 通貨の不一致
  * 追加しようとした明細の単価が、すでにある明細と違う通貨で書かれている。
- * @see sales/order.dt:113
+ * @see sales/order.dt:116
  */
 export interface CurrencyMismatch {
     readonly type: 'Sales.CurrencyMismatch';
@@ -1629,7 +1629,7 @@ export interface CurrencyMismatch {
 /**
  * 備考なし
  * 「その他」で取り消すのに、注文に備考がない。
- * @see sales/order.dt:116
+ * @see sales/order.dt:119
  */
 export interface NoteRequired {
     readonly type: 'Sales.NoteRequired';

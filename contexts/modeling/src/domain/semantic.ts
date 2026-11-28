@@ -556,8 +556,35 @@ const obligations = (model: SourceModel): SemanticObligation[] => {
 };
 
 /** Compute unspecified facts from typed outcome frames and expression-free requirements. */
-function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnspecified[] {
+/** A field an outcome gives through `changes x = expr`: a parameter as it is, or another expression. */
+interface Assignment {
+    readonly kind: 'parameter' | 'explicitAssignment';
+    readonly declaration: string;
+    readonly source?: string;
+    readonly field: string;
+    readonly site: SemanticSpan;
+}
+
+/**
+ * What the model leaves open (a `changes x` without a value, a non-optional field nobody lists — an optional one starts as
+ * null — and a requirement without an expression),
+ * and in `assigned` the fields it gives a value (`changes x = expr`).
+ */
+function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel, assigned: Assignment[] = []): SemanticUnspecified[] {
     const result: SemanticUnspecified[] = [];
+    // a listed field without a value is left open; one with a value is given, as a parameter or by an expression
+    const note = (changes: CommandDecl['changes'], declaration: string, from: string | undefined, params: readonly { name: string }[]): void => {
+        const source = from ? { source: stateId(agg.id, from) } : {};
+        for (const change of changes) {
+            const value = change.value;
+            if (!value) {
+                result.push({ kind: 'changesWithoutExpression', declaration, ...source, field: change.name, site: span(change.at) });
+                continue;
+            }
+            const parameter = value.k === 'name' && params.some((p) => p.name === value.name);
+            assigned.push({ kind: parameter ? 'parameter' : 'explicitAssignment', declaration, ...source, field: change.name, site: span(change.at) });
+        }
+    };
     for (const cmd of commandsOf(agg)) {
         for (const req of cmd.requirements)
             if (!req.expr) result.push({ kind: 'expressionFreeRequirement', declaration: requirementId(cmd.id, req.name), site: span(req.at) });
@@ -573,16 +600,10 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
                 outcomeFields(typed, typedCommand, from, o.to || undefined, o, typedCommand.kind),
             );
             const target = statesOf(agg).find((state) => state.name === o.to);
-            for (const change of sourceOutcome?.changes ?? cmd.changes)
-                result.push({
-                    kind: 'changesWithoutExpression',
-                    declaration: id,
-                    ...(o.from[0] ? { source: stateId(agg.id, o.from[0]) } : {}),
-                    field: change.name,
-                    site: span(change.at),
-                });
+            const listed = sourceOutcome?.changes ?? cmd.changes;
+            for (const source of o.from.length ? o.from : [undefined]) note(listed, id, source, cmd.params);
             if (typedCommand.factory) {
-                for (const field of frames.flatMap((frame) => frame.set))
+                for (const field of frames.flatMap((frame) => frame.set).filter((f) => f.cardinality !== 'optional' && !listed.some((c) => c.name === f.name)))
                     result.push({
                         kind: 'createField',
                         declaration: id,
@@ -593,7 +614,11 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
             }
             const changes = new Set((sourceOutcome?.changes ?? cmd.changes).map((field) => field.name));
             const setFields = [
-                ...new Map(frames.flatMap((frame) => frame.set.filter((field) => !changes.has(field.name))).map((field) => [field.name, field])).values(),
+                ...new Map(
+                    frames
+                        .flatMap((frame) => frame.set.filter((field) => field.cardinality !== 'optional' && !changes.has(field.name)))
+                        .map((field) => [field.name, field]),
+                ).values(),
             ];
             for (const field of setFields) {
                 const declaration = target?.members.find((member) => member.kind === 'field' && member.name === field.name);
@@ -623,16 +648,11 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
                 const id = outcomeId(owner, o.name);
                 const frames = (o.from.length ? o.from : [undefined]).map((from) => outcomeFields(typed, typedCommand, from, o.to || undefined, o, kind.name));
                 const target = statesOf(agg).find((state) => state.name === o.to);
-                for (const change of sourceOutcome.changes)
-                    result.push({
-                        kind: 'changesWithoutExpression',
-                        declaration: id,
-                        ...(o.from[0] ? { source: stateId(agg.id, o.from[0]) } : {}),
-                        field: change.name,
-                        site: span(change.at),
-                    });
+                for (const source of o.from.length ? o.from : [undefined]) note(sourceOutcome.changes, id, source, cmd.params);
                 if (typedCommand.factory) {
-                    for (const field of frames.flatMap((frame) => frame.set))
+                    for (const field of frames
+                        .flatMap((frame) => frame.set)
+                        .filter((f) => f.cardinality !== 'optional' && !sourceOutcome.changes.some((c) => c.name === f.name)))
                         result.push({
                             kind: 'createField',
                             declaration: id,
@@ -643,7 +663,9 @@ function unspecifiedFor(agg: AggregateDecl, typed: AggregateModel): SemanticUnsp
                     const changes = new Set(sourceOutcome.changes.map((field) => field.name));
                     const setFields = [
                         ...new Map(
-                            frames.flatMap((frame) => frame.set.filter((field) => !changes.has(field.name))).map((field) => [field.name, field]),
+                            frames
+                                .flatMap((frame) => frame.set.filter((field) => field.cardinality !== 'optional' && !changes.has(field.name)))
+                                .map((field) => [field.name, field]),
                         ).values(),
                     ];
                     for (const field of setFields) {
@@ -747,13 +769,13 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel, facts: R
             const model = typed.elements.find((el): el is AggregateModel => el.kind === 'aggregate' && el.id === agg.id);
             return model ? [aggregate(agg, model)] : [];
         });
+    const assigned: Assignment[] = [];
     const unspecified = model.elements
         .filter((e): e is AggregateDecl => e.kind === 'aggregate')
         .flatMap((agg) => {
             const typedAggregate = typed.elements.find((element): element is AggregateModel => element.kind === 'aggregate' && element.id === agg.id);
-            return typedAggregate ? unspecifiedFor(agg, typedAggregate) : [];
+            return typedAggregate ? unspecifiedFor(agg, typedAggregate, assigned) : [];
         });
-    // `parameter` and `explicitAssignment` remain unused until Phase 2 adds `changes x = expr`.
     const provenance: SemanticIR['provenance'][number][] = [];
     for (const aggregate of aggregates) {
         const choiceOutcomes = new Set(aggregate.choices.flatMap((choice) => choice.outcomes));
@@ -762,6 +784,9 @@ export function buildSemanticIR(model: SourceModel, typed: DomainModel, facts: R
             for (const source of sources) {
                 for (const field of item.carried)
                     provenance.push({ kind: 'carried', declaration: item.id, field, ...(source ? { source } : {}), site: item.site });
+                for (const a of assigned)
+                    if (a.declaration === item.id && a.source === source)
+                        provenance.push({ kind: a.kind, declaration: item.id, field: a.field, ...(source ? { source } : {}), site: a.site });
                 for (const fact of unspecified) {
                     if (fact.declaration !== item.id || fact.source !== source || !fact.field) continue;
                     provenance.push({ kind: 'unspecified', declaration: item.id, field: fact.field, ...(source ? { source } : {}), site: fact.site });
