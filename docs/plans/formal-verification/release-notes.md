@@ -9,6 +9,14 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 
 ## Changed
 
+- A command's generated function type is now `<Command><Aggregate>Command` (for example, `DraftRotationCommand`) so a
+  command may share a state's or kind's name. Derived names such as `<Command><Aggregate>Params` and
+  `<Command><Aggregate>Decision` are unchanged.
+- M011 no longer reports a command named like a state or a kind of its aggregate (`command draft` beside `state Draft`,
+  `command pilot` beside `kind Pilot`).
+- In generated contract tests, the slot for a command's requirements without an expression is keyed by the command type
+  name: `declared: { Sales: { FinishOrderCommand: { known: … } } }` (was `FinishOrder`), so it no longer clashes with
+  a type of that name. The slots of types keep their names.
 - Logical operators are `&&`, `||` and `!`. `and`, `or`, `not` and `implies` are no longer DomainTrail syntax:
   `dt check` reports each one. Write an implication "if A then B" as `!(A) || B`. On the right of `||`, an optional that
   the left side shows present when it does not hold is narrowed, so `!exists(note) || note.length > 0` checks as
@@ -61,5 +69,8 @@ here; at release, the entries become the version's CHANGELOG.md and CHANGELOG.ja
 
 ## Upgrading
 
+- No `dt migrate` step is needed for the command type rename: `dt migrate` changes `.dt` syntax, not generated TypeScript
+  names. Regenerate TypeScript and update handwritten references to command function types to add the `Command` suffix.
+  Rename the requirement keys in `declared` of contract tests the same way (`FinishOrder` → `FinishOrderCommand`).
 - Run `dt migrate domain` in each workspace, then `dt check`, then `dt generate ts`. The generated checks keep their
   behaviour; their JSDoc shows the new spelling.

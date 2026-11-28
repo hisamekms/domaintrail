@@ -266,7 +266,7 @@ test('decideNamed checks the source states of the command it names, per kind, be
         PLAIN,
         `import * as Delivery from './Delivery.js';
 import { decideNamed, ok } from './_runtime.js';
-export const ship: Delivery.ShipDeliveryRequest = decideNamed<Delivery.ShipDeliveryRequestDecision>()(
+export const ship: Delivery.ShipDeliveryRequestCommand = decideNamed<Delivery.ShipDeliveryRequestDecision>()(
     Delivery.DeliveryRequestShape,
     { shipped: 'OutForDelivery' },
     () => ok({ shipped: { set: {}, events: {} } }),
@@ -275,7 +275,7 @@ export const ship: Delivery.ShipDeliveryRequest = decideNamed<Delivery.ShipDeliv
 // @ts-expect-error a command that takes an aggregate with states says which command it is
 decideNamed<Delivery.ShipDeliveryRequestDecision>()(Delivery.DeliveryRequestShape, { shipped: 'OutForDelivery' }, () => ok({ shipped: { set: {}, events: {} } }));
 // a factory takes no aggregate: nothing to check
-export const open: Delivery.OpenDeliveryRequest = decideNamed<Delivery.OpenDeliveryRequestDecision>()(
+export const open: Delivery.OpenDeliveryRequestCommand = decideNamed<Delivery.OpenDeliveryRequestDecision>()(
     Delivery.DeliveryRequestShape,
     { opened: 'Unassigned' },
     ({ id, onHold }) => ok({ opened: { set: { id, onHold }, events: {} } }),

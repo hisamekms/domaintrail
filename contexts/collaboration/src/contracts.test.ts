@@ -211,10 +211,10 @@ register(
                     Emoji: { singleEmoji: isNormalEmoji },
                     ProposalContent: { oneRecommended },
                     Revision: declaredChecks.Revision,
-                    TakeRevision: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
-                    RestoreRevision: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
+                    TakeRevisionCommand: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
+                    RestoreRevisionCommand: { hashMatchesFiles: ({ contentHash, files: fs }) => snapshotHash(fs) === contentHash },
                     // `onePerRequest` is the store's (a unique index): not a property of one triage
-                    RecordTriage: { inOrder: (triage, { step }) => inCascadeOrder(triage.steps, step.stage) },
+                    RecordTriageCommand: { inOrder: (triage, { step }) => inCascadeOrder(triage.steps, step.stage) },
                 },
             },
             arbitraries: {

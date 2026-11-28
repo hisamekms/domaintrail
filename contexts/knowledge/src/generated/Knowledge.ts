@@ -1229,7 +1229,7 @@ export interface AddKnowledgeItemParams {
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:36
  */
-export type AddKnowledgeItem = (
+export type AddKnowledgeItemCommand = (
     params: AddKnowledgeItemParams,
 ) => Result<{
     readonly Live: {
@@ -1293,7 +1293,7 @@ export interface AddConflictingKnowledgeItemParams {
  * @emits KnowledgeItemAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:45
  */
-export type AddConflictingKnowledgeItem = (
+export type AddConflictingKnowledgeItemCommand = (
     params: AddConflictingKnowledgeItemParams,
 ) => Result<{
     readonly Live: {
@@ -1357,7 +1357,7 @@ export interface AddSourceKnowledgeItemParams {
  * @emits KnowledgeSourceAdded — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:55
  */
-export type AddSourceKnowledgeItem = (
+export type AddSourceKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: AddSourceKnowledgeItemParams,
 ) => Result<{
@@ -1426,7 +1426,7 @@ export interface UpdateKnowledgeItemParams {
  * @emits KnowledgeItemRevised? — at most once when the command succeeds
  * @see contexts/knowledge/model/item.dt:67
  */
-export type UpdateKnowledgeItem = (
+export type UpdateKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: UpdateKnowledgeItemParams,
 ) => Result<{
@@ -1493,7 +1493,7 @@ export interface LinkConflictKnowledgeItemParams {
  * @emits KnowledgeConflictLinked — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:75
  */
-export type LinkConflictKnowledgeItem = (
+export type LinkConflictKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: LinkConflictKnowledgeItemParams,
 ) => Result<{
@@ -1556,7 +1556,7 @@ export interface UnlinkConflictKnowledgeItemParams {
  * @emits KnowledgeConflictUnlinked — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:85
  */
-export type UnlinkConflictKnowledgeItem = (
+export type UnlinkConflictKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: UnlinkConflictKnowledgeItemParams,
 ) => Result<{
@@ -1618,7 +1618,7 @@ export interface HandOverToHotspotKnowledgeItemParams {
  * @emits KnowledgeHandedOverToHotspot — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:94
  */
-export type HandOverToHotspotKnowledgeItem = (
+export type HandOverToHotspotKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: HandOverToHotspotKnowledgeItemParams,
 ) => Result<{
@@ -1675,7 +1675,7 @@ export interface CorrectKnowledgeItemParams {
  * @emits KnowledgeItemCorrected — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:101
  */
-export type CorrectKnowledgeItem = (
+export type CorrectKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: CorrectKnowledgeItemParams,
 ) => Result<{
@@ -1721,7 +1721,7 @@ export interface SetBookmarkKnowledgeItemParams {
  * @emits KnowledgeBookmarkChanged — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:107
  */
-export type SetBookmarkKnowledgeItem = (
+export type SetBookmarkKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: SetBookmarkKnowledgeItemParams,
 ) => Result<{
@@ -1775,7 +1775,7 @@ export interface RetireKnowledgeItemParams {
  * @emits KnowledgeItemRetired — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:113
  */
-export type RetireKnowledgeItem = (
+export type RetireKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: RetireKnowledgeItemParams,
 ) => Result<{
@@ -1837,7 +1837,7 @@ export interface UnretireKnowledgeItemParams {
  * @emits KnowledgeItemUnretired — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:126
  */
-export type UnretireKnowledgeItem = (
+export type UnretireKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: UnretireKnowledgeItemParams,
 ) => Result<{
@@ -1892,7 +1892,7 @@ export interface DeleteKnowledgeItemParams {
  * @emits KnowledgeItemDeleted — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:133
  */
-export type DeleteKnowledgeItem = (
+export type DeleteKnowledgeItemCommand = (
     knowledgeItem: LiveKnowledgeItem,
     params: DeleteKnowledgeItemParams,
 ) => Result<{
@@ -1937,7 +1937,7 @@ export interface RestoreKnowledgeItemParams {
  * @emits KnowledgeItemRestored — exactly once when the command succeeds
  * @see contexts/knowledge/model/item.dt:139
  */
-export type RestoreKnowledgeItem = (
+export type RestoreKnowledgeItemCommand = (
     knowledgeItem: DeletedKnowledgeItem,
     params: RestoreKnowledgeItemParams,
 ) => Result<{
@@ -1971,31 +1971,31 @@ export type RestoreKnowledgeItemDecision = {
  */
 export interface KnowledgeItemCommands {
     /** 足す */
-    readonly add: AddKnowledgeItem;
+    readonly add: AddKnowledgeItemCommand;
     /** 食い違いとして足す */
-    readonly addConflicting: AddConflictingKnowledgeItem;
+    readonly addConflicting: AddConflictingKnowledgeItemCommand;
     /** 出典を足す */
-    readonly addSource: AddSourceKnowledgeItem;
+    readonly addSource: AddSourceKnowledgeItemCommand;
     /** 詳しくする */
-    readonly update: UpdateKnowledgeItem;
+    readonly update: UpdateKnowledgeItemCommand;
     /** 食い違いをつなぐ */
-    readonly linkConflict: LinkConflictKnowledgeItem;
+    readonly linkConflict: LinkConflictKnowledgeItemCommand;
     /** 食い違いを外す */
-    readonly unlinkConflict: UnlinkConflictKnowledgeItem;
+    readonly unlinkConflict: UnlinkConflictKnowledgeItemCommand;
     /** ホットスポットに引き継ぐ */
-    readonly handOverToHotspot: HandOverToHotspotKnowledgeItem;
+    readonly handOverToHotspot: HandOverToHotspotKnowledgeItemCommand;
     /** 直す */
-    readonly correct: CorrectKnowledgeItem;
+    readonly correct: CorrectKnowledgeItemCommand;
     /** ブックマークを変える */
-    readonly setBookmark: SetBookmarkKnowledgeItem;
+    readonly setBookmark: SetBookmarkKnowledgeItemCommand;
     /** 廃止する */
-    readonly retire: RetireKnowledgeItem;
+    readonly retire: RetireKnowledgeItemCommand;
     /** 廃止を取り消す */
-    readonly unretire: UnretireKnowledgeItem;
+    readonly unretire: UnretireKnowledgeItemCommand;
     /** 消す */
-    readonly delete: DeleteKnowledgeItem;
+    readonly delete: DeleteKnowledgeItemCommand;
     /** 元に戻す */
-    readonly restore: RestoreKnowledgeItem;
+    readonly restore: RestoreKnowledgeItemCommand;
 }
 
 /**
@@ -2045,7 +2045,7 @@ export type AddSourceKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Kn
 export type AddSourceKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: AddSourceKnowledgeItemParams,
-) => ReturnType<AddSourceKnowledgeItem> | Err<AddSourceKnowledgeItemUnavailable>;
+) => ReturnType<AddSourceKnowledgeItemCommand> | Err<AddSourceKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.update can be called on the knowledgeItem in its state (Live).
@@ -2066,7 +2066,7 @@ export type UpdateKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Knowl
 export type UpdateKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: UpdateKnowledgeItemParams,
-) => ReturnType<UpdateKnowledgeItem> | Err<UpdateKnowledgeItemUnavailable>;
+) => ReturnType<UpdateKnowledgeItemCommand> | Err<UpdateKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.linkConflict can be called on the knowledgeItem in its state (Live).
@@ -2087,7 +2087,7 @@ export type LinkConflictKnowledgeItemUnavailable = CommandUnavailable<'Knowledge
 export type LinkConflictKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: LinkConflictKnowledgeItemParams,
-) => ReturnType<LinkConflictKnowledgeItem> | Err<LinkConflictKnowledgeItemUnavailable>;
+) => ReturnType<LinkConflictKnowledgeItemCommand> | Err<LinkConflictKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.unlinkConflict can be called on the knowledgeItem in its state (Live).
@@ -2108,7 +2108,7 @@ export type UnlinkConflictKnowledgeItemUnavailable = CommandUnavailable<'Knowled
 export type UnlinkConflictKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: UnlinkConflictKnowledgeItemParams,
-) => ReturnType<UnlinkConflictKnowledgeItem> | Err<UnlinkConflictKnowledgeItemUnavailable>;
+) => ReturnType<UnlinkConflictKnowledgeItemCommand> | Err<UnlinkConflictKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.handOverToHotspot can be called on the knowledgeItem in its state (Live).
@@ -2129,7 +2129,7 @@ export type HandOverToHotspotKnowledgeItemUnavailable = CommandUnavailable<'Know
 export type HandOverToHotspotKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: HandOverToHotspotKnowledgeItemParams,
-) => ReturnType<HandOverToHotspotKnowledgeItem> | Err<HandOverToHotspotKnowledgeItemUnavailable>;
+) => ReturnType<HandOverToHotspotKnowledgeItemCommand> | Err<HandOverToHotspotKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.correct can be called on the knowledgeItem in its state (Live).
@@ -2150,7 +2150,7 @@ export type CorrectKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Know
 export type CorrectKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: CorrectKnowledgeItemParams,
-) => ReturnType<CorrectKnowledgeItem> | Err<CorrectKnowledgeItemUnavailable>;
+) => ReturnType<CorrectKnowledgeItemCommand> | Err<CorrectKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.setBookmark can be called on the knowledgeItem in its state (Live).
@@ -2171,7 +2171,7 @@ export type SetBookmarkKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.
 export type SetBookmarkKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: SetBookmarkKnowledgeItemParams,
-) => ReturnType<SetBookmarkKnowledgeItem> | Err<SetBookmarkKnowledgeItemUnavailable>;
+) => ReturnType<SetBookmarkKnowledgeItemCommand> | Err<SetBookmarkKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.retire can be called on the knowledgeItem in its state (Live).
@@ -2192,7 +2192,7 @@ export type RetireKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Knowl
 export type RetireKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: RetireKnowledgeItemParams,
-) => ReturnType<RetireKnowledgeItem> | Err<RetireKnowledgeItemUnavailable>;
+) => ReturnType<RetireKnowledgeItemCommand> | Err<RetireKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.unretire can be called on the knowledgeItem in its state (Live).
@@ -2213,7 +2213,7 @@ export type UnretireKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Kno
 export type UnretireKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: UnretireKnowledgeItemParams,
-) => ReturnType<UnretireKnowledgeItem> | Err<UnretireKnowledgeItemUnavailable>;
+) => ReturnType<UnretireKnowledgeItemCommand> | Err<UnretireKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.delete can be called on the knowledgeItem in its state (Live).
@@ -2234,7 +2234,7 @@ export type DeleteKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Knowl
 export type DeleteKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: DeleteKnowledgeItemParams,
-) => ReturnType<DeleteKnowledgeItem> | Err<DeleteKnowledgeItemUnavailable>;
+) => ReturnType<DeleteKnowledgeItemCommand> | Err<DeleteKnowledgeItemUnavailable>;
 
 /**
  * Whether KnowledgeItem.restore can be called on the knowledgeItem in its state (Deleted).
@@ -2255,7 +2255,7 @@ export type RestoreKnowledgeItemUnavailable = CommandUnavailable<'Knowledge.Know
 export type RestoreKnowledgeItemFromAnyState = (
     knowledgeItem: KnowledgeItem,
     params: RestoreKnowledgeItemParams,
-) => ReturnType<RestoreKnowledgeItem> | Err<RestoreKnowledgeItemUnavailable>;
+) => ReturnType<RestoreKnowledgeItemCommand> | Err<RestoreKnowledgeItemUnavailable>;
 
 /**
  * The commands of KnowledgeItem that take the knowledgeItem, for the knowledgeItem in any state: make it with `anyStateKnowledgeItemCommands`.
@@ -3119,7 +3119,7 @@ export interface ProposeRetirementProposalParams {
  * @emits RetirementProposed — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:98
  */
-export type ProposeRetirementProposal = (
+export type ProposeRetirementProposalCommand = (
     params: ProposeRetirementProposalParams,
 ) => Result<{
     readonly Open: {
@@ -3180,7 +3180,7 @@ export interface ApproveRetirementProposalParams {
  * @emits RetirementProposalApproved — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:117
  */
-export type ApproveRetirementProposal = (
+export type ApproveRetirementProposalCommand = (
     retirementProposal: OpenRetirementProposal,
     params: ApproveRetirementProposalParams,
 ) => Result<{
@@ -3225,7 +3225,7 @@ export interface DismissRetirementProposalParams {
  * @emits RetirementProposalDismissed — exactly once when the command succeeds
  * @see contexts/knowledge/model/retirement.dt:123
  */
-export type DismissRetirementProposal = (
+export type DismissRetirementProposalCommand = (
     retirementProposal: OpenRetirementProposal,
     params: DismissRetirementProposalParams,
 ) => Result<{
@@ -3259,11 +3259,11 @@ export type DismissRetirementProposalDecision = {
  */
 export interface RetirementProposalCommands {
     /** 候補を出す */
-    readonly propose: ProposeRetirementProposal;
+    readonly propose: ProposeRetirementProposalCommand;
     /** 承認する */
-    readonly approve: ApproveRetirementProposal;
+    readonly approve: ApproveRetirementProposalCommand;
     /** 却下する */
-    readonly dismiss: DismissRetirementProposal;
+    readonly dismiss: DismissRetirementProposalCommand;
 }
 
 /**
@@ -3304,7 +3304,7 @@ export type ApproveRetirementProposalUnavailable = CommandUnavailable<'Knowledge
 export type ApproveRetirementProposalFromAnyState = (
     retirementProposal: RetirementProposal,
     params: ApproveRetirementProposalParams,
-) => ReturnType<ApproveRetirementProposal> | Err<ApproveRetirementProposalUnavailable>;
+) => ReturnType<ApproveRetirementProposalCommand> | Err<ApproveRetirementProposalUnavailable>;
 
 /**
  * Whether RetirementProposal.dismiss can be called on the retirementProposal in its state (Open).
@@ -3325,7 +3325,7 @@ export type DismissRetirementProposalUnavailable = CommandUnavailable<'Knowledge
 export type DismissRetirementProposalFromAnyState = (
     retirementProposal: RetirementProposal,
     params: DismissRetirementProposalParams,
-) => ReturnType<DismissRetirementProposal> | Err<DismissRetirementProposalUnavailable>;
+) => ReturnType<DismissRetirementProposalCommand> | Err<DismissRetirementProposalUnavailable>;
 
 /**
  * The commands of RetirementProposal that take the retirementProposal, for the retirementProposal in any state: make it with `anyStateRetirementProposalCommands`.

@@ -182,7 +182,7 @@ export interface IssueInvoiceParams {
  * @emits nothing
  * @see billing/invoice.dt:14
  */
-export type IssueInvoice = (
+export type IssueInvoiceCommand = (
     params: IssueInvoiceParams,
 ) => Result<{
     readonly Open: {
@@ -223,7 +223,7 @@ export interface PayInvoiceParams {
  * @emits InvoicePaid — exactly once when the command succeeds
  * @see billing/invoice.dt:18
  */
-export type PayInvoice = (
+export type PayInvoiceCommand = (
     invoice: OpenInvoice,
     params: PayInvoiceParams,
 ) => Result<{
@@ -257,9 +257,9 @@ export type PayInvoiceDecision = {
  */
 export interface InvoiceCommands {
     /** 請求書を発行する */
-    readonly issue: IssueInvoice;
+    readonly issue: IssueInvoiceCommand;
     /** 支払う */
-    readonly pay: PayInvoice;
+    readonly pay: PayInvoiceCommand;
 }
 
 /**
@@ -299,7 +299,7 @@ export type PayInvoiceUnavailable = CommandUnavailable<'Billing.Invoice', 'pay',
 export type PayInvoiceFromAnyState = (
     invoice: Invoice,
     params: PayInvoiceParams,
-) => ReturnType<PayInvoice> | Err<PayInvoiceUnavailable>;
+) => ReturnType<PayInvoiceCommand> | Err<PayInvoiceUnavailable>;
 
 /**
  * The commands of Invoice that take the invoice, for the invoice in any state: make it with \`anyStateInvoiceCommands\`.
@@ -601,7 +601,7 @@ export interface RegisterCustomerParams {
  * @emits CustomerRegistered — exactly once when the command succeeds
  * @see sales/customer.dt:12
  */
-export type RegisterCustomer = (
+export type RegisterCustomerCommand = (
     params: RegisterCustomerParams,
 ) => Result<{
     readonly Customer: {
@@ -642,7 +642,7 @@ export interface RenameCustomerParams {
  * @emits nothing
  * @see sales/customer.dt:16
  */
-export type RenameCustomer = (
+export type RenameCustomerCommand = (
     customer: Customer,
     params: RenameCustomerParams,
 ) => Result<{
@@ -686,7 +686,7 @@ export interface ChangeEmailCustomerParams {
  * @emits nothing
  * @see sales/customer.dt:18
  */
-export type ChangeEmailCustomer = (
+export type ChangeEmailCustomerCommand = (
     customer: Customer,
     params: ChangeEmailCustomerParams,
 ) => Result<{
@@ -721,11 +721,11 @@ export type ChangeEmailCustomerDecision = (
  */
 export interface CustomerCommands {
     /** 顧客を登録する */
-    readonly register: RegisterCustomer;
+    readonly register: RegisterCustomerCommand;
     /** 氏名を変更する */
-    readonly rename: RenameCustomer;
+    readonly rename: RenameCustomerCommand;
     /** メールアドレスを変更する */
-    readonly changeEmail: ChangeEmailCustomer;
+    readonly changeEmail: ChangeEmailCustomerCommand;
 }
 
 /**
@@ -1087,7 +1087,7 @@ export interface PlaceOrderParams {
  * @emits OrderPlaced — exactly once when the command succeeds
  * @see sales/order.dt:26
  */
-export type PlaceOrder = (
+export type PlaceOrderCommand = (
     params: PlaceOrderParams,
 ) => Result<{
     readonly Draft: {
@@ -1130,7 +1130,7 @@ export interface AddItemOrderParams {
  * @emits nothing
  * @see sales/order.dt:44
  */
-export type AddItemOrder = (
+export type AddItemOrderCommand = (
     order: DraftOrder,
     params: AddItemOrderParams,
 ) => Result<{
@@ -1186,7 +1186,7 @@ export interface ConfirmOrderParams {
  * @emits OrderConfirmed — exactly once when the command succeeds
  * @see sales/order.dt:52
  */
-export type ConfirmOrder = (
+export type ConfirmOrderCommand = (
     order: DraftOrder,
     params: ConfirmOrderParams,
 ) => Result<{
@@ -1241,7 +1241,7 @@ export interface CancelOrderParams {
  * @emits RefundRequested — exactly once when it comes from Confirmed
  * @see sales/order.dt:58
  */
-export type CancelOrder = <S extends DraftOrder | ConfirmedOrder>(
+export type CancelOrderCommand = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
     params: CancelOrderParams,
 ) => {
@@ -1320,7 +1320,7 @@ export interface ChangeNoteOrderParams {
  * @emits NoteChanged? — at most once when the command succeeds
  * @see sales/order.dt:69
  */
-export type ChangeNoteOrder = <S extends DraftOrder | ConfirmedOrder>(
+export type ChangeNoteOrderCommand = <S extends DraftOrder | ConfirmedOrder>(
     order: S,
     params: ChangeNoteOrderParams,
 ) => {
@@ -1372,15 +1372,15 @@ export type ChangeNoteOrderDecision = {
  */
 export interface OrderCommands {
     /** 注文する */
-    readonly place: PlaceOrder;
+    readonly place: PlaceOrderCommand;
     /** 明細を追加する */
-    readonly addItem: AddItemOrder;
+    readonly addItem: AddItemOrderCommand;
     /** 注文を確定する */
-    readonly confirm: ConfirmOrder;
+    readonly confirm: ConfirmOrderCommand;
     /** 注文を取り消す */
-    readonly cancel: CancelOrder;
+    readonly cancel: CancelOrderCommand;
     /** 備考を変更する */
-    readonly changeNote: ChangeNoteOrder;
+    readonly changeNote: ChangeNoteOrderCommand;
 }
 
 /**
@@ -1423,7 +1423,7 @@ export type AddItemOrderUnavailable = CommandUnavailable<'Sales.Order', 'addItem
 export type AddItemOrderFromAnyState = (
     order: Order,
     params: AddItemOrderParams,
-) => ReturnType<AddItemOrder> | Err<AddItemOrderUnavailable>;
+) => ReturnType<AddItemOrderCommand> | Err<AddItemOrderUnavailable>;
 
 /**
  * Whether Order.confirm can be called on the order in its state (Draft).
@@ -1444,7 +1444,7 @@ export type ConfirmOrderUnavailable = CommandUnavailable<'Sales.Order', 'confirm
 export type ConfirmOrderFromAnyState = (
     order: Order,
     params: ConfirmOrderParams,
-) => ReturnType<ConfirmOrder> | Err<ConfirmOrderUnavailable>;
+) => ReturnType<ConfirmOrderCommand> | Err<ConfirmOrderUnavailable>;
 
 /**
  * Whether Order.cancel can be called on the order in its state (Draft | Confirmed).
@@ -1465,7 +1465,7 @@ export type CancelOrderUnavailable = CommandUnavailable<'Sales.Order', 'cancel',
 export type CancelOrderFromAnyState = (
     order: Order,
     params: CancelOrderParams,
-) => ReturnType<CancelOrder> | Err<CancelOrderUnavailable>;
+) => ReturnType<CancelOrderCommand> | Err<CancelOrderUnavailable>;
 
 /**
  * Whether Order.changeNote can be called on the order in its state (Draft | Confirmed).
@@ -1486,7 +1486,7 @@ export type ChangeNoteOrderUnavailable = CommandUnavailable<'Sales.Order', 'chan
 export type ChangeNoteOrderFromAnyState = (
     order: Order,
     params: ChangeNoteOrderParams,
-) => ReturnType<ChangeNoteOrder> | Err<ChangeNoteOrderUnavailable>;
+) => ReturnType<ChangeNoteOrderCommand> | Err<ChangeNoteOrderUnavailable>;
 
 /**
  * The commands of Order that take the order, for the order in any state: make it with \`anyStateOrderCommands\`.

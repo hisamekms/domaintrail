@@ -56,6 +56,7 @@ import {
     availableCommandsName,
     canName,
     commandTypeName,
+    commandStem,
     commandsInterfaceName,
     commonTypeName,
     decisionTypeName,
@@ -1728,7 +1729,7 @@ class ContextEmitter {
         const input = states.length ? sources.map((n) => stateTypeName(agg, n)).join(' | ') || 'never' : c.kind ? kindTypeName(agg, c.kind) : agg.name;
         const subject = c.factory ? undefined : { name: aggregateParamName(agg), type: input };
         const params = c.params.length ? { name: paramsArgName(agg), type: paramsTypeName(agg, c) } : undefined;
-        return this.checks.requires(agg, c, commandTypeName(agg, c), subject, params);
+        return this.checks.requires(agg, c, commandStem(agg, c), subject, params);
     }
 
     /** The entries of `emits` for a source state, with `when` reduced to what still selects among its targets. */

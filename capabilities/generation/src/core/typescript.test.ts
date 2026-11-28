@@ -33,7 +33,7 @@ describe('generated TypeScript', () => {
     test('command contracts narrow input/output states, events and errors', async () => {
         const sales = await readFile(path.join(dir, 'generated', 'domain', 'Sales.ts'), 'utf8');
         expect(sales).toContain(
-            `export type ConfirmOrder = (
+            `export type ConfirmOrderCommand = (
     order: DraftOrder,
     params: ConfirmOrderParams,
 ) => Result<{
@@ -46,7 +46,7 @@ describe('generated TypeScript', () => {
         // no events -> NoEvents; factory -> no aggregate parameter, the new ID passed in
         expect(sales).toContain('        readonly events: NoEvents;\n    };\n}, DuplicateSku | CurrencyMismatch>;');
         expect(sales).toContain("import type { Availability, CommandUnavailable, Err, NoEvents, Result, Shape, Timestamp } from './_runtime.js';");
-        expect(sales).toContain('export type PlaceOrder = (\n    params: PlaceOrderParams,\n)');
+        expect(sales).toContain('export type PlaceOrderCommand = (\n    params: PlaceOrderParams,\n)');
         // an aggregate without states: keyed by the aggregate's name
         expect(sales).toContain(') => Result<{\n    readonly Customer: {\n        readonly aggregate: Customer;\n');
         expect(sales).toContain(' * Commands are pure functions of the aggregate and their parameters: no I/O, no clock, no randomness.');
@@ -110,7 +110,7 @@ describe('commands with several transitions', () => {
             '/**\n * Work.cancel (Draft -> Cancelled; InProgress -> Cancelled)\n * @changes none — the command changes no common field\n * @emits nothing\n * @see tasks.dt:21\n */',
         );
         expect(code).toContain(
-            `export type CancelWork = (
+            `export type CancelWorkCommand = (
     work: DraftWork | InProgressWork,
 ) => Result<{
     readonly Cancelled: {
@@ -127,7 +127,7 @@ describe('commands with several transitions', () => {
             '/**\n * Work.change (Draft -> Draft; InProgress -> InProgress)\n * @changes title\n * @emits WorkChanged — exactly once when the command succeeds\n * @see tasks.dt:15\n */',
         );
         expect(code).toContain(
-            `export type ChangeWork = <S extends DraftWork | InProgressWork>(
+            `export type ChangeWorkCommand = <S extends DraftWork | InProgressWork>(
     work: S,
     params: ChangeWorkParams,
 ) => {
@@ -201,7 +201,7 @@ export type ChangeWorkDecision = {
         );
         expect(code).toContain(' * Completed -> Cancelled — set: nothing; carried over: id, title; dropped: completedAt\n');
         // the commands interface is unchanged
-        expect(code).toContain('    readonly change: ChangeWork;');
+        expect(code).toContain('    readonly change: ChangeWorkCommand;');
     });
 
     test('every command has a decision: keyed by source state, or one function for a factory', () => {
@@ -303,7 +303,7 @@ describe('links to the DSL', () => {
             const [, file, line] = new RegExp(`@see (\\S+):(\\d+)\\n \\*/\\nexport type ${name} `).exec(sales)!;
             return sources.get(file)![Number(line) - 1].trim();
         };
-        expect(target('ConfirmOrder')).toStartWith('command confirm(');
+        expect(target('ConfirmOrderCommand')).toStartWith('command confirm(');
         expect(target('ConfirmOrderDecision')).toStartWith('command confirm(');
         expect(target('Order')).toStartWith('aggregate Order ');
     });
@@ -388,9 +388,9 @@ describe('command parameters as one object (ADR 0028)', () => {
         expect(a.diagnostics).toEqual([]);
         const code = generateFromAnalysis(a).find((f) => f.path === 'S.ts')!.content;
         expect(code).toContain('export interface MakeParamsParams {\n    readonly id: ParamsId;\n    readonly note?: string;\n}');
-        expect(code).toContain('export type MakeParams = (\n    parameters: MakeParamsParams,\n)');
+        expect(code).toContain('export type MakeParamsCommand = (\n    parameters: MakeParamsParams,\n)');
         // a command without parameters takes none
-        expect(code).toContain('export type ClearParams = (\n    params: Params,\n)');
+        expect(code).toContain('export type ClearParamsCommand = (\n    params: Params,\n)');
         expect(code).not.toContain('ClearParamsParams');
         expect(code).toContain("export function checkSetParamsRequires(_params: Params, parameters: SetParamsParams): 'filled' | undefined {");
         expect(code).toContain("if (!(!(parameters.newNote === ''))) return 'filled';");

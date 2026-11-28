@@ -130,7 +130,7 @@ export type RenameWorkDecision = {`,
         expect(code).toContain(' * @changes color\n * Tag — set: color; carried over: id, name\n');
         // the contract says it too
         expect(code).toContain(
-            ' * Work.submit (Draft -> Review)\n * @changes reviewer\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWork = ',
+            ' * Work.submit (Draft -> Review)\n * @changes reviewer\n * @emits nothing\n * @see tasks.dt:23\n */\nexport type SubmitWorkCommand = ',
         );
         expect(code).toContain("export const TagShape: Shape = { fields: ['id', 'name', 'color'] };");
         expect(code).toContain(

@@ -101,7 +101,7 @@ declare const raw: Sales.EmailAddress;
 declare const available: Sales.AvailableEmail;
 declare const deliverable: Sales.Deliverable;
 declare const both: Sales.AvailableEmail & Sales.Deliverable;
-declare const register: Sales.RegisterCustomer;
+declare const register: Sales.RegisterCustomerCommand;
 declare const id: Sales.CustomerId;
 // @ts-expect-error the check was skipped
 register({ id, email: raw });
